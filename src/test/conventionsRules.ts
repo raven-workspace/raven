@@ -240,7 +240,7 @@ const SPACING_ALLOWED: Record<string, { declarations: string[]; reason: string }
     declarations: ["padding-left: 94px"],
     reason: "window chrome: the macOS traffic lights' 78px clearance (titleBarStyle Overlay) plus 16px of air, not a spacing step",
   },
-  "src/features/network/InterfaceNudge.scss": {
+  "src/features/network/InterfaceNudge/InterfaceNudge.scss": {
     declarations: ["margin-block: -0.125rem"],
     reason: "the inline subnet is a 24px target in a 20px line: -2px above and below keep the line from growing, not a spacing step",
   },

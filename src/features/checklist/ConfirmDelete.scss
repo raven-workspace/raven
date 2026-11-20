@@ -1,7 +1,0 @@
-@use "@/styles/abstracts" as *;
-
-@layer features {
-  .confirm-delete__error {
-    color: var(--warn);
-  }
-}

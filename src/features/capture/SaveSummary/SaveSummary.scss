@@ -1,0 +1,18 @@
+@use "@/styles/abstracts/index" as *;
+
+// What the last save filed: wins in accent first, then counts and ticks.
+@layer features {
+  .save-summary {
+    display: grid;
+    gap: var(--space-xs);
+    list-style-type: none;
+  }
+
+  .save-summary__win {
+    color: var(--accent);
+  }
+
+  .save-summary__line {
+    color: var(--muted);
+  }
+}

@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { CommandList } from "../features/checklist/CommandList";
-import { CredentialPicker } from "../features/checklist/CredentialPicker";
-import { GoalRow } from "../features/checklist/GoalRow";
+import { CommandList } from "../features/checklist/CommandList/CommandList";
+import { CredentialPicker } from "../features/checklist/CredentialPicker/CredentialPicker";
+import { GoalRow } from "../features/checklist/GoalRow/GoalRow";
 import type { Credential } from "../types/credentials";
 
 // jsdom has no layout: these check the classes that decide wrapping (U5–U7).
@@ -22,7 +22,7 @@ describe("layout (U5–U7)", () => {
     expect(label.parentElement).toBe(picker.parentElement);
     expect(label.parentElement).toHaveClass("credential-picker");
     expect(picker).toHaveClass("credential-picker__select");
-    const scss = readFileSync("src/features/checklist/CredentialPicker.scss", "utf8");
+    const scss = readFileSync("src/features/checklist/CredentialPicker/CredentialPicker.scss", "utf8");
     expect(scss).toMatch(/\.credential-picker \{\s*display: grid;/);
     expect(scss).toMatch(/\.credential-picker__select \{\s*width: 100%;/);
     expect(picker.getAttribute("title")).toContain("ted_admin");
@@ -69,7 +69,7 @@ describe("layout (U5–U7)", () => {
     expect(scss).toMatch(/\.toggle-group \{[^}]*height: 1\.75rem;[^}]*border-radius: var\(--radius-sm\);/);
     expect(scss).toMatch(/\.toggle-group__item \{[^}]*height: 100%;/);
     expect(screen.getByText("Because.").parentElement).toHaveClass("goal-row__body");
-    expect(readFileSync("src/features/checklist/GoalRow.scss", "utf8")).toMatch(/\.goal-row__body \{[^}]*gap: var\(--space-md\);/);
+    expect(readFileSync("src/features/checklist/GoalRow/GoalRow.scss", "utf8")).toMatch(/\.goal-row__body \{[^}]*gap: var\(--space-md\);/);
   });
 
   it("pressing the selected status again keeps it", async () => {

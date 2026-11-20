@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useCredPickStore } from "../../../features/checklist/credPick";
 import { logCommand } from "../../../features/capture/logCommand";
-import { inlineOf, NoteView, type Ctx } from "../../../features/manual/NoteView";
+import { inlineOf, NoteView, type Ctx } from "../../../features/manual/NoteView/NoteView";
 import { useManualStatus } from "../../../features/manual/useManualStatus";
 import { api } from "../../../lib/api";
 import { makeQueryClient } from "../../../lib/queryClient";

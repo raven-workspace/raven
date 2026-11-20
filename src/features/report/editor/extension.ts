@@ -49,8 +49,8 @@ import type { ReportNode } from "../../../engines/report";
 import { defineReactNodeView } from "prosekit/react";
 import { hljsParser } from "./codeHighlight";
 import { moveCell } from "./commands";
-import { CodeBlockView } from "./nodes/CodeBlockView";
-import { FigureView } from "./nodes/FigureView";
+import { CodeBlockView } from "./nodes/CodeBlockView/CodeBlockView";
+import { FigureView } from "./nodes/FigureView/FigureView";
 import { figureWidth } from "./nodes/figureWidth";
 
 /** Clicks and typing in controls inside a node view (the code block's language picker) stay with the control, not

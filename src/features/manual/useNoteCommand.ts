@@ -9,7 +9,7 @@ import { shortHostName } from "../../lib/hostName";
 import { reportError } from "../../lib/lockSignal";
 import { useCopyGuard } from "../arsenal/copyGuard";
 import { logCommand } from "../capture/logCommand";
-import type { FilledCommand } from "../checklist/CommandList";
+import type { FilledCommand } from "../checklist/CommandList/CommandList";
 import { fillLibraryCommand } from "../checklist/goalCommands";
 import type { useFillBase } from "../palette/fillData";
 import { useManualStatus } from "./useManualStatus";

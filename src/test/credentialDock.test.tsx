@@ -2,7 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CredentialDock } from "../features/credentials/CredentialDock";
+import { CredentialDock } from "../features/credentials/CredentialDock/CredentialDock";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { CredAttempt, Credential, Username } from "../types/credentials";

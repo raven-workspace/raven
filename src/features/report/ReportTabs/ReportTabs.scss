@@ -1,0 +1,175 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // The tab row under the status strip: the scrolling tabs, then the export slot that never scrolls away.
+  .report-tabs {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .report-tabs__scroller {
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .report-tabs__row {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    align-items: center;
+    justify-content: start;
+    gap: var(--space-sm);
+    width: max-content;
+    min-width: 100%;
+    padding: var(--space-xs) var(--space-lg);
+  }
+
+  // The tablist: its own stacking context, so the TabMarker sits behind the tabs.
+  .report-tabs__list {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    align-items: stretch;
+    gap: var(--space-xs);
+  }
+
+  // + Page.
+  .report-tabs__add {
+    height: 1.75rem;
+    padding-inline: var(--space-sm);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    @include type(body);
+    color: var(--accent);
+    cursor: default;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+      }
+    }
+  }
+
+  .report-tabs__export {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--space-sm);
+    padding-right: var(--space-lg);
+    padding-left: var(--space-sm);
+  }
+
+  // A page title edited in place of its tab.
+  .report-tabs__rename {
+    align-self: center;
+    width: 12rem;
+    height: 2.25rem;
+    padding-inline: var(--space-sm);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg);
+    @include type(body);
+    color: var(--fg);
+    outline-style: none;
+
+    &:focus-visible {
+      border-color: var(--accent);
+    }
+  }
+
+  // One tab: its label over its state. The open tab is plain fg; the rest are muted and light up on hover.
+  .report-tab {
+    display: grid;
+    align-content: end;
+    padding: var(--space-xs) var(--space-md);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    color: var(--muted-2);
+    text-align: left;
+    white-space: nowrap;
+    cursor: default;
+
+    &[aria-selected="true"] {
+      color: var(--fg);
+    }
+
+    @media (hover: hover) {
+      &:not([aria-selected="true"]):hover {
+        background-color: var(--surface);
+        color: var(--fg);
+      }
+    }
+  }
+
+  .report-tab__label {
+    @include type(body);
+  }
+
+  // `ready`, `N to do`, `not started` or the tab's detail: the label role at the normal weight.
+  .report-tab__state {
+    @include type(label);
+    font-weight: 400;
+    color: var(--faint);
+  }
+
+  .report-tab__state--selected {
+    color: var(--muted-2);
+  }
+
+  .report-tab__state--ready {
+    color: var(--accent);
+  }
+
+  // `N to do` opens the tab's To do panel too.
+  .report-tab__state--todo {
+    color: var(--warn);
+
+    @media (hover: hover) {
+      &:hover {
+        text-decoration-line: underline;
+      }
+    }
+  }
+
+  // Front matter's and Closing's segmented row.
+  .part-tabs {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    align-items: center;
+    justify-content: start;
+    gap: var(--space-xs);
+  }
+
+  .part-tabs__tab {
+    height: 1.75rem;
+    padding-inline: var(--space-sm);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    @include type(body);
+    color: var(--muted-2);
+    white-space: nowrap;
+    cursor: default;
+
+    &[aria-selected="true"] {
+      color: var(--fg);
+    }
+
+    @media (hover: hover) {
+      &:not([aria-selected="true"]):hover {
+        background-color: var(--surface);
+        color: var(--fg);
+      }
+    }
+  }
+}

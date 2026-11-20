@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FieldManualSection } from "../features/settings/FieldManualSection";
+import { FieldManualSection } from "../features/settings/FieldManualSection/FieldManualSection";
 import { useVaultNewer } from "../features/fieldManual/queries";
 import { getLibrary, setImported } from "../engines/library/store";
 import { api } from "../lib/api";

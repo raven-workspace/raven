@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
-import { toDraft } from "../features/findings/FindingEditor";
+import { toDraft } from "../features/findings/FindingEditor/FindingEditor";
 import { useFindingDraftStore } from "../features/findings/useFindingDraftStore";
 import { resetNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";

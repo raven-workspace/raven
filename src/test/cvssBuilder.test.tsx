@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { CvssBuilder } from "../features/findings/CvssBuilder";
+import { CvssBuilder } from "../features/findings/CvssBuilder/CvssBuilder";
 
 function Harness({ initial = "", onEmit }: { initial?: string; onEmit?: (v: string) => void }) {
   const [v, setV] = useState(initial);

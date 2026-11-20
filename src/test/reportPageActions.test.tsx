@@ -18,11 +18,11 @@ import {
   type ReportNode,
   type ReportTarget,
 } from "../engines/report";
-import { AddEvidenceButton } from "../features/report/AddEvidenceButton";
-import { unusedEntries } from "../features/report/EvidenceRail";
+import { AddEvidenceButton } from "../features/report/AddEvidenceButton/AddEvidenceButton";
+import { unusedEntries } from "../features/report/EvidenceRail/EvidenceRail";
 import { deleteBlockAt, insertEntry, insertFigure, isEdited, refreshLabel, refreshRun, sourceRun } from "../features/report/editor/pageActions";
-import { ReportDataContext } from "../features/report/editor/ReportDataContext";
-import { ReportEditor } from "../features/report/editor/ReportEditor";
+import { ReportDataContext } from "../features/report/editor/ReportDataContext/ReportDataContext";
+import { ReportEditor } from "../features/report/editor/ReportEditor/ReportEditor";
 import { pruneRemoved } from "../features/report/saveQueue";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";

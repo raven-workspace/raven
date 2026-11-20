@@ -1,0 +1,106 @@
+@use "@/styles/abstracts/index" as *;
+
+// The Arsenal drawer's and ⌘K's results: groups of option rows. The selected row (aria-selected) has the accent wash
+// and the 2px accent bar; hover only tints the others.
+@layer features {
+  .result-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-sm);
+    outline-style: none;
+  }
+
+  .result-list__group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--line);
+
+    &:first-child {
+      padding-top: 0;
+      border-top-width: 0;
+    }
+  }
+
+  .result-list__label {
+    padding-inline: var(--space-sm);
+    padding-bottom: var(--space-xs);
+  }
+
+  .result-list__lead {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding-inline: var(--space-sm);
+    padding-bottom: var(--space-xs);
+  }
+
+  .result-list__lead-code {
+    min-width: 0;
+    @include truncate;
+    @include mono;
+    @include type(body);
+    color: var(--fg);
+  }
+
+  .result-list__lead-text {
+    min-width: 0;
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .result-list__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    @include type(body);
+    color: var(--fg-2);
+    text-align: left;
+    cursor: default;
+
+    &[aria-selected="true"] {
+      background-color: var(--accent);
+      background-color: color-mix(in oklab, var(--accent) 10%, transparent);
+      color: var(--accent);
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+
+    @media (hover: hover) {
+      &[aria-selected="false"]:hover {
+        background-color: var(--surface-hi);
+      }
+    }
+  }
+
+  // The tag on its own line under the title, so a narrow list keeps the whole title.
+  .result-list__row--stack {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: normal;
+    gap: 0;
+  }
+
+  .result-list__title {
+    min-width: 0;
+    @include truncate;
+  }
+
+  .result-list__tag {
+    min-width: 0;
+    max-width: 10rem;
+    @include truncate;
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .result-list__tag--mono {
+    @include mono;
+  }
+
+  .result-list__tag--stack {
+    max-width: none;
+    white-space: pre;
+  }
+}

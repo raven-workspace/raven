@@ -1,0 +1,57 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // Ruled-out items above the note text; scrolls past 160px. Also a .scroll-pane.
+  .ruled-out-list {
+    display: grid;
+    max-height: 10rem;
+    align-content: flex-start;
+    gap: var(--space-xs);
+  }
+
+  .ruled-out-list__count {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ruled-out-list__items {
+    display: grid;
+    gap: var(--space-xs);
+    list-style-type: none;
+  }
+
+  // Text and reason, then the verdict or a delete button.
+  .ruled-out-list__item {
+    display: grid;
+    min-height: 1.75rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .ruled-out-list__body {
+    display: grid;
+    min-width: 0;
+  }
+
+  .ruled-out-list__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: var(--space-sm);
+  }
+
+  .ruled-out-list__text {
+    @include truncate;
+    @include type(body);
+    color: var(--fg-2);
+  }
+
+  .ruled-out-list__meta {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .ruled-out-list__meta--truncate {
+    @include truncate;
+  }
+}

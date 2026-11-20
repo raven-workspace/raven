@@ -6,7 +6,7 @@ import "./sidebar.scss"
 
 // Raven's sidebar, from shadcn's: 240px expanded, a 56px icon rail collapsed (DESIGN.md Navigation). It sits in the
 // shell's grid column rather than fixed to the window. The window is at least 1100px wide, so shadcn's mobile sheet,
-// and the parts Raven doesn't use, are gone. The caller (src/features/engagements/Sidebar.tsx) owns the collapsed
+// and the parts Raven doesn't use, are gone. The caller (src/features/engagements/Sidebar/Sidebar.tsx) owns the collapsed
 // state, persisted and toggled by ⌘B.
 
 type SidebarState = "expanded" | "collapsed"

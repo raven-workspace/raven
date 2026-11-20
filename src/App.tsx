@@ -1,15 +1,15 @@
 import { lazy, Suspense } from "react";
 import { Route, Routes } from "react-router";
-import { Dashboard } from "./features/engagements/Dashboard";
-import { SectionView } from "./features/engagements/sections";
-import { EngagementShell, HostRoute, SectionRoute } from "./features/engagements/EngagementShell";
-import { ArsenalBrowse } from "./features/arsenal/ArsenalBrowse";
-import { ManualPage } from "./features/manual/ManualPage";
-import { PayloadsWorkbench } from "./features/payloads/PayloadsWorkbench";
-import { SettingsPage } from "./features/settings/SettingsPage";
+import { Dashboard } from "./features/engagements/Dashboard/Dashboard";
+import { SectionView } from "./features/engagements/sections/sections";
+import { EngagementShell, HostRoute, SectionRoute } from "./features/engagements/EngagementShell/EngagementShell";
+import { ArsenalBrowse } from "./features/arsenal/ArsenalBrowse/ArsenalBrowse";
+import { ManualPage } from "./features/manual/ManualPage/ManualPage";
+import { PayloadsWorkbench } from "./features/payloads/PayloadsWorkbench/PayloadsWorkbench";
+import { SettingsPage } from "./features/settings/SettingsPage/SettingsPage";
 import { useEscapeTo } from "./lib/keys";
 import { TooltipProvider } from "./ui";
-import { useVault, VaultGate } from "./features/vault/VaultGate";
+import { useVault, VaultGate } from "./features/vault/VaultGate/VaultGate";
 
 // Dev-only component gallery. `import.meta.env.DEV` is false in builds, so the
 // route and its chunk are dropped from release bundles.

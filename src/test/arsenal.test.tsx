@@ -313,7 +313,7 @@ describe("Arsenal", () => {
     expect(barEl.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
     // Focusing the text field rings the whole bar in the accent, like every other input.
     expect(barEl).toHaveClass("search-bar");
-    expect(readFileSync("src/features/arsenal/SearchBar.scss", "utf8")).toMatch(/&:has\(input:focus-visible\) \{\s*outline: 1px solid var\(--accent\);/);
+    expect(readFileSync("src/features/arsenal/SearchBar/SearchBar.scss", "utf8")).toMatch(/&:has\(input:focus-visible\) \{\s*outline: 1px solid var\(--accent\);/);
     expect(bar.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
     expect(scopeText(hostChip(d))).toBe("Host dc01");
     const header = d.getByRole("banner");

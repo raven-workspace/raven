@@ -1,0 +1,105 @@
+@use "@/styles/abstracts/index" as *;
+@use "../../popup" as *;
+
+@layer features {
+  // ProseKit's autocomplete root takes no box of its own.
+  .slash-menu {
+    display: contents;
+  }
+
+  .slash-menu__positioner {
+    @include prosekit-positioner(30);
+  }
+
+  .slash-menu__popup {
+    @include report-popup;
+    align-content: start;
+    gap: var(--space-xs);
+    width: 20rem;
+    max-height: 24rem;
+    padding: var(--space-xs);
+    overflow-y: auto;
+  }
+
+  .slash-menu__empty {
+    padding: var(--space-sm);
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  // A block to insert: icon, name, its markdown shortcut.
+  .slash-menu__item {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-md);
+    min-height: 2rem;
+    padding-inline: var(--space-sm);
+    border-radius: var(--radius-sm);
+    @include type(body);
+    color: var(--fg-2);
+    cursor: default;
+
+    &[data-highlighted] {
+      background-color: var(--surface-hi);
+      color: var(--fg);
+    }
+  }
+
+  .slash-menu__label {
+    @include truncate;
+  }
+
+  .slash-menu__markdown {
+    @include type(code);
+    color: var(--muted);
+  }
+
+  .slash-menu__heading {
+    padding: var(--space-sm) var(--space-sm) var(--space-xs);
+  }
+
+  // A log entry: its time, then its title over its command (or kind).
+  .slash-menu__entry {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-md);
+    min-height: 2.75rem;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    cursor: default;
+
+    &[data-highlighted] {
+      background-color: var(--surface-hi);
+    }
+  }
+
+  .slash-menu__time {
+    @include type(code);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .slash-menu__entry-text {
+    display: grid;
+    gap: var(--space-xs);
+    min-width: 0;
+  }
+
+  .slash-menu__entry-title {
+    @include truncate;
+    @include type(body);
+    color: var(--fg);
+  }
+
+  .slash-menu__entry-detail {
+    @include truncate;
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .slash-menu__command {
+    @include type(code);
+  }
+}

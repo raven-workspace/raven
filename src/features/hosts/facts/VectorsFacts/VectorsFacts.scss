@@ -1,0 +1,88 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // Title, status, actions. An anonymous container: from 26rem a row's three cells share the list's columns (subgrid);
+  // narrower, the title takes its own line.
+  .vectors-facts {
+    container-type: inline-size;
+    display: grid;
+    list-style-type: none;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    column-gap: var(--space-sm);
+  }
+
+  .vectors-facts__row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-sm);
+    row-gap: var(--space-sm);
+    border-bottom: 1px solid var(--line);
+    padding-block: var(--space-sm);
+  }
+
+  .vectors-facts__title {
+    grid-column: span 2 / span 2;
+    min-width: 0;
+    @include truncate;
+    @include type(meta);
+    color: var(--fg);
+  }
+
+  .vectors-facts__title--ruled-out {
+    color: var(--muted);
+  }
+
+  @container (min-width: 26rem) {
+    .vectors-facts__row {
+      grid-column: span 3 / span 3;
+      grid-template-columns: subgrid;
+    }
+
+    .vectors-facts__title {
+      grid-column: span 1 / span 1;
+    }
+  }
+
+  // A status chip as a toggle: a 28px target.
+  .vectors-facts__status-button {
+    display: grid;
+    min-height: 1.75rem;
+    cursor: default;
+    place-items: center;
+    justify-self: flex-start;
+  }
+
+  .vectors-facts__status--ruled-out {
+    color: var(--muted);
+    text-decoration-line: line-through;
+  }
+
+  .vectors-facts__actions {
+    justify-self: flex-end;
+  }
+
+  .vectors-facts__line-form {
+    grid-column: 1 / -1;
+  }
+
+  .vectors-facts__row-error {
+    grid-column: 1 / -1;
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .vectors-facts__adding {
+    grid-column: span 3 / span 3;
+    display: grid;
+    grid-template-columns: subgrid;
+    padding-block: var(--space-xs);
+  }
+
+  .vectors-facts__empty {
+    grid-column: span 3 / span 3;
+    @include type(meta);
+    color: var(--muted);
+  }
+}

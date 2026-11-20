@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setImported, type CardMeta } from "../engines/library/store";
 import type { LibraryCommand } from "../engines/library/types";
-import { CardView } from "../features/arsenal/CardView";
+import { CardView } from "../features/arsenal/CardView/CardView";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";

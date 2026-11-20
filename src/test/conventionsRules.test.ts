@@ -141,8 +141,8 @@ describe("off-scale-spacing matcher", () => {
     expect(bad(".a { padding-left: 94px; }")).toBe(true);
   });
   it("allows the inline subnet's -2px target bleed, only in InterfaceNudge", () => {
-    expect(bad(".a { margin-block: -0.125rem; }", "src/features/network/InterfaceNudge.scss")).toBe(false);
-    expect(bad(".a { margin-inline: -0.125rem; }", "src/features/network/InterfaceNudge.scss")).toBe(true);
+    expect(bad(".a { margin-block: -0.125rem; }", "src/features/network/InterfaceNudge/InterfaceNudge.scss")).toBe(false);
+    expect(bad(".a { margin-inline: -0.125rem; }", "src/features/network/InterfaceNudge/InterfaceNudge.scss")).toBe(true);
     expect(bad(".a { margin-block: -0.125rem; }")).toBe(true);
   });
   it("allows only the documented 6px hint gap, only in HintLine", () => {
@@ -155,7 +155,7 @@ describe("scan scope", () => {
   it("covers .ts, .tsx and .scss under features and ui, App.tsx, and engines", () => {
     expect(files).toContain("src/App.tsx");
     expect(files).toContain("src/ui/Button.scss");
-    expect(files).toContain("src/features/credentials/TestGrid.scss");
+    expect(files).toContain("src/features/credentials/TestGrid/TestGrid.scss");
     expect(files).toContain("src/features/palette/suggest.ts");
     expect(files).toContain("src/ui/controlStyles.ts");
     expect(files).toContain("src/engines/stuck/engagementStuck.ts");

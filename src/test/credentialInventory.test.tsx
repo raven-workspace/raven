@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
-import { InventoryList } from "../features/credentials/InventoryList";
+import { InventoryList } from "../features/credentials/InventoryList/InventoryList";
 import { makeQueryClient } from "../lib/queryClient";
 import type { CredAttempt, Credential, Username } from "../types/credentials";
 import type { Host } from "../types/host";

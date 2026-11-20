@@ -3,8 +3,8 @@ import { garnetFixtures, GARNET_HOST } from "../audit/examFixtures";
 import { AUDIT_NOW } from "../audit/fixtures";
 import { buildPlainTarget, targetNumbers, type ReportTarget } from "../engines/report";
 import { parseMarkdown, type Block, type Inline } from "../engines/manual/markdown";
-import { ReportDataContext, type ReportDataValue } from "../features/report/editor/ReportDataContext";
-import { ReportEditor } from "../features/report/editor/ReportEditor";
+import { ReportDataContext, type ReportDataValue } from "../features/report/editor/ReportDataContext/ReportDataContext";
+import { ReportEditor } from "../features/report/editor/ReportEditor/ReportEditor";
 import "../features/report/page.css";
 import "./reportCompare.css";
 

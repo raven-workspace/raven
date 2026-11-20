@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ResultList } from "../features/arsenal/ResultList";
+import { ResultList } from "../features/arsenal/ResultList/ResultList";
 
 const groups = [{ key: "g", rows: [
   { id: "r1", title: "A command with a very long descriptive title", tag: "nxc", mono: true, stack: true },

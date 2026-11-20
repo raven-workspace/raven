@@ -1,0 +1,50 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  .playbook-section {
+    display: grid;
+    gap: var(--space-xs);
+    border-top: 1px solid var(--line);
+    padding-top: var(--space-md);
+  }
+
+  // Caret and title; at least 28px tall.
+  .playbook-section__toggle {
+    display: grid;
+    min-height: 1.75rem;
+    width: 100%;
+    cursor: default;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-sm);
+    border-radius: var(--radius-sm);
+    text-align: left;
+    @include type(body);
+    font-weight: 600;
+    color: var(--fg);
+  }
+
+  @media (hover: hover) {
+    .playbook-section__toggle:hover {
+      background-color: var(--surface-hi);
+    }
+  }
+
+  .playbook-section__caret {
+    color: var(--muted);
+  }
+
+  .playbook-section__title {
+    @include truncate;
+  }
+
+  .playbook-section__opens {
+    padding-left: var(--space-xl);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .playbook-section__list {
+    list-style-type: none;
+  }
+}

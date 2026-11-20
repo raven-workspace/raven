@@ -1,0 +1,117 @@
+@use "@/styles/abstracts/index" as *;
+
+// "Transfer a file": the fields row, the method tabs under their group labels, then the Kali and target halves.
+@layer features {
+  .transfer-generator {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  .transfer-generator__title {
+    @include type(heading);
+    color: var(--fg);
+  }
+
+  // One max-content track per field (File, OS when Payloads didn't settle it, Folder, Port when the method uses one),
+  // then the rest of the row.
+  .transfer-generator__fields {
+    display: grid;
+    align-items: start;
+    column-gap: var(--space-lg);
+    row-gap: var(--space-md);
+  }
+
+  .transfer-generator__fields--2 {
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+  }
+
+  .transfer-generator__fields--3 {
+    grid-template-columns: max-content max-content max-content minmax(0, 1fr);
+  }
+
+  .transfer-generator__fields--4 {
+    grid-template-columns: max-content max-content max-content max-content minmax(0, 1fr);
+  }
+
+  .transfer-generator__field {
+    display: grid;
+    gap: var(--space-sm);
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .transfer-generator__file {
+    max-width: 100%;
+  }
+
+  .transfer-generator__os {
+    width: 8rem;
+  }
+
+  .transfer-generator__folder {
+    width: 12rem;
+    max-width: 100%;
+  }
+
+  .transfer-generator__port {
+    width: 5rem;
+  }
+
+  .transfer-generator__methods {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .transfer-generator__method-group {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--space-sm);
+  }
+
+  // The selected method is the accent tint; the others light up on hover.
+  .transfer-generator__method {
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    @include type(body);
+    color: var(--fg-2);
+    white-space: nowrap;
+    cursor: default;
+
+    &[aria-selected="true"] {
+      background-color: var(--accent);
+      background-color: color-mix(in oklab, var(--accent) 10%, transparent);
+      color: var(--accent);
+    }
+
+    @media (hover: hover) {
+      &[aria-selected="false"]:hover {
+        background-color: var(--surface-hi);
+      }
+    }
+  }
+
+  .transfer-generator__note {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .transfer-generator__halves {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  .transfer-generator__half {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .transfer-generator__half-title {
+    @include type(body);
+    color: var(--fg-2);
+  }
+
+  .transfer-generator__half-title--truncate {
+    @include truncate;
+  }
+}

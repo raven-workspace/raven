@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FilledCommand } from "../checklist/CommandList";
+import type { FilledCommand } from "../checklist/CommandList/CommandList";
 
 export type GuardResult = { action: "copy" } | { action: "focus"; token: string };
 

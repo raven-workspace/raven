@@ -1,0 +1,68 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // The report's status strip: the cells, then the evidence toggle under 1200px.
+  .report-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-sm);
+    height: 2.25rem;
+    padding-right: var(--space-lg);
+    padding-left: var(--space-xl);
+    border-bottom: 1px solid var(--line);
+  }
+
+  // The measured box the cells fit into (useFitStrip drops cells that overflow it).
+  .report-strip__status {
+    height: 2.25rem;
+    overflow: hidden;
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .report-strip__cells {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    align-items: center;
+    justify-content: start;
+    gap: var(--space-xl);
+    height: 100%;
+    white-space: nowrap;
+  }
+
+  // To do: a button that opens the open tab's To do panel; the surface tint while the panel is open.
+  .report-strip__todo {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--space-sm);
+    height: 1.75rem;
+    padding-inline: var(--space-xs);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    cursor: default;
+
+    &[aria-expanded="true"] {
+      background-color: var(--surface-hi);
+    }
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+      }
+    }
+  }
+
+  .report-strip__count {
+    @include mono;
+    @include type(meta);
+    color: var(--fg);
+  }
+
+  .report-strip__count--todo {
+    color: var(--warn);
+  }
+}

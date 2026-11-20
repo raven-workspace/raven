@@ -1,0 +1,7 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  .facts-column {
+    display: grid;
+  }
+}

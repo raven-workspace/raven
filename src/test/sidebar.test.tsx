@@ -4,10 +4,10 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WEDGE } from "../features/hosts/HostGlyph";
-import { Sidebar, railName } from "../features/engagements/Sidebar";
+import { WEDGE } from "../features/hosts/HostGlyph/HostGlyph";
+import { Sidebar, railName } from "../features/engagements/Sidebar/Sidebar";
 import { useSidebarStore } from "../features/engagements/useSidebarStore";
-import { LogEntryRow } from "../features/log/LogEntryRow";
+import { LogEntryRow } from "../features/log/LogEntryRow/LogEntryRow";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Host } from "../types/host";
@@ -149,7 +149,7 @@ describe("sidebar", () => {
     // (sidebar-accent) plus the 2px accent bar (sidebar-primary), slides to the active link.
     expect(a).toHaveAttribute("data-active", "true");
     expect(a).toHaveClass("engagement-sidebar__link");
-    expect(readFileSync("src/features/engagements/Sidebar.scss", "utf8")).toMatch(
+    expect(readFileSync("src/features/engagements/Sidebar/Sidebar.scss", "utf8")).toMatch(
       /\.engagement-sidebar__link \{[^}]*&\[data-active="true"\] \{\s*background-color: transparent;\s*box-shadow: none;/,
     );
     const marker = document.querySelector("nav [data-tab-marker]")!;
@@ -170,7 +170,7 @@ describe("sidebar", () => {
     // Host rows: 48px wide, glyph centred in a single track.
     expect(host).toHaveClass("sidebar-menu-button--lg", "engagement-sidebar__host-row--rail");
     expect(scss).toMatch(/\.sidebar-menu-button--lg \{[^}]*#\{\$rail\} & \{\s*width: 3rem !important;/);
-    expect(readFileSync("src/features/engagements/Sidebar.scss", "utf8")).toMatch(
+    expect(readFileSync("src/features/engagements/Sidebar/Sidebar.scss", "utf8")).toMatch(
       /\.engagement-sidebar__host-row--rail \{[^}]*grid-template-columns: minmax\(0, 1fr\);\s*justify-items: center;/,
     );
     // Both lists centre their items in the same rail column, so the centres share one line.
@@ -207,7 +207,7 @@ describe("sidebar", () => {
     mount();
     const row = (await screen.findByText("dc01")).closest("a")!;
     const wrap = screen.getByRole("button", { name: "Add host" }).parentElement!.parentElement ?? screen.getByRole("button", { name: "Add host" }).parentElement!;
-    const scss = readFileSync("src/features/engagements/Sidebar.scss", "utf8");
+    const scss = readFileSync("src/features/engagements/Sidebar/Sidebar.scss", "utf8");
     const rule = (cls: string) => new RegExp(`\\.${cls} \\{([^}]*)\\}`).exec(scss)?.[1] ?? "";
     expect(row).toHaveClass("engagement-sidebar__host-row");
     expect(rule("engagement-sidebar__host-row")).toMatch(/grid-template-columns: 16px[ ;]/);

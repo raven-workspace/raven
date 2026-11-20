@@ -1,0 +1,38 @@
+@use "@/styles/abstracts/index" as *;
+
+// An engagement: sidebar, then the header and status strip over the section in view.
+@layer features {
+  .engagement-shell {
+    display: grid;
+    height: 100%;
+    min-height: 0;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .engagement-shell__column {
+    display: grid;
+    min-height: 0;
+    min-width: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  // Header and status strip both show.
+  .engagement-shell__column--two-bars {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .engagement-shell__main {
+    min-height: 0;
+    overflow: auto;
+  }
+
+  // The Report lays out its own panes and strip edge to edge; every other section is padded.
+  .engagement-shell__main--padded {
+    padding: var(--space-xl);
+  }
+
+  // Not found, loading and error states.
+  .engagement-shell__state {
+    padding: var(--space-xl) var(--space-2xl);
+  }
+}

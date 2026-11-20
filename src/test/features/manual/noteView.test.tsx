@@ -9,9 +9,9 @@ import type { CardMeta } from "../../../engines/library/store";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { logCommand } from "../../../features/capture/logCommand";
-import { NoteTable } from "../../../features/manual/NoteTable";
+import { NoteTable } from "../../../features/manual/NoteTable/NoteTable";
 import { useManualStatus } from "../../../features/manual/useManualStatus";
-import { NoteView } from "../../../features/manual/NoteView";
+import { NoteView } from "../../../features/manual/NoteView/NoteView";
 import { api } from "../../../lib/api";
 import { makeQueryClient } from "../../../lib/queryClient";
 import type { Engagement } from "../../../types/engagement";
@@ -512,7 +512,7 @@ describe("NoteView emphasis around code", () => {
 describe("safe Markdown", () => {
   it("the Manual never injects HTML", () => {
     const root = join(__dirname, "..", "..", "..", "..");
-    for (const f of ["src/engines/manual/anchors.ts", "src/engines/manual/markdown.ts", "src/engines/manual/links.ts", "src/features/manual/NoteView.tsx", "src/features/manual/NoteTable.tsx", "src/features/manual/ManualCommand.tsx"]) {
+    for (const f of ["src/engines/manual/anchors.ts", "src/engines/manual/markdown.ts", "src/engines/manual/links.ts", "src/features/manual/NoteView/NoteView.tsx", "src/features/manual/NoteTable/NoteTable.tsx", "src/features/manual/ManualCommand/ManualCommand.tsx"]) {
       expect(readFileSync(join(root, f), "utf8"), f).not.toMatch(/dangerouslySetInnerHTML|innerHTML|outerHTML|insertAdjacentHTML/);
     }
   });

@@ -1,0 +1,66 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  .command-list {
+    display: grid;
+    gap: var(--space-lg);
+    list-style-type: none;
+  }
+
+  .command-list__item {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  // Description, then the copy guard's status.
+  .command-list__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: var(--space-sm);
+  }
+
+  .command-list__desc {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .command-list__desc--strong {
+    @include type(body);
+    font-weight: 500;
+    color: var(--fg);
+  }
+
+  .command-list__status {
+    @include type(meta);
+    color: var(--accent);
+  }
+
+  .command-list__status--warn {
+    color: var(--warn);
+  }
+
+  // "via tunnel on ..." chip as a link to Network.
+  .command-list__tunnel-link {
+    display: inline-grid;
+    min-height: 1.5rem;
+    align-items: center;
+    border-radius: var(--radius-full);
+
+    &:focus-visible {
+      outline-style: solid;
+      outline-width: 1px;
+      outline-color: var(--accent);
+    }
+
+    > span {
+      text-underline-offset: 2px;
+    }
+  }
+
+  @media (hover: hover) {
+    .command-list__tunnel-link > span:hover {
+      text-decoration-line: underline;
+    }
+  }
+}

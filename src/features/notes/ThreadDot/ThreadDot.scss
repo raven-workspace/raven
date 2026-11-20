@@ -1,0 +1,12 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // Small neutral dot: this host has open threads.
+  .thread-dot {
+    width: 0.375rem;
+    height: 0.375rem;
+    flex-shrink: 0;
+    border-radius: var(--radius-full);
+    background-color: var(--fg-2);
+  }
+}

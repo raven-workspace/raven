@@ -69,7 +69,9 @@ with every screen pixel-identical. Inventory: [tailwind-to-css-inventory.md](tai
 
 ## Feature conventions
 
-- One `.scss` per component file, next to it (`TestGrid.tsx` + `TestGrid.scss`), imported by that file; BEM block named
+- Each feature component has its own folder holding the component and its sheet (`credentials/TestGrid/TestGrid.tsx` +
+  `TestGrid.scss`), the sheet imported by the component; modules a feature shares (queries, hooks, helpers, a sheet
+  several components use, `_` partials) stay at the feature's root; BEM block named
   after the component in kebab-case (`.test-grid`), so class names are unique app-wide. All rules in `@layer features`.
 - A class a feature puts on a `src/ui` primitive needs nothing special: `features` beats `components`.
 - A class a feature puts on **another feature's** component shares that component's layer, so it is written with two

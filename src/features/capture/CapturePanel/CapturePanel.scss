@@ -1,0 +1,26 @@
+@use "@/styles/abstracts/index" as *;
+
+// The capture sheet: a scrim over the engagement screen and the sheet pinned to the right edge.
+@layer features {
+  // Under the sheet (z 50) and over the drawers (z 30).
+  .capture-panel__overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background-color: var(--bg);
+    background-color: color-mix(in oklab, var(--bg) 60%, transparent);
+  }
+
+  .capture-panel {
+    position: fixed;
+    inset-block: 0;
+    right: 0;
+    z-index: var(--z-dialog);
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    width: min(580px, 100vw);
+    border-left: 1px solid var(--line-2);
+    background-color: var(--surface);
+    color: var(--fg-2);
+  }
+}

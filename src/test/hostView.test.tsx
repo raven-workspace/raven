@@ -149,7 +149,7 @@ describe("host view", () => {
     const facts = await screen.findByRole("region", { name: "Facts" });
     const root = screen.getByRole("region", { name: "Host" }).parentElement!;
     expect(root).toHaveClass("host-view");
-    const scss = readFileSync("src/features/hosts/HostView.scss", "utf8");
+    const scss = readFileSync("src/features/hosts/HostView/HostView.scss", "utf8");
     expect(scss).toMatch(/\.host-view \{\s*container-type: inline-size;\s*container-name: host;/);
     // Header, then the work area: no hint row (the shortcuts live behind the header's ?).
     expect(scss).toMatch(/\.host-view \{[^}]*grid-template-rows: auto minmax\(0, 1fr\);/);

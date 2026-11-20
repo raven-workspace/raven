@@ -2,8 +2,8 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { HostChip, isHostPickKey } from "../features/arsenal/HostChip";
-import type { HostChipHandle } from "../features/arsenal/HostChip";
+import { HostChip, isHostPickKey } from "../features/arsenal/HostChip/HostChip";
+import type { HostChipHandle } from "../features/arsenal/HostChip/HostChip";
 import type { Host } from "../types/host";
 
 const host = (id: string, name: string, ip: string | null): Host => ({

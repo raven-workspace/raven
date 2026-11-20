@@ -1,0 +1,17 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // One day of log rows under its heading.
+  .log-day {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .log-day__heading {
+    padding-top: var(--space-sm);
+  }
+
+  .log-day__list {
+    border-top: 1px solid var(--line);
+  }
+}

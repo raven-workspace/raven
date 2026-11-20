@@ -15,8 +15,8 @@ import { resolveTemplate } from "../../engines/checklist/template";
 import { getLibrary } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import type { Engagement } from "../../types/engagement";
-import { MASK } from "../credentials/MaskedSecret";
-import type { FilledCommand } from "./CommandList";
+import { MASK } from "../credentials/MaskedSecret/MaskedSecret";
+import type { FilledCommand } from "./CommandList/CommandList";
 import { filePickFor, pickOverrides } from "./filePick";
 import { portPickKey, usePortPickStore } from "./portPick";
 

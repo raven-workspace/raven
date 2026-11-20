@@ -1,0 +1,57 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // The Network section; sets `--node-w`, the tree's shared node width, inline.
+  .network-section {
+    display: grid;
+    min-width: 0;
+    gap: var(--space-xl);
+  }
+
+  // Label, Add hop, Add tunnel.
+  .network-section__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  // 4px of room (padding, cancelled by the margin) so a focused node's outline is not clipped by the scroller.
+  .network-section__path {
+    margin: calc(var(--space-xs) * -1);
+    display: grid;
+    gap: var(--space-md);
+    overflow-x: auto;
+    padding: var(--space-xs);
+  }
+
+  .network-section__empty {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .network-section__unreached {
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  // Tree: the tree's node width. List: as wide as the list, so both end on the same edge.
+  .network-section__tray {
+    display: grid;
+    gap: var(--space-md);
+    list-style-type: none;
+  }
+
+  .network-section__tray--tree {
+    grid-template-columns: repeat(auto-fill, var(--node-w));
+  }
+
+  .network-section__tray--list {
+    max-width: 36rem;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  }
+
+  .network-section__tray-item {
+    display: grid;
+  }
+}

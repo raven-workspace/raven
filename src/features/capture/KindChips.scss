@@ -1,9 +1,0 @@
-@use "@/styles/abstracts" as *;
-
-@layer features {
-  // Body-size segments (the group's own are meta), the shortcut 8px after the label.
-  .kind-chips__item {
-    gap: var(--space-sm);
-    @include type(body);
-  }
-}

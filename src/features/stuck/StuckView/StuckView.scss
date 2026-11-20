@@ -1,0 +1,227 @@
+@use "@/styles/abstracts/index" as *;
+
+// The stuck view (`H`, a slide-over on the host view) and the engagement-wide stuck check.
+@layer features {
+  .stuck-view {
+    position: fixed;
+    right: 0;
+    z-index: var(--z-drawer);
+    display: grid;
+    max-width: 70vw;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    border-left: 1px solid var(--line-2);
+    background-color: var(--surface);
+    color: var(--fg-2);
+    outline-style: none;
+  }
+
+  .stuck-view__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-md);
+    border-bottom: 1px solid var(--line);
+    padding: var(--space-sm) var(--space-lg);
+  }
+
+  .stuck-view__title {
+    @include truncate;
+    @include type(heading);
+    color: var(--fg);
+  }
+
+  .stuck-view__body {
+    display: grid;
+    min-height: 0;
+    align-content: flex-start;
+    gap: var(--space-lg);
+    overflow-y: auto;
+    padding: var(--space-md) var(--space-lg);
+  }
+
+  .stuck-view__footer {
+    border-top: 1px solid var(--line);
+    padding: var(--space-sm) var(--space-lg);
+  }
+
+  // One section of the view; a hairline between sections, none above the first.
+  .stuck-view__section {
+    display: grid;
+    gap: var(--space-sm);
+    border-top: 1px solid var(--line-2);
+    padding-top: var(--space-lg);
+
+    &:first-child {
+      border-top-width: 0;
+      padding-top: 0;
+    }
+  }
+
+  .stuck-view__list {
+    display: grid;
+    gap: var(--space-xs);
+    list-style-type: none;
+  }
+
+  .stuck-view__group {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .stuck-view__text {
+    @include type(meta);
+    color: var(--fg-2);
+  }
+
+  .stuck-view__text--strong {
+    color: var(--fg);
+  }
+
+  .stuck-view__text--muted {
+    color: var(--muted);
+  }
+
+  // A skipped goal: opens it.
+  .stuck-view__goal {
+    cursor: default;
+    text-align: left;
+    @include type(meta);
+    color: var(--fg-2);
+    text-underline-offset: 2px;
+
+    &:focus-visible {
+      outline-style: solid;
+      outline-width: 1px;
+      outline-color: var(--accent);
+    }
+  }
+
+  @media (hover: hover) {
+    .stuck-view__goal:hover {
+      color: var(--fg);
+      text-decoration-line: underline;
+    }
+  }
+
+  // port/proto, service, reason.
+  .stuck-view__service {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: var(--space-sm);
+    @include type(meta);
+  }
+
+  // port/proto, product.
+  .stuck-view__untouched {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--space-sm);
+    @include type(meta);
+  }
+
+  .stuck-view__code {
+    @include type(code);
+    color: var(--fg);
+  }
+
+  .stuck-view__code--soft {
+    color: var(--fg-2);
+  }
+
+  .stuck-view__code--truncate {
+    @include truncate;
+  }
+
+  .stuck-view__reason {
+    color: var(--muted);
+  }
+
+  .stuck-view__product {
+    @include truncate;
+    color: var(--muted);
+  }
+
+  .stuck-view__notes {
+    white-space: pre-wrap;
+    @include type(code);
+    color: var(--fg-2);
+  }
+
+  // Engagement stuck check.
+  .stuck-check {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .stuck-check__empty {
+    padding: var(--space-sm) var(--space-xs);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .stuck-check__areas {
+    display: grid;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-xs);
+  }
+
+  .stuck-check__area {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .stuck-check__area-title {
+    padding-inline: var(--space-xs);
+    @include type(meta);
+    color: var(--fg-2);
+  }
+
+  .stuck-check__count {
+    @include type(code);
+    color: var(--faint);
+  }
+
+  .stuck-check__list {
+    display: grid;
+    list-style-type: none;
+  }
+
+  // A selectable list row (DESIGN.md: no grey text links for actions), at least 28px tall.
+  .stuck-check__line {
+    display: grid;
+    min-height: 1.75rem;
+    width: 100%;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: center;
+    align-items: baseline;
+    gap: var(--space-sm);
+    border-radius: var(--radius-sm);
+    padding: var(--space-xs);
+    text-align: left;
+    @include type(meta);
+    color: var(--fg-2);
+  }
+
+  .stuck-check__line--action {
+    cursor: default;
+  }
+
+  @media (hover: hover) {
+    .stuck-check__line--action:hover {
+      background-color: var(--surface-hi);
+      color: var(--fg);
+    }
+  }
+
+  .stuck-check__subject {
+    max-width: 24ch;
+    @include truncate;
+    color: var(--fg);
+  }
+
+  .stuck-check__text--wide {
+    grid-column: span 2 / span 2;
+  }
+}

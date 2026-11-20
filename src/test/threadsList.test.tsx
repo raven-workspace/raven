@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ThreadsList } from "../features/notes/ThreadsList";
+import { ThreadsList } from "../features/notes/ThreadsList/ThreadsList";
 
 describe("ThreadsList", () => {
   it("renders nothing when the note has no open threads", () => {

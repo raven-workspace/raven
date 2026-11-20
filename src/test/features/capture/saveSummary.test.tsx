@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SaveSummary } from "../../../features/capture/SaveSummary";
+import { SaveSummary } from "../../../features/capture/SaveSummary/SaveSummary";
 import { useSaveSummaryStore } from "../../../features/capture/useSaveSummaryStore";
 import { afterEntrySaved } from "../../../features/checklist/ticks";
-import { ExtractedLine } from "../../../features/log/ExtractedLine";
+import { ExtractedLine } from "../../../features/log/ExtractedLine/ExtractedLine";
 import { extractionsKey, invalidateAfterSave } from "../../../features/log/extractions";
 import { triedPairsKey } from "../../../features/credentials/queries";
 import { api } from "../../../lib/api";
