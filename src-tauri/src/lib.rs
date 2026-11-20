@@ -12,7 +12,6 @@ pub mod extractions;
 pub mod host_facts;
 pub mod hosts;
 pub mod field_manual;
-pub mod import;
 pub mod log;
 pub mod network;
 pub mod notes;
@@ -50,7 +49,6 @@ pub fn run() {
             commands::backups_list,
             commands::backup_restore,
             commands::backup_restore_locked,
-            commands::import_apply,
             commands::field_manual_scan,
             commands::field_manual_latest_mtime,
             commands::field_manual_save,

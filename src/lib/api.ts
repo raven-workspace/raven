@@ -3,8 +3,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { FieldManualSnapshot } from "../engines/fieldManual/merge";
 import type { VaultFile } from "../types/fieldManual";
 import type { BackupInfo } from "../types/backup";
-import type { ImportPlan } from "../engines/import/plan";
-import type { ImportSummary } from "../types/import";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
 import type { GoalRef } from "../engines/checklist";
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
@@ -81,9 +79,6 @@ export const api = {
 
   backupNow: () => call<BackupInfo>("backup_now"),
   backupsList: () => call<BackupInfo[]>("backups_list"),
-  /** Takes a `pre-import` backup, then adds the plan's records in one transaction. Existing rows are never
-   *  changed; a dangling reference fails the whole import (validation) and nothing is written. */
-  importApply: (plan: ImportPlan) => call<ImportSummary>("import_apply", { plan }),
   /** Reads the vault's Toolkit, playbooks and cards. Read-only; a missing folder is `not_found`. */
   fieldManualScan: (path: string) => call<VaultFile[]>("field_manual_scan", { path }),
   /** Newest modified time (ms) among the files a scan reads, or null when there are none. */

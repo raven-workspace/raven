@@ -221,10 +221,6 @@ describe("joined-strings in engines (narrow)", () => {
     expect(breaks("joined-strings", E, "// `${a} — ${b}` was the old title\nconst a = 1;")).toBe(false);
     expect(breaks("joined-strings", E, "const w = `${n} hosts detected — primary target ports mapped.`;")).toBe(false);
   });
-  it("exempts the import writers: stored titles and note bodies stay as they were", () => {
-    expect(breaks("joined-strings", "src/engines/import/plan.ts", "const t = `${a} · ${b}`;")).toBe(false);
-    expect(breaks("joined-strings", "src/engines/import/loot.ts", "const t = `${a} · ${b}`;")).toBe(false);
-  });
   it("applies no markup rules to engines", () => {
     for (const r of ["tiny-type", "feature-flex", "hand-hint", "esc-close", "unknown-color", "off-scale-spacing"] as const)
       expect(breaks(r, E, 'const c = "text-xs flex bg-[#fff] p-1.5"; <div><Kbd>a</Kbd><Kbd>esc</Kbd></div>'), r).toBe(false);
