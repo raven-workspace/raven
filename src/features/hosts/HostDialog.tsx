@@ -4,6 +4,7 @@ import type { Host, HostAccess, HostInput, HostOs } from "../../types/host";
 import { Button, ChipSet, Dialog, Field, Input, Select, Toggle } from "../../ui";
 import { useHostMutations } from "./queries";
 import { useEngagement } from "../engagements/queries";
+import { ConfirmDelete } from "../checklist/ConfirmDelete";
 
 /** What a host delete takes with it (FK cascades) and what stays. */
 const HOST_DELETE_DETAIL =
@@ -157,42 +158,15 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
 function DeleteHostDialog({ host, onClose }: { host: Host; onClose: () => void }) {
   const navigate = useNavigate();
   const { remove } = useHostMutations(host.engagementId);
-  const [error, setError] = useState<string>();
   return (
-    <Dialog
-      open
-      onOpenChange={(o) => !o && onClose()}
+    <ConfirmDelete
       title={`Delete ${host.name}?`}
-      description={
-        <>
-          {HOST_DELETE_DETAIL}
-          {error && (
-            <>
-              {" "}
-              <span role="alert" className="text-warn">
-                {error}
-              </span>
-            </>
-          )}
-        </>
-      }
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            variant="danger"
-            disabled={remove.isPending}
-            onClick={() =>
-              remove.mutate(host.id, {
-                onSuccess: () => void navigate(`/e/${host.engagementId}`),
-                onError: (e) => setError(e.message),
-              })
-            }
-          >
-            Delete host
-          </Button>
-        </>
-      }
+      detail={HOST_DELETE_DETAIL}
+      error={remove.error?.message}
+      pending={remove.isPending}
+      label="Delete host"
+      onCancel={onClose}
+      onConfirm={() => remove.mutate(host.id, { onSuccess: () => void navigate(`/e/${host.engagementId}`) })}
     />
   );
 }
