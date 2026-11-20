@@ -1,0 +1,104 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // Field notes (`N`): docked on the right under the title bar; its width is set inline.
+  .notes-panel {
+    position: fixed;
+    right: 0;
+    z-index: var(--z-drawer);
+    display: grid;
+    max-width: 70vw;
+    grid-template-rows: auto minmax(0, 1fr);
+    border-left: 1px solid var(--line-2);
+    background-color: var(--surface);
+    color: var(--fg-2);
+  }
+
+  // The drag handle on the left edge.
+  .notes-panel__resize {
+    position: absolute;
+    inset-block: 0;
+    left: calc(var(--space-xs) * -1);
+    width: 0.5rem;
+    cursor: col-resize;
+  }
+
+  @media (hover: hover) {
+    .notes-panel__resize:hover {
+      background-color: var(--line-2);
+    }
+  }
+
+  .notes-panel__resize:focus-visible {
+    background-color: var(--line-2);
+  }
+
+  .notes-panel__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-md);
+    border-bottom: 1px solid var(--line);
+    padding: var(--space-md) var(--space-lg);
+  }
+
+  .notes-panel__title {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--space-sm);
+  }
+
+  .notes-panel__scope-name {
+    @include truncate;
+    @include type(body);
+    color: var(--fg);
+  }
+
+  .notes-panel__scopes {
+    display: grid;
+    grid-auto-flow: column;
+  }
+
+  // Host / Engagement. The chosen half shows in accent text; its border stays --line-2 (Tailwind emitted
+  // border-line-2 after border-accent, so the accent border never rendered).
+  .notes-panel__segment {
+    height: 1.75rem;
+    cursor: default;
+    border: 1px solid var(--line-2);
+    padding-inline: var(--space-sm);
+    @include type(body);
+    color: var(--fg-2);
+
+    &[aria-pressed="true"] {
+      color: var(--accent);
+    }
+
+    &:first-child {
+      border-top-left-radius: var(--radius-sm);
+      border-bottom-left-radius: var(--radius-sm);
+    }
+
+    &:last-child {
+      border-top-right-radius: var(--radius-sm);
+      border-bottom-right-radius: var(--radius-sm);
+      border-left-width: 0;
+    }
+  }
+
+  @media (hover: hover) {
+    .notes-panel__segment:not([aria-pressed="true"]):hover {
+      color: var(--fg);
+    }
+  }
+
+  .notes-panel__segment:disabled {
+    opacity: 40%;
+  }
+
+  // The editor's padding inside the panel (NoteEditor sets none of its own).
+  .notes-panel .notes-panel__editor {
+    padding: var(--space-md) var(--space-lg);
+  }
+}

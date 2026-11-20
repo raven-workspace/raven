@@ -6,6 +6,7 @@ import { IconButton, labelClass } from "../../ui";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useRuledOutDelete } from "./queries";
+import "./RuledOutList.scss";
 
 const FROM_VERDICT: Record<NonNullable<RuledOut["sourceKind"]>, string> = {
   service: "From a service's dead-end verdict",
@@ -21,22 +22,22 @@ export function RuledOutList({ engagementId, items }: { engagementId: string; it
   const [deleting, setDeleting] = useState<RuledOut>();
   if (items.length === 0) return null;
   return (
-    <section aria-label="Ruled out" className={cx("grid max-h-40 content-start gap-1", SCROLL_PANE)}>
-      <h3 className={cx(labelClass, "m-0")}>
-        Ruled out <span className="tabular-nums">{items.length}</span>
+    <section aria-label="Ruled out" className={cx("ruled-out-list", SCROLL_PANE)}>
+      <h3 className={labelClass}>
+        Ruled out <span className="ruled-out-list__count">{items.length}</span>
       </h3>
-      <ul className="m-0 grid list-none gap-1 p-0">
+      <ul className="ruled-out-list__items">
         {items.map((r) => (
-          <li key={r.id} className="grid min-h-7 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-            <span className="grid min-w-0">
-              <span className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
-                <span className="truncate text-body text-fg-2" title={r.text}>{r.text}</span>
-                {r.private && <span className="text-meta text-muted">Private</span>}
+          <li key={r.id} className="ruled-out-list__item">
+            <span className="ruled-out-list__body">
+              <span className="ruled-out-list__head">
+                <span className="ruled-out-list__text" title={r.text}>{r.text}</span>
+                {r.private && <span className="ruled-out-list__meta">Private</span>}
               </span>
-              {r.reason && <span className="truncate text-meta text-muted" title={r.reason}>{r.reason}</span>}
+              {r.reason && <span className="ruled-out-list__meta ruled-out-list__meta--truncate" title={r.reason}>{r.reason}</span>}
             </span>
             {r.sourceKind ? (
-              <span className="text-meta text-muted">{FROM_VERDICT[r.sourceKind]}</span>
+              <span className="ruled-out-list__meta">{FROM_VERDICT[r.sourceKind]}</span>
             ) : (
               <IconButton icon={Trash} tone="destructive" label={`Delete ruled-out item: ${r.text}`} onClick={() => setDeleting(r)} />
             )}

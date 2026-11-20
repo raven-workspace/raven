@@ -2,11 +2,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { closeThread, openThreads } from "../../engines/notes/threads";
 import { api } from "../../lib/api";
-import { cx } from "../../lib/cx";
 import { RavenError } from "../../types/errors";
 import { Button, Dialog, Field, Input, Toggle } from "../../ui";
 import { ruledOutKey } from "./queries";
 import { flushNotes, noteKey, sessionGeneration, useNotesStore, type NoteTarget } from "./useNotesStore";
+import "./CloseThreadDialog.scss";
 
 export interface ClosingThread {
   line: number;
@@ -100,13 +100,13 @@ function Body({ thread, target, saved, onClose }: { thread: ClosingThread; targe
 
   return (
     <form
-      className="grid gap-4"
+      className="close-thread"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
       }}
     >
-      <div role="group" aria-label="Outcome" className="grid grid-flow-col justify-start">
+      <div role="group" aria-label="Outcome" className="close-thread__outcome">
         <Choice on={outcome === "panned"} disabled={rewritten} onClick={() => setOutcome("panned")}>
           Panned out
         </Choice>
@@ -119,17 +119,17 @@ function Body({ thread, target, saved, onClose }: { thread: ClosingThread; targe
           <Field label="Reason" hint="One line: why it's ruled out.">
             <Input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} />
           </Field>
-          <Toggle on={isPrivate} onChange={setIsPrivate} className="justify-self-start">
+          <Toggle on={isPrivate} onChange={setIsPrivate} className="close-thread__private">
             Private
           </Toggle>
         </>
       )}
       {error && (
-        <p role="alert" className="m-0 text-meta text-warn">
+        <p role="alert" className="close-thread__error">
           {error}
         </p>
       )}
-      <div className="grid grid-flow-col justify-end gap-2">
+      <div className="close-thread__actions">
         <Button type="button" onClick={onClose}>
           Cancel
         </Button>
@@ -148,10 +148,7 @@ function Choice({ on, disabled, onClick, children }: { on: boolean; disabled?: b
       aria-pressed={on}
       disabled={disabled}
       onClick={onClick}
-      className={cx(
-        "h-7 border border-line-2 px-3 text-body first:rounded-l-sm last:rounded-r-sm last:border-l-0 cursor-default disabled:opacity-40",
-        on ? "border-accent text-accent" : "text-fg-2 hover:text-fg",
-      )}
+      className="close-thread__choice"
     >
       {children}
     </button>

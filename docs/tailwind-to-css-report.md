@@ -330,3 +330,23 @@
 - [x] Unit tests (no utility assertions in this area)
 - [x] Type check and lint
 - [x] Pixel diff and audit gate: see the hosts unit (one run over stuck, notes, checklist, network and hosts)
+
+## Unit: notes
+
+### Changes
+- NotesPanel.scss (`.notes-panel`, resize handle, header, Host/Engagement segments), NoteEditor.scss
+  (`.note-editor`, `--lists` when threads or ruled-out items show), ThreadsList.scss, RuledOutList.scss,
+  CloseThreadDialog.scss (`.close-thread`, its Panned out / Dead end segments), ThreadDot.scss.
+- The segments' chosen state keys on `aria-pressed="true"`; hover stays on the unpressed one, as before.
+- NotesPanel puts `.notes-panel__editor` (padding) on NoteEditor with two classes.
+
+### Differences and risks
+- **Existing bug kept as is:** the chosen segment of both segmented controls (notes scope, close-thread outcome) never
+  showed its accent border: `border-accent` lost to `border-line-2`, which Tailwind emits later. The SCSS keeps the
+  `--line-2` border and only the accent text, so nothing changes on screen.
+- findings/SplitLeftPane passes `min-h-[16rem] py-2` to NoteEditor. As Tailwind utilities they still win; when the
+  findings unit moves them to SCSS they need a two-class selector to beat `.note-editor`'s `min-height: 0`.
+
+### Verification
+- [x] Unit tests, type check, lint
+- [x] Pixel diff and audit gate: see the hosts unit

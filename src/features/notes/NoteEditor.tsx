@@ -8,6 +8,7 @@ import { ThreadsList } from "./ThreadsList";
 import { useNote, useRuledOut } from "./queries";
 import { RuledOutList } from "./RuledOutList";
 import { flushQuietly, noteKey, useNotesStore, type NoteTarget } from "./useNotesStore";
+import "./NoteEditor.scss";
 
 /**
  * Raw Markdown, typed fast: no macOS text services in WKWebView (autocapitalised lines, inline writing
@@ -80,14 +81,14 @@ export function NoteEditor({ target, textRef, className }: {
   return (
     <div
       className={cx(
-        "grid min-h-0 gap-2",
+        "note-editor",
         // Threads and ruled-out items (when any), the text, then the footer: the text takes the slack.
-        openThreads(body).length > 0 || ruledOut.length > 0 ? "grid-rows-[auto_minmax(0,1fr)_auto]" : "grid-rows-[minmax(0,1fr)_auto]",
+        (openThreads(body).length > 0 || ruledOut.length > 0) && "note-editor--lists",
         className,
       )}
     >
       {(openThreads(body).length > 0 || ruledOut.length > 0) && (
-        <div className="grid content-start gap-3">
+        <div className="note-editor__lists">
           <ThreadsList body={body} onClose={(line, text) => setClosing({ line, text })} />
           <RuledOutList engagementId={target.engagementId} items={ruledOut} />
         </div>
@@ -102,9 +103,9 @@ export function NoteEditor({ target, textRef, className }: {
         {...NO_TEXT_SERVICES}
         onChange={(e) => edit(target, e.target.value, isPrivate)}
         onKeyDown={onKeyDown}
-        className="h-full min-h-0"
+        className="note-editor__text"
       />
-      <div className="grid gap-2">
+      <div className="note-editor__footer">
         {note.isError && !pending && (
           <ErrorState
             title="Couldn't load these notes"
@@ -114,15 +115,15 @@ export function NoteEditor({ target, textRef, className }: {
           />
         )}
         {error && (
-          <p role="alert" className="m-0 text-meta text-warn">
+          <p role="alert" className="note-editor__error">
             {error}. Your text is still here; it saves again when you type or close.
           </p>
         )}
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+        <div className="note-editor__status-row">
           <Toggle on={isPrivate} onChange={(on) => edit(target, body, on)} disabled={!ready}>
             Private
           </Toggle>
-          <span className="justify-self-end text-meta text-muted" aria-live="polite">
+          <span className="note-editor__status" aria-live="polite">
             {error ? "" : pending ? "Saving…" : note.data && note.data.updatedAt > 0 ? "Saved" : ""}
           </span>
         </div>

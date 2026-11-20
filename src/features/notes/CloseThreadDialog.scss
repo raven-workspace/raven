@@ -1,0 +1,66 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  .close-thread {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  .close-thread__outcome {
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: flex-start;
+  }
+
+  .close-thread__private {
+    justify-self: flex-start;
+  }
+
+  .close-thread__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .close-thread__actions {
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+  }
+
+  // One half of the Panned out / Dead end segmented control. The chosen half shows in accent text; its border stays
+  // --line-2 (Tailwind emitted border-line-2 after border-accent, so the accent border never rendered).
+  .close-thread__choice {
+    height: 1.75rem;
+    cursor: default;
+    border: 1px solid var(--line-2);
+    padding-inline: var(--space-md);
+    @include type(body);
+    color: var(--fg-2);
+
+    &[aria-pressed="true"] {
+      color: var(--accent);
+    }
+
+    &:first-child {
+      border-top-left-radius: var(--radius-sm);
+      border-bottom-left-radius: var(--radius-sm);
+    }
+
+    &:last-child {
+      border-top-right-radius: var(--radius-sm);
+      border-bottom-right-radius: var(--radius-sm);
+      border-left-width: 0;
+    }
+  }
+
+  @media (hover: hover) {
+    .close-thread__choice:not([aria-pressed="true"]):hover {
+      color: var(--fg);
+    }
+  }
+
+  .close-thread__choice:disabled {
+    opacity: 40%;
+  }
+}

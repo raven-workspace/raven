@@ -6,6 +6,7 @@ import { cx } from "../../lib/cx";
 import { useHosts } from "../hosts/queries";
 import { NoteEditor } from "./NoteEditor";
 import { flushQuietly, MIN_WIDTH, maxWidth, noteKey, useNotesStore, type NotesScope } from "./useNotesStore";
+import "./NotesPanel.scss";
 
 /**
  * Field notes (`N`): a panel over the right side of the engagement screen holding the current
@@ -108,7 +109,7 @@ function PanelBody({
       ref={panelRef}
       aria-label={title}
       style={{ width }}
-      className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid max-w-[70vw] grid-rows-[auto_minmax(0,1fr)] border-l border-line-2 bg-surface text-fg-2`}
+      className={cx("notes-panel", BELOW_TITLE_BAR)}
     >
       <div
         role="separator"
@@ -124,16 +125,16 @@ function PanelBody({
           e.preventDefault();
           useNotesStore.getState().setWidth(width + (e.key === "ArrowLeft" ? 24 : -24));
         }}
-        className="absolute inset-y-0 -left-1 w-2 cursor-col-resize hover:bg-line-2 focus-visible:bg-line-2"
+        className="notes-panel__resize"
       />
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-4 py-3">
+      <header className="notes-panel__header">
         {/* The space keeps "Notes SRV11" readable as one heading name; the grid ignores it. */}
-        <h2 className="m-0 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2">
+        <h2 className="notes-panel__title">
           <span className={labelClass}>Notes</span>{" "}
-          {scopeName && <span className="truncate text-body text-fg" title={scopeName}>{scopeName}</span>}
+          {scopeName && <span className="notes-panel__scope-name" title={scopeName}>{scopeName}</span>}
         </h2>
         <Toolbar>
-          <div role="group" aria-label="Scope" className="grid grid-flow-col">
+          <div role="group" aria-label="Scope" className="notes-panel__scopes">
             <Segment on={scope === "host"} disabled={!hostId} onClick={() => setScope("host")}>
               Host
             </Segment>
@@ -144,7 +145,7 @@ function PanelBody({
           <Kbd aria-hidden>⌘E</Kbd>
         </Toolbar>
       </header>
-      <NoteEditor target={target} textRef={textRef} className="px-4 py-3" />
+      <NoteEditor target={target} textRef={textRef} className="notes-panel__editor" />
     </aside>
   );
 }
@@ -156,10 +157,7 @@ function Segment({ on, disabled, onClick, children }: { on: boolean; disabled?: 
       aria-pressed={on}
       disabled={disabled}
       onClick={onClick}
-      className={cx(
-        "h-7 border border-line-2 px-2 text-body first:rounded-l-sm last:rounded-r-sm last:border-l-0 cursor-default disabled:opacity-40",
-        on ? "border-accent text-accent" : "text-fg-2 hover:text-fg",
-      )}
+      className="notes-panel__segment"
     >
       {children}
     </button>
