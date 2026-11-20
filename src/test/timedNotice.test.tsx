@@ -19,7 +19,7 @@ describe("TimedNotice", () => {
     const status = screen.getByRole("status");
     expect(container.contains(status)).toBe(false);
     expect(status.parentElement).toBe(document.body);
-    expect(status).toHaveClass("fixed", "bottom-4", "z-50");
+    expect(status).toHaveClass("timed-notice");
   });
 
   it("sits 16px right of the sidebar, expanded and collapsed", () => {

@@ -1,5 +1,6 @@
 import * as RT from "@radix-ui/react-tooltip";
 import { createContext, useContext, useState, type ReactNode } from "react";
+import "./Tooltip.scss";
 
 /** True under a TooltipProvider, so tooltips share it (and its skip delay) instead of bringing their own. */
 const HasProvider = createContext(false);
@@ -39,7 +40,7 @@ export function Tooltip({
         <RT.Content
           side={side}
           sideOffset={4}
-          className="z-50 rounded-sm border border-line-strong bg-surface px-2 py-1 text-meta text-fg-2 whitespace-nowrap"
+          className="tooltip"
         >
           {content}
         </RT.Content>

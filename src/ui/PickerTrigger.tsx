@@ -1,6 +1,7 @@
 import { CaretDown } from "@phosphor-icons/react";
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { cx } from "../lib/cx";
+import "./PickerTrigger.scss";
 
 export interface PickerTriggerProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
   prefix: string;
@@ -18,20 +19,17 @@ export function PickerTrigger({ prefix, value, placeholder = "Pick one", icon, w
     <button
       type={type}
       data-picker-trigger=""
-      className={cx(
-        "inline-grid h-7 max-w-full grid-flow-col items-center gap-2 rounded-sm border border-line-2 bg-transparent px-2 text-left select-none cursor-default hover:bg-surface-hi",
-        className,
-      )}
+      className={cx("picker-trigger", className)}
       {...rest}
     >
       {icon}
-      {prefix && <span className="text-meta text-muted-2">{prefix}</span>}
+      {prefix && <span className="picker-trigger__prefix">{prefix}</span>}
       {value ? (
-        <span className={cx("min-w-0 truncate text-body", warn ? "text-warn" : "text-fg")}>{value}</span>
+        <span className={cx("picker-trigger__value", warn && "picker-trigger__value--warn")}>{value}</span>
       ) : (
-        <span className="text-body text-warn">{placeholder}</span>
+        <span className="picker-trigger__placeholder">{placeholder}</span>
       )}
-      <CaretDown size={12} aria-hidden className="text-fg-2" />
+      <CaretDown size={12} aria-hidden className="picker-trigger__caret" />
     </button>
   );
 }

@@ -2,6 +2,7 @@ import { XIcon } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { IconButton } from "./IconButton";
+import "./TimedNotice.scss";
 
 const CLOSE_MS = 5000;
 const SIDEBAR = '[data-slot="sidebar-gap"]';
@@ -62,11 +63,11 @@ export function TimedNotice({
       onFocus={() => setFocus(true)}
       onBlur={() => setFocus(false)}
       style={{ left }}
-      className="fixed bottom-4 z-50 grid w-[min(400px,calc(100vw-2rem))] grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-md border border-line-2 bg-surface px-3 py-3 text-meta shadow-lg"
+      className="timed-notice"
     >
-      <div className={action ? "row-span-2 grid min-w-0" : "grid min-w-0"}>{children}</div>
-      <IconButton icon={XIcon} label={closeLabel} onClick={onClose} className="justify-self-end" />
-      {action && <div className="grid justify-self-end">{action}</div>}
+      <div className={action ? "timed-notice__body timed-notice__body--beside-action" : "timed-notice__body"}>{children}</div>
+      <IconButton icon={XIcon} label={closeLabel} onClick={onClose} className="timed-notice__close" />
+      {action && <div className="timed-notice__action">{action}</div>}
     </div>,
     document.body,
   );

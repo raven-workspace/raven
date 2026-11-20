@@ -32,6 +32,16 @@
   /* Motion for small state changes (hover, press): Tailwind's standard ease at 100ms. Larger motion is in global.css. */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --duration-fast: 100ms;
+  /* A caret turning (150ms) and a selection marker gliding (180ms). */
+  --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-turn: 150ms;
+  --duration-glide: 180ms;
+
+  /* Stacking, by role. */
+  --z-drawer: 30;
+  --z-popover: 50;
+  --z-dialog: 50;
 
   color-scheme: dark;
 }

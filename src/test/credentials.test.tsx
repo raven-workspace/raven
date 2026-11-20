@@ -339,8 +339,7 @@ describe("credentials section", () => {
     for (const re of [/hashcat -m 1000/, /^john /]) {
       const code = within(list).getByText(codeMatching(re));
       const block = code.closest("pre")!;
-      expect(block.className).not.toMatch(/break-all/);
-      expect(block.className).toMatch(/whitespace-pre-wrap/);
+      expect(block).toHaveClass("command-block__text--wrap");
     }
     await user.click(within(list).getByRole("button", { name: "Record plaintext" }));
     const dlg = await screen.findByRole("dialog");

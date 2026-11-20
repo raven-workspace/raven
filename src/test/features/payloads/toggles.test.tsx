@@ -139,7 +139,7 @@ describe("Payloads toggles", () => {
     const d = within(await drawer());
     await d.findByRole("heading", { name: "mkfifo + nc" });
     const chip = d.getByRole("button", { name: "Callbacks: allowed" });
-    expect(chip.querySelector(".text-warn")).not.toBeNull();
+    expect(chip.querySelector(".picker-trigger__placeholder, .picker-trigger__value--warn")).not.toBeNull();
     expect(d.getByText("Callbacks failed here twice")).toBeInTheDocument();
     // Still a reverse shell first: Raven never flips the toggle.
     expect(fitNames(d)[0]).toBe("mkfifo + nc");

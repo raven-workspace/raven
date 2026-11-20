@@ -76,5 +76,25 @@
 - [x] Pixel diff: 297/297 identical
 - [x] Audit gate: 660/660
 
+## Unit 4: the rest of src/ui
+
+### Changes
+- Panel.scss, Disclosure.scss (`.disclosure-caret`, `.caret-turn`, `.disclosure__toggle`), media.scss (`.wordmark`,
+  `.brand-icon`, `.match`), Dialog.scss, Tooltip.scss (`.tooltip`, `.tooltip__key`, `.popover-panel`), TabMarker.scss,
+  PickerTrigger.scss, TitleBar.scss (title-bar controls keyed on `aria-current="page"` / `aria-expanded="true"`),
+  TimedNotice.scss, CommandBlock.scss, HintLine.scss, and `.scroll-pane` in layout.scss.
+- Exported helper strings now name classes: `SCROLL_PANE = "scroll-pane"`, `CARET_TURN = "caret-turn"`,
+  `BELOW_TITLE_BAR = "below-title-bar"`, `MATCH_CLASS = "match"`.
+- New shared SCSS and tokens: `truncate` mixin; `--ease-decelerate`, `--ease-emphasized`, `--duration-turn`,
+  `--duration-glide`; z-index roles `--z-drawer`, `--z-popover`, `--z-dialog`.
+- Dead classes dropped: `shadow-lg` on three popovers (Raven's theme resets the shadow scale, so it never rendered).
+- Callers and helper-string combinations checked: none dead.
+
+### Verification
+- [x] Unit tests (15 assertions moved from utility names to the BEM classes that carry the same rules)
+- [x] Type check and lint
+- [x] Pixel diff: 297/297 identical
+- [x] Audit gate: 660/660, 0 failing checks
+
 ### Follow-up
-- Unit 4: the rest of src/ui (Panel, Dialog, Collapse, Disclosure, TitleBar, Tooltip, CommandBlock, HintLine, …).
+- src/ui outside shadcn has no utilities left. Features next (units 5–24, in parallel), then shadcn (25), then removal (26).

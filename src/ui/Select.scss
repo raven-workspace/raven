@@ -20,9 +20,7 @@
   // A long value ellipsizes instead of wrapping the trigger.
   .select-trigger__value {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    @include truncate;
   }
 
   .select-trigger__icon {
@@ -30,7 +28,7 @@
   }
 
   .select-menu {
-    z-index: 50;
+    z-index: var(--z-popover);
     min-width: var(--radix-select-trigger-width);
     max-height: var(--radix-select-content-available-height);
     overflow: hidden;

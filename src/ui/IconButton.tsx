@@ -27,7 +27,7 @@ export function IconButton({
       content={
         <>
           <span>{label}</span>
-          {shortcut && <span className="icon-button__shortcut">{shortcut}</span>}
+          {shortcut && <span className="tooltip__key">{shortcut}</span>}
         </>
       }
     >

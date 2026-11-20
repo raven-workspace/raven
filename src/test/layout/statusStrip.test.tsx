@@ -94,8 +94,7 @@ describe("status strip and title bar", () => {
   it("controls are the last track, inset like the content column", async () => {
     await mountStrip();
     const bar = document.querySelector<HTMLElement>("[data-tauri-drag-region]")!;
-    expect(bar.className).toMatch(/grid-cols-\[auto_minmax\(0,1fr\)_auto\]/);
-    expect(bar.className).toMatch(/\bpr-6\b/);
+    expect(bar).toHaveClass("title-bar");
     const group = screen.getByRole("button", { name: "Settings" }).closest("[data-tauri-drag-region] > div")!;
     expect(bar.lastElementChild).toBe(group);
     expect(bar.firstElementChild!.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

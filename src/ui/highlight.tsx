@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
+import "./media.scss";
 
 /** A search match: quiet accent wash; the current match (`data-current`, set by the page) is solid accent. */
-export const MATCH_CLASS = "rounded-[2px] bg-accent/20 text-fg data-[current]:bg-accent data-[current]:text-bg";
+export const MATCH_CLASS = "match";
 
 /** Every match of `re` in `text` as `[start, end)` offsets (`matchAll` clones `re`, so a shared global regex is safe). */
 export function rangesOf(text: string, re: RegExp | null | undefined): [number, number][] {

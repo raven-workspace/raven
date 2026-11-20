@@ -28,10 +28,9 @@ describe("layout (U5–U7)", () => {
   it("U6: a command block wraps at whitespace, keeps each word whole, and its text stays selectable and copyable as written", () => {
     render(<CommandList commands={[{ id: "a", title: "Run it", text: "nxc smb 10.10.67.140 -u tom", unresolved: [], msfMarker: false }]} />);
     const pre = screen.getByText((_, el) => el?.tagName === "PRE");
-    expect(pre.className).not.toMatch(/break-all|break-words|wrap-anywhere|wrap-break-word/);
-    expect(pre.className).toMatch(/whitespace-pre-wrap/);
-    expect(pre.className).toMatch(/overflow-x-hidden/);
-    expect(pre.className).not.toMatch(/overflow-x-(auto|scroll)/);
+    // Wraps at whitespace (pre-wrap, no word breaking) and never scrolls sideways: the wrapping variant.
+    expect(pre).toHaveClass("command-block__text", "command-block__text--wrap");
+    expect(pre).not.toHaveClass("command-block__text--scroll");
     expect(pre.textContent).toBe("nxc smb 10.10.67.140 -u tom");
   });
 
@@ -42,8 +41,7 @@ describe("layout (U5–U7)", () => {
     expect(block).toContainElement(copy);
     // A fixed 28px track for Copy, 8px from the text: the text never runs under it.
     const row = copy.parentElement!;
-    expect(row.className).toMatch(/grid-cols-\[minmax\(0,1fr\)_28px\]/);
-    expect(row.className).toMatch(/\bgap-2\b/);
+    expect(row).toHaveClass("command-block__box");
     expect(copy.className).not.toMatch(/absolute/);
     expect(copy.querySelector("svg")).not.toBeNull();
     const desc = screen.getByText(/A long description/);
@@ -84,7 +82,8 @@ describe("layout (U5–U7)", () => {
     const block = screen.getByTestId("command-block");
     const words = [...block.querySelectorAll("[data-token]")];
     expect(words.map((w) => w.textContent)).toEqual(["rustscan", "-a", "10.10.20.15", "--", "-sC", "-sV"]);
-    for (const w of words) expect(w.className).toMatch(/inline-block max-w-full \[overflow-wrap:anywhere\]/);
+    for (const w of words) expect(w).toHaveClass("command-block__token");
+    expect(block.querySelector("pre")).toHaveClass("command-block__text--wrap");
     expect(block.querySelector("pre")!.textContent).toBe("rustscan -a 10.10.20.15 -- -sC -sV");
   });
 

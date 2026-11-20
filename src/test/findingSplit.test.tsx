@@ -547,7 +547,7 @@ describe("finding split: services list inside the editor pane", () => {
     const list = await within(form).findByTestId("service-list");
     // jsdom has no layout: the classes are the contract here. The list is its own scroll pane, so it pads like one
     // (overlay scrollbars sit over its own content, not the editor pane's); Playwright checks pixels.
-    expect(list).toHaveClass("overflow-y-auto", "p-1", "pr-3");
+    expect(list).toHaveClass("scroll-pane");
   });
 });
 

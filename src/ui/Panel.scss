@@ -1,0 +1,27 @@
+@use "@/styles/abstracts" as *;
+
+// A flat hairline box on black. No fill, no shadow.
+@layer components {
+  .panel {
+    min-height: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background-color: var(--bg);
+  }
+
+  .panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    min-height: 1.25rem;
+    margin-bottom: var(--space-sm);
+  }
+
+  .panel__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+}

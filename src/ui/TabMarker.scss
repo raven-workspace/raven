@@ -1,0 +1,21 @@
+@use "@/styles/abstracts" as *;
+
+// The selected item's mark, drawn once behind the list and glided to the new selection. Its surface, underline, bar or
+// ring comes from the caller's class; TabMarker.tsx sets the position, size and opacity inline.
+@layer components {
+  .tab-marker {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: -10;
+    opacity: 0;
+    pointer-events: none;
+    transition-property: transform, width, height;
+    transition-timing-function: var(--ease-emphasized);
+    transition-duration: var(--duration-glide);
+
+    @media (prefers-reduced-motion: reduce) {
+      transition-property: none;
+    }
+  }
+}

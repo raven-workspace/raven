@@ -43,10 +43,4 @@
     color: var(--faint);
     cursor: not-allowed;
   }
-
-  .icon-button__shortcut {
-    margin-left: var(--space-sm);
-    @include mono;
-    color: var(--muted);
-  }
 }

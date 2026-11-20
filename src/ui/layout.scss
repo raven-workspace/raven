@@ -29,4 +29,15 @@
   .action-cell {
     justify-content: flex-end;
   }
+
+  // Vertical scroll pane: 4px so focus outlines are not clipped, 12px right so overlay scrollbars (WKWebView) never sit
+  // over controls.
+  .scroll-pane {
+    position: relative;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-xs);
+    padding-right: var(--space-md);
+    scrollbar-gutter: stable;
+  }
 }

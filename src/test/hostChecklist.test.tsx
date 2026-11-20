@@ -154,7 +154,7 @@ describe("host checklist tab", () => {
     await openChecklist(user);
     const marks = await screen.findAllByText("{USER}");
     expect(marks[0].tagName).toBe("MARK");
-    expect(marks[0]).toHaveClass("text-warn");
+    expect(marks[0]).toHaveClass("command-block__warn");
   });
 
   it("exam-sim host shows no banned command", async () => {

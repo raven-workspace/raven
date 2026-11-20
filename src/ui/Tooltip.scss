@@ -1,0 +1,32 @@
+@use "@/styles/abstracts" as *;
+
+@layer components {
+  .tooltip {
+    z-index: var(--z-popover);
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    @include type(meta);
+    color: var(--fg-2);
+    white-space: nowrap;
+  }
+
+  // The shortcut after a tooltip's label.
+  .tooltip__key {
+    margin-left: var(--space-sm);
+    @include mono;
+    color: var(--muted);
+  }
+
+  // A popover panel of hints or shortcuts.
+  .popover-panel {
+    z-index: var(--z-popover);
+    display: grid;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+  }
+}

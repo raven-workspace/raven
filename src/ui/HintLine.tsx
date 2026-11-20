@@ -2,6 +2,8 @@ import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isTypingTarget } from "../lib/keys";
 import { Kbd } from "./Kbd";
+import "./HintLine.scss";
+import "./Tooltip.scss";
 
 export interface Hint {
   keys: string;
@@ -12,9 +14,9 @@ export interface Hint {
 
 export function HintUnit({ hint }: { hint: Hint }) {
   return (
-    <span data-hint className="inline-grid grid-flow-col items-center justify-start gap-[6px] whitespace-nowrap text-meta text-muted-2">
+    <span data-hint className="hint">
       {/* "⌥H ⌥C" is two caps side by side in one unit. */}
-      <span className="inline-grid grid-flow-col items-center justify-start gap-1">
+      <span className="hint__keys">
         {hint.keys.split(" ").map((k) => (
           <Kbd key={k}>{k}</Kbd>
         ))}
@@ -98,7 +100,7 @@ export function HintLine({ hints, more, max = 5, ariaLabel }: { hints: Hint[]; /
       data-hint-line
       role="group"
       aria-label={ariaLabel}
-      className="grid w-full min-w-0 grid-flow-col items-center justify-start gap-x-6 overflow-hidden"
+      className="hint-line"
     >
       {shown.map(({ h, i }) => (
         <HintUnit key={i} hint={h} />
@@ -108,7 +110,7 @@ export function HintLine({ hints, more, max = 5, ariaLabel }: { hints: Hint[]; /
           <button
             type="button"
             aria-label="All shortcuts"
-            className="inline-grid size-6 place-items-center hover:opacity-80"
+            className="hint-line__more"
           >
             <Kbd>?</Kbd>
           </button>
@@ -117,7 +119,7 @@ export function HintLine({ hints, more, max = 5, ariaLabel }: { hints: Hint[]; /
           <Popover.Content
             align="start"
             sideOffset={6}
-            className="z-50 grid gap-2 rounded-md border border-line-strong bg-surface p-3 shadow-lg"
+            className="popover-panel"
           >
             {[...hints, ...(more ?? [])].map((h, i) => (
               <HintUnit key={i} hint={h} />
