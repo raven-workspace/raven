@@ -156,7 +156,7 @@ pub fn create(conn: &Connection, input: EngagementInput) -> AppResult<Engagement
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'active',?12,?12)",
         params![
             id, i.name, i.kind, i.client, i.sub_label,
-            serde_json::to_string(&i.scope_cidrs).map_err(|e| AppError::Db(e.to_string()))?,
+            serde_json::to_string(&i.scope_cidrs)?,
             i.domain, i.starts_at, i.ends_at, i.timebox_start, i.timebox_minutes, now
         ],
     )?;
@@ -178,7 +178,7 @@ pub fn update(conn: &Connection, id: &str, input: EngagementInput) -> AppResult<
          WHERE id=?1",
         params![
             id, i.name, i.kind, i.client, i.sub_label,
-            serde_json::to_string(&i.scope_cidrs).map_err(|e| AppError::Db(e.to_string()))?,
+            serde_json::to_string(&i.scope_cidrs)?,
             i.domain, i.starts_at, i.ends_at, i.timebox_start, i.timebox_minutes, system_now_ms()
         ],
     )?;

@@ -124,10 +124,6 @@ pub fn tunnels_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Tun
     Ok(rows)
 }
 
-fn subnets_json(s: &[String]) -> AppResult<String> {
-    serde_json::to_string(s).map_err(|e| AppError::Db(e.to_string()))
-}
-
 pub fn tunnel_create(conn: &Connection, engagement_id: &str, input: TunnelInput) -> AppResult<Tunnel> {
     check_scope(conn, engagement_id, None)?;
     let c = clean_tunnel(conn, engagement_id, input)?;
@@ -136,7 +132,7 @@ pub fn tunnel_create(conn: &Connection, engagement_id: &str, input: TunnelInput)
     conn.execute(
         "INSERT INTO tunnels (id, engagement_id, kind, via_host_id, subnets, callback_ip, status, notes, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)",
-        params![id, engagement_id, c.kind, c.via, subnets_json(&c.subnets)?, c.callback_ip, c.status, c.notes, now],
+        params![id, engagement_id, c.kind, c.via, serde_json::to_string(&c.subnets)?, c.callback_ip, c.status, c.notes, now],
     )?;
     tunnel_get(conn, &id)
 }
@@ -146,7 +142,7 @@ pub fn tunnel_update(conn: &Connection, id: &str, input: TunnelInput) -> AppResu
     let c = clean_tunnel(conn, &current.engagement_id, input)?;
     conn.execute(
         "UPDATE tunnels SET kind=?2, via_host_id=?3, subnets=?4, callback_ip=?5, status=?6, notes=?7, updated_at=?8 WHERE id=?1",
-        params![id, c.kind, c.via, subnets_json(&c.subnets)?, c.callback_ip, c.status, c.notes, system_now_ms()],
+        params![id, c.kind, c.via, serde_json::to_string(&c.subnets)?, c.callback_ip, c.status, c.notes, system_now_ms()],
     )?;
     tunnel_get(conn, id)
 }

@@ -91,8 +91,8 @@ pub fn identity_set(conn: &Connection, input: HostIdentity) -> AppResult<HostIde
             return Err(AppError::validation("entryId", "entry must belong to this engagement"));
         }
     }
-    let privileges = serde_json::to_string(&clean_list(&input.privileges)).map_err(|e| AppError::Db(e.to_string()))?;
-    let groups = serde_json::to_string(&clean_list(&input.groups)).map_err(|e| AppError::Db(e.to_string()))?;
+    let privileges = serde_json::to_string(&clean_list(&input.privileges))?;
+    let groups = serde_json::to_string(&clean_list(&input.groups))?;
     conn.execute(
         "INSERT INTO host_identity (host_id, username, privileges, groups, entry_id, updated_at) VALUES (?1,?2,?3,?4,?5,?6) \
          ON CONFLICT (host_id) DO UPDATE SET username = excluded.username, privileges = excluded.privileges, \

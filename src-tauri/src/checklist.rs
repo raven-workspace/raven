@@ -109,7 +109,7 @@ pub fn put(conn: &Connection, engagement_id: &str, items: &[ChecklistItemInput])
         if !owned {
             return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
         }
-        let evidence = serde_json::to_string(&it.evidence).map_err(|e| AppError::Db(e.to_string()))?;
+        let evidence = serde_json::to_string(&it.evidence)?;
         tx.execute(
             "INSERT INTO checklist_items \
                (owner_id, engagement_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at, status_manual) \

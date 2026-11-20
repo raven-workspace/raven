@@ -290,7 +290,7 @@ fn clean_finding(conn: &Connection, engagement_id: &str, i: &FindingInput) -> Ap
         cvss_vector: blank_to_none(i.cvss_vector.as_deref()),
         cvss_score: i.cvss_score,
         status,
-        refs_json: serde_json::to_string(&refs).map_err(|e| AppError::Db(e.to_string()))?,
+        refs_json: serde_json::to_string(&refs)?,
         host_ids,
         service_ids,
         step_entry_ids,

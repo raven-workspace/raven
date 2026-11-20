@@ -489,7 +489,7 @@ impl Ctx<'_> {
             return Ok(false);
         }
         let last_activity = plan.log_entries.iter().filter(|l| l.engagement_id == e.id).map(|l| l.at).max();
-        let cidrs = serde_json::to_string(&e.scope_cidrs).map_err(|err| AppError::Db(err.to_string()))?;
+        let cidrs = serde_json::to_string(&e.scope_cidrs)?;
         // msf_host_id is set at the end, once the hosts exist.
         self.tx.execute(
             "INSERT INTO engagements (id, name, kind, client, sub_label, scope_cidrs, domain, starts_at, ends_at, \
@@ -606,7 +606,7 @@ impl Ctx<'_> {
             LogContent::Flag { attachment_id, .. } => *attachment_id = att_id.clone(),
             _ => {}
         }
-        let json = serde_json::to_string(&content).map_err(|err| AppError::Db(err.to_string()))?;
+        let json = serde_json::to_string(&content)?;
         let trim = |v: &Option<String>| v.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
         self.tx.execute(
             "INSERT INTO log_entries (id, engagement_id, kind, title, title_edited, ran_on, observations, \
@@ -667,7 +667,7 @@ impl Ctx<'_> {
         }
         let title = crate::log::check_title(&format!("Imported notes ({old_name})"))?;
         let content = LogContent::Note { text: body.to_string() };
-        let json = serde_json::to_string(&content).map_err(|err| AppError::Db(err.to_string()))?;
+        let json = serde_json::to_string(&content)?;
         self.tx.execute(
             "INSERT INTO log_entries (id, engagement_id, kind, title, title_edited, content, at, created_at, updated_at) \
              VALUES (?1,?2,'note',?3,1,?4,?5,?5,?5)",
@@ -693,7 +693,7 @@ impl Ctx<'_> {
         {
             return Ok(false);
         }
-        let evidence = serde_json::to_string(&i.evidence).map_err(|err| AppError::Db(err.to_string()))?;
+        let evidence = serde_json::to_string(&i.evidence)?;
         self.tx.execute(
             "INSERT INTO checklist_items \
                (owner_id, engagement_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at, status_manual) \
@@ -721,7 +721,7 @@ impl Ctx<'_> {
         if self.exists("tunnels", &t.id)? {
             return Ok(false);
         }
-        let subnets = serde_json::to_string(&t.subnets).map_err(|err| AppError::Db(err.to_string()))?;
+        let subnets = serde_json::to_string(&t.subnets)?;
         self.tx.execute(
             "INSERT INTO tunnels (id, engagement_id, kind, via_host_id, subnets, callback_ip, status, notes, created_at, updated_at) \
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
@@ -785,7 +785,7 @@ impl Ctx<'_> {
         if self.exists("findings", &f.id)? {
             return Ok(false);
         }
-        let refs = serde_json::to_string(&f.refs).map_err(|err| AppError::Db(err.to_string()))?;
+        let refs = serde_json::to_string(&f.refs)?;
         self.tx.execute(
             "INSERT INTO findings (id, engagement_id, title, severity, cvss_vector, cvss_score, status, description, impact, \
              remediation, exploit_notes, lessons, refs, created_at, updated_at) \

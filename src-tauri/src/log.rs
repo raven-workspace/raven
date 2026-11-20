@@ -308,7 +308,7 @@ fn insert_entry(
     at: i64,
     now: i64,
 ) -> AppResult<()> {
-    let json = serde_json::to_string(content).map_err(|e| AppError::Db(e.to_string()))?;
+    let json = serde_json::to_string(content)?;
     tx.execute(
         "INSERT INTO log_entries (id, engagement_id, kind, title, title_edited, ran_on, observations, \
          returned_nothing, private, content, at, created_at, updated_at, payload_id, payload_values) \
@@ -334,7 +334,7 @@ fn insert_entry(
 }
 
 fn values_json(v: &Option<BTreeMap<String, String>>) -> AppResult<Option<String>> {
-    v.as_ref().map(|m| serde_json::to_string(m).map_err(|e| AppError::Db(e.to_string()))).transpose()
+    Ok(v.as_ref().map(serde_json::to_string).transpose()?)
 }
 
 /// Full update. The attachment is ignored and the kind cannot change; a stored
@@ -355,7 +355,7 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
         (LogContent::Flag { attachment_id, .. }, LogContent::Flag { attachment_id: o, .. }) => *attachment_id = o.clone(),
         _ => {}
     }
-    let json = serde_json::to_string(&content).map_err(|e| AppError::Db(e.to_string()))?;
+    let json = serde_json::to_string(&content)?;
     // None keeps the stored payload; a blank string clears it, and the values it was built with go with it.
     let payload_id = match input.payload_id.as_deref() {
         None => old.payload_id.clone(),

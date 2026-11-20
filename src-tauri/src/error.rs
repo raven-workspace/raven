@@ -86,6 +86,12 @@ impl From<std::io::Error> for AppError {
     }
 }
 
+impl From<serde_json::Error> for AppError {
+    fn from(e: serde_json::Error) -> Self {
+        AppError::Db(e.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,5 +141,13 @@ mod tests {
     fn error_from_io() {
         let e: AppError = std::io::Error::other("boom").into();
         assert_eq!(e.code(), "io");
+    }
+
+    #[test]
+    fn error_from_serde() {
+        let src = serde_json::from_str::<u32>("x").unwrap_err();
+        let e: AppError = serde_json::from_str::<u32>("x").unwrap_err().into();
+        assert_eq!(e, AppError::Db(src.to_string()));
+        assert_eq!(e.code(), "db");
     }
 }

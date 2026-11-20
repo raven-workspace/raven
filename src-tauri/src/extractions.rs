@@ -92,8 +92,8 @@ fn parse(raw: (String, String, String, String, i64, Option<i64>)) -> AppResult<E
     Ok(Extraction {
         log_entry_id,
         engagement_id,
-        summary: serde_json::from_str(&summary).map_err(|e| AppError::Db(e.to_string()))?,
-        record: serde_json::from_str(&record).map_err(|e| AppError::Db(e.to_string()))?,
+        summary: serde_json::from_str(&summary)?,
+        record: serde_json::from_str(&record)?,
         created_at,
         undone_at,
     })
@@ -130,8 +130,8 @@ pub fn save(
     if !ok {
         return Err(AppError::NotFound);
     }
-    let summary = serde_json::to_string(summary).map_err(|e| AppError::Db(e.to_string()))?;
-    let record = serde_json::to_string(record).map_err(|e| AppError::Db(e.to_string()))?;
+    let summary = serde_json::to_string(summary)?;
+    let record = serde_json::to_string(record)?;
     let inserted = conn.execute(
         "INSERT INTO extractions (log_entry_id, engagement_id, summary, record, created_at, undone_at) \
          VALUES (?1,?2,?3,?4,?5,NULL) ON CONFLICT (log_entry_id) DO NOTHING",
@@ -219,8 +219,8 @@ pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
                 tx.execute("DELETE FROM host_identity WHERE host_id=?1", [&i.host_id])?;
             }
             (Some(_), Some(id)) => {
-                let privileges = serde_json::to_string(&id.privileges).map_err(|e| AppError::Db(e.to_string()))?;
-                let groups = serde_json::to_string(&id.groups).map_err(|e| AppError::Db(e.to_string()))?;
+                let privileges = serde_json::to_string(&id.privileges)?;
+                let groups = serde_json::to_string(&id.groups)?;
                 tx.execute(
                     "UPDATE host_identity SET username=?2, privileges=?3, groups=?4, \
                        entry_id=(SELECT id FROM log_entries WHERE id=?5), updated_at=?6 WHERE host_id=?1",

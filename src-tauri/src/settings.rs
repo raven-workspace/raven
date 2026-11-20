@@ -357,11 +357,11 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
         None => {}
     }
     if let Some(m) = machines {
-        let json = serde_json::to_string(&m).map_err(|e| AppError::Db(e.to_string()))?;
+        let json = serde_json::to_string(&m)?;
         put_text(conn, MACHINES_KEY, &json)?;
     }
     if let Some(ids) = guides_hidden {
-        let json = serde_json::to_string(&ids).map_err(|e| AppError::Db(e.to_string()))?;
+        let json = serde_json::to_string(&ids)?;
         put_text(conn, REPORT_GUIDES_HIDDEN_KEY, &json)?;
     }
     get(conn)
