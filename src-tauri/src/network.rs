@@ -4,7 +4,7 @@ use crate::backup::system_now_ms;
 use crate::engagements::valid_cidr;
 use crate::error::{AppError, AppResult};
 use crate::notes::check_scope;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 pub(crate) const MAX_SUBNETS: usize = 50;
@@ -115,11 +115,7 @@ fn tunnel_row(r: &Row) -> rusqlite::Result<Tunnel> {
 }
 
 fn tunnel_get(conn: &Connection, id: &str) -> AppResult<Tunnel> {
-    match conn.query_row(&format!("SELECT {TUNNEL_COLS} FROM tunnels WHERE id = ?1"), [id], tunnel_row) {
-        Ok(t) => Ok(t),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {TUNNEL_COLS} FROM tunnels WHERE id = ?1"), [id], tunnel_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn tunnels_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Tunnel>> {
@@ -211,11 +207,7 @@ fn hop_row(r: &Row) -> rusqlite::Result<Hop> {
 }
 
 fn hop_get(conn: &Connection, id: &str) -> AppResult<Hop> {
-    match conn.query_row(&format!("SELECT {HOP_COLS} FROM hops WHERE id = ?1"), [id], hop_row) {
-        Ok(h) => Ok(h),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {HOP_COLS} FROM hops WHERE id = ?1"), [id], hop_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn hops_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Hop>> {

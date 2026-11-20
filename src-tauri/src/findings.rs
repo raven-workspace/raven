@@ -3,7 +3,7 @@
 use crate::backup::system_now_ms;
 use crate::error::{AppError, AppResult};
 use crate::notes::check_scope;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -152,11 +152,7 @@ fn in_scope(conn: &Connection, table: &str, engagement_id: &str, id: &str) -> Ap
 }
 
 fn finding_engagement(conn: &Connection, id: &str) -> AppResult<String> {
-    match conn.query_row("SELECT engagement_id FROM findings WHERE id = ?1", [id], |r| r.get(0)) {
-        Ok(e) => Ok(e),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row("SELECT engagement_id FROM findings WHERE id = ?1", [id], |r| r.get(0)).optional()?.ok_or(AppError::NotFound)
 }
 
 // ---- findings ----
@@ -203,11 +199,7 @@ fn fill_links(conn: &Connection, f: &mut Finding) -> AppResult<()> {
 }
 
 fn get(conn: &Connection, id: &str) -> AppResult<Finding> {
-    let mut f = match conn.query_row(&format!("SELECT {F_COLS} FROM findings WHERE id = ?1"), [id], finding_row) {
-        Ok(f) => f,
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
-        Err(e) => return Err(e.into()),
-    };
+    let mut f = conn.query_row(&format!("SELECT {F_COLS} FROM findings WHERE id = ?1"), [id], finding_row).optional()?.ok_or(AppError::NotFound)?;
     fill_links(conn, &mut f)?;
     Ok(f)
 }
@@ -402,11 +394,7 @@ fn clean_file(i: &FindingFileInput) -> AppResult<(String, Option<String>)> {
 }
 
 fn file_get(conn: &Connection, id: &str) -> AppResult<FindingFile> {
-    match conn.query_row(&format!("SELECT {FILE_COLS} FROM finding_files WHERE id = ?1"), [id], file_row) {
-        Ok(f) => Ok(f),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {FILE_COLS} FROM finding_files WHERE id = ?1"), [id], file_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn files_list(conn: &Connection, finding_id: &str) -> AppResult<Vec<FindingFile>> {
@@ -528,11 +516,7 @@ fn clean_attempt(conn: &Connection, engagement_id: &str, i: &FailedAttemptInput)
 }
 
 fn attempt_get(conn: &Connection, id: &str) -> AppResult<FailedAttempt> {
-    match conn.query_row(&format!("SELECT {A_COLS} FROM failed_attempts WHERE id = ?1"), [id], attempt_row) {
-        Ok(a) => Ok(a),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {A_COLS} FROM failed_attempts WHERE id = ?1"), [id], attempt_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn attempts_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<FailedAttempt>> {

@@ -3,7 +3,7 @@
 
 use crate::backup::system_now_ms;
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 pub(crate) const MAX_BODY: usize = 1024 * 1024;
@@ -77,9 +77,9 @@ const NOTE_COLS: &str = "owner_id, engagement_id, host_id, body, private, update
 pub fn get(conn: &Connection, engagement_id: &str, host_id: Option<&str>) -> AppResult<Note> {
     check_scope(conn, engagement_id, host_id)?;
     let owner = host_id.unwrap_or(engagement_id);
-    match conn.query_row(&format!("SELECT {NOTE_COLS} FROM notes WHERE owner_id = ?1"), [owner], note_row) {
-        Ok(n) => Ok(n),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(Note {
+    match conn.query_row(&format!("SELECT {NOTE_COLS} FROM notes WHERE owner_id = ?1"), [owner], note_row).optional()? {
+        Some(n) => Ok(n),
+        None => Ok(Note {
             owner_id: owner.to_string(),
             engagement_id: engagement_id.to_string(),
             host_id: host_id.map(str::to_string),
@@ -87,7 +87,6 @@ pub fn get(conn: &Connection, engagement_id: &str, host_id: Option<&str>) -> App
             private: false,
             updated_at: 0,
         }),
-        Err(e) => Err(e.into()),
     }
 }
 

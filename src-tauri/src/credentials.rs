@@ -5,7 +5,7 @@
 use crate::backup::system_now_ms;
 use crate::error::{AppError, AppResult};
 use crate::notes::check_scope;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -209,11 +209,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Credential>
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Credential> {
-    match conn.query_row(&format!("SELECT {CRED_COLS} FROM credentials WHERE id = ?1"), [id], cred_row) {
-        Ok(c) => Ok(c),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {CRED_COLS} FROM credentials WHERE id = ?1"), [id], cred_row).optional()?.ok_or(AppError::NotFound)
 }
 
 fn check_cred_scope(conn: &Connection, engagement_id: &str, id: &str) -> AppResult<()> {
@@ -460,27 +456,18 @@ pub fn usernames_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<U
 }
 
 fn username_get(conn: &Connection, id: &str) -> AppResult<Username> {
-    match conn.query_row(&format!("SELECT {USER_COLS} FROM usernames WHERE id = ?1"), [id], user_row) {
-        Ok(u) => Ok(u),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {USER_COLS} FROM usernames WHERE id = ?1"), [id], user_row).optional()?.ok_or(AppError::NotFound)
 }
 
 fn username_find(conn: &Connection, engagement_id: &str, username: &str, domain: Option<&str>) -> AppResult<Option<Username>> {
-    let r = conn.query_row(
+    Ok(conn.query_row(
         &format!(
             "SELECT {USER_COLS} FROM usernames WHERE engagement_id = ?1 AND lower(username) = lower(?2) \
              AND lower(ifnull(domain,'')) = lower(?3)"
         ),
         params![engagement_id, username, domain.unwrap_or("")],
         user_row,
-    );
-    match r {
-        Ok(u) => Ok(Some(u)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.into()),
-    }
+    ).optional()?)
 }
 
 /// Creates a username, or returns the existing one (case-insensitive on username and domain).

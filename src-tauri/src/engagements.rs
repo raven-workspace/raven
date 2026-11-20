@@ -2,7 +2,7 @@
 
 use crate::backup::system_now_ms;
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 const COLS: &str = "id, name, kind, client, sub_label, scope_cidrs, domain, starts_at, ends_at, \
@@ -141,11 +141,7 @@ pub fn list(conn: &Connection) -> AppResult<Vec<Engagement>> {
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Engagement> {
-    match conn.query_row(&format!("SELECT {COLS} FROM engagements WHERE id = ?1"), [id], from_row) {
-        Ok(e) => Ok(e),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {COLS} FROM engagements WHERE id = ?1"), [id], from_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn create(conn: &Connection, input: EngagementInput) -> AppResult<Engagement> {
@@ -172,11 +168,8 @@ pub fn create(conn: &Connection, input: EngagementInput) -> AppResult<Engagement
 pub fn update(conn: &Connection, id: &str, input: EngagementInput) -> AppResult<Engagement> {
     let i = normalise(input)?;
     let tx = conn.unchecked_transaction()?;
-    let previous: Vec<String> = match tx.query_row("SELECT scope_cidrs FROM engagements WHERE id = ?1", params![id], |r| r.get::<_, String>(0)) {
-        Ok(json) => serde_json::from_str(&json).unwrap_or_default(),
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
-        Err(e) => return Err(e.into()),
-    };
+    let json = tx.query_row("SELECT scope_cidrs FROM engagements WHERE id = ?1", params![id], |r| r.get::<_, String>(0)).optional()?.ok_or(AppError::NotFound)?;
+    let previous: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
     let n = tx.execute(
         "UPDATE engagements SET name=?2, kind=?3, client=?4, sub_label=?5, scope_cidrs=?6, domain=?7, \
          starts_at=?8, ends_at=?9, timebox_start=?10, timebox_minutes=?11, updated_at=?12, \

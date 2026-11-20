@@ -2,7 +2,7 @@
 
 use crate::backup::system_now_ms;
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -124,11 +124,7 @@ pub fn list_engagement(conn: &Connection, engagement_id: &str) -> AppResult<Vec<
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Service> {
-    match conn.query_row(&format!("SELECT {COLS} FROM services WHERE id = ?1"), [id], from_row) {
-        Ok(s) => Ok(s),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {COLS} FROM services WHERE id = ?1"), [id], from_row).optional()?.ok_or(AppError::NotFound)
 }
 
 /// Applies nmap results: new `(port, protocol)` rows are inserted, existing ones get fresh

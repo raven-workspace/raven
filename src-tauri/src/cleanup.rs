@@ -5,7 +5,7 @@
 
 use crate::backup::system_now_ms;
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -66,11 +66,7 @@ fn row(r: &Row) -> rusqlite::Result<CleanupItem> {
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<CleanupItem> {
-    match conn.query_row(&format!("SELECT {COLS} FROM cleanup_items WHERE id = ?1"), [id], row) {
-        Ok(i) => Ok(i),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {COLS} FROM cleanup_items WHERE id = ?1"), [id], row).optional()?.ok_or(AppError::NotFound)
 }
 
 /// An existing, non-dismissed item.

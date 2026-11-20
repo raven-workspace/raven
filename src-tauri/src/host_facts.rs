@@ -3,7 +3,7 @@
 
 use crate::backup::system_now_ms;
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -39,11 +39,7 @@ pub struct VectorInput {
 }
 
 fn host_engagement(conn: &Connection, host_id: &str) -> AppResult<String> {
-    match conn.query_row("SELECT engagement_id FROM hosts WHERE id = ?1", [host_id], |r| r.get(0)) {
-        Ok(e) => Ok(e),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row("SELECT engagement_id FROM hosts WHERE id = ?1", [host_id], |r| r.get(0)).optional()?.ok_or(AppError::NotFound)
 }
 
 fn clean_list(items: &[String]) -> Vec<String> {
@@ -69,15 +65,11 @@ fn identity_from_row(r: &Row) -> rusqlite::Result<HostIdentity> {
 }
 
 pub fn identity_get(conn: &Connection, host_id: &str) -> AppResult<Option<HostIdentity>> {
-    match conn.query_row(
+    Ok(conn.query_row(
         "SELECT host_id, username, privileges, groups, entry_id, updated_at FROM host_identity WHERE host_id = ?1",
         [host_id],
         identity_from_row,
-    ) {
-        Ok(i) => Ok(Some(i)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.into()),
-    }
+    ).optional()?)
 }
 
 /// One identity per host; a new one replaces the old. `entry_id`, when given, must be a log
@@ -125,11 +117,7 @@ fn vector_from_row(r: &Row) -> rusqlite::Result<PrivescVector> {
 }
 
 pub fn vector_get(conn: &Connection, id: &str) -> AppResult<PrivescVector> {
-    match conn.query_row(&format!("SELECT {VEC_COLS} FROM privesc_vectors WHERE id = ?1"), [id], vector_from_row) {
-        Ok(v) => Ok(v),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {VEC_COLS} FROM privesc_vectors WHERE id = ?1"), [id], vector_from_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn vectors_list(conn: &Connection, host_id: &str) -> AppResult<Vec<PrivescVector>> {

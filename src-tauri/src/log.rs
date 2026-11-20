@@ -4,7 +4,7 @@ use crate::backup::system_now_ms;
 use crate::error::{AppError, AppResult};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -161,11 +161,7 @@ fn fill_hosts(conn: &Connection, e: &mut LogEntry) -> AppResult<()> {
 }
 
 fn get(conn: &Connection, id: &str) -> AppResult<LogEntry> {
-    let mut e = match conn.query_row(&format!("SELECT {COLS} FROM log_entries WHERE id = ?1"), [id], from_row) {
-        Ok(e) => e,
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
-        Err(e) => return Err(e.into()),
-    };
+    let mut e = conn.query_row(&format!("SELECT {COLS} FROM log_entries WHERE id = ?1"), [id], from_row).optional()?.ok_or(AppError::NotFound)?;
     fill_hosts(conn, &mut e)?;
     Ok(e)
 }
@@ -402,13 +398,10 @@ pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
 }
 
 pub fn attachment_get(conn: &Connection, id: &str) -> AppResult<Attachment> {
-    match conn.query_row("SELECT id, mime, bytes FROM attachments WHERE id = ?1", [id], |r| {
+    let (id, mime, bytes) = conn.query_row("SELECT id, mime, bytes FROM attachments WHERE id = ?1", [id], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Vec<u8>>(2)?))
-    }) {
-        Ok((id, mime, bytes)) => Ok(Attachment { id, mime, data_base64: STANDARD.encode(bytes) }),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    }).optional()?.ok_or(AppError::NotFound)?;
+    Ok(Attachment { id, mime, data_base64: STANDARD.encode(bytes) })
 }
 
 #[cfg(test)]

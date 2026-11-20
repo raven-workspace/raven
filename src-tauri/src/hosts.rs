@@ -3,7 +3,7 @@
 use crate::backup::system_now_ms;
 use crate::engagements::valid_cidr;
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 /// SQL for a host's effective AD-set flag; `alias` names the hosts table in the query. The one
@@ -150,11 +150,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Host>> {
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Host> {
-    match conn.query_row(&format!("SELECT {} FROM hosts WHERE id = ?1", cols()), [id], from_row) {
-        Ok(h) => Ok(h),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {} FROM hosts WHERE id = ?1", cols()), [id], from_row).optional()?.ok_or(AppError::NotFound)
 }
 
 fn ip_taken(conn: &Connection, engagement_id: &str, ip: &str, except_id: &str) -> AppResult<bool> {

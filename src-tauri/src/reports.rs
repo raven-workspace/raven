@@ -3,7 +3,7 @@
 
 use crate::backup::system_now_ms;
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -116,13 +116,12 @@ fn report_row(r: &Row) -> rusqlite::Result<(Report, String)> {
 }
 
 fn report_by(conn: &Connection, col: &str, key: &str) -> AppResult<Option<Report>> {
-    match conn.query_row(&format!("SELECT {REPORT_COLS} FROM reports WHERE {col} = ?1"), [key], report_row) {
-        Ok((mut rep, meta)) => {
+    match conn.query_row(&format!("SELECT {REPORT_COLS} FROM reports WHERE {col} = ?1"), [key], report_row).optional()? {
+        Some((mut rep, meta)) => {
             rep.meta = parse(&meta)?;
             Ok(Some(rep))
         }
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.into()),
+        None => Ok(None),
     }
 }
 
@@ -212,11 +211,7 @@ fn finish(parts: (ReportSection, Option<String>, String)) -> AppResult<ReportSec
 }
 
 fn section_get(conn: &Connection, id: &str) -> AppResult<ReportSection> {
-    match conn.query_row(&format!("SELECT {SECTION_COLS} FROM report_sections WHERE id = ?1"), [id], section_row) {
-        Ok(p) => finish(p),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    finish(conn.query_row(&format!("SELECT {SECTION_COLS} FROM report_sections WHERE id = ?1"), [id], section_row).optional()?.ok_or(AppError::NotFound)?)
 }
 
 pub fn sections_list(conn: &Connection, report_id: &str) -> AppResult<Vec<ReportSection>> {
@@ -258,15 +253,11 @@ pub fn section_upsert(conn: &Connection, report_id: &str, input: SectionInput) -
     if report_by(conn, "id", report_id)?.is_none() {
         return Err(AppError::NotFound);
     }
-    let existing: Option<String> = match conn.query_row(
+    let existing: Option<String> = conn.query_row(
         "SELECT id FROM report_sections WHERE report_id = ?1 AND kind = ?2 AND COALESCE(target_key, '') = COALESCE(?3, '')",
         params![report_id, input.kind, input.target_key],
         |r| r.get(0),
-    ) {
-        Ok(id) => Some(id),
-        Err(rusqlite::Error::QueryReturnedNoRows) => None,
-        Err(e) => return Err(e.into()),
-    };
+    ).optional()?;
     let now = system_now_ms();
     let id = match existing {
         Some(id) => {
@@ -302,11 +293,7 @@ pub fn section_save(conn: &Connection, id: &str, doc: Value, meta: Value) -> App
 
 /// Deletes an owner-written page of the report. Other sections are part of the report's outline and are never deleted.
 pub fn section_delete(conn: &Connection, report_id: &str, id: &str) -> AppResult<()> {
-    let kind: String = match conn.query_row("SELECT kind FROM report_sections WHERE id = ?1 AND report_id = ?2", params![id, report_id], |r| r.get(0)) {
-        Ok(k) => k,
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
-        Err(e) => return Err(e.into()),
-    };
+    let kind: String = conn.query_row("SELECT kind FROM report_sections WHERE id = ?1 AND report_id = ?2", params![id, report_id], |r| r.get(0)).optional()?.ok_or(AppError::NotFound)?;
     if kind != "page" {
         return Err(AppError::validation("kind", "only pages can be deleted"));
     }

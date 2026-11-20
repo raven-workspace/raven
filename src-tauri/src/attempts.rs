@@ -5,7 +5,7 @@
 use crate::backup::system_now_ms;
 use crate::error::{AppError, AppResult};
 use crate::notes::check_scope;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -187,8 +187,8 @@ fn upsert_clean(conn: &Connection, engagement_id: &str, c: &Clean, id: Option<&s
              AND host_id = ?3 AND service = ?4 AND auth_mode = ?5"
         ))?
         .query_row(params![c.cred_id, c.username_id, c.host_id, c.service, c.auth_mode], row);
-    match existing {
-        Ok(old) => match merge(&old, c) {
+    match existing.optional()? {
+        Some(old) => match merge(&old, c) {
             None => Ok(old),
             Some(new) => {
                 conn.prepare_cached(
@@ -198,7 +198,7 @@ fn upsert_clean(conn: &Connection, engagement_id: &str, c: &Clean, id: Option<&s
                 Ok(new)
             }
         },
-        Err(rusqlite::Error::QueryReturnedNoRows) => {
+        None => {
             let a = CredAttempt {
                 id: id.map(str::to_string).unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
                 engagement_id: engagement_id.to_string(),
@@ -222,7 +222,6 @@ fn upsert_clean(conn: &Connection, engagement_id: &str, c: &Clean, id: Option<&s
             ])?;
             Ok(a)
         }
-        Err(e) => Err(e.into()),
     }
 }
 
@@ -258,15 +257,11 @@ pub fn rekey_username_attempts(
     cred_id: &str,
     host_id: Option<&str>,
 ) -> AppResult<Vec<CredAttempt>> {
-    let engagement_id: String = match conn.query_row(
+    let engagement_id: String = conn.query_row(
         "SELECT engagement_id FROM usernames WHERE id = ?1",
         [username_id],
         |r| r.get(0),
-    ) {
-        Ok(e) => e,
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
-        Err(e) => return Err(e.into()),
-    };
+    ).optional()?.ok_or(AppError::NotFound)?;
     in_scope(conn, "credentials", &engagement_id, cred_id)?;
     for s in secret_cred_ids {
         in_scope(conn, "credentials", &engagement_id, s)?;
