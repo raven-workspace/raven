@@ -179,7 +179,7 @@ export function collectUxIssues(): RawIssue[] {
   for (const el of all) {
     if (ownText(el) === "" || allowed(el, "tiny-text")) continue;
     const fs = parseFloat(style(el).fontSize);
-    const twelveOk = el.closest("kbd, .text-label, .section-label, .chip, .report-tab__state, .engagement-sidebar__heading") !== null;
+    const twelveOk = el.closest("kbd, .text-label, .section-label, .chip, .report-tab__state, .engagement-sidebar__heading, .sidebar-group-label, .data-table__head") !== null;
     const floor = twelveOk ? 12 : 13;
     if (fs < floor - 0.01) {
       add("tiny-text", el, `font-size ${fs}px < ${floor}px${twelveOk ? "" : " (12px is only for labels, chips and key caps)"}: "${ownText(el).slice(0, 40)}"`);

@@ -9,6 +9,12 @@
     min-height: 0;
   }
 
+  // On NoteEditor (another feature's block, so two classes): at least 16rem tall.
+  .split-left-pane .split-left-pane__notes {
+    min-height: 16rem;
+    padding-block: var(--space-sm);
+  }
+
   .split-left-pane--switcher {
     grid-template-rows: auto auto minmax(0, 1fr);
   }

@@ -62,9 +62,12 @@ describe("layout (U5–U7)", () => {
     const segs = within(group).getAllByRole("radio");
     expect(segs.map((b) => b.textContent)).toEqual(["To do", "Doing", "Done", "N/A"]);
     expect(segs.filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.textContent)).toEqual(["Doing"]);
-    expect(group.className).toMatch(/\bh-7\b/);
-    for (const s of segs) expect(s.className).toMatch(/\bh-full\b/);
-    expect(group.className).toMatch(/rounded-sm/);
+    // A 28px pill whose segments fill its height.
+    expect(group).toHaveClass("toggle-group");
+    for (const s of segs) expect(s).toHaveClass("toggle-group__item");
+    const scss = readFileSync("src/ui/shadcn/toggle-group.scss", "utf8");
+    expect(scss).toMatch(/\.toggle-group \{[^}]*height: 1\.75rem;[^}]*border-radius: var\(--radius-sm\);/);
+    expect(scss).toMatch(/\.toggle-group__item \{[^}]*height: 100%;/);
     expect(screen.getByText("Because.").parentElement).toHaveClass("goal-row__body");
     expect(readFileSync("src/features/checklist/GoalRow.scss", "utf8")).toMatch(/\.goal-row__body \{[^}]*gap: var\(--space-md\);/);
   });

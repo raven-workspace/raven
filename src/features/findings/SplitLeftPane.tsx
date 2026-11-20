@@ -126,8 +126,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
             key={activeId ?? ""}
             target={{ engagementId: eid, hostId: activeId }}
             textRef={notesRef}
-            // Utilities until NoteEditor is converted: its own min-h-0 utility would beat a feature class here.
-            className="min-h-[16rem] py-2"
+            className="split-left-pane__notes"
           />
         ) : active ? (
           <FactsColumn

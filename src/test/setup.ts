@@ -20,7 +20,7 @@ HTMLCanvasElement.prototype.getContext = (() => null) as unknown as typeof HTMLC
 Element.prototype.hasPointerCapture ??= () => false;
 Element.prototype.releasePointerCapture ??= () => {};
 
-// jsdom gap that shadcn's Sidebar (useIsMobile) relies on: no media query ever matches.
+// jsdom has no matchMedia: here no media query ever matches.
 window.matchMedia ??= ((query: string) => ({
   matches: false,
   media: query,

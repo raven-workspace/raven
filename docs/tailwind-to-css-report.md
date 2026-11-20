@@ -518,3 +518,46 @@
 - [x] Type check and lint
 - [x] Pixel diff: 297/297
 - [x] Audit gate: 660/660
+
+## Unit: shadcn (25)
+
+### Changes
+- Converted and kept (each `.tsx` imports its own sheet, all in `@layer components`): separator (`.separator`),
+  toggle-group (`.toggle-group`, `.toggle-group__item`), tabs (`.tabs`, `.tabs__list`, `.tabs__trigger`,
+  `.tabs__content`, and `.tab-mark`, the selected tab's surface and underline that `TAB_MARK` now names), scroll-area
+  (`.scroll-area`), resizable (`.resizable-group`, `.resizable-handle`), table (`.data-table`, BEM elements per part),
+  sidebar (`.sidebar`, `.sidebar-*`; the rail is `.sidebar[data-collapsible="icon"]`). `cn` and `cva` are gone from
+  `src/ui/shadcn`.
+- **Removed, not converted** (dead code, so nothing to keep pixel-identical): button, input, sheet, skeleton, the
+  shadcn tooltip and `src/lib/use-mobile.ts` were reachable only through the sidebar's mobile sheet, which never
+  renders (the window is at least 1100px wide; shadcn switches under 768px). The sidebar keeps only the ten parts the
+  engagement sidebar uses; its context is now just the collapsed state, since nothing called `setOpen` (no trigger or
+  rail; ⌘B lives in the feature). Unused table parts (footer, caption) and toggle.tsx (its variants only ever reached
+  the group) went too. The eslint ban on importing the stock button, input, skeleton, sheet, toggle and tooltip stays,
+  so they aren't re-added from the CLI.
+- **ToggleGroup lost `variant` and `size`:** every caller passed `size="sm"` with the default variant, and an item is
+  `h-full`, so size only ever set a 28px minimum width. The group is that one look now.
+- **Callers' utilities, converted with this unit** (tailwind-merge had let them replace shadcn's own): the engagement
+  sidebar's header, content, rules, groups, label, menus and rows (`.engagement-sidebar__*`, `--rail` modifiers);
+  KindChips' and InventoryList's body-size segments (`.kind-chips__item`, `.inventory-list__kind`); CredentialDock's
+  separators (`bg-line-2` was the separator's own colour; the container-query display is
+  `.credential-dock__rule-across` / `__rule-down`); CredentialsSection's `gap-4` (into `.credentials-section`, which
+  now beats `.tabs`); SplitLeftPane's NoteEditor `min-h-[16rem] py-2` (`.split-left-pane .split-left-pane__notes`,
+  two classes since NoteEditor is another feature's). The sidebar's own placement (absolute in the shell column,
+  `h-full`, the `--line` border) is the sidebar's default now, its only caller having always overridden shadcn's
+  window-fixed one.
+- `arsenal/styles.ts` (`ON`) is deleted: nothing imported it any more.
+- **Kept as rendered:** the scroll-area viewport and the resize handle draw no focus ring (stock `outline-none` set
+  `--tw-outline-style: none`, which their `focus-visible:outline-2` then read); the handle still brightens on focus.
+  tailwind-merge had dropped the separator's `w-full` for the rail rules' `w-6`, which the feature rule reproduces.
+- Audit: the tiny-text exemptions add `.sidebar-group-label` and `.data-table__head` (12px label role, formerly
+  matched as `.text-label`).
+
+### Verification
+- [x] Unit tests (sidebar, capture and layout assertions moved to the BEM classes or the SCSS rule text)
+- [x] Type check and lint
+- [x] Pixel diff: 297/297
+- [x] Audit gate: 660/660. A first run caught a real regression: sidebar-collapsed at 1024–1440 overflowed while the
+      rail animated, because the shared reduced-motion `transition-property: none` came before the gap's and
+      container's own `transition-property` at equal specificity. The reduced-motion rule now comes last; 24/24 on
+      repeat.

@@ -149,7 +149,6 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
         <div className="services-facts__menu">
           <ToggleGroup
             type="single"
-            size="sm"
             aria-label={`Verdict for ${proto}`}
             value={s.verdict ?? ""}
             onValueChange={(v) => {

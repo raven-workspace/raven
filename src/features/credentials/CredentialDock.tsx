@@ -157,17 +157,15 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
           />
         </div>
       </header>
-      {/* The separators keep their utilities until src/ui/shadcn is converted: cn() drops Separator's own bg-border only
-          for a bg-* utility. */}
       {!folded && (
         <>
-          <Separator className="bg-line-2" />
+          <Separator />
           <div className={tabs.length > 0 ? "credential-dock__body credential-dock__body--tabs" : "credential-dock__body"}>
             {facts}
             {tabs.length > 0 && (
               <>
-                <Separator className="bg-line-2 @[700px]:hidden" />
-                <Separator orientation="vertical" className="hidden bg-line-2 @[700px]:block" />
+                <Separator className="credential-dock__rule-across" />
+                <Separator orientation="vertical" className="credential-dock__rule-down" />
                 <ScrollArea className="credential-dock__work">
                   <div className="credential-dock__work-inner">
                     <DockWork

@@ -64,7 +64,7 @@ with every screen pixel-identical. Inventory: [tailwind-to-css-inventory.md](tai
 | 5–20 | Features, smallest first: palette, generators, board, cleanup, settings, capture, stuck, notes, vault, log, checklist, network, arsenal, manual, engagements, hosts | Med | tests, pixel diff at all widths | Done |
 | 21–23 | payloads, credentials (TestGrid: sticky cells, snapping), findings | High | + manual QA of sticky/scroll | Done |
 | 24 | report (TodoPanel, EvidenceRail, ReportTabs) | High | + page.css interplay | Done |
-| 25 | src/ui/shadcn (sidebar, button, toggle, tabs, sheet, scroll-area, …) | High | + tw-animate replacements | |
+| 25 | src/ui/shadcn (sidebar, button, toggle, tabs, sheet, scroll-area, …) | High | + tw-animate replacements | Done |
 | 26 | Remove Tailwind: preflight → `base.scss`, `@theme` → `:root`, drop packages, `cn`, `cva`, convention tests rewritten, DESIGN.md | Med | full suite, build, audit, pixel, manual QA | |
 
 ## Feature conventions

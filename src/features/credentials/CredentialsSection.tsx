@@ -144,8 +144,7 @@ export function CredentialsSection() {
     <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} asChild>
       <section
         aria-label="Credentials"
-        // gap-4 stays a utility: Tabs puts its own gap-3 utility on this element, which a feature class can't beat.
-        className="credentials-section gap-4"
+        className="credentials-section"
       >
         <div className="credentials-section__bar">
           <TabsList aria-label="Credentials view">

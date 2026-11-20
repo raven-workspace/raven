@@ -22,4 +22,10 @@ const c = await compile(css, {
   },
 });
 const out = c.build(process.argv[2].split(/\s+/).filter(Boolean));
-console.log(out.slice(out.indexOf("@layer utilities")));
+const start = out.indexOf("@layer utilities");
+let depth = 0, end = start;
+for (let i = out.indexOf("{", start); i < out.length; i++) {
+  if (out[i] === "{") depth++;
+  else if (out[i] === "}" && --depth === 0) { end = i + 1; break; }
+}
+console.log(out.slice(start, end));

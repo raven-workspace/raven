@@ -1,0 +1,214 @@
+@use "@/styles/abstracts" as *;
+
+// The sidebar's look and its collapse: .sidebar[data-collapsible="icon"] is the 56px rail. The layout of what goes
+// inside (header grid, group padding, row tracks) is the caller's.
+$rail: '.sidebar[data-collapsible="icon"]';
+
+@layer components {
+  .sidebar-wrapper {
+    --sidebar-width: 240px;
+    --sidebar-width-icon: 56px;
+    position: relative;
+    display: flex;
+    width: auto;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .sidebar {
+    display: block;
+    color: var(--muted-2);
+  }
+
+  // Width eases between 240px and the rail (none under reduced motion); the gap and the panel move together.
+  .sidebar__gap {
+    position: relative;
+    width: var(--sidebar-width);
+    background-color: transparent;
+    transition: width 200ms linear;
+  }
+
+  .sidebar__container {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    z-index: 10;
+    display: flex;
+    width: var(--sidebar-width);
+    height: 100%;
+    border-right: 1px solid var(--line);
+    transition-property: left, right, width;
+    transition-timing-function: linear;
+    transition-duration: 200ms;
+  }
+
+  #{$rail} .sidebar__gap,
+  #{$rail} .sidebar__container {
+    width: var(--sidebar-width-icon);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar__gap,
+    .sidebar__container {
+      transition-property: none;
+    }
+  }
+
+  .sidebar__inner {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg);
+  }
+
+  .sidebar-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+  }
+
+  // Scrolls with no visible scrollbar.
+  .sidebar-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 0;
+    min-height: 0;
+    overflow: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    #{$rail} & {
+      overflow: hidden;
+    }
+  }
+
+  .sidebar-group {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    padding: var(--space-sm);
+  }
+
+  // Slides up out of sight on the rail.
+  .sidebar-group-label {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    height: 2rem;
+    padding-inline: var(--space-sm);
+    border-radius: var(--radius-sm);
+    @include type(label);
+    color: var(--faint);
+    outline-style: none;
+    transition-property: margin, opacity;
+    transition-timing-function: linear;
+    transition-duration: 200ms;
+
+    #{$rail} & {
+      margin-top: -2rem;
+      opacity: 0;
+    }
+  }
+
+  .sidebar-separator {
+    margin-inline: var(--space-sm);
+    background-color: var(--line);
+  }
+
+  .sidebar-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sidebar-menu-item {
+    position: relative;
+  }
+
+  // A 32px row: 16px icon, label (the last span truncates). Current = --surface-hi and the 2px accent bar. On the rail
+  // a fixed 32px box with the icon centred.
+  .sidebar-menu-button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    height: 2rem;
+    padding: var(--space-sm);
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    @include type(body);
+    text-align: left;
+    text-decoration-line: none;
+    color: var(--muted-2);
+    transition-property: width, height, padding, color, background-color;
+    transition-timing-function: var(--ease-standard);
+    transition-duration: 100ms;
+
+    @media (prefers-reduced-motion: reduce) {
+      transition-property: none;
+    }
+
+    svg {
+      flex-shrink: 0;
+      width: 1rem;
+      height: 1rem;
+    }
+
+    > span:last-child {
+      @include truncate;
+    }
+
+    // Under hover, so a hovered current row takes the hover surface.
+    &:where([data-active="true"]) {
+      background-color: var(--surface-hi);
+      color: var(--fg);
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface);
+        color: var(--fg);
+      }
+    }
+
+    &:active {
+      background-color: var(--surface-hi);
+      color: var(--fg);
+    }
+
+    &:disabled,
+    &[aria-disabled="true"] {
+      pointer-events: none;
+      opacity: 0.5;
+    }
+
+    #{$rail} &:not(.sidebar-menu-button--lg) {
+      width: 2rem !important;
+      height: 2rem !important;
+      padding: var(--space-sm) !important;
+    }
+  }
+
+  // Two lines (a host: glyph, name, IP); on the rail 48px wide, its height from the content.
+  .sidebar-menu-button--lg {
+    height: auto;
+    min-height: 2.75rem;
+    padding-block: var(--space-xs);
+
+    #{$rail} & {
+      width: 3rem !important;
+      padding-inline: 0 !important;
+    }
+  }
+}

@@ -49,9 +49,6 @@ const SECTION_ICONS: Record<SectionId, Icon> = {
   report: FileText,
 };
 
-/** Both menus centre their items in the rail, so section boxes and host glyphs share one centre line. */
-const menu = "gap-1 group-data-[collapsible=icon]:items-center";
-
 const LAST_OCTET = /(\d{1,3})$/;
 
 /**
@@ -59,7 +56,6 @@ const LAST_OCTET = /(\d{1,3})$/;
  * item to item, sections and hosts alike; the links themselves draw no active background, even on hover.
  */
 const ACTIVE_MARK = "engagement-sidebar__marker";
-const SLIDING_ACTIVE = "data-active:bg-transparent data-active:shadow-none data-active:hover:bg-transparent";
 const FOLLOW_ACTIVE = { selected: '[data-sidebar="menu-button"][data-active="true"]', items: '[data-sidebar="menu-button"]', attributes: ["data-active"] };
 
 /** Rail label: the first 4 characters of the name without trailing - _ . ("web-" is "web"), or the last octet when that leaves under 2 characters. */
@@ -91,7 +87,7 @@ function SectionItem({ engagementId, id, label, n, collapsed }: {
         <SidebarMenuButton
           asChild
           isActive={active}
-          className={cx("cursor-default", SLIDING_ACTIVE, !collapsed && "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2 py-0")}
+          className={cx("engagement-sidebar__link", !collapsed && "engagement-sidebar__section-row")}
         >
           <NavLink to={to} end aria-label={collapsed ? label : undefined}>
             <SectionIcon aria-hidden />
@@ -132,13 +128,7 @@ function HostItem({ engagementId, host: h, threads, collapsed }: {
           asChild
           size="lg"
           isActive={active}
-          className={cx(
-            "cursor-default",
-            SLIDING_ACTIVE,
-            collapsed
-              ? "relative grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1"
-              : "grid grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
-          )}
+          className={cx("engagement-sidebar__link", collapsed ? "engagement-sidebar__host-row--rail" : "engagement-sidebar__host-row")}
         >
           <NavLink to={to} title={collapsed ? undefined : h.name}>
             <HostGlyph column={h.boardColumn} />
@@ -193,24 +183,15 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
   });
 
   const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
-  const group = collapsed ? "px-1 py-0" : "px-3 py-0";
+  // Both menus centre their items on the rail, so section boxes and host glyphs share one centre line.
+  const rail = (block: string) => cx(block, collapsed && `${block}--rail`);
 
   return (
     <>
-      <SidebarProvider
-        open={!collapsed}
-        onOpenChange={(open) => open === collapsed && toggle()}
-        className="relative h-full min-h-0 w-auto"
-      >
-        {/* In the shell's grid column, not fixed to the window: the gap div sizes the column, the panel fills it. */}
-        <ShadSidebar collapsible="icon" className="absolute h-full border-sidebar-border">
+      <SidebarProvider open={!collapsed}>
+        <ShadSidebar>
           <nav aria-label="Engagement" className="engagement-sidebar__nav">
-            <SidebarHeader
-              className={cx(
-                "grid items-center gap-0 pt-4 pb-2",
-                collapsed ? "grid-cols-[28px] justify-center px-1" : "grid-cols-[minmax(0,1fr)_28px] px-3",
-              )}
-            >
+            <SidebarHeader className={rail("engagement-sidebar__header")}>
               <h2 className={cx("engagement-sidebar__heading", collapsed && "engagement-sidebar__sr-only")}>Engagement</h2>
               <IconButton
                 icon={SidebarSimple}
@@ -220,24 +201,24 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
                 onClick={toggle}
               />
             </SidebarHeader>
-            <SidebarContent className="relative isolate overflow-x-hidden pb-4 group-data-[collapsible=icon]:overflow-y-auto">
+            <SidebarContent className="engagement-sidebar__content">
               <TabMarker className={ACTIVE_MARK} follow={FOLLOW_ACTIVE} />
-              {collapsed && <SidebarSeparator className="mx-auto mb-2 data-horizontal:w-6" />}
-              <SidebarGroup className={group}>
-                <SidebarMenu className={menu}>
+              {collapsed && <SidebarSeparator className="engagement-sidebar__rule engagement-sidebar__rule--first" />}
+              <SidebarGroup className={rail("engagement-sidebar__group")}>
+                <SidebarMenu className={rail("engagement-sidebar__menu")}>
                   {SECTIONS.map((s, i) => (
                     <SectionItem key={s.id} engagementId={engagementId} id={s.id} label={s.label} n={i + 1} collapsed={collapsed} />
                   ))}
                 </SidebarMenu>
               </SidebarGroup>
-              {collapsed && <SidebarSeparator className="mx-auto my-2 data-horizontal:w-6" />}
-              <SidebarGroup className={group}>
+              {collapsed && <SidebarSeparator className="engagement-sidebar__rule engagement-sidebar__rule--between" />}
+              <SidebarGroup className={rail("engagement-sidebar__group")}>
                 {collapsed ? (
                   // Collapsed, the heading is for screen readers only: a plain sr-only heading, since the group label's
                   // own height and padding would outlast sr-only and leave a clipped sliver.
                   <h2 id={hostsId} className="engagement-sidebar__sr-only">Hosts</h2>
                 ) : (
-                  <SidebarGroupLabel asChild className="m-0 text-label text-faint mt-4 h-auto px-2 pb-2">
+                  <SidebarGroupLabel asChild className="engagement-sidebar__group-label">
                     <h2 id={hostsId}>Hosts</h2>
                   </SidebarGroupLabel>
                 )}
@@ -246,7 +227,7 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
                     No hosts yet
                   </p>
                 )}
-                <SidebarMenu className={menu}>
+                <SidebarMenu className={rail("engagement-sidebar__menu")}>
                   {list.map((h) => (
                     <HostItem key={h.id} engagementId={engagementId} host={h} threads={threads.get(h.id) ?? 0} collapsed={collapsed} />
                   ))}

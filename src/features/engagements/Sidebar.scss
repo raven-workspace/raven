@@ -1,9 +1,103 @@
 @use "@/styles/abstracts" as *;
 
-// The engagement sidebar's own elements. The classes it passes to shadcn's Sidebar parts stay Tailwind utilities
-// until shadcn is converted: shadcn merges them with its own utilities (tailwind-merge), so a semantic class there
-// would lose to the utility it used to replace.
+// The engagement sidebar: its layout inside the Sidebar parts (src/ui/shadcn/sidebar), and its own elements. A `--rail`
+// modifier is the collapsed 56px rail.
 @layer features {
+  // The heading and the collapse button, in a 28px column; on the rail the button alone, centred.
+  .engagement-sidebar__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px;
+    align-items: center;
+    gap: 0;
+    padding: var(--space-lg) var(--space-md) var(--space-sm);
+  }
+
+  .engagement-sidebar__header--rail {
+    grid-template-columns: 28px;
+    justify-content: center;
+    padding-inline: var(--space-xs);
+  }
+
+  .engagement-sidebar__content {
+    position: relative;
+    isolation: isolate;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: var(--space-lg);
+  }
+
+  // The rail's short rules above and between the menus.
+  .engagement-sidebar__rule {
+    width: 1.5rem;
+    margin-inline: auto;
+  }
+
+  .engagement-sidebar__rule--first {
+    margin-bottom: var(--space-sm);
+  }
+
+  .engagement-sidebar__rule--between {
+    margin-block: var(--space-sm);
+  }
+
+  .engagement-sidebar__group {
+    padding: 0 var(--space-md);
+  }
+
+  .engagement-sidebar__group--rail {
+    padding-inline: var(--space-xs);
+  }
+
+  .engagement-sidebar__group-label {
+    height: auto;
+    margin: var(--space-lg) 0 0;
+    padding: 0 var(--space-sm) var(--space-sm);
+  }
+
+  .engagement-sidebar__menu {
+    gap: var(--space-xs);
+  }
+
+  .engagement-sidebar__menu--rail {
+    align-items: center;
+  }
+
+  // Links draw no current background or bar, even on hover: the marker does.
+  .engagement-sidebar__link {
+    cursor: default;
+
+    &[data-active="true"] {
+      background-color: transparent;
+      box-shadow: none;
+    }
+  }
+
+  // Icon, label, key number.
+  .engagement-sidebar__section-row {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    height: 30px;
+    padding-block: 0;
+    padding-inline: var(--space-sm);
+  }
+
+  // Glyph, name over IP, thread dot.
+  .engagement-sidebar__host-row {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    gap: var(--space-sm);
+    padding-inline: var(--space-sm);
+  }
+
+  // The glyph over the short name, in one centred track.
+  .engagement-sidebar__host-row--rail {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: var(--space-xs);
+  }
+
   .engagement-sidebar__nav {
     display: grid;
     height: 100%;

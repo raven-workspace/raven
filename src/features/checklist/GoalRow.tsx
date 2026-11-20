@@ -28,7 +28,7 @@ const STATUSES: { value: ChecklistStatus; label: string }[] = [
  */
 export function StatusToggles({ label, status, onStatus }: { label: string; status: ChecklistStatus; onStatus: (status: ChecklistStatus) => void }) {
   return (
-    <ToggleGroup type="single" size="sm" aria-label={label} value={status} onValueChange={(v) => v && onStatus(v as ChecklistStatus)}>
+    <ToggleGroup type="single" aria-label={label} value={status} onValueChange={(v) => v && onStatus(v as ChecklistStatus)}>
       {STATUSES.map((s) => (
         <ToggleGroupItem key={s.value} value={s.value}>{s.label}</ToggleGroupItem>
       ))}

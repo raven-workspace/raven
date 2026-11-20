@@ -1,0 +1,59 @@
+@use "@/styles/abstracts" as *;
+
+// Tabs are controls, so sentence-case body text. The selected tab is bold and white; its raised surface and accent
+// underline (.tab-mark) is drawn once by the list's TabMarker and glides to the next tab.
+@layer components {
+  .tabs {
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  .tabs__list {
+    position: relative;
+    isolation: isolate;
+    display: inline-grid;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .tabs__trigger {
+    height: 1.75rem;
+    padding-inline: var(--space-md);
+    border-radius: var(--radius-sm);
+    @include type(body);
+    white-space: nowrap;
+    color: var(--muted);
+    cursor: default;
+    user-select: none;
+    @include transition-colors;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+
+    &:disabled {
+      pointer-events: none;
+      color: var(--faint);
+    }
+
+    &[data-state="active"] {
+      font-weight: 600;
+      color: var(--fg);
+    }
+  }
+
+  .tabs__content {
+    outline-style: none;
+  }
+
+  // On a TabMarker (also used by tab strips that aren't Tabs: the report's and the finding split's).
+  .tab-mark {
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-hi);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+}

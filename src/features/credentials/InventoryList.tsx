@@ -168,11 +168,10 @@ export function InventoryList({ eid, creds, all, hosts, servicesByHost, attempts
   return (
     <div className="inventory-list">
       <div className="inventory-list__filter">
-        <ToggleGroup type="single" size="sm" aria-label="Show kind" value={kind} onValueChange={(v) => v && setKind(v as InventoryKind | "all")} className="inventory-list__kinds">
-          {/* Utilities until src/ui/shadcn is converted: cn() swaps the item's own text-meta and gap-1 only for utilities. */}
-          <ToggleGroupItem value="all" className="text-body">All</ToggleGroupItem>
+        <ToggleGroup type="single" aria-label="Show kind" value={kind} onValueChange={(v) => v && setKind(v as InventoryKind | "all")} className="inventory-list__kinds">
+          <ToggleGroupItem value="all" className="inventory-list__kind">All</ToggleGroupItem>
           {present.map((k) => (
-            <ToggleGroupItem key={k.kind} value={k.kind} className="gap-2 whitespace-nowrap text-body">
+            <ToggleGroupItem key={k.kind} value={k.kind} className="inventory-list__kind">
               {k.label}
               <span className="inventory-list__kind-count">{k.count}</span>
             </ToggleGroupItem>

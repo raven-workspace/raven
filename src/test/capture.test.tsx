@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -303,7 +304,8 @@ describe("capture panel", () => {
     await screen.findByRole("navigation", { name: "Engagement" });
     const dialog = await openCapture(user);
     const group = within(dialog).getByRole("radiogroup", { name: "Kind" });
-    expect(group).toHaveClass("h-7");
+    expect(group).toHaveClass("toggle-group");
+    expect(readFileSync("src/ui/shadcn/toggle-group.scss", "utf8")).toMatch(/\.toggle-group \{[^}]*height: 1\.75rem;/);
     const names = ["Command", "Screenshot", "HTTP", "Other", "Flag"];
     names.forEach((name, i) => {
       const chip = within(group).getByRole("radio", { name });

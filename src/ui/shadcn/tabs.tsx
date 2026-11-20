@@ -1,11 +1,12 @@
 import * as React from "react"
-import { cn } from "@/lib/utils"
+import { cx } from "@/lib/cx"
 import { Tabs as TabsPrimitive } from "radix-ui"
 import { TabMarker } from "../TabMarker"
 import { FADE_MS, canAnimate } from "../motion"
+import "./tabs.scss"
 
 /** The selected tab's mark: a raised surface with an accent underline. It glides between tabs (TabMarker). */
-export const TAB_MARK = "rounded-sm bg-surface-hi shadow-[inset_0_-2px_0_var(--color-accent)]"
+export const TAB_MARK = "tab-mark"
 
 // Ink: tabs are controls, so sentence-case body text. The active tab gets a surface and an accent underline, drawn
 // once by the list's TabMarker so it glides to the next tab.
@@ -19,7 +20,7 @@ function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive
   }, [])
   return (
     <ShownContext.Provider value={shown}>
-      <TabsPrimitive.Root data-slot="tabs" className={cn("grid gap-3", className)} {...props} />
+      <TabsPrimitive.Root data-slot="tabs" className={cx("tabs", className)} {...props} />
     </ShownContext.Provider>
   )
 }
@@ -28,7 +29,7 @@ function TabsList({ className, children, ...props }: React.ComponentProps<typeof
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
-      className={cn("relative isolate inline-grid grid-flow-col items-center justify-start gap-2", className)}
+      className={cx("tabs__list", className)}
       {...props}
     >
       <TabMarker className={TAB_MARK} />
@@ -41,11 +42,7 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
-      className={cn(
-        "h-7 cursor-default select-none whitespace-nowrap rounded-sm px-3 text-body text-muted transition-colors duration-100 hover:text-fg disabled:pointer-events-none disabled:text-faint",
-        "data-[state=active]:font-semibold data-[state=active]:text-fg",
-        className
-      )}
+      className={cx("tabs__trigger", className)}
       {...props}
     />
   )
@@ -61,7 +58,7 @@ function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPr
     const anim = el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE_MS, easing: "ease-out" })
     return () => anim.cancel()
   }, [props.value, shown])
-  return <TabsPrimitive.Content ref={ref} data-slot="tabs-content" className={cn("outline-none", className)} {...props} />
+  return <TabsPrimitive.Content ref={ref} data-slot="tabs-content" className={cx("tabs__content", className)} {...props} />
 }
 
 export { Tabs, TabsList, TabsTrigger, TabsContent }
