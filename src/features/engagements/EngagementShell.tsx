@@ -21,6 +21,7 @@ import { StatusStrip } from "./StatusStrip";
 import { SECTIONS, SectionView, sectionPath, type SectionId } from "./sections";
 import { engagementKey, engagementsKey } from "./queries";
 import { hostsKey } from "../hosts/queries";
+import "./EngagementShell.scss";
 
 /** Layout for `/e/:id/*`: sidebar, header, status strip and the routed section. */
 export function EngagementShell() {
@@ -74,7 +75,7 @@ export function EngagementShell() {
 
   if (query.isError && (query.error as { code?: string }).code === "not_found") {
     return (
-      <div className="px-8 py-6">
+      <div className="engagement-shell__state">
         <EmptyState
           title="Engagement not found"
           body="It may have been deleted."
@@ -83,21 +84,21 @@ export function EngagementShell() {
       </div>
     );
   }
-  if (!query.data) return <div className="px-8 py-6">{queryState([query], "this engagement")}</div>;
+  if (!query.data) return <div className="engagement-shell__state">{queryState([query], "this engagement")}</div>;
   const e = query.data;
   // The Report section has its own strip (file name, due in, gaps) in this one's place: never two strips stacked.
   const strip = section !== "report";
   const bars = (hostId ? 0 : 1) + (strip ? 1 : 0);
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[auto_minmax(0,1fr)]">
+    <div className="engagement-shell">
       <Sidebar engagementId={id} />
       {/* On a host page the host is the subject: no engagement header; the strip carries the engagement's name. */}
-      <div className={cx("grid min-h-0 min-w-0", bars === 2 ? "grid-rows-[auto_auto_minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)]")}>
+      <div className={cx("engagement-shell__column", bars === 2 && "engagement-shell__column--two-bars")}>
         {!hostId && <EngagementHeader engagement={e} />}
         {strip && <StatusStrip engagement={e} named={!!hostId} />}
         {/* The Report lays out its own panes and strip edge to edge. */}
-        <main className={cx("min-h-0 overflow-auto", strip && "px-6 py-6")}>
+        <main className={cx("engagement-shell__main", strip && "engagement-shell__main--padded")}>
           <Outlet />
         </main>
       </div>

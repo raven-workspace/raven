@@ -4,6 +4,7 @@ import type { Engagement } from "../../types/engagement";
 import { labelClass } from "../../ui";
 import { useProgress } from "../hosts/queries";
 import { EMPTY_PROGRESS, KIND_LABEL, dateRange } from "./format";
+import "./PastTable.scss";
 
 /** Case-insensitive match on name and client. */
 export function matchesSearch(e: Engagement, q: string): boolean {
@@ -13,23 +14,22 @@ export function matchesSearch(e: Engagement, q: string): boolean {
 }
 
 const COLS = ["Engagement", "Kind", "Dates", "Result", "Report"] as const;
-const cell = "px-3 text-left align-baseline";
 
 /** How it ended: hosts rooted and flags found, as on the active cards. Nothing to show without hosts. */
 function Result({ id }: { id: string }) {
   const p = useProgress().data?.[id] ?? EMPTY_PROGRESS;
-  if (p.hostsTotal === 0) return <span className="text-faint">—</span>;
+  if (p.hostsTotal === 0) return <span className="past-table__none">—</span>;
   return (
-    <span className="grid grid-flow-col justify-start gap-4 text-meta">
+    <span className="past-table__result">
       {(
         [
           ["Rooted", `${p.hostsRooted}/${p.hostsTotal}`],
           ["Flags", `${p.flagsFound}/${p.flagsTotal}`],
         ] as const
       ).map(([label, value]) => (
-        <span key={label} className="grid grid-flow-col items-baseline gap-1">
-          <span className="text-muted-2">{label}</span>
-          <span className={cx("font-mono text-code tabular-nums", label === "Rooted" && p.hostsRooted === p.hostsTotal ? "text-accent" : "text-fg-2")}>
+        <span key={label} className="past-table__stat">
+          <span className="past-table__stat-label">{label}</span>
+          <span className={cx("past-table__stat-value", label === "Rooted" && p.hostsRooted === p.hostsTotal && "past-table__stat-value--all")}>
             {value}
           </span>
         </span>
@@ -41,18 +41,18 @@ function Result({ id }: { id: string }) {
 export function PastTable({ engagements, now }: { engagements: Engagement[]; now: number }) {
   const navigate = useNavigate();
   return (
-    <table className="w-full table-fixed border-collapse text-body">
+    <table className="past-table">
       <colgroup>
-        <col className="w-[36%]" />
-        <col className="w-[12%]" />
-        <col className="w-[20%]" />
-        <col className="w-[22%]" />
-        <col className="w-[10%]" />
+        <col className="past-table__col--name" />
+        <col className="past-table__col--kind" />
+        <col className="past-table__col--dates" />
+        <col className="past-table__col--result" />
+        <col className="past-table__col--report" />
       </colgroup>
       <thead>
-        <tr className="border-b border-line-2">
+        <tr className="past-table__head-row">
           {COLS.map((c) => (
-            <th key={c} scope="col" className={cx(cell, labelClass, "pb-2")}>
+            <th key={c} scope="col" className={cx("past-table__th", labelClass)}>
               {c}
             </th>
           ))}
@@ -63,26 +63,26 @@ export function PastTable({ engagements, now }: { engagements: Engagement[]; now
           <tr
             key={e.id}
             onClick={() => void navigate(`/e/${e.id}`)}
-            className="cursor-default border-b border-line text-fg-2 transition-colors duration-100 hover:bg-surface"
+            className="past-table__row"
           >
             {/* The link carries half the cell's padding, so it is a 28px target and the row keeps its height. */}
-            <td className={cx(cell, "py-1")}>
+            <td className="past-table__cell past-table__cell--name">
               <Link
                 to={`/e/${e.id}`}
                 title={e.name}
-                className="block truncate py-1 text-fg no-underline"
+                className="past-table__name"
                 onClick={(ev) => ev.stopPropagation()}
               >
                 {e.name}
               </Link>
-              {e.client && <span className="block truncate text-meta text-muted">{e.client}</span>}
+              {e.client && <span className="past-table__client">{e.client}</span>}
             </td>
-            <td className={cx(cell, "py-2", "text-muted-2")}>{KIND_LABEL[e.kind]}</td>
-            <td className={cx(cell, "py-2", "truncate text-muted-2")}>{dateRange(e.startsAt, e.endsAt, now)}</td>
-            <td className={cx(cell, "py-2")}>
+            <td className="past-table__cell past-table__cell--muted">{KIND_LABEL[e.kind]}</td>
+            <td className="past-table__cell past-table__cell--muted past-table__cell--dates">{dateRange(e.startsAt, e.endsAt, now)}</td>
+            <td className="past-table__cell">
               <Result id={e.id} />
             </td>
-            <td className={cx(cell, "py-2", "text-faint")}>—</td>
+            <td className="past-table__cell past-table__cell--none">—</td>
           </tr>
         ))}
       </tbody>

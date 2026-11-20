@@ -294,3 +294,26 @@
 ### Verification
 - [x] Type check, lint, unit tests
 - [x] Pixel diff 297/297 (findings@900 flaky on one attempt), audit gate (with engagements)
+
+## Unit: engagements (and App.tsx)
+
+### Changes
+- Sheets for ActiveCard (also `.timebox-text--*` and `.time-bar`, shared with the status strip through `TIMEBOX_TEXT`),
+  Dashboard, PastTable, EngagementShell, EngagementHeader, StatusStrip (`.status-strip`, `.status-cell` used by the
+  report strip's `Cell` too), Listener, MsfLock, EngagementDialog (`.kind-picker` keyed on `aria-checked`; the empty-date
+  look no longer needs `!important`: the features layer beats `.control`) and Sidebar.
+- App.tsx has no classes; nothing to convert.
+- **Left on Tailwind (Sidebar):** every class passed to a shadcn part (SidebarProvider, Sidebar, SidebarHeader,
+  SidebarContent, SidebarSeparator, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton). shadcn merges a
+  caller's classes with its own through tailwind-merge (`cn`), which removes the shadcn utility the caller's class
+  replaces (`grid` drops `flex`, `px-2` trims `p-2`, `data-active:bg-transparent` drops `data-active:bg-sidebar-accent`).
+  A semantic class there would sit under the surviving utility. They move with unit 25. The sidebar's own elements
+  (headings, spans, the empty line, the Add host row, the sliding marker on TabMarker) are converted.
+- The sliding marker uses `--surface-hi` / `--accent` (what `--sidebar-accent` / `--sidebar-primary` resolve to).
+- Audit: tiny-text accepts `.engagement-sidebar__heading` (the 12px "Engagement" label lost `.text-label`).
+- Tests: sidebar, hosts, dashboard, msfLock and statusStrip assertions moved to the BEM classes.
+
+### Verification
+- [x] Type check, lint, unit tests
+- [x] Pixel diff 297/297 (findings@900 flaky on one attempt)
+- [x] Audit gate

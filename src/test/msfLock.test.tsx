@@ -81,14 +81,14 @@ describe("metasploit lock", () => {
   it("shows the locked host name in warn", async () => {
     mount("/e/e1", { ...E1, msfHostId: "h1" });
     const btn = await screen.findByRole("button", { name: /Metasploit SRV11/ });
-    expect(within(btn).getByText("SRV11")).toHaveClass("text-warn");
+    expect(within(btn).getByText("SRV11")).toHaveClass("msf-lock__host--locked");
   });
 
   it("shows locked, not unused, while the locked host's name is unresolved", async () => {
     m.hostsList.mockReturnValue(new Promise(() => {}));
     mount("/e/e1", { ...E1, msfHostId: "h1" });
     const btn = await screen.findByRole("button", { name: /Metasploit locked/ });
-    expect(within(btn).getByText("locked")).toHaveClass("text-warn");
+    expect(within(btn).getByText("locked")).toHaveClass("msf-lock__host--locked");
   });
 
   it("locks a host from the dialog", async () => {

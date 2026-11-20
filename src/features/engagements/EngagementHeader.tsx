@@ -7,6 +7,7 @@ import { Chip, ChipSet, IconButton } from "../../ui";
 import { EngagementDialog } from "./EngagementDialog";
 import { KIND_LABEL, scopeSummary } from "./format";
 import { engagementKey, engagementsKey } from "./queries";
+import "./EngagementHeader.scss";
 
 export function EngagementHeader({ engagement: e }: { engagement: Engagement }) {
   const qc = useQueryClient();
@@ -27,37 +28,37 @@ export function EngagementHeader({ engagement: e }: { engagement: Engagement }) 
   });
 
   return (
-    <header className="grid shrink-0 gap-y-1 border-b border-line px-6 pt-4 pb-3">
+    <header className="engagement-header">
       {/* The engagement's actions sit right after its name, not at the pane's far edge: "edit this", "archive this". */}
-      <div className="grid min-w-0 grid-flow-col grid-cols-[minmax(0,max-content)] auto-cols-max items-center justify-start gap-x-1">
-        <h1 title={e.name} className="m-0 truncate text-title text-fg">
+      <div className="engagement-header__title-row">
+        <h1 title={e.name} className="engagement-header__name">
           {e.name}
         </h1>
-        {archived && <span className="px-1"><Chip>archived</Chip></span>}
+        {archived && <span className="engagement-header__archived"><Chip>archived</Chip></span>}
         <IconButton icon={PencilSimple} label="Edit engagement" onClick={() => setEditing(true)} />
         <IconButton icon={ArchiveIcon} label={archived ? "Unarchive" : "Archive"} disabled={setStatus.isPending} onClick={toggleArchive} />
       </div>
-      <ChipSet className="items-center gap-x-4 gap-y-1 text-meta text-muted-2">
+      <ChipSet className="engagement-header__facts">
         <span>{KIND_LABEL[e.kind]}</span>
         {e.subLabel && <span>{e.subLabel}</span>}
         {e.client && <span>{e.client}</span>}
         {scope && (
-          <ul aria-label="Scope" className="m-0 grid list-none auto-cols-max grid-flow-col gap-3 p-0">
+          <ul aria-label="Scope" className="engagement-header__scope">
             {e.scopeCidrs.map((c) => (
-              <li key={c} className="font-mono text-code text-muted-2">
+              <li key={c} className="engagement-header__cidr">
                 {c}
               </li>
             ))}
           </ul>
         )}
         {e.domain && (
-          <span className="grid grid-flow-col items-baseline gap-2">
-            <span className="text-meta text-muted">Domain</span>
-            <span className="font-mono text-code text-fg-2">{e.domain}</span>
+          <span className="engagement-header__domain">
+            <span className="engagement-header__domain-label">Domain</span>
+            <span className="engagement-header__domain-value">{e.domain}</span>
           </span>
         )}
       </ChipSet>
-      {error && <p className="m-0 text-meta text-warn">{error}</p>}
+      {error && <p className="engagement-header__error">{error}</p>}
       <EngagementDialog open={editing} onOpenChange={setEditing} engagement={e} />
     </header>
   );

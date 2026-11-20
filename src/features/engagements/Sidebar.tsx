@@ -37,6 +37,7 @@ import { ThreadDot } from "../notes/ThreadDot";
 import { useThreadCounts } from "../notes/useThreadCounts";
 import { SECTIONS, sectionPath, type SectionId } from "./sections";
 import { useSidebarStore } from "./useSidebarStore";
+import "./Sidebar.scss";
 
 const SECTION_ICONS: Record<SectionId, Icon> = {
   board: Kanban,
@@ -48,7 +49,6 @@ const SECTION_ICONS: Record<SectionId, Icon> = {
   report: FileText,
 };
 
-const heading = "m-0 text-label text-faint";
 /** Both menus centre their items in the rail, so section boxes and host glyphs share one centre line. */
 const menu = "gap-1 group-data-[collapsible=icon]:items-center";
 
@@ -58,7 +58,7 @@ const LAST_OCTET = /(\d{1,3})$/;
  * The current section or host is lit by one marker for the whole sidebar (surface and accent bar) that slides from
  * item to item, sections and hosts alike; the links themselves draw no active background, even on hover.
  */
-const ACTIVE_MARK = "rounded-md bg-sidebar-accent shadow-[inset_2px_0_0_var(--sidebar-primary)]";
+const ACTIVE_MARK = "engagement-sidebar__marker";
 const SLIDING_ACTIVE = "data-active:bg-transparent data-active:shadow-none data-active:hover:bg-transparent";
 const FOLLOW_ACTIVE = { selected: '[data-sidebar="menu-button"][data-active="true"]', items: '[data-sidebar="menu-button"]', attributes: ["data-active"] };
 
@@ -84,7 +84,7 @@ function SectionItem({ engagementId, id, label, n, collapsed }: {
         content={
           <>
             <span>{label}</span>
-            <span className="ml-2 font-mono text-muted">{n}</span>
+            <span className="engagement-sidebar__key">{n}</span>
           </>
         }
       >
@@ -98,7 +98,7 @@ function SectionItem({ engagementId, id, label, n, collapsed }: {
             {!collapsed && (
               <>
                 <span>{label}</span>
-                <span aria-hidden className="font-mono text-meta text-faint">
+                <span aria-hidden className="engagement-sidebar__count">
                   {n}
                 </span>
               </>
@@ -122,9 +122,9 @@ function HostItem({ engagementId, host: h, threads, collapsed }: {
         side="right"
         disabled={!collapsed}
         content={
-          <span className="grid">
+          <span className="engagement-sidebar__host-tip">
             {h.name && <span>{h.name}</span>}
-            {h.ip && <span className="font-mono text-code">{h.ip}</span>}
+            {h.ip && <span className="engagement-sidebar__host-tip-ip">{h.ip}</span>}
           </span>
         }
       >
@@ -145,22 +145,22 @@ function HostItem({ engagementId, host: h, threads, collapsed }: {
             {collapsed ? (
               <>
                 {/* The link's name: the host name, or its IP when it has none (the tooltip is not a name). */}
-                <span className="sr-only">{h.name || h.ip}</span>
-                <span aria-hidden className="font-mono text-meta">
+                <span className="engagement-sidebar__sr-only">{h.name || h.ip}</span>
+                <span aria-hidden className="engagement-sidebar__rail-name">
                   {railName(h.name, h.ip)}
                 </span>
                 {/* Pinned to the glyph's corner so the rail's 56px column keeps its layout. */}
                 {threads > 0 && (
-                  <span className="absolute top-1.5 right-2 grid">
+                  <span className="engagement-sidebar__rail-dot">
                     <ThreadDot count={threads} />
                   </span>
                 )}
               </>
             ) : (
               <>
-                <span className="grid min-w-0 grid-cols-1">
-                  <span className="truncate">{shortHostName(h.name)}</span>
-                  {h.ip && <span className="truncate font-mono text-meta text-faint">{h.ip}</span>}
+                <span className="engagement-sidebar__host-text">
+                  <span className="engagement-sidebar__host-name">{shortHostName(h.name)}</span>
+                  {h.ip && <span className="engagement-sidebar__host-ip">{h.ip}</span>}
                 </span>
                 <ThreadDot count={threads} />
               </>
@@ -204,14 +204,14 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
       >
         {/* In the shell's grid column, not fixed to the window: the gap div sizes the column, the panel fills it. */}
         <ShadSidebar collapsible="icon" className="absolute h-full border-sidebar-border">
-          <nav aria-label="Engagement" className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)]">
+          <nav aria-label="Engagement" className="engagement-sidebar__nav">
             <SidebarHeader
               className={cx(
                 "grid items-center gap-0 pt-4 pb-2",
                 collapsed ? "grid-cols-[28px] justify-center px-1" : "grid-cols-[minmax(0,1fr)_28px] px-3",
               )}
             >
-              <h2 className={cx(heading, collapsed ? "sr-only" : "px-2")}>Engagement</h2>
+              <h2 className={cx("engagement-sidebar__heading", collapsed && "engagement-sidebar__sr-only")}>Engagement</h2>
               <IconButton
                 icon={SidebarSimple}
                 label={label}
@@ -235,14 +235,14 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
                 {collapsed ? (
                   // Collapsed, the heading is for screen readers only: a plain sr-only heading, since the group label's
                   // own height and padding would outlast sr-only and leave a clipped sliver.
-                  <h2 id={hostsId} className="sr-only">Hosts</h2>
+                  <h2 id={hostsId} className="engagement-sidebar__sr-only">Hosts</h2>
                 ) : (
-                  <SidebarGroupLabel asChild className={cx(heading, "mt-4 h-auto px-2 pb-2")}>
+                  <SidebarGroupLabel asChild className="m-0 text-label text-faint mt-4 h-auto px-2 pb-2">
                     <h2 id={hostsId}>Hosts</h2>
                   </SidebarGroupLabel>
                 )}
                 {hosts.isSuccess && list.length === 0 && !collapsed && (
-                  <p aria-labelledby={hostsId} className="m-0 px-2 text-meta text-faint">
+                  <p aria-labelledby={hostsId} className="engagement-sidebar__empty">
                     No hosts yet
                   </p>
                 )}
@@ -251,7 +251,7 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
                     <HostItem key={h.id} engagementId={engagementId} host={h} threads={threads.get(h.id) ?? 0} collapsed={collapsed} />
                   ))}
                 </SidebarMenu>
-                <div className={cx("mt-1 grid", collapsed ? "justify-items-center" : "grid-cols-[16px] justify-items-center px-2")}>
+                <div className={cx("engagement-sidebar__add", !collapsed && "engagement-sidebar__add--expanded")}>
                   <IconButton icon={Plus} label="Add host" onClick={() => setAdding(true)} />
                 </div>
               </SidebarGroup>

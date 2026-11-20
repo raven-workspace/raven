@@ -1,0 +1,86 @@
+@use "@/styles/abstracts" as *;
+
+// The engagement's one-line status strip. Parts marked data-drop hide one step at a time when it runs out of room
+// (useFitStrip sets their inline display).
+@layer features {
+  .status-strip {
+    height: 2.25rem;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-bottom: 1px solid var(--line);
+    padding-inline: var(--space-xl);
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .status-strip__parts {
+    display: grid;
+    height: 100%;
+    grid-auto-columns: max-content;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-xl);
+    white-space: nowrap;
+  }
+
+  // The engagement's name on host pages: a link back to the board.
+  .status-strip__name {
+    display: block;
+    height: 1.5rem;
+    max-width: 28ch;
+    @include truncate;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-body);
+    line-height: 1.5rem;
+    font-weight: 600;
+    color: var(--fg-2);
+    text-decoration-line: none;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+  }
+
+  // A label and its value; also the timebox group.
+  .status-cell {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .status-cell__value {
+    @include mono;
+    @include type(meta);
+    color: var(--fg);
+  }
+
+  .status-cell__value--warn {
+    color: var(--warn);
+  }
+
+  .status-strip__pause {
+    margin-inline: calc(var(--space-xs) * -1);
+  }
+
+  .status-strip__time {
+    @include mono;
+    @include type(meta);
+  }
+
+  .status-strip__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .status-strip__bar {
+    width: 6rem;
+  }
+
+  .status-strip__of {
+    color: var(--faint);
+  }
+}

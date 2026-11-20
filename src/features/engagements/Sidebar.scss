@@ -1,0 +1,109 @@
+@use "@/styles/abstracts" as *;
+
+// The engagement sidebar's own elements. The classes it passes to shadcn's Sidebar parts stay Tailwind utilities
+// until shadcn is converted: shadcn merges them with its own utilities (tailwind-merge), so a semantic class there
+// would lose to the utility it used to replace.
+@layer features {
+  .engagement-sidebar__nav {
+    display: grid;
+    height: 100%;
+    min-height: 0;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .engagement-sidebar__heading {
+    @include type(label);
+    color: var(--faint);
+    padding-inline: var(--space-sm);
+  }
+
+  // Screen readers only (the collapsed rail's headings).
+  .engagement-sidebar__sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  // The one marker that slides between the current section and host: surface and accent bar.
+  .engagement-sidebar__marker {
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-hi);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+
+  // A section's key number, in its rail tooltip and beside its name.
+  .engagement-sidebar__key {
+    @include mono;
+    color: var(--muted);
+    margin-left: var(--space-sm);
+  }
+
+  .engagement-sidebar__count {
+    @include mono;
+    @include type(meta);
+    color: var(--faint);
+  }
+
+  .engagement-sidebar__host-tip {
+    display: grid;
+  }
+
+  .engagement-sidebar__host-tip-ip {
+    @include type(code);
+  }
+
+  // The collapsed rail's short host name.
+  .engagement-sidebar__rail-name {
+    @include mono;
+    @include type(meta);
+  }
+
+  // Pinned to the glyph's corner so the rail's 56px column keeps its layout.
+  .engagement-sidebar__rail-dot {
+    position: absolute;
+    top: 0.375rem;
+    right: var(--space-sm);
+    display: grid;
+  }
+
+  .engagement-sidebar__host-text {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .engagement-sidebar__host-name {
+    @include truncate;
+  }
+
+  .engagement-sidebar__host-ip {
+    @include truncate;
+    @include mono;
+    @include type(meta);
+    color: var(--faint);
+  }
+
+  .engagement-sidebar__empty {
+    padding-inline: var(--space-sm);
+    @include type(meta);
+    color: var(--faint);
+  }
+
+  .engagement-sidebar__add {
+    display: grid;
+    margin-top: var(--space-xs);
+    justify-items: center;
+  }
+
+  .engagement-sidebar__add--expanded {
+    grid-template-columns: 16px;
+    padding-inline: var(--space-sm);
+  }
+}

@@ -1,0 +1,51 @@
+@use "@/styles/abstracts" as *;
+
+// Exam-sim only: the one host allowed Metasploit, on the status strip, and its picker.
+@layer features {
+  .msf-lock {
+    display: grid;
+    height: 1.75rem;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: default;
+    border-radius: var(--radius-sm);
+    color: var(--fg-2);
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+  }
+
+  .msf-lock__host {
+    @include type(meta);
+    color: var(--fg);
+  }
+
+  .msf-lock__host--locked {
+    color: var(--warn);
+  }
+
+  .msf-lock__error {
+    margin-bottom: var(--space-sm);
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .msf-lock__hosts {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .msf-lock__pick {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .msf-lock__empty {
+    @include type(meta);
+    color: var(--muted);
+  }
+}

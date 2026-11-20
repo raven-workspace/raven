@@ -121,7 +121,7 @@ describe("dashboard", () => {
     expect(within(active).getAllByText("No hosts yet")).toHaveLength(1);
 
     const row = screen.getByRole("row", { name: /Acme/ });
-    expect(within(row).getByText("2/2")).toHaveClass("text-accent"); // every host rooted
+    expect(within(row).getByText("2/2")).toHaveClass("past-table__stat-value--all"); // every host rooted
     expect(within(row).getByText("3/4")).toBeInTheDocument();
     // No hosts, no result.
     expect(within(screen.getByRole("row", { name: /Internal/ })).queryByText("Rooted")).not.toBeInTheDocument();

@@ -5,6 +5,7 @@ import { ActiveCard } from "./ActiveCard";
 import { EngagementDialog } from "./EngagementDialog";
 import { PastTable, matchesSearch } from "./PastTable";
 import { useEngagements } from "./queries";
+import "./Dashboard.scss";
 
 export function Dashboard() {
   const list = useEngagements();
@@ -29,10 +30,10 @@ export function Dashboard() {
   const shown = past.filter((e) => matchesSearch(e, q));
 
   return (
-    <div data-testid="app-root" className="mx-auto grid w-full content-start gap-6 pt-6 pb-8"
+    <div data-testid="app-root" className="dashboard"
       style={{ maxWidth: DASHBOARD_COLUMN.max, paddingInline: DASHBOARD_COLUMN.inset }}>
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
-        <h1 className="m-0 text-title text-fg">Engagements</h1>
+      <header className="dashboard__head">
+        <h1 className="dashboard__title">Engagements</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
           New engagement <Kbd variant="inline" aria-hidden>⌘N</Kbd>
         </Button>
@@ -53,14 +54,14 @@ export function Dashboard() {
       ) : (
         list.isSuccess && (
           <>
-            <section aria-labelledby={activeId} className="grid gap-3">
-              <h2 id={activeId} className={`${labelClass} m-0`}>
+            <section aria-labelledby={activeId} className="dashboard__section">
+              <h2 id={activeId} className={labelClass}>
                 Active
               </h2>
               {active.length === 0 ? (
-                <p className="m-0 text-meta text-muted">Nothing active. Archived engagements are below.</p>
+                <p className="dashboard__note">Nothing active. Archived engagements are below.</p>
               ) : (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
+                <div className="dashboard__cards">
                   {active.map((e) => (
                     <ActiveCard key={e.id} engagement={e} now={now} />
                   ))}
@@ -68,12 +69,12 @@ export function Dashboard() {
               )}
             </section>
 
-            <section aria-labelledby={pastId} className="grid gap-3 border-t border-line pt-8">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
-                <h2 id={pastId} className={`${labelClass} m-0`}>
+            <section aria-labelledby={pastId} className="dashboard__section dashboard__section--past">
+              <div className="dashboard__head">
+                <h2 id={pastId} className={labelClass}>
                   Past
                 </h2>
-                <div className="w-64">
+                <div className="dashboard__search">
                   <Input
                     type="search"
                     aria-label="Search past engagements"
@@ -84,12 +85,12 @@ export function Dashboard() {
                 </div>
               </div>
               {past.length === 0 ? (
-                <p className="m-0 text-meta text-muted">Archived engagements show here.</p>
+                <p className="dashboard__note">Archived engagements show here.</p>
               ) : (
                 <>
                   <PastTable engagements={shown} now={now} />
                   {shown.length === 0 && (
-                    <p className="m-0 px-3 text-meta text-muted">No matches for “{q.trim()}”.</p>
+                    <p className="dashboard__note dashboard__note--inset">No matches for “{q.trim()}”.</p>
                   )}
                 </>
               )}

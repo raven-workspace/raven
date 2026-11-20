@@ -7,6 +7,7 @@ import { BrandIcon, Button, Dialog, labelClass } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useHosts } from "../hosts/queries";
 import { engagementKey, engagementsKey } from "./queries";
+import "./MsfLock.scss";
 
 /** Exam-sim only: the one host allowed to use Metasploit. Click to change or release it. */
 export function MsfLock({ engagement: e, step }: { engagement: Engagement; step?: number }) {
@@ -36,11 +37,11 @@ export function MsfLock({ engagement: e, step }: { engagement: Engagement; step?
         type="button"
         onClick={() => setDialog("pick")}
         data-drop={step}
-        className="grid h-7 grid-flow-col items-center gap-2 cursor-default rounded-sm text-fg-2 hover:text-fg"
+        className="msf-lock"
       >
         <BrandIcon brand="metasploit" />
         <span className={labelClass}>Metasploit</span>{" "}
-        <span className={cx("text-meta", e.msfHostId ? "text-warn" : "text-fg")}>
+        <span className={cx("msf-lock__host", e.msfHostId && "msf-lock__host--locked")}>
           {e.msfHostId ? (locked?.name ?? "locked") : "unused"}
         </span>
       </button>
@@ -60,12 +61,12 @@ export function MsfLock({ engagement: e, step }: { engagement: Engagement; step?
           </>
         }
       >
-        {error && <p role="alert" className="m-0 mb-2 text-meta text-warn">{error}</p>}
-        <ul className="m-0 grid list-none gap-1 p-0">
+        {error && <p role="alert" className="msf-lock__error">{error}</p>}
+        <ul className="msf-lock__hosts">
           {hosts.map((h) => (
             <li key={h.id}>
               <Button
-                className="w-full justify-start"
+                className="msf-lock__pick"
                 aria-pressed={h.id === e.msfHostId}
                 disabled={set.isPending}
                 onClick={() => (h.id === e.msfHostId ? close() : set.mutate(h.id))}
@@ -75,7 +76,7 @@ export function MsfLock({ engagement: e, step }: { engagement: Engagement; step?
             </li>
           ))}
         </ul>
-        {hosts.length === 0 && <p className="m-0 text-meta text-muted">Add a host first.</p>}
+        {hosts.length === 0 && <p className="msf-lock__empty">Add a host first.</p>}
       </Dialog>
       {dialog === "release" && (
         <ConfirmDelete

@@ -52,13 +52,13 @@ describe("sidebar", () => {
     mount();
     const link = (await screen.findByText("web-portal-dmz-frontend-01")).closest("a")!;
     expect(link).toHaveAttribute("title", FULL);
-    expect(within(link).getByText("10.10.20.15")).toHaveClass("font-mono");
+    expect(within(link).getByText("10.10.20.15")).toHaveClass("engagement-sidebar__host-ip");
   });
 
   it("a long host name truncates in the sidebar with its title", async () => {
     mount();
     const short = await screen.findByText("web-portal-dmz-frontend-01");
-    expect(short).toHaveClass("truncate");
+    expect(short).toHaveClass("engagement-sidebar__host-name");
     expect(short.closest("a")).toHaveAttribute("title", FULL);
   });
 
@@ -83,7 +83,7 @@ describe("sidebar", () => {
     web.focus();
     const tip = await screen.findByRole("tooltip");
     expect(within(tip).getByText(FULL)).toBeInTheDocument();
-    expect(within(tip).getByText("10.10.20.15")).toHaveClass("font-mono");
+    expect(within(tip).getByText("10.10.20.15")).toHaveClass("engagement-sidebar__host-tip-ip");
   });
 
   it("the collapsed rail keeps the open-thread dot on a host with threads", async () => {
@@ -92,7 +92,7 @@ describe("sidebar", () => {
       { ownerId: "h2", engagementId: "e1", hostId: "h2", body: "? is 445 reachable\n? other", private: false, updatedAt: 1 },
     ]);
     mount();
-    const link = (await screen.findByText("dc01", { selector: "span.sr-only" })).closest("a")!;
+    const link = (await screen.findByText("dc01", { selector: "span.engagement-sidebar__sr-only" })).closest("a")!;
     expect(await within(link).findByRole("img", { name: "2 open threads" })).toBeInTheDocument();
     const other = screen.getByText("web").closest("a")!;
     expect(within(other).queryByRole("img", { name: /open thread/ })).toBeNull();
@@ -149,8 +149,7 @@ describe("sidebar", () => {
     expect(a).toHaveAttribute("data-active", "true");
     expect(a).toHaveClass("data-active:bg-transparent", "data-active:shadow-none");
     const marker = document.querySelector("nav [data-tab-marker]")!;
-    expect(marker).toHaveClass("bg-sidebar-accent");
-    expect(marker.className).toContain("shadow-[inset_2px_0_0_var(--sidebar-primary)]");
+    expect(marker).toHaveClass("engagement-sidebar__marker");
     expect(screen.getByText("web").closest("a")).toHaveAttribute("data-active", "false");
   });
 
@@ -201,9 +200,9 @@ describe("sidebar", () => {
     const wrap = screen.getByRole("button", { name: "Add host" }).parentElement!.parentElement ?? screen.getByRole("button", { name: "Add host" }).parentElement!;
     const cols = (el: Element) => /grid-cols-\[(16px)[_\]]/.exec(el.className)?.[1];
     expect(cols(row)).toBe("16px");
-    const w = screen.getByRole("button", { name: "Add host" }).closest("div.grid")!;
-    expect(cols(w)).toBe("16px");
-    expect(w).toHaveClass("px-2");
+    const w = screen.getByRole("button", { name: "Add host" }).closest("div.engagement-sidebar__add")!;
+    // .engagement-sidebar__add--expanded: one 16px track and px-2, as the host rows.
+    expect(w).toHaveClass("engagement-sidebar__add--expanded");
     expect(row).toHaveClass("px-2");
     expect(wrap).toBeTruthy();
   });

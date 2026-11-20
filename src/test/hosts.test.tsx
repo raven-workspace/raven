@@ -87,7 +87,7 @@ describe("hosts", () => {
     const nav = await screen.findByRole("navigation", { name: "Engagement" });
     const dc = await within(nav).findByRole("link", { name: /dc01/ });
     expect(within(dc).getByRole("img", { name: "Vulnerability detection" })).toBeInTheDocument();
-    expect(within(dc).getByText("10.10.10.5")).toHaveClass("font-mono");
+    expect(within(dc).getByText("10.10.10.5")).toHaveClass("engagement-sidebar__host-ip");
     expect(within(nav).getByRole("img", { name: "Reporting" })).toBeInTheDocument();
     await user.click(dc);
     expect(screen.getByTestId("where")).toHaveTextContent("/e/e1/h/h1");

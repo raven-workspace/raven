@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../../lib/api";
-import { cx } from "../../lib/cx";
 import type { Engagement, EngagementInput, EngagementKind } from "../../types/engagement";
 import { dropPendingNotes } from "../notes/useNotesStore";
 import { Button, Dialog, Field, Input, Textarea } from "../../ui";
@@ -17,6 +16,7 @@ import {
 import { engagementKey, engagementsKey } from "./queries";
 import { hostsKey } from "../hosts/queries";
 import { RavenError } from "../../types/errors";
+import "./EngagementDialog.scss";
 
 const KINDS: { value: EngagementKind; label: string }[] = [
   { value: "exam-sim", label: "Exam sim" },
@@ -68,7 +68,7 @@ function draftFrom(e: Engagement | undefined): Draft {
 }
 
 /** An empty date field shows its format ("yyyy-mm-dd") as the placeholder colour, not as a value. */
-const emptyDate = (v: string) => (v === "" ? "text-faint! focus:text-fg!" : undefined);
+const emptyDate = (v: string) => (v === "" ? "engagement-dialog__empty-date" : undefined);
 
 const orNull = (s: string) => (s.trim() === "" ? null : s.trim());
 const sentence = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
@@ -130,7 +130,7 @@ function KindPicker({
     group?.querySelector<HTMLElement>(`[data-kind="${next.value}"]`)?.focus();
   };
   return (
-    <div role="radiogroup" aria-labelledby={labelId} className="grid h-8 w-fit grid-flow-col rounded-sm border border-line-2">
+    <div role="radiogroup" aria-labelledby={labelId} className="kind-picker">
       {KINDS.map((k, i) => {
         const on = k.value === value;
         return (
@@ -143,14 +143,8 @@ function KindPicker({
             tabIndex={on ? 0 : -1}
             onClick={() => onChange(k.value)}
             onKeyDown={(e) => move(e, i)}
-            className={cx(
-              "h-full cursor-default px-3 text-body transition-colors duration-100",
-              i === 0 && "rounded-l-sm",
-              i === KINDS.length - 1 && "rounded-r-sm",
-              i > 0 && "border-l border-line-2",
-              // The same selected segment as the shared ToggleGroup: accent text on a faint accent wash.
-              on ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-hi hover:text-fg",
-            )}
+            // The same selected segment as the shared ToggleGroup: accent text on a faint accent wash (aria-checked).
+            className="kind-picker__option"
           >
             {k.label}
           </button>
@@ -243,7 +237,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
       footer={
         <>
           {engagement && (
-            <Button variant="quiet-danger" className="mr-auto" onClick={() => setDeleting(true)}>
+            <Button variant="quiet-danger" className="engagement-dialog__delete" onClick={() => setDeleting(true)}>
               Delete engagement
             </Button>
           )}
@@ -254,14 +248,14 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
+      <form id={formId} onSubmit={submit} noValidate className="engagement-dialog__form">
         <Field label="Name" error={err("name")}>
           <Input autoFocus value={d.name} onChange={(e) => set("name", e.target.value)} placeholder="Mock exam A" />
         </Field>
 
-        <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-start gap-4">
-          <div className="grid gap-2">
-            <span id={kindLabelId} className="block text-meta text-muted-2">
+        <div className="engagement-dialog__pair engagement-dialog__pair--kind">
+          <div className="engagement-dialog__group">
+            <span id={kindLabelId} className="engagement-dialog__group-label">
               Kind
             </span>
             <KindPicker value={d.kind} onChange={(k) => set("kind", k)} labelId={kindLabelId} />
@@ -280,7 +274,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
         )}
 
         {exam && (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
+          <div className="engagement-dialog__pair engagement-dialog__pair--timebox">
             <Field label="Timebox start" hint="Leave empty until you start" error={err("timeboxStart")}>
               <Input
                 type="datetime-local"
@@ -290,12 +284,12 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
                 onChange={(e) => set("timeboxStart", e.target.value)}
               />
             </Field>
-            <div role="group" aria-labelledby={durationId} className="grid content-start gap-2">
-              <span id={durationId} className="block text-meta text-muted-2">
+            <div role="group" aria-labelledby={durationId} className="engagement-dialog__group">
+              <span id={durationId} className="engagement-dialog__group-label">
                 Duration
               </span>
-              <div className="grid grid-flow-col items-center justify-start gap-2">
-                <div className="w-14">
+              <div className="engagement-dialog__duration">
+                <div className="engagement-dialog__number">
                   <Input
                     type="number"
                     mono
@@ -306,8 +300,8 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
                     onChange={(e) => set("hours", e.target.value)}
                   />
                 </div>
-                <span className="text-meta text-muted">h</span>
-                <div className="w-14">
+                <span className="engagement-dialog__unit">h</span>
+                <div className="engagement-dialog__number">
                   <Input
                     type="number"
                     mono
@@ -319,14 +313,14 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
                     onChange={(e) => set("minutes", e.target.value)}
                   />
                 </div>
-                <span className="text-meta text-muted">m</span>
+                <span className="engagement-dialog__unit">m</span>
               </div>
-              {err("timeboxMinutes") && <p className="m-0 text-meta text-warn">{err("timeboxMinutes")}</p>}
+              {err("timeboxMinutes") && <p className="engagement-dialog__error">{err("timeboxMinutes")}</p>}
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="engagement-dialog__pair engagement-dialog__pair--dates">
           <Field label="Start date" error={err("startsAt")}>
             <Input type="date" mono className={emptyDate(d.startsAt)} value={d.startsAt} onChange={(e) => set("startsAt", e.target.value)} />
           </Field>
@@ -335,7 +329,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
           </Field>
         </div>
 
-        <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start gap-4">
+        <div className="engagement-dialog__pair engagement-dialog__pair--scope">
           <Field label="Scope" hint="One CIDR or IP per line" error={err("scopeCidrs")}>
             <Textarea
               mono
@@ -350,7 +344,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
           </Field>
         </div>
 
-        {(errors.form || hidden) && <p className="m-0 text-meta text-warn">{errors.form ?? hidden}</p>}
+        {(errors.form || hidden) && <p className="engagement-dialog__error">{errors.form ?? hidden}</p>}
       </form>
       {engagement && deleting && (
         <DeleteDialog engagement={engagement} onClose={() => setDeleting(false)} />
@@ -401,7 +395,7 @@ function DeleteDialog({ engagement: e, onClose }: { engagement: Engagement; onCl
         <Field
           label={
             <>
-              Type the engagement name to confirm: <span className="text-fg-2">{e.name}</span>
+              Type the engagement name to confirm: <span className="engagement-dialog__confirm-name">{e.name}</span>
             </>
           }
           error={del.isError ? del.error.message : undefined}

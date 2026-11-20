@@ -26,6 +26,8 @@ import {
 import { Listener } from "./Listener";
 import { MsfLock } from "./MsfLock";
 import { engagementKey, engagementsKey } from "./queries";
+import "./StatusStrip.scss";
+import "./ActiveCard.scss";
 
 /**
  * Drop steps, in order: each step hides one part when the strip has run out of room (see useFitStrip).
@@ -39,9 +41,9 @@ const LAST_STEP = 9;
 /** One labelled value. `step` marks the part as droppable at that step. */
 export function Cell({ label, value, step, tone }: { label: string; value: string; step?: number; tone?: "warn" }) {
   return (
-    <span role="group" aria-label={`${label} ${value}`} data-drop={step} className="grid grid-flow-col items-center gap-2">
+    <span role="group" aria-label={`${label} ${value}`} data-drop={step} className="status-cell">
       <span className={labelClass}>{label}</span>
-      <span className={cx("font-mono text-meta", tone === "warn" ? "text-warn" : "text-fg")}>{value}</span>
+      <span className={cx("status-cell__value", tone === "warn" && "status-cell__value--warn")}>{value}</span>
     </span>
   );
 }
@@ -106,11 +108,11 @@ export function StatusStrip({ engagement: e, named = false }: { engagement: Enga
       ref={outer}
       role="status"
       aria-label="Engagement status"
-      className="h-9 shrink-0 overflow-hidden border-b border-line px-6 text-meta text-muted-2"
+      className="status-strip"
     >
-      <div ref={inner} className="grid h-full grid-flow-col auto-cols-max items-center justify-start gap-6 whitespace-nowrap">
+      <div ref={inner} className="status-strip__parts">
         {named && (
-          <Link to={`/e/${e.id}`} title={e.name} data-drop={STEP.name} className="block h-6 max-w-[28ch] truncate rounded-sm text-body leading-6 font-semibold text-fg-2 no-underline hover:text-fg">
+          <Link to={`/e/${e.id}`} title={e.name} data-drop={STEP.name} className="status-strip__name">
             {e.name}
           </Link>
         )}
@@ -148,9 +150,9 @@ function TimeboxStatus({ engagement: e, now }: { engagement: Engagement & { time
     onError: reportError,
   });
   const paused = state === "paused";
-  const of: ReactNode = <span data-drop={STEP.of} className="text-faint">of {formatDuration(e.timeboxMinutes)}</span>;
+  const of: ReactNode = <span data-drop={STEP.of} className="status-strip__of">of {formatDuration(e.timeboxMinutes)}</span>;
   return (
-    <span className="grid grid-flow-col items-center gap-2">
+    <span className="status-cell">
       <span className={labelClass}>Timebox</span>
       {(state === "running" || paused) && (
         <IconButton
@@ -158,16 +160,16 @@ function TimeboxStatus({ engagement: e, now }: { engagement: Engagement & { time
           label={paused ? "Resume timebox" : "Pause timebox"}
           disabled={toggle.isPending}
           onClick={() => toggle.mutate(!paused)}
-          className="-mx-1"
+          className="status-strip__pause"
         />
       )}
-      <span className={cx("font-mono text-meta", TIMEBOX_TEXT[state])}>{timeLeft(e.timeboxStart, e.timeboxMinutes, clock)}</span>
+      <span className={cx("status-strip__time", TIMEBOX_TEXT[state])}>{timeLeft(e.timeboxStart, e.timeboxMinutes, clock)}</span>
       {toggle.isError && !toggle.isPending && (
-        <span role="alert" className="text-meta text-warn">
+        <span role="alert" className="status-strip__error">
           {toggle.variables ? "Didn't pause" : "Didn't resume"}
         </span>
       )}
-      <span data-drop={STEP.bar} className="w-24">
+      <span data-drop={STEP.bar} className="status-strip__bar">
         <TimeBar fraction={timeboxElapsed(e.timeboxStart, e.timeboxMinutes, clock)} state={state} />
       </span>
       {of}
