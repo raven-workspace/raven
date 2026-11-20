@@ -31,7 +31,6 @@ import {
   type FlagKind,
   type PageMeta,
   type ReportData,
-  type ReportMeta,
   type ReportNode,
   type ReportTarget,
   type SectionMeta,
@@ -41,7 +40,7 @@ import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { cx } from "../../lib/cx";
 import { useWidth } from "../../lib/useNarrow";
 import { reportError } from "../../lib/lockSignal";
-import type { Report, ReportDoc, ReportPatch, ReportSection } from "../../types/report";
+import type { Report, ReportPatch, ReportSection } from "../../types/report";
 import type { Settings } from "../../types/settings";
 import { Button, Dialog, EmptyState, ErrorState, LoadingState, queryState, TimedNotice, usePageShortcuts, type Hint } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
@@ -328,7 +327,7 @@ function ReportBody({
   sections: ReportSection[];
   qc: ReturnType<typeof useQueryClient>;
 }) {
-  const reportMeta = report.meta as ReportMeta;
+  const reportMeta = report.meta;
   const targets = useMemo(() => reportTargets(data, reportMeta), [data, reportMeta]);
   const [ensureFailed, setEnsureFailed] = useState<string | null>(null);
 
@@ -419,7 +418,7 @@ function ReportBody({
   // Every section's stored page (or the draft it will get), in the plain schema. Only the open page changes per
   // keystroke; it is read live.
   const savedDocOf = useCallback(
-    (s: ReportSection): ReportNode => drafts.get(s.id) ?? (s.doc ? plainOf(s.doc as ReportNode, targetOf(s)) : EMPTY_DOC),
+    (s: ReportSection): ReportNode => drafts.get(s.id) ?? (s.doc ? plainOf(s.doc, targetOf(s)) : EMPTY_DOC),
     [drafts, plainOf, targetOf],
   );
   // Appendix pages' letters (+ Page, placement appendix): a plain page moves nothing out, so these are the only appendices.
@@ -586,7 +585,7 @@ function ReportBody({
    *  that needs no flatten. One that doesn't fit (`error`) is never saved over the stored page. */
   const openFlatten = useMemo((): { id: string; original: ReportNode; doc: ReportNode; error: string | null } | null => {
     const s = openSection;
-    const original = s ? (cachedSection(s).doc as ReportNode | null) : null;
+    const original = s ? cachedSection(s).doc : null;
     if (!s || !original || !needsFlatten(original)) return null;
     const doc = plainOf(original, targetOf(s));
     try {
@@ -614,7 +613,7 @@ function ReportBody({
     const meta: SectionMeta = was.previousDoc
       ? { ...was, originals }
       : { ...was, previousDoc: original, previousLayout: was.layout ?? null, previousAt: Date.now(), restored: false, flattened: true, originals };
-    patchCachedSection(qc, s.id, { doc: doc as ReportDoc, meta: meta as Record<string, unknown> });
+    patchCachedSection(qc, s.id, { doc, meta: meta as Record<string, unknown> });
     replacePage(doc, meta);
   }, [openSection, openFlatten, cachedSection, qc, replacePage]);
   const [swapFailed, setSwapFailed] = useState<string | null>(null);
@@ -634,7 +633,7 @@ function ReportBody({
     setSwapFailed(null);
     const next = swapPrevious(plain);
     if (!next) return;
-    patchCachedSection(qc, s.id, { doc: next.doc as ReportDoc, meta: next.meta as Record<string, unknown> });
+    patchCachedSection(qc, s.id, { doc: next.doc, meta: next.meta as Record<string, unknown> });
     setSwaps((n) => n + 1);
   };
   // Front matter and Closing reopen on the part last shown in them.
@@ -717,10 +716,10 @@ function ReportBody({
             ? {
                 ...ownerMeta(was),
                 layout: DRAFT_LAYOUT,
-                previousDoc: now.doc as ReportNode,
+                previousDoc: now.doc,
                 previousLayout: was.layout ?? null,
                 previousAt: Date.now(),
-                originals: archivePage(was, now.doc as ReportNode, "rebuild"),
+                originals: archivePage(was, now.doc, "rebuild"),
               }
             : { ...ownerMeta(was), layout: DRAFT_LAYOUT, ...(was.originals ? { originals: was.originals } : {}) };
         return api
@@ -760,7 +759,7 @@ function ReportBody({
     [qc, report.engagementId, report.id],
   );
   const setFlags = (hostId: string, flags: FlagKind[]) => {
-    const cached = (qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta) as ReportMeta;
+    const cached = qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta;
     saveReport({ meta: { expectedFlags: { ...(cached.expectedFlags ?? {}), [hostId]: flags } } });
   };
 
@@ -981,7 +980,7 @@ function ReportBody({
     const next = (was: string[] = []) => (on ? [...new Set([...was, ...ids])] : was.filter((id) => !ids.includes(id)));
     if (open?.target && openSection) patchMeta({ dismissedChecks: next(metaOf(openSection).dismissedChecks) });
     else if (open?.item.group === "front") {
-      const cached = (qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta) as ReportMeta;
+      const cached = qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta;
       saveReport({ meta: { dismissedChecks: next(cached.dismissedChecks) } });
     }
   };

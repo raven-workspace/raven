@@ -1,5 +1,26 @@
-/** A ProseMirror JSON document. Evidence is referenced by id, never copied in. */
-export type ReportDoc = Record<string, unknown>;
+import type { FlagKind } from "./log";
+
+/** A ProseMirror JSON node; a stored page is its `doc` node. Evidence is referenced by id, never copied in. */
+export type ReportNode = {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: ReportNode[];
+  text?: string;
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
+};
+
+/** Stored in `reports.meta`. Dates are ISO yyyy-mm-dd. */
+export interface ReportMeta {
+  /** Labs only. */
+  includedHostIds?: string[];
+  /** Per host id. */
+  expectedFlags?: Record<string, FlagKind[]>;
+  examEndAt?: number;
+  examDate?: string;
+  reportDate?: string;
+  /** Report-level check ids the owner dismissed from To do (a false positive): not counted, listed as dismissed. */
+  dismissedChecks?: string[];
+}
 
 /** `appendix-*` kinds are no longer created (layout 2 has no generated appendices); old rows stay hidden. */
 export type SectionKind =
@@ -27,7 +48,7 @@ export interface Report {
   email: string;
   osid: string;
   title: string;
-  meta: Record<string, unknown>;
+  meta: ReportMeta;
   createdAt: number;
   updatedAt: number;
   exportedAt: number | null;
@@ -38,7 +59,7 @@ export interface ReportPatch {
   email?: string;
   osid?: string;
   title?: string;
-  meta?: Record<string, unknown>;
+  meta?: ReportMeta;
 }
 
 export interface ReportSection {
@@ -48,7 +69,7 @@ export interface ReportSection {
   /** A host id for `target`, "ad-set" for `ad`, a fresh id for `page`, otherwise null. */
   targetKey: string | null;
   position: number;
-  doc: ReportDoc | null;
+  doc: ReportNode | null;
   meta: Record<string, unknown>;
   draftBuiltAt: number | null;
   updatedAt: number;
@@ -58,7 +79,7 @@ export interface SectionInput {
   kind: SectionKind;
   targetKey: string | null;
   position: number;
-  doc: ReportDoc | null;
+  doc: ReportNode | null;
   meta: Record<string, unknown>;
   draftBuiltAt: number | null;
 }

@@ -16,7 +16,6 @@ import { ReportTabs, type TabItem } from "../features/report/ReportTabs";
 import { CheckList, TodoPanel } from "../features/report/TodoPanel";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
-import type { ReportDoc } from "../types/report";
 import { RavenError } from "../types/errors";
 import { TooltipProvider } from "../ui";
 import layout3Json from "./fixtures/report-layout3-owner.json";
@@ -360,8 +359,8 @@ describe("Report view", () => {
   it("a layout-3 target page and a layout-3 summary page both rebuild and offer Restore your previous page", async () => {
     const report = await api.reportGetOrCreate("e-exam");
     const old = (text: string) => ({ type: "doc", content: [{ type: "slot", attrs: { hint: "x" }, content: [{ type: "text", text }] }] });
-    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX_ID, position: 0, doc: old("Old lnx02 page") as unknown as ReportDoc, meta: { layout: 3 }, draftBuiltAt: 1 });
-    await api.reportSectionUpsert(report.id, { kind: "summary", targetKey: null, position: 0, doc: old("Old summary page") as unknown as ReportDoc, meta: { layout: 3 }, draftBuiltAt: 1 });
+    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX_ID, position: 0, doc: old("Old lnx02 page"), meta: { layout: 3 }, draftBuiltAt: 1 });
+    await api.reportSectionUpsert(report.id, { kind: "summary", targetKey: null, position: 0, doc: old("Old summary page"), meta: { layout: 3 }, draftBuiltAt: 1 });
     mount();
     await ready();
     const paper = () => document.querySelector<HTMLElement>(".report-page")!;
@@ -413,7 +412,7 @@ describe("Report view", () => {
         });
         view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, at)).insertText(text));
       });
-    const savedText = () => save.mock.calls.map(([, doc]) => JSON.stringify(doc as ReportDoc));
+    const savedText = () => save.mock.calls.map(([, doc]) => JSON.stringify(doc));
 
     type("Port 22 was the way in");
     expect(save).not.toHaveBeenCalled();
@@ -685,11 +684,11 @@ async function seedLnx(outputLines = 3, meta: Record<string, unknown> = {}) {
   return scan;
 }
 
-const plainPage = (content: ReportNode[]): ReportDoc => ({ type: "doc", content }) as unknown as ReportDoc;
-const plainBlocks = (doc: ReportDoc): ReportNode[] => (doc as unknown as ReportNode).content ?? [];
+const plainPage = (content: ReportNode[]): ReportNode => ({ type: "doc", content });
+const plainBlocks = (doc: ReportNode): ReportNode[] => doc.content ?? [];
 
 /** A plain lnx02 page: an h2 with its phase source, a hint paragraph, the scan's command and output, the post heading. */
-function lnxPage(scanId: string, output: string): ReportDoc {
+function lnxPage(scanId: string, output: string): ReportNode {
   return plainPage([
     { type: "heading", attrs: { level: 2, source: `phase:${LNX}:foothold` }, content: [{ type: "text", text: "Initial access" }] },
     { type: "paragraph", attrs: { hint: "What you do next" } },
@@ -908,7 +907,7 @@ describe("Report view: the result", () => {
   it("rebuilds a page saved with an older layout from scratch, once", async () => {
     const report = await api.reportGetOrCreate("e-exam");
     const old = { type: "doc", content: [{ type: "slot", attrs: { hint: "x" }, content: [{ type: "text", text: "Written under the old layout" }] }] };
-    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old as unknown as ReportDoc, meta: { removedEntryIds: ["l-x"] }, draftBuiltAt: 1 });
+    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: { removedEntryIds: ["l-x"] }, draftBuiltAt: 1 });
     const upsert = vi.spyOn(api, "reportSectionUpsert");
     mount();
     await ready();
@@ -937,7 +936,7 @@ describe("Report view: the result", () => {
   it("a page rebuilt for a new layout offers the previous one back, and the swap undoes", async () => {
     const report = await api.reportGetOrCreate("e-exam");
     const old = { type: "doc", content: [{ type: "slot", attrs: { hint: "x" }, content: [{ type: "text", text: "Written under the old layout" }] }] };
-    const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old as unknown as ReportDoc, meta: { layout: 2 }, draftBuiltAt: 1 });
+    const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: { layout: 2 }, draftBuiltAt: 1 });
     const save = vi.spyOn(api, "reportSectionSave");
     mount();
     await ready();
@@ -948,12 +947,12 @@ describe("Report view: the result", () => {
     expect(rebuilt()).toBeNull();
     // Stored as the current layout, the rebuilt page kept for the swap back.
     await waitFor(() => expect(save).toHaveBeenCalled());
-    const [id, doc, meta] = save.mock.calls[save.mock.calls.length - 1] as [string, ReportDoc, Record<string, unknown>];
+    const [id, doc, meta] = save.mock.calls[save.mock.calls.length - 1] as [string, ReportNode, Record<string, unknown>];
     expect(id).toBe(section.id);
     expect(JSON.stringify(doc)).toContain("Written under the old layout");
     expect(meta).toMatchObject({ layout: 6, previousLayout: 2, restored: true });
     expect(JSON.stringify(meta.previousDoc)).toContain(`"facts:${LNX}"`);
-    expect(needsFlatten(doc as unknown as ReportNode)).toBe(false);
+    expect(needsFlatten(doc)).toBe(false);
     // The second swap brings the rebuilt page back.
     fireEvent.click(screen.getByRole("button", { name: "Use the rebuilt page" }));
     await waitFor(() => expect(rebuilt()).toBeTruthy());
@@ -991,7 +990,7 @@ describe("Report view: the result", () => {
     const note = await api.logCreate("e-exam", { ...logInput("my note", { kind: "note", text: "creds in the share" }, 1_000), private: true });
     const report = await api.reportGetOrCreate("e-exam");
     const doc = { type: "doc", content: [{ type: "paragraph", attrs: { fromEntry: note.id, source: `entry:${note.id}:note` }, content: [{ type: "text", text: "creds in the share" }] }] };
-    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: DRAFT_LAYOUT }, draftBuiltAt: 1 });
+    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc, meta: { layout: DRAFT_LAYOUT }, draftBuiltAt: 1 });
     mount();
     await ready();
     await waitFor(() => expect(paper().querySelector('[data-source-gone="private"]')).toBeTruthy());
@@ -1010,7 +1009,7 @@ describe("Report view: the result", () => {
     const OWNER = ["I read the backup config through the LFI first.", "Admin panel on 8080", "The upload filter trusts the extension only.", "Root shell on web01"];
     const storeWeb01 = async () => {
       const report = await api.reportGetOrCreate("e-exam");
-      return api.reportSectionUpsert(report.id, { kind: "target", targetKey: WEB, position: 2, doc: layout5 as unknown as ReportDoc, meta: { layout: 5 }, draftBuiltAt: 1 });
+      return api.reportSectionUpsert(report.id, { kind: "target", targetKey: WEB, position: 2, doc: layout5, meta: { layout: 5 }, draftBuiltAt: 1 });
     };
     const stored = async (id: string) => {
       const report = await api.reportGetOrCreate("e-exam");
@@ -1037,7 +1036,7 @@ describe("Report view: the result", () => {
     it("the rebuild leaves out what the owner removed, and the removal stays recorded after it saves", async () => {
       const report = await api.reportGetOrCreate("e-exam");
       const removed = ["l-exam-web01-grafana", "l-exam-web01-sudo", "tested:h-exam-web"];
-      const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: WEB, position: 2, doc: layout5 as unknown as ReportDoc, meta: { layout: 5, removedEntryIds: removed }, draftBuiltAt: 1 });
+      const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: WEB, position: 2, doc: layout5, meta: { layout: 5, removedEntryIds: removed }, draftBuiltAt: 1 });
       const upsert = vi.spyOn(api, "reportSectionUpsert");
       mount();
       await ready();
@@ -1056,7 +1055,7 @@ describe("Report view: the result", () => {
       const save = vi.spyOn(api, "reportSectionSave");
       queueReportSave(makeQueryClient(), section.id, input.doc, input.meta);
       await flushReports();
-      const [, , meta] = save.mock.calls.filter(([id]) => id === section.id).at(-1)! as [string, ReportDoc, SectionMeta];
+      const [, , meta] = save.mock.calls.filter(([id]) => id === section.id).at(-1)! as [string, ReportNode, SectionMeta];
       expect(meta.removedEntryIds).toEqual(removed);
     });
 
@@ -1073,8 +1072,8 @@ describe("Report view: the result", () => {
       await waitFor(() => expect(paper().textContent).toContain(OWNER[0]));
       for (const sentence of OWNER) expect(paper().textContent).toContain(sentence);
       await waitFor(() => expect(save.mock.calls.some(([id]) => id === section.id)).toBe(true));
-      const [, doc, meta] = save.mock.calls.filter(([id]) => id === section.id).at(-1)! as [string, ReportDoc, SectionMeta];
-      expect(needsFlatten(doc as unknown as ReportNode)).toBe(false);
+      const [, doc, meta] = save.mock.calls.filter(([id]) => id === section.id).at(-1)! as [string, ReportNode, SectionMeta];
+      expect(needsFlatten(doc)).toBe(false);
       expect(meta).toMatchObject({ layout: 6, restored: true });
 
       // The stored layout-5 page survives the swaps, byte for byte, in the archive; the rebuilt page swapped out joins it.
@@ -1123,7 +1122,7 @@ describe("Report view: the result", () => {
       });
       // An edit of the old page whose write failed: it waits in the queue for its retry.
       const qc = makeQueryClient();
-      queueReportSave(qc, section.id, edited as unknown as ReportNode, { layout: 5 });
+      queueReportSave(qc, section.id, edited, { layout: 5 });
       await flushReports();
       expect(calls).toEqual(["save:5"]);
 
@@ -1134,7 +1133,7 @@ describe("Report view: the result", () => {
       // The old page's write went out first; nothing of the old layout is written after the rebuild.
       expect(calls).toEqual(["save:5", "save:5", "upsert:6"]);
       const after = await stored(section.id);
-      expect(needsFlatten(after.doc as unknown as ReportNode)).toBe(false);
+      expect(needsFlatten(after.doc!)).toBe(false);
       expect(after.meta).toMatchObject({ layout: 6, previousLayout: 5 });
       expect(after.meta.previousDoc).toEqual(edited);
     });
@@ -1152,7 +1151,7 @@ describe("Report view: the result", () => {
       });
       const upsert = vi.spyOn(api, "reportSectionUpsert");
       const qc = makeQueryClient();
-      queueReportSave(qc, section.id, edited as unknown as ReportNode, { layout: 5 });
+      queueReportSave(qc, section.id, edited, { layout: 5 });
       await flushReports();
 
       mount("e-exam", qc);
@@ -1177,7 +1176,7 @@ describe("Report view: the result", () => {
       });
       const upsert = vi.spyOn(api, "reportSectionUpsert");
       const qc = makeQueryClient();
-      queueReportSave(qc, section.id, edited as unknown as ReportNode, { layout: 5 });
+      queueReportSave(qc, section.id, edited, { layout: 5 });
       await flushReports();
       expect(save).toHaveBeenCalledTimes(1);
 
@@ -1226,7 +1225,7 @@ describe("Report view: the result", () => {
         return realUpsert(rid, input);
       });
       const qc = makeQueryClient();
-      queueReportSave(qc, section.id, edited as unknown as ReportNode, { layout: 5 });
+      queueReportSave(qc, section.id, edited, { layout: 5 });
       await flushReports();
       mount("e-exam", qc);
       await ready();
@@ -1244,12 +1243,12 @@ describe("Report view: the result", () => {
       await waitFor(() => expect(calls).toEqual(["save:start", "save:end", "upsert"]));
       const after = await stored(section.id);
       expect(after.meta).toMatchObject({ layout: 6, previousDoc: edited });
-      expect(needsFlatten(after.doc as unknown as ReportNode)).toBe(false);
+      expect(needsFlatten(after.doc!)).toBe(false);
     });
 
     it("a section with no page yet keeps its archive when its draft is built", async () => {
       const report = await api.reportGetOrCreate("e-exam");
-      const archived = [{ doc: plainPage([]) as unknown as ReportNode, layout: 4, meta: { layout: 4 }, at: 3, why: "rebuild" as const }];
+      const archived = [{ doc: plainPage([]), layout: 4, meta: { layout: 4 }, at: 3, why: "rebuild" as const }];
       await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: null, meta: { layout: 5, originals: archived }, draftBuiltAt: null });
       const upsert = vi.spyOn(api, "reportSectionUpsert");
       mount();
@@ -1294,7 +1293,7 @@ describe("Report view: the result", () => {
         kind: "page",
         targetKey: "p-owner",
         position: 99,
-        doc: original as unknown as ReportDoc,
+        doc: original,
         meta: { title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT },
         draftBuiltAt: 1,
       });
@@ -1308,8 +1307,8 @@ describe("Report view: the result", () => {
       await waitFor(() => expect(save.mock.calls.some(([id]) => id === page.id)).toBe(true));
       const writes = save.mock.calls.filter(([id]) => id === page.id);
       expect(writes).toHaveLength(1);
-      const [, doc, meta] = writes[0] as unknown as [string, ReportDoc, SectionMeta & { title: string }];
-      expect(needsFlatten(doc as unknown as ReportNode)).toBe(false);
+      const [, doc, meta] = writes[0] as unknown as [string, ReportNode, SectionMeta & { title: string }];
+      expect(needsFlatten(doc)).toBe(false);
       expect(meta.previousDoc).toEqual(original);
       expect(meta).toMatchObject({ title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT, previousLayout: DRAFT_LAYOUT, flattened: true });
       expect(meta.originals).toEqual([{ doc: original, layout: DRAFT_LAYOUT, meta: { title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT }, at: expect.any(Number), why: "flatten" }]);
@@ -1325,7 +1324,7 @@ describe("Report view: the result", () => {
         kind: "page",
         targetKey: "p-broken",
         position: 99,
-        doc: raw as unknown as ReportDoc,
+        doc: raw,
         meta: { title: "Broken notes", placement: "body", layout: DRAFT_LAYOUT },
         draftBuiltAt: 1,
       });
@@ -1362,7 +1361,7 @@ describe("Report view: the result", () => {
         kind: "page",
         targetKey: "p-private",
         position: 99,
-        doc: raw as unknown as ReportDoc,
+        doc: raw,
         meta: { title: "Private notes", placement: "body", layout: DRAFT_LAYOUT },
         draftBuiltAt: 1,
       });
@@ -1372,7 +1371,7 @@ describe("Report view: the result", () => {
       fireEvent.click(tab("Private notes"));
       await waitFor(() => expect(paper().textContent).toContain("Owner intro"));
       await waitFor(() => expect(save.mock.calls.some(([id]) => id === page.id)).toBe(true));
-      const [, doc] = save.mock.calls.filter(([id]) => id === page.id)[0] as unknown as [string, ReportDoc];
+      const [, doc] = save.mock.calls.filter(([id]) => id === page.id)[0] as unknown as [string, ReportNode];
       expect(() => reportSchema().nodeFromJSON(doc).check()).not.toThrow();
       expect(screen.queryByRole("alert")).toBeNull();
     });
@@ -1388,14 +1387,14 @@ describe("Report view: the result", () => {
         ],
       };
       const was = { layout: DRAFT_LAYOUT, previousDoc: kept, previousLayout: 5, previousAt: 7 };
-      const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: raw as unknown as ReportDoc, meta: was, draftBuiltAt: 1 });
+      const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: raw, meta: was, draftBuiltAt: 1 });
       const save = vi.spyOn(api, "reportSectionSave");
       mount();
       await ready();
       await waitFor(() => expect(paper().textContent).toContain("Rebuilt page text"));
       await waitFor(() => expect(save.mock.calls.some(([id]) => id === section.id)).toBe(true));
-      const [, doc, meta] = save.mock.calls.filter(([id]) => id === section.id)[0] as unknown as [string, ReportDoc, SectionMeta];
-      expect(needsFlatten(doc as unknown as ReportNode)).toBe(false);
+      const [, doc, meta] = save.mock.calls.filter(([id]) => id === section.id)[0] as unknown as [string, ReportNode, SectionMeta];
+      expect(needsFlatten(doc)).toBe(false);
       expect(meta).toMatchObject({ previousDoc: kept, previousLayout: 5, previousAt: 7 });
       expect(meta.flattened).toBeUndefined();
       expect(meta.originals).toEqual([{ doc: raw, layout: DRAFT_LAYOUT, meta: was, at: expect.any(Number), why: "flatten" }]);

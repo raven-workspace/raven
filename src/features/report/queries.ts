@@ -187,7 +187,7 @@ export function renamePage(qc: QueryClient, section: ReportSection, title: strin
   const cached = qc.getQueryData<ReportSection[]>(reportSectionsKey(section.reportId))?.find((s) => s.id === section.id) ?? section;
   const meta = { ...cached.meta, title } as SectionMeta;
   patchCachedSection(qc, section.id, { meta: meta as Record<string, unknown> });
-  queueReportSave(qc, section.id, (cached.doc ?? { type: "doc", content: [] }) as ReportNode, meta);
+  queueReportSave(qc, section.id, cached.doc ?? { type: "doc", content: [] }, meta);
 }
 
 /**

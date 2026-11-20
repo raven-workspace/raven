@@ -7,9 +7,10 @@ import type { Host } from "../../types/host";
 import type { FlagKind, LogEntry } from "../../types/log";
 import type { Hop } from "../../types/network";
 import type { Note, RuledOut } from "../../types/notes";
+import type { ReportMeta, ReportNode } from "../../types/report";
 import type { Service } from "../../types/service";
 
-export type { FlagKind };
+export type { FlagKind, ReportMeta, ReportNode };
 
 /** Everything the report engine reads, loaded for one engagement. */
 export interface ReportData {
@@ -30,19 +31,6 @@ export interface ReportData {
   credentials: Credential[];
   /** Results of trying credentials on hosts (nxc, hydra): a valid or admin one ties the credential to that host. */
   credAttempts: CredAttempt[];
-}
-
-/** Stored in `reports.meta`. Dates are ISO yyyy-mm-dd. */
-export interface ReportMeta {
-  /** Labs only. */
-  includedHostIds?: string[];
-  /** Per host id. */
-  expectedFlags?: Record<string, FlagKind[]>;
-  examEndAt?: number;
-  examDate?: string;
-  reportDate?: string;
-  /** Report-level check ids the owner dismissed from To do (a false positive): not counted, listed as dismissed. */
-  dismissedChecks?: string[];
 }
 
 export type CoverageResult = "exploited" | "tested" | "untested";
@@ -147,14 +135,6 @@ export interface ReportTarget {
   kind: TargetKind;
   hostIds: string[];
 }
-
-export type ReportNode = {
-  type: string;
-  attrs?: Record<string, unknown>;
-  content?: ReportNode[];
-  text?: string;
-  marks?: { type: string; attrs?: Record<string, unknown> }[];
-};
 
 /** A sub-section heading of a machine, in OffSec's sample order: Service Enumeration (standalone only), the entry
  *  phase (Initial Access, Lateral Movement or Domain Compromise), Privilege Escalation, Post-Exploitation; then Raven's

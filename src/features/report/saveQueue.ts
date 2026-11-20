@@ -4,7 +4,7 @@ import { placedIdsIn, type ReportNode, type SectionMeta } from "../../engines/re
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
 import { RavenError } from "../../types/errors";
-import type { ReportDoc, ReportSection } from "../../types/report";
+import type { ReportSection } from "../../types/report";
 
 /**
  * The report's autosave queue. It lives outside the Report view, so leaving the view never drops a write and a lock
@@ -130,9 +130,9 @@ async function sendRun(s: Session, id: string): Promise<void> {
       if (!w || w === last) return;
       last = w;
       const meta = pruneRemoved(w.doc, w.meta);
-      if (s === session && s.qc) patchCachedSection(s.qc, id, { doc: w.doc as ReportDoc, meta: meta as Record<string, unknown> });
+      if (s === session && s.qc) patchCachedSection(s.qc, id, { doc: w.doc, meta: meta as Record<string, unknown> });
       try {
-        await api.reportSectionSave(id, w.doc as ReportDoc, meta as Record<string, unknown>);
+        await api.reportSectionSave(id, w.doc, meta as Record<string, unknown>);
         // A newer change queued meanwhile stays for its own write (the next turn of this loop).
         if (s.pending.get(id) === w) s.pending.delete(id);
         s.failed.delete(id);
