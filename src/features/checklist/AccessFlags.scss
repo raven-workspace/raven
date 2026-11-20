@@ -1,0 +1,30 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  .access-flags {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .access-flags__list {
+    display: grid;
+    list-style-type: none;
+  }
+
+  // What happened, then Reviewed.
+  .access-flags__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: flex-start;
+    gap: var(--space-md);
+    border-bottom: 1px solid var(--line);
+    padding-block: var(--space-sm);
+  }
+
+  .access-flags__text {
+    min-width: 0;
+    padding-block: var(--space-xs);
+    @include type(body);
+    color: var(--fg);
+  }
+}

@@ -1,0 +1,28 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // A command in a plain block: wraps at whitespace; only a word longer than the whole line breaks.
+  .command-pre {
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    padding: var(--space-sm);
+    @include type(code);
+    color: var(--fg);
+  }
+
+  // An unresolved token: warn-coloured, no background.
+  .command-pre__mark {
+    background-color: transparent;
+    color: var(--warn);
+  }
+
+  // One whitespace-separated word; breaks inside itself only when longer than the line.
+  .command-pre__word {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}

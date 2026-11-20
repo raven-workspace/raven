@@ -1,6 +1,7 @@
 import { FilePicker } from "../generators/FilePicker";
 import { filePickFor, useFilePickStore } from "./filePick";
 import type { FilledCommand } from "./CommandList";
+import "./FileChip.scss";
 
 /** The {FILE}/{SCRIPT} chip of a checklist step: the Toolkit picker, scoped to the host the commands are filled for. */
 export function FileChip({ commands }: { commands: FilledCommand[] }) {
@@ -9,9 +10,9 @@ export function FileChip({ commands }: { commands: FilledCommand[] }) {
   if (!c?.fileToken) return null;
   const { hostId, os, token } = c.fileToken;
   return (
-    <label className="grid grid-cols-[max-content_176px] items-center justify-start gap-2 text-meta text-muted-2">
+    <label className="file-chip">
       {token}
-      <FilePicker name={token} os={os} className="w-full" value={filePickFor(hostId)} onChange={(v) => useFilePickStore.getState().set(hostId, v)} />
+      <FilePicker name={token} os={os} className="file-chip__picker" value={filePickFor(hostId)} onChange={(v) => useFilePickStore.getState().set(hostId, v)} />
     </label>
   );
 }

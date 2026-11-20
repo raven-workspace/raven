@@ -1,6 +1,7 @@
 import { credLabel } from "../../engines/credentials/labels";
 import type { Credential } from "../../types/credentials";
 import { Select, fieldLabelClass } from "../../ui";
+import "./CredentialPicker.scss";
 
 const NONE = "none";
 
@@ -22,11 +23,11 @@ export function CredentialPicker({ credentials, value, onChange }: { credentials
   const selected = options.find((o) => o.value === (value?.id ?? NONE));
   return (
     // Label on its own line, the picker full width below: a long DOMAIN\user (hash) never wraps the label.
-    <div className="grid gap-1">
+    <div className="credential-picker">
       <span className={fieldLabelClass}>Commands use:</span>
       <Select
         aria-label="Commands use"
-        className="w-full min-w-0"
+        className="credential-picker__select"
         {...(selected ? { title: selected.label } : {})}
         options={options}
         value={value?.id ?? NONE}

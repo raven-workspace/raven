@@ -3,6 +3,7 @@ import { DA_COVER_LABEL, isCoverMarked, type ChecklistGoal } from "../../engines
 import { getCards, useLibraryVersion } from "../../engines/library/store";
 import type { ChecklistStatus, ItemState } from "../../types/checklist";
 import { ArrowSquareOut, CaretRightIcon } from "@phosphor-icons/react";
+import { cx } from "../../lib/cx";
 import { Button, CARET_TURN, ChipSet, Collapse, Disclosure, IconButton, Textarea, fieldLabelClass } from "../../ui";
 import { ToggleGroup, ToggleGroupItem } from "../../ui/shadcn/toggle-group";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
@@ -10,6 +11,7 @@ import { CommandList, type FilledCommand } from "./CommandList";
 import { FileChip } from "./FileChip";
 import { PortChip } from "./PortChip";
 import { EvidenceLinks, type EvidenceLink } from "./EvidenceLinks";
+import "./GoalRow.scss";
 
 export type { FilledCommand, EvidenceLink };
 
@@ -65,9 +67,9 @@ function CardLinks({ commands }: { commands: FilledCommand[] }) {
       {ids.map((id) => {
         const title = cards.find((c) => c.id === id)?.title ?? id;
         return (
-          <Button key={id} size="sm" className="min-w-0 max-w-full" title={`From card ${title}`} onClick={() => useArsenalStore.getState().openCard(id)}>
-            <span className="min-w-0 truncate">From card {title}</span>
-            <ArrowSquareOut size={16} aria-hidden className="shrink-0" />
+          <Button key={id} size="sm" className="goal-row__card-link" title={`From card ${title}`} onClick={() => useArsenalStore.getState().openCard(id)}>
+            <span className="goal-row__card-label">From card {title}</span>
+            <ArrowSquareOut size={16} aria-hidden className="goal-row__card-icon" />
           </Button>
         );
       })}
@@ -81,9 +83,9 @@ function NewCredNotice({ labels }: { labels: string[] }) {
   const [open, setOpen] = useState(false);
   return (
     <Disclosure label="New credentials since done" count={labels.length} open={open} onOpenChange={setOpen}>
-      <ul className="m-0 grid min-w-0 list-none gap-1 px-1 py-1">
+      <ul className="goal-row__creds">
         {labels.map((l) => (
-          <li key={l} title={l} className="min-w-0 truncate text-code text-fg-2">{l}</li>
+          <li key={l} title={l} className="goal-row__cred">{l}</li>
         ))}
       </ul>
     </Disclosure>
@@ -104,11 +106,11 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
     if (focus === undefined) return;
     root.current?.scrollIntoView({ block: "start" });
   }, [focus]);
-  const titleClass = status === "done" ? "text-muted line-through" : status === "na" ? "text-muted" : "text-fg";
+  const titleClass = status === "done" ? "goal-row__title--done" : status === "na" ? "goal-row__title--muted" : undefined;
   const cover = isCoverMarked(state);
 
   return (
-    <li ref={root} data-goal-id={goal.id} data-status={status} className={`grid items-start gap-x-2 gap-y-3 border-b border-line py-3 ${cover ? "grid-cols-[28px_minmax(0,1fr)_auto_auto]" : "grid-cols-[28px_minmax(0,1fr)_auto]"}`}>
+    <li ref={root} data-goal-id={goal.id} data-status={status} className={cx("goal-row", cover && "goal-row--cover")}>
       <IconButton
         icon={CaretRightIcon}
         label={`${open ? "Collapse" : "Expand"} ${goal.title}`}
@@ -116,18 +118,18 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
         className={CARET_TURN}
         onClick={() => setOpen((o) => !o)}
       />
-      <div data-testid="goal-title-col" className="grid min-w-0 gap-1">
-        <span className={`min-w-0 py-1 text-body ${titleClass}`}>{goal.title}</span>
+      <div data-testid="goal-title-col" className="goal-row__title-col">
+        <span className={cx("goal-row__title", titleClass)}>{goal.title}</span>
       </div>
-      {cover && <span className="py-1 text-meta text-muted">{DA_COVER_LABEL}</span>}
+      {cover && <span className="goal-row__cover">{DA_COVER_LABEL}</span>}
       <div data-testid="goal-status">
         <StatusToggles label={`Status: ${goal.title}`} status={status} onStatus={(s) => onStatus(goal.id, s)} />
       </div>
       {status === "done" && newCredLabels && newCredLabels.length > 0 && (
-        <div className="col-start-2 col-end-[-1] min-w-0"><NewCredNotice labels={newCredLabels} /></div>
+        <div className="goal-row__wide"><NewCredNotice labels={newCredLabels} /></div>
       )}
-      <Collapse open={open} className="col-start-2 col-end-[-1] min-w-0" contentClassName="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
-          {goal.why && <p className="m-0 text-meta text-muted">{goal.why}</p>}
+      <Collapse open={open} className="goal-row__wide" contentClassName="goal-row__body">
+          {goal.why && <p className="goal-row__text">{goal.why}</p>}
           {commands.length > 0 ? (
             <>
               <FileChip commands={commands} />
@@ -136,10 +138,10 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
               <CardLinks commands={commands} />
             </>
           ) : (
-            emptyCommandsText && <p className="m-0 text-meta text-muted">{emptyCommandsText}</p>
+            emptyCommandsText && <p className="goal-row__text">{emptyCommandsText}</p>
           )}
           {children}
-          <div className="grid gap-1">
+          <div className="goal-row__notes">
             <span className={fieldLabelClass}>Notes</span>
             <Textarea
               key={notes}

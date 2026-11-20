@@ -38,11 +38,12 @@ import { useSettings, settingsFill } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
 import { RavenError } from "../../types/errors";
 import { blankHost } from "../hosts/blankHost";
+import "./EngagementChecklist.scss";
 
 /** Sub-heading above the first row of each group. */
 const GroupHeading = ({ children }: { children: ReactNode }) => (
-  <li role="presentation" className="list-none pb-1 pt-3 first:pt-0">
-    <h4 className="m-0 text-meta font-medium text-muted-2">{children}</h4>
+  <li role="presentation" className="engagement-checklist__group">
+    <h4 className="engagement-checklist__group-title">{children}</h4>
   </li>
 );
 
@@ -140,28 +141,28 @@ export function EngagementChecklist() {
   };
 
   return (
-    <section aria-label="Engagement checklist" className="grid gap-6">
+    <section aria-label="Engagement checklist" className="engagement-checklist">
       <EngagementStuckCheck engagementId={id} />
 
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
+      <div className="engagement-checklist__tick">
         <Button disabled={tick.ticking} onClick={() => void runTick()}>Tick from log</Button>
-        <div className="grid min-w-0 gap-1">
-          <p role="status" className="m-0 text-meta text-fg-2">{tick.message}</p>
-          {tick.error && <p role="alert" className="m-0 text-meta text-warn">{tick.error}</p>}
+        <div className="engagement-checklist__tick-status">
+          <p role="status" className="engagement-checklist__tick-message">{tick.message}</p>
+          {tick.error && <p role="alert" className="engagement-checklist__error">{tick.error}</p>}
         </div>
       </div>
 
       <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
 
-      <div className="grid gap-1">
-        <h3 className={`m-0 ${labelClass}`}>Setup</h3>
-        <ul className="m-0 list-none p-0">{grouped(setup)}</ul>
+      <div className="engagement-checklist__setup">
+        <h3 className={labelClass}>Setup</h3>
+        <ul className="engagement-checklist__list">{grouped(setup)}</ul>
       </div>
 
       <AccessFlags engagementId={id} hosts={hosts} attempts={attempts} credentials={credentials} />
 
-      <div className="grid gap-3">
-        <h3 className={`m-0 ${labelClass}`}>Active Directory</h3>
+      <div className="engagement-checklist__playbooks">
+        <h3 className={labelClass}>Active Directory</h3>
         {AD_PLAYBOOKS.map((p) => (
           <PlaybookSection key={p.id} title={p.title} opensWhen={p.opensWhen} defaultOpen={opens[p.id]}>
             {p.goals.map((g) => row(g))}
@@ -181,8 +182,8 @@ export function EngagementChecklist() {
           </Fragment>
         ))}
         {grouped(LATERAL_MOVEMENT_GOALS)}
-        <li className="pt-2 text-meta text-muted">
-          Tunnels and hops are in <Link to={sectionPath(id, "network")} className="text-fg-2 underline underline-offset-2 hover:text-fg">Network</Link> (5).
+        <li className="engagement-checklist__network-note">
+          Tunnels and hops are in <Link to={sectionPath(id, "network")} className="engagement-checklist__network-link">Network</Link> (5).
         </li>
       </PlaybookSection>
 

@@ -1,0 +1,98 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // Caret, title, (cover label,) status toggles; the body spans from the title column to the end.
+  .goal-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: flex-start;
+    column-gap: var(--space-sm);
+    row-gap: var(--space-md);
+    border-bottom: 1px solid var(--line);
+    padding-block: var(--space-md);
+  }
+
+  .goal-row--cover {
+    grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  }
+
+  .goal-row__title-col {
+    display: grid;
+    min-width: 0;
+    gap: var(--space-xs);
+  }
+
+  .goal-row__title {
+    min-width: 0;
+    padding-block: var(--space-xs);
+    @include type(body);
+    color: var(--fg);
+  }
+
+  .goal-row__title--muted {
+    color: var(--muted);
+  }
+
+  .goal-row__title--done {
+    color: var(--muted);
+    text-decoration-line: line-through;
+  }
+
+  .goal-row__cover {
+    padding-block: var(--space-xs);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .goal-row__wide {
+    grid-column-start: 2;
+    grid-column-end: -1;
+    min-width: 0;
+  }
+
+  .goal-row__body {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
+  }
+
+  .goal-row__text {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .goal-row__notes {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .goal-row__creds {
+    display: grid;
+    min-width: 0;
+    gap: var(--space-xs);
+    list-style-type: none;
+    padding: var(--space-xs);
+  }
+
+  .goal-row__cred {
+    min-width: 0;
+    @include truncate;
+    @include type(code);
+    color: var(--fg-2);
+  }
+
+  .goal-row__card-link {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .goal-row__card-label {
+    min-width: 0;
+    @include truncate;
+  }
+
+  .goal-row__card-icon {
+    flex-shrink: 0;
+  }
+}

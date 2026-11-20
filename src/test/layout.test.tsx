@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -19,8 +20,11 @@ describe("layout (U5–U7)", () => {
     const label = screen.getByText("Commands use:");
     const picker = screen.getByRole("combobox", { name: "Commands use" });
     expect(label.parentElement).toBe(picker.parentElement);
-    expect(label.parentElement!.className).toMatch(/\bgrid\b/);
-    expect(picker.className).toMatch(/w-full/);
+    expect(label.parentElement).toHaveClass("credential-picker");
+    expect(picker).toHaveClass("credential-picker__select");
+    const scss = readFileSync("src/features/checklist/CredentialPicker.scss", "utf8");
+    expect(scss).toMatch(/\.credential-picker \{\s*display: grid;/);
+    expect(scss).toMatch(/\.credential-picker__select \{\s*width: 100%;/);
     expect(picker.getAttribute("title")).toContain("ted_admin");
     expect(picker.querySelector(".select-trigger__value")).not.toBeNull();
   });
@@ -61,7 +65,8 @@ describe("layout (U5–U7)", () => {
     expect(group.className).toMatch(/\bh-7\b/);
     for (const s of segs) expect(s.className).toMatch(/\bh-full\b/);
     expect(group.className).toMatch(/rounded-sm/);
-    expect(screen.getByText("Because.").parentElement!.className).toMatch(/gap-3/);
+    expect(screen.getByText("Because.").parentElement).toHaveClass("goal-row__body");
+    expect(readFileSync("src/features/checklist/GoalRow.scss", "utf8")).toMatch(/\.goal-row__body \{[^}]*gap: var\(--space-md\);/);
   });
 
   it("pressing the selected status again keeps it", async () => {

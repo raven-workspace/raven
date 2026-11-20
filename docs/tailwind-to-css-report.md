@@ -350,3 +350,19 @@
 ### Verification
 - [x] Unit tests, type check, lint
 - [x] Pixel diff and audit gate: see the hosts unit
+
+## Unit: checklist
+
+### Changes
+- One sheet per component: GoalRow (`.goal-row`, `--cover` for the four-track row, title `--done`/`--muted`, the body
+  spanning from the title column), HostChecklist, EngagementChecklist, PlaybookSection, CommandList (status `--warn`,
+  the tunnel note link), AccessFlags, EvidenceLinks, CredentialPicker, PortChip, FileChip, ConfirmDelete.
+- `COMMAND_PRE` now names `.command-pre`; `MarkedText` uses `.command-pre__word` and `.command-pre__mark`
+  (commandPre.scss). arsenal/CommandPreview still adds `max-h-48 overflow-y-auto` as utilities (no overlap).
+- FileChip puts `.file-chip__picker` on the generators feature's FilePicker with two classes.
+
+### Verification
+- [x] Unit tests: copyGuard, portAndLayout and layout assert the BEM classes, and the layout intent (start-aligned
+  grid, gaps, muted description, full-width picker) against the rule in the component's sheet
+- [x] Type check and lint
+- [x] Pixel diff and audit gate: see the hosts unit

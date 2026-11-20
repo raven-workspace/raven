@@ -18,6 +18,7 @@ import { useEngagementServices } from "../services/queries";
 import { useSettings, settingsFill } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
 import { RavenError } from "../../types/errors";
+import "./HostChecklist.scss";
 
 const KALI = "kali";
 const EXAM_EMPTY = "Nothing allowed in an exam sim; do it by hand";
@@ -41,13 +42,13 @@ function ArrivedFrom({ host, hosts, onSave }: { host: Host; hosts: Host[]; onSav
     }
   };
   return (
-    <div className="grid gap-1">
-      <div className="grid grid-cols-[192px_minmax(0,1fr)_auto] items-end gap-2">
-        <label className="grid gap-1">
+    <div className="host-checklist__hop">
+      <div className="host-checklist__hop-row">
+        <label className="host-checklist__hop-field">
           <span className={fieldLabelClass}>Arrived from</span>
           <Select aria-label="Arrived from" options={options} value={from} onValueChange={setFrom} />
         </label>
-        <label className="grid min-w-0 gap-1">
+        <label className="host-checklist__hop-field host-checklist__hop-field--fill">
           <span className={fieldLabelClass}>Via</span>
           <Input aria-label="Via" placeholder="creds, exploit, share…" value={via} onChange={(e) => setVia(e.target.value)} />
         </label>
@@ -55,7 +56,7 @@ function ArrivedFrom({ host, hosts, onSave }: { host: Host; hosts: Host[]; onSav
           Save hop
         </Button>
       </div>
-      {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
+      {error && <p role="alert" className="host-checklist__error">{error}</p>}
     </div>
   );
 }
@@ -144,24 +145,24 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   };
 
   return (
-    <div data-checklist-ready className="grid gap-6 py-3">
+    <div data-checklist-ready className="host-checklist">
       <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
-      {nothingNext && <p className="m-0 text-meta text-muted">{nothingNext}</p>}
+      {nothingNext && <p className="host-checklist__note">{nothingNext}</p>}
       {doneWithNewCreds > 0 && onShowFull && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-          <span className="min-w-0 truncate text-meta text-fg-2">
+        <div className="host-checklist__new-creds">
+          <span className="host-checklist__new-creds-text">
             {doneWithNewCreds} done step{doneWithNewCreds === 1 ? " has" : "s have"} new credentials
           </span>
           <Button size="sm" onClick={onShowFull}>Show done steps</Button>
         </div>
       )}
       {shown.map(({ stage, goals, hint }) => (
-        <section key={stage.id} aria-label={stage.title} className="grid gap-2 border-t border-line-2 pt-6 first:border-t-0 first:pt-0">
-          <h3 className={`m-0 ${labelClass}`}>{stage.title}</h3>
+        <section key={stage.id} aria-label={stage.title} className="host-checklist__stage">
+          <h3 className={labelClass}>{stage.title}</h3>
           {goals.length === 0 ? (
-            <p className="m-0 text-meta text-muted">{hint}</p>
+            <p className="host-checklist__note">{hint}</p>
           ) : (
-            <ul className="m-0 list-none p-0">
+            <ul className="host-checklist__goals">
               {goals.map((g, i) => {
                 const { commands, hadAny } = commandsFor(g.id);
                 const s = state[g.id];
@@ -169,8 +170,8 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
                 return (
                   <Fragment key={g.id}>
                   {heading && (
-                    <li role="presentation" className="list-none pb-1 pt-3 first:pt-0">
-                      <h4 className="m-0 text-meta font-medium text-muted-2">{heading}</h4>
+                    <li role="presentation" className="host-checklist__group">
+                      <h4 className="host-checklist__group-title">{heading}</h4>
                     </li>
                   )}
                   <GoalRow

@@ -1,4 +1,5 @@
 import { Button, Dialog } from "../../ui";
+import "./ConfirmDelete.scss";
 
 /** Confirm-before-delete dialog, same shape as the log entry delete. */
 export function ConfirmDelete({ title, detail, error, pending, label, onConfirm, onCancel }: {
@@ -21,7 +22,7 @@ export function ConfirmDelete({ title, detail, error, pending, label, onConfirm,
           <>
             {detail}
             {detail && error && " "}
-            {error && <span role="alert" className="text-warn">{error}</span>}
+            {error && <span role="alert" className="confirm-delete__error">{error}</span>}
           </>
         ) : undefined
       }

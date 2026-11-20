@@ -4,6 +4,7 @@ import { ChipSet, Chip, CommandBlock } from "../../ui";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { sectionPath } from "../engagements/sections";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
+import "./CommandList.scss";
 
 export interface FilledCommand {
   id: string;
@@ -75,13 +76,13 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
   };
 
   return (
-    <ul className="m-0 grid list-none gap-4 p-0">
+    <ul className="command-list">
       {commands.map((c) => (
-        <li key={c.id} className="grid gap-1">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
-            <span data-testid="command-desc" className={strongTitles ? "text-body font-medium text-fg" : "text-meta text-muted-2"}>{c.title}</span>
+        <li key={c.id} className="command-list__item">
+          <div className="command-list__head">
+            <span data-testid="command-desc" className={strongTitles ? "command-list__desc command-list__desc--strong" : "command-list__desc"}>{c.title}</span>
             {guard.forKey === copyKey(guardAs ?? c) && (!guardAs || statusId === c.id) && (guard.hint || guard.confirm) && (
-              <span role="status" className={`text-meta ${guard.hint || c.unresolved.length > 0 ? "text-warn" : "text-accent"}`}>
+              <span role="status" className={guard.hint || c.unresolved.length > 0 ? "command-list__status command-list__status--warn" : "command-list__status"}>
                 {guard.hint ?? guard.confirm}
               </span>
             )}
@@ -111,7 +112,7 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
                 // Outside an engagement there is no Network to open: the note stays a plain chip.
                 if (!engagementId) return <Chip variant={variant}>{label}</Chip>;
                 return (
-                  <Link to={sectionPath(engagementId, "network")} state={{ hostId: c.viaTunnel.viaHostId }} className="inline-grid min-h-6 items-center rounded-full focus-visible:outline-1 focus-visible:outline-accent [&>span]:hover:underline [&>span]:underline-offset-2">
+                  <Link to={sectionPath(engagementId, "network")} state={{ hostId: c.viaTunnel.viaHostId }} className="command-list__tunnel-link">
                     <Chip variant={variant}>{label}</Chip>
                   </Link>
                 );

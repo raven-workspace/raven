@@ -1,0 +1,18 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // "Port" and a 96px select of the host's matching ports.
+  .port-chip {
+    display: grid;
+    grid-template-columns: max-content 96px;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-sm);
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .port-chip__select {
+    width: 100%;
+  }
+}

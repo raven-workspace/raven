@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -9,6 +10,13 @@ import { usePortPickStore } from "../features/checklist/portPick";
 import { setImported } from "../engines/library/store";
 import type { FillInput } from "../engines/checklist";
 import type { Engagement } from "../types/engagement";
+
+/** The declarations of one rule in a feature sheet (jsdom loads no CSS, so layout rules are read from the source). */
+const rule = (file: string, selector: string) => {
+  const scss = readFileSync(file, "utf8");
+  const start = scss.indexOf(`${selector} {`);
+  return scss.slice(start, scss.indexOf("}", start));
+};
 
 const labels = Array.from({ length: 7 }, (_, i) => `CORP\\svc_${i}`);
 const row = (cmds = []) => (
@@ -27,32 +35,34 @@ describe("new credential notice", () => {
     const items = screen.getAllByRole("listitem").filter((li) => li.textContent?.startsWith("CORP"));
     expect(items).toHaveLength(7);
     for (const li of items) {
-      expect(li.className).toMatch(/truncate/);
+      expect(li).toHaveClass("goal-row__cred");
       expect(li).toHaveAttribute("title", li.textContent);
     }
   });
   it("title column is min-w-0 and wraps; the status control sits in its own column", () => {
     render(row());
     const col = screen.getByTestId("goal-title-col");
-    expect(col.className).toMatch(/min-w-0/);
-    expect(col.className).not.toMatch(/whitespace-nowrap/);
+    expect(col).toHaveClass("goal-row__title-col");
+    expect(rule("src/features/checklist/GoalRow.scss", ".goal-row__title-col")).toMatch(/min-width: 0;/);
+    expect(rule("src/features/checklist/GoalRow.scss", ".goal-row__title-col")).not.toMatch(/white-space/);
     expect(screen.getByTestId("goal-status")).toContainElement(screen.getByRole("radiogroup", { name: /Status/ }));
-    expect(screen.getByText("Scan all 65,535 TCP ports").className).not.toMatch(/whitespace-nowrap/);
+    expect(rule("src/features/checklist/GoalRow.scss", ".goal-row__title")).not.toMatch(/white-space/);
   });
   it("goal status stays on the title line when new credentials open", async () => {
     render(row());
     const li = document.querySelector("li[data-goal-id]") as HTMLElement;
     // jsdom has no layout: the row is a start-aligned grid and nothing offsets the status or the title.
-    expect(li.className).toMatch(/\bgrid\b/);
-    expect(li.className).toMatch(/items-start/);
+    expect(li).toHaveClass("goal-row");
+    expect(rule("src/features/checklist/GoalRow.scss", ".goal-row")).toMatch(/display: grid;[^]*align-items: flex-start;/);
     const status = screen.getByTestId("goal-status");
     const title = screen.getByTestId("goal-title-col");
     expect(status.parentElement).toBe(li);
     expect(title.parentElement).toBe(li);
-    for (const el of [status, title]) expect(el.className).not.toMatch(/\bm[tb]-|self-(center|end)|items-center/);
+    expect(status.className).toBe("");
+    expect(rule("src/features/checklist/GoalRow.scss", ".goal-row__title-col")).not.toMatch(/margin|align-self|align-items/);
     await userEvent.click(screen.getByRole("button", { name: /New credentials since done/ }));
     expect(status.parentElement).toBe(li);
-    expect(li.className).toMatch(/items-start/);
+    expect(li).toHaveClass("goal-row");
   });
   it("the new-credentials line is a disclosure with a count", () => {
     render(row());
@@ -64,11 +74,14 @@ describe("CommandList spacing", () => {
   it("separates commands with gap-4 and mutes the description", () => {
     render(<CommandList commands={[{ id: "a", title: "Desc A", text: "id", unresolved: [], msfMarker: false }, { id: "b", title: "Desc B", text: "ls", unresolved: [], msfMarker: false }]} />);
     const ul = screen.getAllByRole("list")[0];
-    expect(ul.className).toMatch(/gap-4/);
-    expect(ul.firstElementChild!.className).toMatch(/gap-1\b/);
+    expect(ul).toHaveClass("command-list");
+    expect(rule("src/features/checklist/CommandList.scss", ".command-list")).toMatch(/gap: var\(--space-lg\);/);
+    expect(ul.firstElementChild).toHaveClass("command-list__item");
+    expect(rule("src/features/checklist/CommandList.scss", ".command-list__item")).toMatch(/gap: var\(--space-xs\);/);
     const d = screen.getAllByTestId("command-desc")[0];
-    expect(d.className).toMatch(/text-meta/);
-    expect(d.className).toMatch(/text-muted/);
+    expect(d).toHaveClass("command-list__desc");
+    expect(d).not.toHaveClass("command-list__desc--strong");
+    expect(rule("src/features/checklist/CommandList.scss", ".command-list__desc")).toMatch(/type\(meta\);\s*color: var\(--muted-2\);/);
   });
 });
 
