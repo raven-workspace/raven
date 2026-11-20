@@ -7,6 +7,7 @@ import {
   ENGAGEMENT_SETUP,
   AD_PLAYBOOKS,
   LATERAL_MOVEMENT_GOALS,
+  nextFreePort,
   type ChecklistGoal,
   type FillInput,
 } from "../../engines/checklist";
@@ -43,6 +44,13 @@ export function fillLibraryCommand(c: LibraryCommand, input: FillInput, msfMarke
   if (fileTok) out.fileToken = { hostId: input.host.id, os: input.host.os === "windows" || input.host.os === "linux" ? input.host.os : null, token: fileTok[1] as "FILE" | "SCRIPT" };
   if (filled.dcByName) out.dcByName = true;
   if (filled.viaTunnel) out.viaTunnel = { viaHostId: filled.viaTunnel.tunnel.viaHostId, viaHostName: filled.viaTunnel.viaHostName, down: filled.viaTunnel.down };
+  // A reverse shell back to {LPORT} clashes with a listener already in the log: name the next free port.
+  if (input.listenerPorts?.size && /(?<![$%])\{LPORT\}/.test(c.template)) {
+    const port = Number(input.listenerPort.trim());
+    if (Number.isInteger(port) && input.listenerPorts.has(port)) {
+      out.portClash = { port, suggested: nextFreePort(port, input.listenerPorts) };
+    }
+  }
   return out;
 }
 

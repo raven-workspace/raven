@@ -28,6 +28,8 @@ export interface FillInput {
   portHint?: number[];
   /** Explicit token values keyed by upper-case token name (FILE, DEST_DIR, PORT, COMMUNITY...). They win over everything. */
   overrides?: Record<string, string>;
+  /** Ports a logged reverse-shell listener already holds, so a command reusing {LPORT} can warn (see loggedListenerPorts). */
+  listenerPorts?: ReadonlySet<number>;
 }
 
 /**
