@@ -167,14 +167,14 @@ describe("Payload build memory", () => {
     usePayloadsStore.setState({ lhost: NEW_LHOST });
     const { user, d } = await openOn("Nishang cradle (served rev.ps1)");
     const line = await d.findByText(REBUILD_LINE);
-    expect(line).toHaveClass("text-warn");
+    expect(line).toHaveClass("payload-block__stale");
     // The line sits right above the build step (the prepare block), which is the first step.
     expect(line.nextElementSibling).toHaveTextContent("Prepare on Kali");
     expect(before(d.getByLabelText("Command: Prepare on Kali"), d.getByLabelText("Command: Listener"))).toBe(true);
 
     await navigator.clipboard.writeText("untouched");
     await user.keyboard("{Enter}");
-    expect(await d.findByText(`Built with ${LHOST}:${LPORT}; rebuild first. Press ↵ again to copy anyway`)).toHaveClass("text-warn");
+    expect(await d.findByText(`Built with ${LHOST}:${LPORT}; rebuild first. Press ↵ again to copy anyway`)).toHaveClass("payload-block__note--warn");
     expect(await navigator.clipboard.readText()).toBe("untouched");
 
     await user.click(d.getByRole("button", { name: "Copy prepare on Kali" }));
@@ -225,7 +225,8 @@ describe("Payload build memory", () => {
     await navigator.clipboard.writeText("untouched");
     await user.keyboard("{Enter}");
     const hint = await d.findByText("Checking the last build. Press ↵ again to copy anyway");
-    expect(hint).toHaveClass("text-muted");
+    expect(hint).toHaveClass("payload-block__note");
+    expect(hint).not.toHaveClass("payload-block__note--warn");
     expect(await navigator.clipboard.readText()).toBe("untouched");
     await user.keyboard("{Enter}");
     expect(await navigator.clipboard.readText()).toBe(d.getByLabelText("Command: Payload").textContent);
@@ -269,7 +270,7 @@ describe("Meterpreter lock", () => {
 
   it("locked to another host: an amber line, and the first ↵ is held back with it", async () => {
     const { user, d } = await openOn(MET, { ...EXAM, msfHostId: "h2" });
-    expect(d.getByText("Metasploit is locked to dc01.example.test")).toHaveClass("text-warn");
+    expect(d.getByText("Metasploit is locked to dc01.example.test")).toHaveClass("payload-block__lock--breach");
     await navigator.clipboard.writeText("untouched");
     await user.keyboard("{Enter}");
     expect(await d.findByText("Metasploit is locked to dc01.example.test. Press ↵ again to copy anyway")).toBeInTheDocument();
@@ -280,7 +281,7 @@ describe("Meterpreter lock", () => {
 
   it("no lock yet: a muted line, and ↵ copies at once", async () => {
     const { user, d } = await openOn(MET, EXAM);
-    expect(d.getByText("Using Meterpreter here makes this your Metasploit machine")).toHaveClass("text-muted");
+    expect(d.getByText("Using Meterpreter here makes this your Metasploit machine")).not.toHaveClass("payload-block__lock--breach");
     await navigator.clipboard.writeText("untouched");
     await user.keyboard("{Enter}");
     expect(await navigator.clipboard.readText()).toBe(d.getByLabelText("Command: Payload").textContent);

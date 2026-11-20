@@ -1,0 +1,55 @@
+@use "@/styles/abstracts" as *;
+
+// The drawer's context pickers, as borderless runs of "Label value ⌄" (the background shows on hover). The runs sit
+// 8px out so each label lines up with the text below.
+@layer features {
+  .context-chips {
+    display: grid;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .context-chips__runs {
+    display: grid;
+    gap: var(--space-xs);
+    margin-inline: calc(var(--space-sm) * -1);
+
+    [data-picker-trigger] {
+      border-color: transparent;
+    }
+  }
+
+  .context-chips__run {
+    align-items: start;
+  }
+
+  .context-chips .context-chips__host {
+    max-width: 100%;
+  }
+
+  .context-chips__no-host {
+    padding: var(--space-xs) var(--space-sm);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .context-chips__port {
+    display: grid;
+    align-content: flex-start;
+    gap: var(--space-xs);
+  }
+
+  .context-chips__custom {
+    display: grid;
+    align-content: flex-start;
+    gap: var(--space-xs);
+    width: 6rem;
+  }
+
+  .context-chips__invalid,
+  .context-chips__clue {
+    @include type(meta);
+    color: var(--warn);
+  }
+}

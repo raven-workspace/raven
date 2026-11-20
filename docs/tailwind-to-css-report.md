@@ -479,7 +479,7 @@
 - HostChip and CredChip keep their "share of the row" default as a class (`host-chip--share`, 40%; `cred-chip--share`,
   50%) used only when the caller passes no `className`, as the default prop did. Callers in other features use a
   two-class rule (`.palette .palette__chip`).
-- FillBar's `border-warn!`, `text-fg!`, `text-fg-2!` become plain feature-layer modifiers on the Input primitive: the
+- FillBar's `border-warn!`, `text-fg!`, `text-fg-2!` become plain feature-layer modifiers (`.fillbar__input--*`; the block is `fillbar` because the convention tests read any `fill-` class as a colour utility) on the Input primitive: the
   features layer already beats every `.control` state rule, so the `!important` is not needed.
 - `rounded-md` emits `--radius-sm` under Raven's theme and is written as such.
 - `styles.ts` keeps exporting `ON` (a Tailwind string) for ManualRail, which is not migrated; ResultList no longer uses
@@ -495,3 +495,26 @@
       (0034c4e) at the same load: the tab walks run close to the 30s test timeout, and the `open()` helper's
       `getByRole("button", { name: /Search/ })` races a host page whose commands include "Copy command: Search
       Exploit-DB…" (a strict-mode violation when the page renders before the wait).
+
+## Unit: payloads
+
+### Changes
+- One sheet per component file: PayloadView.scss (`.payload-view`, `.fit-row`, `.payload-block`, `.payload-parts`),
+  PayloadsDrawer.scss, PayloadsWorkbench.scss (`.payloads-workbench`, `.read-item`), ContextChips.scss,
+  ToolsPicker.scss, SqlPanel.scss (`.sql-panel`, `.sql-payload`, `.sql-parts`, `.fold-heading`), TransferPanel.scss,
+  usePayloadSession.scss (`.payload-fields`).
+- State on existing attributes: fit rows, generator tabs and the Workbench generator list on `aria-selected`; the
+  ToolsPicker choice as `--auto|present|missing|idle` modifiers (hover only on idle ones, as before).
+- The borderless picker runs (`[&_[data-picker-trigger]]:border-transparent`) are a descendant rule,
+  `.context-chips__runs [data-picker-trigger]`.
+- `ring-1 ring-inset ring-*` becomes `box-shadow: inset 0 0 0 1px …`; `sr-only` is written out on
+  `.payload-view__heading`; `font-medium` is 500 (`--font-weight-medium`).
+- The HostChip widths Payloads sets are two-class rules (`.context-chips .context-chips__host`,
+  `.payloads-workbench .payloads-workbench__host`).
+- PayloadBlock's key cap (`h-7 px-2 text-code` on Kbd, noted in unit 1) is `.payload-block__key`.
+
+### Verification
+- [x] Unit tests (lock, note, stale, mark, file-name, port and host-cell assertions moved to the BEM classes)
+- [x] Type check and lint
+- [x] Pixel diff: 297/297
+- [x] Audit gate: 660/660

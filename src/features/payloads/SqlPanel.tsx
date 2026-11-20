@@ -8,6 +8,7 @@ import type { PayloadFit } from "./usePayloadFit";
 import { lhostPlaceholder } from "./usePayloadSession";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
 import { RavenError } from "../../types/errors";
+import "./SqlPanel.scss";
 
 const ENGINE_LABEL: Record<SqlEngine, string> = { mssql: "MSSQL", mysql: "MySQL", postgres: "PostgreSQL", oracle: "Oracle", sqlite: "SQLite" };
 const POINTS: { id: SqlPoint; label: string }[] = [
@@ -50,18 +51,18 @@ function SqlPayload({ id, title, result, armedKey, onCopy }: {
   /** "guarded" when an unfilled token held the copy back. */
   onCopy: (b: BuiltPayload) => "copied" | "guarded";
 }) {
-  if ("error" in result) return <p className="m-0 text-meta text-muted">Skip here: {result.error}.</p>;
+  if ("error" in result) return <p className="sql-payload__muted">Skip here: {result.error}.</p>;
   const b = result.built;
   const armed = armedKey === armKey(id, b);
   return (
-    <div className="grid gap-2">
+    <div className="sql-payload">
       {b.prepare && <CommandBlock text={b.prepare} name={`${title} prepare on Kali`} copyLabel={`Copy ${title} prepare on Kali`} placeholders />}
       {b.listener && <CommandBlock text={b.listener} name={`${title} listener`} copyLabel={`Copy ${title} listener`} placeholders />}
       <CommandBlock text={b.text} name={`${title} payload`} copyLabel={`Copy ${title}`} onCopyAction={() => Promise.resolve(onCopy(b))} placeholders />
-      {armed && <p role="status" className="m-0 text-meta text-warn">{b.unresolved.map((u) => `{${u}}`).join(" ")} not filled. Copy again to copy anyway</p>}
+      {armed && <p role="status" className="sql-payload__armed">{b.unresolved.map((u) => `{${u}}`).join(" ")} not filled. Copy again to copy anyway</p>}
       <PartsList label="What each part does" parts={b.parts.filter((p) => !p.decoded)} />
       <PartsList label="Inside the base64 script" parts={b.parts.filter((p) => p.decoded)} />
-      {b.notes.map((n) => <p key={n} className="m-0 text-meta text-muted">{n}</p>)}
+      {b.notes.map((n) => <p key={n} className="sql-payload__muted">{n}</p>)}
     </div>
   );
 }
@@ -72,11 +73,11 @@ function PartsList({ label, parts }: { label: string; parts: PayloadPart[] }) {
   if (parts.length === 0) return null;
   return (
     <Disclosure label={label} open={open} onOpenChange={setOpen}>
-      <dl className="m-0 grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-3 gap-y-1 px-1 pt-1 text-meta">
+      <dl className="sql-parts">
         {parts.map((p) => (
-          <div key={p.token} className="contents">
-            <dt className="break-all font-mono text-code text-fg">{p.token}</dt>
-            <dd className="m-0 text-muted">{p.explain}</dd>
+          <div key={p.token} className="sql-parts__item">
+            <dt className="sql-parts__token">{p.token}</dt>
+            <dd className="sql-parts__explain">{p.explain}</dd>
           </div>
         ))}
       </dl>
@@ -92,16 +93,16 @@ function FoldHeading({ label, level, finished, folded, result, mono, onToggle }:
   label: string; level: "h3" | "h4"; finished: boolean; folded: boolean; result: string; mono: boolean; onToggle: () => void;
 }) {
   const H = level;
-  if (!finished) return <H className="m-0 text-heading text-fg">{label}</H>;
+  if (!finished) return <H className="fold-heading">{label}</H>;
   return (
-    <H className="m-0">
+    <H>
       <button
         type="button" aria-expanded={!folded} aria-label={folded ? `${label}: ${result}` : label} onClick={onToggle}
-        className="grid min-h-7 w-full grid-cols-[16px_minmax(0,max-content)_minmax(0,1fr)] items-center gap-x-3 rounded-sm border-0 bg-transparent px-1 text-left select-none cursor-default hover:bg-surface-hi"
+        className="fold-heading__toggle"
       >
-        <DisclosureCaret open={!folded} className="text-muted-2" />
-        <span className={`truncate ${folded ? "text-body text-fg-2" : "text-heading text-fg"}`}>{label}</span>
-        {folded && <span className={`truncate text-muted ${mono ? "font-mono text-code" : "text-meta"}`}>{result}</span>}
+        <DisclosureCaret open={!folded} className="fold-heading__caret" />
+        <span className={`fold-heading__label fold-heading__label--${folded ? "folded" : "open"}`}>{label}</span>
+        {folded && <span className={`fold-heading__result fold-heading__result--${mono ? "mono" : "text"}`}>{result}</span>}
       </button>
     </H>
   );
@@ -272,22 +273,22 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
   };
 
   return (
-    <section ref={rootRef} aria-label="SQL injection" className="grid content-start gap-4">
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+    <section ref={rootRef} aria-label="SQL injection" className="sql-panel">
+      <div className="sql-panel__settings">
         <span className={labelClass}>Engine</span>
-        <div className="grid grid-cols-[repeat(5,auto)] justify-start gap-1">
+        <div className="sql-panel__choices sql-panel__choices--5">
           {SQL_ENGINES.map((e) => (
             <Toggle key={e} on={e === engine} onChange={() => set({ sqlEngine: e })}>{ENGINE_LABEL[e]}</Toggle>
           ))}
         </div>
         <span />
         {fit.evidence.dbEngine ? (
-          <span className="text-meta text-muted">{fit.evidence.dbEngine}</span>
+          <span className="sql-panel__hint">{fit.evidence.dbEngine}</span>
         ) : (
-          <span className="text-meta text-warn">Not known from the host's ports: showing MySQL; pick one</span>
+          <span className="sql-panel__unknown">Not known from the host's ports: showing MySQL; pick one</span>
         )}
         <span className={labelClass}>Inject into</span>
-        <div className="grid grid-cols-[repeat(3,auto)] justify-start gap-1">
+        <div className="sql-panel__choices sql-panel__choices--3">
           {POINTS.map((p) => (
             <Toggle key={p.id} on={p.id === point} onChange={() => set({ sqlPoint: p.id })}>{p.label}</Toggle>
           ))}
@@ -295,15 +296,15 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
         {point !== "client-session" && (
           <>
             <span className={labelClass}>Break</span>
-            <label className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
+            <label className="sql-panel__break">
               <Input mono aria-label="Break" value={values.prefix ?? "'"} onChange={(e) => setValues({ prefix: e.target.value })} />
-              <span className="text-meta text-muted">' for a string; empty for a number</span>
+              <span className="sql-panel__hint">' for a string; empty for a number</span>
             </label>
           </>
         )}
       </div>
 
-      <ol aria-label="SQL steps" className="m-0 grid list-none p-0">
+      <ol aria-label="SQL steps" className="sql-panel__steps">
         {SQL_STEPS.map((step, i) => {
           const input = STEP_INPUT[step.id];
           const result = tryBuild(step.id, step.title, engine, point, values);
@@ -322,15 +323,15 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
               result={key ? String(values[key]) : "copied"} mono={!!key} onToggle={() => toggle(step.id, key)}
             />
           );
-          if (folded) return <li key={step.id} data-sql-item={step.id} className="border-t border-line py-1">{heading}</li>;
+          if (folded) return <li key={step.id} data-sql-item={step.id} className="sql-panel__step-folded">{heading}</li>;
           return (
-            <li key={step.id} data-sql-item={step.id} onKeyDown={onKey} onBlur={onLeave(step.id)} className="grid gap-2 border-t border-line py-3">
+            <li key={step.id} data-sql-item={step.id} onKeyDown={onKey} onBlur={onLeave(step.id)} className="sql-panel__step">
               {heading}
-              <p className="m-0 text-meta text-muted">{step.explain}</p>
+              <p className="sql-panel__hint">{step.explain}</p>
               <SqlPayload id={step.id} title={step.title} result={result} armedKey={armed} onCopy={(b) => copyItem(step.id, key, b)} />
               {input && (
-                <label className="grid grid-cols-[max-content_minmax(0,14rem)] items-center gap-2">
-                  <span className="text-meta text-fg-2">{input.label} found</span>
+                <label className="sql-panel__found">
+                  <span className="sql-panel__field-label">{input.label} found</span>
                   <Input
                     mono aria-label={input.label} placeholder={input.placeholder} ref={(el) => setInput(input.key, el)}
                     inputMode={input.numeric ? "numeric" : undefined}
@@ -347,11 +348,11 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
         })}
       </ol>
 
-      <section aria-label={`Run commands (${ENGINE_LABEL[engine]})`} className="grid gap-3 border-t border-line-2 pt-3">
-        <h3 className={`${labelClass} m-0`}>Run commands for {ENGINE_LABEL[engine]}</h3>
+      <section aria-label={`Run commands (${ENGINE_LABEL[engine]})`} className="sql-panel__run">
+        <h3 className={labelClass}>Run commands for {ENGINE_LABEL[engine]}</h3>
         {lhostField && !values.cmd && execIds.some((id) => CALLS_BACK.has(id)) && (
-          <label className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-2">
-            <span className="font-mono text-code text-fg-2">LHOST</span>
+          <label className="sql-panel__row">
+            <span className="sql-panel__token">LHOST</span>
             <Input
               mono aria-label="LHOST" ref={(el) => setInput("lhost", el)} value={fit.lhostInput} placeholder={lhostPlaceholder(fit.settingsLhost)}
               onChange={(e) => usePayloadsStore.getState().setLhost(e.target.value)}
@@ -359,15 +360,15 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
           </label>
         )}
         {(engine === "mysql" || engine === "mssql") && (
-          <label className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-2">
-            <span className="text-meta text-fg-2">File path</span>
+          <label className="sql-panel__row">
+            <span className="sql-panel__field-label">File path</span>
             <Input mono aria-label="File path" ref={(el) => setInput("path", el)} value={values.path ?? ""} placeholder={engine === "mysql" ? "/var/www/html/zz.php" : "C:\\Windows\\win.ini"} onChange={(e) => setValues({ path: e.target.value })} />
           </label>
         )}
         {engine === "mssql" && (
-          <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-2">
-            <span className="text-meta text-fg-2">Shell</span>
-            <div className="grid grid-cols-[repeat(3,auto)] justify-start gap-1">
+          <div className="sql-panel__row">
+            <span className="sql-panel__field-label">Shell</span>
+            <div className="sql-panel__choices sql-panel__choices--3">
               {SHELLS.map((s) => (
                 <Toggle key={s.id} on={(values.shell ?? "ps-b64") === s.id} onChange={() => setValues({ shell: s.id })}>{s.label}</Toggle>
               ))}
@@ -375,9 +376,9 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
           </div>
         )}
         {execIds.length === 0 ? (
-          <p className="m-0 text-meta text-muted">No OS command or file payloads for {ENGINE_LABEL[engine]} here.</p>
+          <p className="sql-panel__hint">No OS command or file payloads for {ENGINE_LABEL[engine]} here.</p>
         ) : (
-          <ul aria-label="Run commands" className="m-0 grid list-none gap-2 p-0">
+          <ul aria-label="Run commands" className="sql-panel__exec">
             {execIds.map((id) => {
               const x = SQL_EXEC.find((e) => e.id === id)!;
               const folded = isFolded(id);
@@ -386,7 +387,7 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
               );
               if (folded) return <li key={id} data-sql-item={id}>{heading}</li>;
               return (
-                <li key={id} data-sql-item={id} onBlur={onLeave(id)} className="grid gap-2 pb-2">
+                <li key={id} data-sql-item={id} onBlur={onLeave(id)} className="sql-panel__exec-item">
                   {heading}
                   <SqlPayload id={id} title={x.title} result={tryBuild(id, x.title, engine, point, execValues)} armedKey={armed} onCopy={(b) => copyItem(id, undefined, b)} />
                 </li>
@@ -395,7 +396,7 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
           </ul>
         )}
       </section>
-      {status && <p role="status" className="m-0 text-meta text-muted">{status}</p>}
+      {status && <p role="status" className="sql-panel__hint">{status}</p>}
     </section>
   );
 }

@@ -20,6 +20,7 @@ import { contextLabel, hasToggles, isRanked, OS_LABEL, showsFilter, usePayloadFi
 import { usePayloadsStore } from "./usePayloadsStore";
 import { RavenError } from "../../types/errors";
 import { anyDrawerOpen } from "../drawers";
+import "./usePayloadSession.scss";
 
 /** In ⌥1–⌥6 order. */
 export const GENERATORS: { id: GeneratorId; label: string }[] = [
@@ -351,10 +352,10 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     : null;
   const tokens = def ? fieldTokens(def).filter((t) => lhostField || t !== "LHOST") : [];
   const fields = tokens.length > 0 && (
-    <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+    <div className="payload-fields">
       {tokens.map((t) => (
-        <label key={t} className="contents">
-          <span className="font-mono text-code text-muted">{t}</span>
+        <label key={t} className="payload-fields__field">
+          <span className="payload-fields__token">{t}</span>
           <Input
             mono aria-label={t}
             ref={(el) => { if (el) fieldEls.current.set(t, el); else fieldEls.current.delete(t); }}

@@ -124,7 +124,7 @@ describe("Payloads toggles", () => {
     // A bind row says so first.
     expect(within(fitRow(d, "mkfifo + nc bind")).getAllByText(/./).map((s) => s.textContent)).toContain("bind");
     const bash = fitRow(d, "Bash /dev/tcp");
-    expect(within(bash).getByText("Needs a callback")).toHaveClass("text-warn");
+    expect(within(bash).getByText("Needs a callback")).toHaveClass("fit-row__reason--mark");
     // Marks come before the requires reasons.
     const texts = [...bash.querySelectorAll("span span")].map((s) => s.textContent);
     expect(texts.indexOf("Needs a callback")).toBeLessThan(texts.indexOf("uses bash"));
@@ -177,10 +177,10 @@ describe("Payloads toggles", () => {
     expect(d.getByRole("button", { name: "Tools: 1 set" })).toHaveFocus();
     expect(screen.getByRole("complementary", { name: "Payloads" })).toBeInTheDocument();
     const py = fitRow(d, "Python 3 with PTY");
-    expect(within(py).getByText("Needs python3")).toHaveClass("text-warn");
+    expect(within(py).getByText("Needs python3")).toHaveClass("fit-row__reason--mark");
     const names = fitNames(d);
     const rows = within(d.getByRole("listbox", { name: "Fits" })).getAllByRole("option");
-    const marked = rows.map((r) => r.querySelector(".text-warn") !== null);
+    const marked = rows.map((r) => r.querySelector(".fit-row__reason--mark") !== null);
     const pyAt = names.indexOf("Python 3 with PTY");
     expect(pyAt).toBeGreaterThan(0);
     expect(marked.slice(0, pyAt).every((x) => !x)).toBe(true);
@@ -353,7 +353,7 @@ describe("Workbench toggles", () => {
     const w = within(await screen.findByRole("main", { name: "Payloads" }));
     await w.findByRole("heading", { name: "Bash /dev/tcp" });
     const r = read();
-    for (const label of ["Callbacks", "Filter", "Tools"]) expect(r.getAllByText(label, { selector: "span.text-muted-2" })[0]).toBeInTheDocument();
+    for (const label of ["Callbacks", "Filter", "Tools"]) expect(r.getAllByText(label, { selector: "span.read-item__label" })[0]).toBeInTheDocument();
     await user.keyboard("{Alt>}b{/Alt}");
     expect(r.getByRole("button", { name: "Allowed" })).toHaveFocus();
     await user.click(r.getByRole("button", { name: "Blocked" }));
@@ -367,11 +367,11 @@ describe("Workbench toggles", () => {
     await user.keyboard("{Escape}");
     // msfvenom keeps Callbacks and Tools; it never takes a filter.
     await user.keyboard("{Alt>}4{/Alt}");
-    expect(r.getAllByText("Callbacks", { selector: "span.text-muted-2" })[0]).toBeInTheDocument();
-    expect(r.getAllByText("Tools", { selector: "span.text-muted-2" })[0]).toBeInTheDocument();
-    expect(r.queryByText("Filter", { selector: "span.text-muted-2" })).not.toBeInTheDocument();
+    expect(r.getAllByText("Callbacks", { selector: "span.read-item__label" })[0]).toBeInTheDocument();
+    expect(r.getAllByText("Tools", { selector: "span.read-item__label" })[0]).toBeInTheDocument();
+    expect(r.queryByText("Filter", { selector: "span.read-item__label" })).not.toBeInTheDocument();
     await user.keyboard("{Alt>}2{/Alt}");
-    expect(r.queryByText("Callbacks", { selector: "span.text-muted-2" })).not.toBeInTheDocument();
+    expect(r.queryByText("Callbacks", { selector: "span.read-item__label" })).not.toBeInTheDocument();
     expect(r.getByText("No exam limits.")).toBeInTheDocument();
   });
 

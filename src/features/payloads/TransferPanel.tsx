@@ -4,6 +4,7 @@ import { TransferGenerator } from "../generators/TransferGenerator";
 import type { PayloadFit } from "./usePayloadFit";
 import { lhostPlaceholder } from "./usePayloadSession";
 import { usePayloadsStore } from "./usePayloadsStore";
+import "./TransferPanel.scss";
 
 /**
  * Transfer in Payloads (drawer and Workbench): the Arsenal's "Transfer a file" generator, moved here. It fills for the
@@ -18,10 +19,10 @@ export function TransferPanel({ engagementId, hostId, fit, lhostField, focusToke
   const lhostRef = useRef<HTMLInputElement>(null);
   const focus = useCallback((t: string) => (t === "LHOST" && lhostRef.current ? lhostRef.current.focus() : focusToken(t)), [focusToken]);
   return (
-    <div className="grid content-start gap-4">
+    <div className="transfer-panel">
       {lhostField && (
-        <label className="grid grid-cols-[max-content_minmax(0,14rem)] items-center gap-3">
-          <span className="font-mono text-code text-muted">LHOST</span>
+        <label className="transfer-panel__lhost">
+          <span className="transfer-panel__token">LHOST</span>
           <Input
             mono aria-label="LHOST" ref={lhostRef} value={fit.lhostInput} placeholder={lhostPlaceholder(fit.settingsLhost)}
             onChange={(e) => usePayloadsStore.getState().setLhost(e.target.value)}

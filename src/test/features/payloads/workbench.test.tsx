@@ -207,7 +207,7 @@ describe("Payloads Workbench", () => {
     expect(exec.getAllByRole("listitem").map((s) => within(s).getByRole("heading").textContent)).toEqual(["COPY FROM PROGRAM reverse shell"]);
     // A step that does not apply in a client session is a muted line, not a crash.
     await user.click(sql.getByRole("button", { name: "Client session" }));
-    expect(within(steps[0]!).getByText(/does not apply in a client session/)).toHaveClass("text-muted");
+    expect(within(steps[0]!).getByText(/does not apply in a client session/)).toHaveClass("sql-payload__muted");
   });
 
   it("the SQL generator in the drawer uses the same panel", async () => {
@@ -266,7 +266,7 @@ describe("Payloads Workbench", () => {
     await user.click(sql.getByRole("button", { name: "Copy Version" }));
     expect(await navigator.clipboard.readText()).toBe("untouched");
     expect(sql.getByRole("textbox", { name: "Columns" })).toHaveFocus();
-    expect(sql.getByText("{COLUMNS} not filled. Copy again to copy anyway")).toHaveClass("text-warn");
+    expect(sql.getByText("{COLUMNS} not filled. Copy again to copy anyway")).toHaveClass("sql-payload__armed");
     // Another injection point is another payload: the old confirm does not carry over.
     await user.click(sql.getByRole("button", { name: "Form field" }));
     await user.click(sql.getByRole("button", { name: "Copy Version" }));
@@ -363,7 +363,7 @@ describe("Payloads Workbench", () => {
     }
     // The chip's column never shrinks below 10rem, so a short or missing name still reads as a control.
     const chip = read().getByRole("button", { name: "Host zzweb01" });
-    expect(chip.closest("[data-host-chip-cell]")).toHaveClass("grid-cols-[minmax(10rem,max-content)]");
+    expect(chip.closest("[data-host-chip-cell]")).toHaveClass("payloads-workbench__host-cell");
   });
 
   it("Esc leaves the Workbench", async () => {

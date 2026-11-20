@@ -15,14 +15,15 @@ import { ToolsPicker } from "./ToolsPicker";
 import { FILTER_LABEL, hasToggles, OS_LABEL, showsFilter } from "./usePayloadFit";
 import { GENERATOR_LIST_ID, GENERATORS, hintsFor, inGeneratorList, isGenerator, lhostPlaceholder, otherDrawerOpen, usePayloadSession } from "./usePayloadSession";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
+import "./PayloadsWorkbench.scss";
 
 /** One labelled block of the left column, with the line saying where the value came from (amber when unknown). */
 function ReadItem({ label, why, unknown, children }: { label: string; why?: string | null; unknown?: string; children: ReactNode }) {
   return (
-    <div className="grid gap-2">
-      <span className="text-meta text-muted-2">{label}</span>
+    <div className="read-item">
+      <span className="read-item__label">{label}</span>
       {children}
-      {why ? <span className="text-meta text-muted">{why}</span> : unknown && <span className="text-meta text-warn">{unknown}</span>}
+      {why ? <span className="read-item__why">{why}</span> : unknown && <span className="read-item__unknown">{unknown}</span>}
     </div>
   );
 }
@@ -77,46 +78,46 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
   };
 
   return (
-    <main aria-label="Payloads" data-hint-surface="" className="raven-page grid h-full min-h-0 grid-cols-[360px_minmax(0,1fr)]" onKeyDown={s.onKeyDown}>
-      <aside role="complementary" aria-label="Raven's read" className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden border-r border-line px-6 py-4">
-        <h2 className={`${labelClass} m-0`}>Raven's read</h2>
+    <main aria-label="Payloads" data-hint-surface="" className="raven-page payloads-workbench" onKeyDown={s.onKeyDown}>
+      <aside role="complementary" aria-label="Raven's read" className="payloads-workbench__read">
+        <h2 className={labelClass}>Raven's read</h2>
         <ReadItem label="Target">
           {engagementId ? (
             // The chip's column never shrinks below 10rem, so a short name (or "No host") still reads as a control.
-            <div data-host-chip-cell="" className="grid grid-cols-[minmax(10rem,max-content)] justify-start">
-              <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={s.setHostId} align="start" className="max-w-80" />
+            <div data-host-chip-cell="" className="payloads-workbench__host-cell">
+              <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={s.setHostId} align="start" className="payloads-workbench__host" />
             </div>
           ) : (
-            <span className="text-meta text-fg-2">No active engagement</span>
+            <span className="payloads-workbench__no-engagement">No active engagement</span>
           )}
         </ReadItem>
         <ReadItem label="OS" why={fit.evidence.os} unknown="Not known: pick one">
-          <div ref={choiceGroup(osRef)} className="grid grid-cols-2 gap-2">
+          <div ref={choiceGroup(osRef)} className="payloads-workbench__choices">
             {(["linux", "windows"] as const).map((o) => (
-              <Toggle key={o} on={fit.os === o} onChange={() => override({ os: o })} className="justify-center">{OS_LABEL[o]}</Toggle>
+              <Toggle key={o} on={fit.os === o} onChange={() => override({ os: o })} className="payloads-workbench__choice">{OS_LABEL[o]}</Toggle>
             ))}
           </div>
         </ReadItem>
         <ReadItem label="Where you paste it" why={fit.evidence.context} unknown="Not known: pick one">
-          <div ref={choiceGroup(contextRef)} className="grid grid-cols-2 gap-2">
+          <div ref={choiceGroup(contextRef)} className="payloads-workbench__choices">
             {contexts.map((c) => (
               // A long label truncates in its half of the column: the title keeps it whole.
-              <Toggle key={c.id} on={fit.context === c.id} onChange={() => override({ context: c.id })} title={c.label} className="min-w-0 justify-center">
-                <span className="min-w-0 truncate">{c.label}</span>
+              <Toggle key={c.id} on={fit.context === c.id} onChange={() => override({ context: c.id })} title={c.label} className="payloads-workbench__choice payloads-workbench__choice--long">
+                <span className="payloads-workbench__choice-text">{c.label}</span>
               </Toggle>
             ))}
           </div>
         </ReadItem>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-2">
-            <span className="text-meta text-muted-2">LHOST</span>
+        <div className="payloads-workbench__listen">
+          <label className="payloads-workbench__field">
+            <span className="payloads-workbench__field-label">LHOST</span>
             <Input
               mono aria-label="LHOST" ref={register("LHOST")} value={fit.lhostInput} placeholder={lhostPlaceholder(fit.settingsLhost)}
               onChange={(e) => usePayloadsStore.getState().setLhost(e.target.value)}
             />
           </label>
-          <label className="grid gap-2">
-            <span className="text-meta text-muted-2">LPORT</span>
+          <label className="payloads-workbench__field">
+            <span className="payloads-workbench__field-label">LPORT</span>
             <Input
               mono aria-label="LPORT" ref={register("LPORT")} value={fit.portInput} placeholder={fit.settingsPort ? `Settings: ${fit.settingsPort}` : "443"} inputMode="numeric"
               onChange={(e) => override({ port: e.target.value.replace(/\D/g, "") })}
@@ -125,21 +126,21 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
         </div>
         {toggles && (
           <ReadItem label="Callbacks" why={blocked ? "set by you: binds first" : null}>
-            <div ref={choiceGroup(callbacksRef)} className="grid grid-cols-2 gap-2">
-              <Toggle on={!blocked} onChange={() => override({ callbacksBlocked: false })} className="justify-center">
-                <span className={clue ? "text-warn" : undefined}>Allowed</span>
+            <div ref={choiceGroup(callbacksRef)} className="payloads-workbench__choices">
+              <Toggle on={!blocked} onChange={() => override({ callbacksBlocked: false })} className="payloads-workbench__choice">
+                <span className={clue ? "payloads-workbench__clue" : undefined}>Allowed</span>
               </Toggle>
-              <Toggle on={blocked} onChange={() => override({ callbacksBlocked: true })} className="justify-center">Blocked</Toggle>
+              <Toggle on={blocked} onChange={() => override({ callbacksBlocked: true })} className="payloads-workbench__choice">Blocked</Toggle>
             </div>
-            {clue && <span className="text-meta text-warn">{clue}</span>}
+            {clue && <span className="payloads-workbench__clue-line">{clue}</span>}
           </ReadItem>
         )}
         {showsFilter(generator, fit.filterApplies) && (
           <ReadItem label="Filter">
-            <div ref={choiceGroup(filterRef)} className="grid grid-cols-2 gap-2">
+            <div ref={choiceGroup(filterRef)} className="payloads-workbench__choices">
               {filterChoices(fit.os).map((f) => (
-                <Toggle key={f} on={fit.filter === f} onChange={() => override({ filter: f })} title={f === "off" ? "Off" : FILTER_LABEL[f]} className="min-w-0 justify-center">
-                  <span className="min-w-0 truncate">{f === "off" ? "Off" : FILTER_LABEL[f]}</span>
+                <Toggle key={f} on={fit.filter === f} onChange={() => override({ filter: f })} title={f === "off" ? "Off" : FILTER_LABEL[f]} className="payloads-workbench__choice payloads-workbench__choice--long">
+                  <span className="payloads-workbench__choice-text">{f === "off" ? "Off" : FILTER_LABEL[f]}</span>
                 </Toggle>
               ))}
             </div>
@@ -147,22 +148,22 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
         )}
         {toggles && (
           <ReadItem label="Tools">
-            <div className="grid justify-start">
+            <div className="payloads-workbench__tools">
               <ToolsPicker ref={toolsRef} own={fit.toggles.tools} log={fit.logTools} onChange={(tools) => override({ tools })} />
             </div>
           </ReadItem>
         )}
         <ReadItem label="Exam rules">
-          <span className={cx("text-meta", exam ? "text-fg-2" : "text-muted")}>
+          <span className={cx("payloads-workbench__exam", exam && "payloads-workbench__exam--limits")}>
             {exam ? `Meterpreter: one machine only. ${msfHost ? `Locked to ${msfHost}.` : "Not locked yet."}` : "No exam limits."}
           </span>
         </ReadItem>
-        <div className="grid gap-2 border-t border-line pt-3">
+        <div className="payloads-workbench__generators">
           <span className={labelClass}>Generator</span>
           <div
             id={GENERATOR_LIST_ID} ref={listRef} role="listbox" aria-label="Generator" tabIndex={0}
             aria-activedescendant={`payloads-gen-${generator}`} onKeyDown={onListKey}
-            className="grid gap-1 rounded-sm"
+            className="payloads-workbench__generator-list"
           >
             {GENERATORS.map((g, i) => (
               <div
@@ -171,12 +172,9 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
                   usePayloadsStore.getState().setGenerator(g.id);
                   listRef.current?.focus();
                 }}
-                className={cx(
-                  "grid min-h-8 cursor-default grid-cols-[minmax(0,1fr)_max-content] items-center rounded-sm px-2 py-1 text-body",
-                  generator === g.id ? "bg-surface-hi text-accent shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2 hover:bg-surface-hi",
-                )}
+                className="payloads-workbench__generator"
               >
-                <span className="truncate">{g.label}</span>
+                <span className="payloads-workbench__generator-name">{g.label}</span>
                 <Kbd variant="inline">⌥{i + 1}</Kbd>
               </div>
             ))}
@@ -184,8 +182,8 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
         </div>
       </aside>
 
-      <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-        <div ref={bodyRef} tabIndex={-1} className="min-h-0 overflow-y-auto overflow-x-hidden px-6 py-6 outline-none">
+      <div className="payloads-workbench__main">
+        <div ref={bodyRef} tabIndex={-1} className="payloads-workbench__output">
           {ranked && (
             <PayloadView
               fits={ranked.fits} misfits={ranked.misfits} marks={ranked.marks} index={index} onIndex={setIndex} ordered={ranked.ordered}
@@ -193,9 +191,9 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
             />
           )}
           {generator === "encode" && (
-            <div className="grid content-start gap-3">
-              <label className="grid gap-2">
-                <span className="text-meta text-muted-2">PowerShell command to encode</span>
+            <div className="payloads-workbench__encode">
+              <label className="payloads-workbench__field">
+                <span className="payloads-workbench__field-label">PowerShell command to encode</span>
                 <Input mono ref={psRef} aria-label="PowerShell command" value={s.psCommand} onChange={(e) => s.setPsCommand(e.target.value)} />
               </label>
               {built && (
@@ -208,9 +206,9 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
           )}
           {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} fit={fit} focusToken={s.focusToken} autoFocus={!inGeneratorList()} />}
           {generator === "sql" && <SqlPanel fit={fit} onFocusToken={s.focusToken} />}
-          {s.status && <p role="alert" className="m-0 mt-2 text-meta text-warn">{s.status}</p>}
+          {s.status && <p role="alert" className="payloads-workbench__status">{s.status}</p>}
         </div>
-        <footer className="grid border-t border-line px-6 py-2">
+        <footer className="payloads-workbench__footer">
           <HintLine hints={hints} ariaLabel="Payloads shortcuts" />
         </footer>
       </div>

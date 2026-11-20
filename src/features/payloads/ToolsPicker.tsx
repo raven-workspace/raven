@@ -6,6 +6,7 @@ import { cx } from "../../lib/cx";
 import { PickerTrigger } from "../../ui";
 import type { ChipPickerHandle } from "../arsenal/ChipPicker";
 import { useEscapeWhile } from "../../lib/keys";
+import "./ToolsPicker.scss";
 
 type Tick = "present" | "missing";
 type State = "unknown" | Tick;
@@ -95,7 +96,7 @@ export function ToolsPicker({ own, log, onChange, align = "start", ref }: {
     // it shifts to stay inside the window and flips above the chip near the bottom. Focus stays on the trigger.
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Anchor asChild>
-        <div className="grid min-w-0">
+        <div className="tools-picker">
           <PickerTrigger
             ref={buttonRef} prefix="Tools" value={summary} aria-label={`Tools: ${summary}`} aria-haspopup="listbox" aria-expanded={open}
             {...(open ? { "aria-controls": listId, "aria-activedescendant": `${listId}-${active}` } : {})}
@@ -116,7 +117,7 @@ export function ToolsPicker({ own, log, onChange, align = "start", ref }: {
           // Keeps focus on the trigger so its keys keep working and blur does not close the list first.
           onMouseDown={(e) => e.preventDefault()}
           // One column grid shared by every row (subgrid), so the choices line up whether a row says "unknown" or "from your log".
-          className="z-50 grid max-h-[var(--radix-popover-content-available-height)] grid-cols-[6.5rem_repeat(3,max-content)] overflow-y-auto rounded-md border border-line-2 bg-surface p-1 text-body shadow-lg"
+          className="tools-picker__list"
         >
           {TOOLS.map((t, i) => {
             const state = stateOf(t, own, log);
@@ -128,25 +129,17 @@ export function ToolsPicker({ own, log, onChange, align = "start", ref }: {
                 key={t} id={`${listId}-${i}`} role="option" aria-selected={i === active}
                 aria-label={`${TOOL_LABEL[t]}: ${STATE_LABEL[state]}${source}`}
                 onMouseMove={() => setActive(i)}
-                className={cx(
-                  "col-span-full grid cursor-default grid-cols-subgrid items-center gap-2 rounded-sm px-2 py-1",
-                  i === active ? "bg-accent/10 shadow-[inset_2px_0_0_var(--accent)]" : "",
-                )}
+                className="tools-picker__option"
               >
                 {/* What the log says sits under the name, so the list stays narrow. */}
-                <span className="grid min-w-0">
-                  <span className={cx("truncate", i === active ? "text-accent" : "text-fg-2")}>{TOOL_LABEL[t]}</span>
-                  {said !== undefined && <span className="truncate text-meta text-muted">log: {STATE_LABEL[said]}</span>}
+                <span className="tools-picker__tool">
+                  <span className="tools-picker__name">{TOOL_LABEL[t]}</span>
+                  {said !== undefined && <span className="tools-picker__log">log: {STATE_LABEL[said]}</span>}
                 </span>
                 {CHOICES.map((c) => (
                   <span
                     key={c} aria-hidden onClick={() => onChange(withChoice(own, t, c))}
-                    className={cx(
-                      "rounded-sm px-1 text-meta ring-1 ring-inset",
-                      c === choice
-                        ? c === "missing" ? "text-warn ring-warn" : c === "present" ? "text-accent ring-accent" : "text-fg-2 ring-line-2"
-                        : "text-muted ring-transparent hover:text-fg-2",
-                    )}
+                    className={cx("tools-picker__choice", c === choice ? `tools-picker__choice--${c}` : "tools-picker__choice--idle")}
                   >
                     {c === "auto" ? autoLabel(t, log) : STATE_LABEL[c]}
                   </span>

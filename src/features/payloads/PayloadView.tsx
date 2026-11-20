@@ -4,12 +4,13 @@ import type { BuiltPayload, ListenerId, PayloadDef, PayloadPart } from "../../en
 import { cx } from "../../lib/cx";
 import { CommandBlock, Disclosure, Kbd, labelClass } from "../../ui";
 import { ChipPicker } from "../arsenal/ChipPicker";
+import "./PayloadView.scss";
 
 type CopyResult = Promise<"copied" | "guarded">;
 
 /** A copy guard note under one block; `warn` says whether it is a hold-back (amber) or a confirmation (muted). */
 const Note = ({ text, warn }: { text?: string | null; warn?: boolean }) =>
-  text ? <p role="status" className={`m-0 text-meta ${warn ? "text-warn" : "text-muted"}`}>{text}</p> : null;
+  text ? <p role="status" className={cx("payload-block__note", warn && "payload-block__note--warn")}>{text}</p> : null;
 
 /**
  * One built payload: the Kali-side prepare step for a served file, the listener, the payload to paste (or, for an
@@ -57,9 +58,9 @@ export function PayloadBlock({
     const at = pasteFile ? pasteLabel.indexOf(pasteFile) : -1;
     if (!pasteFile || at < 0) return heading("payload", pasteLabel);
     const head = heading("payload", pasteLabel.slice(0, at));
-    return <>{head}<code data-upload-file="" className="font-mono normal-case">{pasteFile}</code>{pasteLabel.slice(at + pasteFile.length)}</>;
+    return <>{head}<code data-upload-file="" className="payload-block__file">{pasteFile}</code>{pasteLabel.slice(at + pasteFile.length)}</>;
   };
-  const staleLine = (step: Step) => first === step && <p className="m-0 text-meta text-warn">{stale}</p>;
+  const staleLine = (step: Step) => first === step && <p className="payload-block__stale">{stale}</p>;
 
   const listeners = built.def.listeners;
   // A bind shell's "listener" is the client you connect with, so its chip says so under "Connect from Kali".
@@ -75,18 +76,18 @@ export function PayloadBlock({
   );
   const blocks: Record<Step, () => ReactNode> = {
     prepare: () => (
-      <section key="prepare" className="grid gap-2">
+      <section key="prepare" className="payload-block__step">
         {staleLine("prepare")}
-        <h3 className={`${labelClass} m-0`}>{heading("prepare", "Prepare on Kali")}</h3>
+        <h3 className={labelClass}>{heading("prepare", "Prepare on Kali")}</h3>
         <CommandBlock text={built.prepare!} name="Prepare on Kali" copyLabel="Copy prepare on Kali" onCopyAction={onCopyPrepare} placeholders />
         <Note text={prepareNote} warn={noteWarn} />
       </section>
     ),
     listener: () => (
-      <section key="listener" className="grid gap-2">
+      <section key="listener" className="payload-block__step">
         {/* The heading, with the listener picker on its right when the payload has more than one. */}
-        <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3">
-          <h3 className={`${labelClass} m-0`}>
+        <div className="payload-block__step-head">
+          <h3 className={labelClass}>
             {heading("listener", numbered && built.listenerHeading === "Listener" ? "Listener on Kali" : built.listenerHeading)}
           </h3>
           {listenerPicker}
@@ -96,33 +97,33 @@ export function PayloadBlock({
       </section>
     ),
     payload: () => (
-      <section key="payload" className="grid gap-2">
+      <section key="payload" className="payload-block__step">
         {staleLine("payload")}
-        {lock && <p className={`m-0 text-meta ${lock.breach ? "text-warn" : "text-muted"}`}>{lock.text}</p>}
-        <h3 className={`${labelClass} m-0`}>{payloadHeading()}</h3>
+        {lock && <p className={cx("payload-block__lock", lock.breach && "payload-block__lock--breach")}>{lock.text}</p>}
+        <h3 className={labelClass}>{payloadHeading()}</h3>
         {/* A key to press (Ctrl-Z) is shown as a key, with no Copy. */}
         {built.def.keypress
-          ? <p className="m-0"><Kbd className="h-7 px-2 text-code">{built.text}</Kbd></p>
+          ? <p><Kbd className="payload-block__key">{built.text}</Kbd></p>
           : <CommandBlock text={built.text} name="Payload" copyLabel="Copy payload" onCopyAction={onCopy} placeholders />}
         <Note text={note} warn={noteWarn} />
       </section>
     ),
     trigger: () => (
-      <section key="trigger" className="grid gap-2">
-        <h3 className={`${labelClass} m-0`}>{heading("trigger", "Trigger it")}</h3>
+      <section key="trigger" className="payload-block__step">
+        <h3 className={labelClass}>{heading("trigger", "Trigger it")}</h3>
         <CommandBlock text={built.trigger!.text} name="Trigger" copyLabel="Copy trigger" onCopyAction={onCopyTrigger} placeholders />
         <Note text={triggerNote} warn={noteWarn} />
       </section>
     ),
   };
   return (
-    <div className="grid gap-4">
+    <div className="payload-block">
       {fields}
       {order.map((step) => blocks[step]())}
       <PartsList title="What each part does" parts={built.parts.filter((p) => !p.decoded)} />
       <PartsList title="Inside the base64 script" parts={built.parts.filter((p) => p.decoded)} />
       {built.notes.length > 0 && (
-        <ul className="m-0 grid list-none gap-1 p-0 text-meta text-muted">
+        <ul className="payload-block__notes">
           {built.notes.map((n) => <li key={n}>{n}</li>)}
         </ul>
       )}
@@ -135,13 +136,13 @@ function PartsList({ title, parts }: { title: string; parts: PayloadPart[] }) {
   const id = useId();
   if (parts.length === 0) return null;
   return (
-    <section aria-labelledby={id} className="grid gap-2">
-      <h3 id={id} className={`${labelClass} m-0`}>{title}</h3>
-      <dl className="m-0 grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-3 gap-y-1 text-meta">
+    <section aria-labelledby={id} className="payload-parts">
+      <h3 id={id} className={labelClass}>{title}</h3>
+      <dl className="payload-parts__list">
         {parts.map((p) => (
-          <div key={p.token} className="contents">
-            <dt className="break-all font-mono text-code text-fg">{p.token}</dt>
-            <dd className="m-0 text-muted">{p.explain}</dd>
+          <div key={p.token} className="payload-parts__item">
+            <dt className="payload-parts__token">{p.token}</dt>
+            <dd className="payload-parts__explain">{p.explain}</dd>
           </div>
         ))}
       </dl>
@@ -180,15 +181,12 @@ function FitRow({ def, best, marks, selected, onSelect, id }: {
   return (
     <div
       id={id} role="option" aria-selected={selected} onClick={onSelect} title={def.title}
-      className={cx(
-        "grid min-h-9 cursor-default grid-cols-[minmax(0,max-content)_minmax(0,1fr)] items-center gap-4 border-t border-line px-3 py-2 first:border-t-0",
-        selected ? "bg-surface-hi shadow-[inset_2px_0_0_var(--accent)]" : "hover:bg-surface-hi",
-      )}
+      className="fit-row"
     >
-      <span data-fit-name="" className={cx("min-w-0 truncate text-body", selected ? "font-medium text-accent" : "text-fg")}>{def.title}</span>
-      <span className="min-w-0 truncate text-right text-meta text-muted" title={all.join(", ")}>
-        {best && <span className="text-fg-2">Best fit</span>}
-        {all.map((r, i) => <span key={r} className={cx((best || i > 0) && "ml-3", i < marks.length && "text-warn")}>{r}</span>)}
+      <span data-fit-name="" className="fit-row__name">{def.title}</span>
+      <span className="fit-row__reasons" title={all.join(", ")}>
+        {best && <span className="fit-row__best">Best fit</span>}
+        {all.map((r, i) => <span key={r} className={cx("fit-row__reason", (best || i > 0) && "fit-row__reason--spaced", i < marks.length && "fit-row__reason--mark")}>{r}</span>)}
       </span>
     </div>
   );
@@ -222,33 +220,33 @@ export function PayloadView({ fits, misfits, marks = {}, index, onIndex, ordered
   };
   return (
     // Positioned, so the sr-only heading below stays inside whichever pane scrolls this view.
-    <div className="relative grid content-start gap-4">
-      <div className="grid gap-2">
-        {fitsLine && <p className="m-0 text-meta text-muted">{fitsLine}</p>}
-        <div className="grid overflow-hidden rounded-md border border-line-2">
+    <div className="payload-view">
+      <div className="payload-view__fits">
+        {fitsLine && <p className="payload-view__line">{fitsLine}</p>}
+        <div className="payload-view__box">
           {fits.length > 0 ? (
             <div
               role="listbox" aria-label={ordered ? "Steps" : "Fits"} tabIndex={0} onKeyDown={onListKey}
               aria-activedescendant={`${listId}-${index}`}
-              className="grid focus-visible:outline-offset-[-2px]"
+              className="payload-view__list"
             >
               {fits.map((d, i) => (
                 <FitRow key={d.id} id={`${listId}-${i}`} def={d} best={!ordered && i === 0} marks={marks[d.id] ?? []} selected={i === index} onSelect={() => onIndex(i)} />
               ))}
             </div>
           ) : (
-            <p className="m-0 px-3 py-2 text-meta text-muted">Nothing fits what is known about this host. Check the reasons below, or change OS or paste context above.</p>
+            <p className="payload-view__none">Nothing fits what is known about this host. Check the reasons below, or change OS or paste context above.</p>
           )}
           {misfits.length > 0 && (
-            // pl-1 + the Disclosure's own 4px: the caret's stroke (6px into its 16px box) lands on the fit names' 12px edge.
-            <div className="border-t border-line py-1 pr-2 pl-1">
+            // 4px of left padding + the Disclosure's own 4px: the caret's stroke (6px into its 16px box) lands on the fit names' 12px edge.
+            <div className="payload-view__misfits">
               <Disclosure label="Don't fit here" count={misfits.length} open={misfitsOpen} onOpenChange={setMisfitsOpen}>
-                <ul aria-label="Don't fit here" className="m-0 grid list-none gap-1 p-0 pt-1 pb-2">
+                <ul aria-label="Don't fit here" className="payload-view__misfit-list">
                   {misfits.map(({ def, reason }) => (
-                    <li key={def.id} className="grid grid-cols-[16px_minmax(0,14rem)_minmax(0,1fr)] items-start gap-2 px-1 text-meta">
+                    <li key={def.id} className="payload-view__misfit">
                       <span />
-                      <span className="truncate text-fg-2" title={def.title}>{def.title}</span>
-                      <span className="text-muted">{reason}</span>
+                      <span className="payload-view__misfit-name" title={def.title}>{def.title}</span>
+                      <span className="payload-view__misfit-reason">{reason}</span>
                     </li>
                   ))}
                 </ul>
@@ -260,7 +258,7 @@ export function PayloadView({ fits, misfits, marks = {}, index, onIndex, ordered
       {current && built && (
         <>
           {/* The fit list already shows the picked name; the heading stays for the outline and screen readers. */}
-          <h2 className="sr-only">{current.title}</h2>
+          <h2 className="payload-view__heading">{current.title}</h2>
           <PayloadBlock built={built} {...block} />
         </>
       )}

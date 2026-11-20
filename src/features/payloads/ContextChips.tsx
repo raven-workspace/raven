@@ -7,6 +7,7 @@ import { ChipSet, Input } from "../../ui";
 import { ToolsPicker } from "./ToolsPicker";
 import { contextLabel, FILTER_LABEL, OS_LABEL, type PayloadFit } from "./usePayloadFit";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
+import "./ContextChips.scss";
 
 const SUGGESTED_PORTS = ["443", "80"];
 /** The Port chip's last option: opens an inline field for any port. */
@@ -77,17 +78,17 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
   };
   const clue = toggleRow && !toggles.callbacksBlocked ? callbackClue : null;
   return (
-    <div className="grid gap-2 border-b border-line px-4 py-3">
+    <div className="context-chips">
       {/* Not a table: labelled settings, mostly inferred, read at a glance. Like the status strip they flow as runs of
           "Label value ⌄", borderless (the background shows on hover), 24px apart, wrapping only when the drawer is too
           narrow: the target (host, OS, paste context, port), then what gets out and what the box has. The runs sit 8px
           out so each label lines up with the text below. */}
-      <div className="-mx-2 grid gap-1 [&_[data-picker-trigger]]:border-transparent">
-      <ChipSet className="items-start">
+      <div className="context-chips__runs">
+      <ChipSet className="context-chips__run">
         {engagementId ? (
-          <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={onHost} align="start" className="max-w-full" {...mouse} />
+          <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={onHost} align="start" className="context-chips__host" {...mouse} />
         ) : (
-          <span className="px-2 py-1 text-meta text-muted">No host</span>
+          <span className="context-chips__no-host">No host</span>
         )}
         <Chip
           ref={osRef} name="OS" value={os ? OS_LABEL[os] : null} current={os}
@@ -101,7 +102,7 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
           onPick={(id) => set({ context: id as (typeof contexts)[number]["id"] })} {...mouse}
           title={`${why.context}. Pick to override for this host (⌥W)`}
         />
-        <div className="grid content-start gap-1">
+        <div className="context-chips__port">
           <Chip
             ref={portRef} name="Port" value={port || null} current={port || null}
             title={`${why.port}. Pick to override for this host`}
@@ -114,7 +115,7 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
             {...(onDone ? { onMousePick: (id: string | null) => id !== OTHER_PORT && onDone() } : {})}
           />
           {field && (
-            <div className="grid w-24 content-start gap-1">
+            <div className="context-chips__custom">
               <Input
                 mono autoFocus aria-label="Custom port" placeholder="port" inputMode="numeric" value={field.text} data-own-esc=""
                 {...(field.invalid ? { "aria-invalid": true, "aria-describedby": noteId } : {})}
@@ -134,14 +135,14 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
                 }}
                 onBlur={() => !closing.current && closeCustom(true)}
               />
-              {field.invalid && <span id={noteId} className="text-meta text-warn">1–65535</span>}
+              {field.invalid && <span id={noteId} className="context-chips__invalid">1–65535</span>}
             </div>
           )}
         </div>
       {/* What gets out and what the box has: callbacks, a filter wrapper where it applies, the tools. */}
       </ChipSet>
         {toggleRow && (
-          <ChipSet className="items-start">
+          <ChipSet className="context-chips__run">
           <Chip
             ref={callbacksRef} name="Callbacks" value={toggles.callbacksBlocked ? "blocked" : "allowed"} current={toggles.callbacksBlocked ? "blocked" : "allowed"}
             options={[{ id: "allowed", name: "allowed" }, { id: "blocked", name: "blocked", detail: "binds first" }]}
@@ -161,7 +162,7 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
         )}
       </div>
       {/* Where each value came from is in its picker's tooltip; only a callback clue earns a line, in amber. */}
-      {clue && <p className="m-0 text-meta text-warn">{clue}</p>}
+      {clue && <p className="context-chips__clue">{clue}</p>}
     </div>
   );
 }

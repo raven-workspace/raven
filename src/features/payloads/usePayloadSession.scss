@@ -1,0 +1,21 @@
+@use "@/styles/abstracts" as *;
+
+// A payload's fill fields (LHOST and its other placeholders): token names in one column, their inputs in the next.
+@layer features {
+  .payload-fields {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-md);
+    row-gap: var(--space-sm);
+  }
+
+  .payload-fields__field {
+    display: contents;
+  }
+
+  .payload-fields__token {
+    @include type(code);
+    color: var(--muted);
+  }
+}

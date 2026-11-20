@@ -12,6 +12,7 @@ import { hasToggles, showsFilter } from "./usePayloadFit";
 import { GENERATOR_LIST_ID, GENERATORS, hintsFor, usePayloadSession } from "./usePayloadSession";
 import { usePayloadsStore } from "./usePayloadsStore";
 import { TabMarker } from "../../ui/TabMarker";
+import "./PayloadsDrawer.scss";
 
 const TABBABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]";
 /** The drawer's Tab stops, in order. */
@@ -53,15 +54,15 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
 
   return (
     <div
-      className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]"
+      className="payloads-drawer__body"
       onKeyDown={(e) => {
         s.onKeyDown(e);
         wrapTab(e);
       }}
     >
-      <header className="grid grid-cols-[minmax(0,1fr)_28px] items-center gap-2 border-b border-line px-4 py-2">
-        <div role="tablist" aria-label="Generator" className="relative isolate grid grid-flow-col justify-start gap-1 overflow-hidden">
-          <TabMarker className="rounded-sm ring-1 ring-inset ring-accent" />
+      <header className="payloads-drawer__header">
+        <div role="tablist" aria-label="Generator" className="payloads-drawer__tabs">
+          <TabMarker className="payloads-drawer__marker" />
           {GENERATORS.map((g, i) => (
             <button
               key={g.id} type="button" role="tab" aria-selected={generator === g.id} title={`⌥${i + 1}`}
@@ -69,7 +70,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
               // An inset ring, not a border: six tabs at 13px fit the 560px drawer beside Full screen. Only the selected one
               // is outlined (accent, the list's TabMarker, which glides to it); the rest are plain until hovered, so the
               // row reads as one choice, not six boxes.
-              className={`h-7 cursor-default whitespace-nowrap rounded-sm px-2 text-meta ${generator === g.id ? "text-accent" : "text-fg-2 hover:bg-surface-hi hover:text-fg"}`}
+              className="payloads-drawer__tab"
             >
               {g.label}
             </button>
@@ -86,7 +87,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
       <ContextChips fit={fit} engagementId={engagementId} onHost={s.setHostId} onDone={() => bodyRef.current?.focus()} toggleRow={hasToggles(generator)} filterChip={showsFilter(generator, fit.filterApplies)} hostRef={hostRef} osRef={osRef} contextRef={contextRef} portRef={portRef}
         callbacksRef={callbacksRef} filterRef={filterRef} toolsRef={toolsRef}
       />
-      <div ref={bodyRef} tabIndex={-1} className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 outline-none">
+      <div ref={bodyRef} tabIndex={-1} className="payloads-drawer__output">
         {ranked && (
           <PayloadView
             fits={ranked.fits} misfits={ranked.misfits} marks={ranked.marks} index={index} onIndex={setIndex} ordered={ranked.ordered}
@@ -94,9 +95,9 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           />
         )}
         {generator === "encode" && (
-          <div className="grid content-start gap-3">
-            <label className="grid gap-2">
-              <span className="text-meta text-muted-2">PowerShell command to encode</span>
+          <div className="payloads-drawer__encode">
+            <label className="payloads-drawer__field">
+              <span className="payloads-drawer__field-label">PowerShell command to encode</span>
               <Input mono ref={psRef} aria-label="PowerShell command" value={s.psCommand} onChange={(e) => s.setPsCommand(e.target.value)} />
             </label>
             {built && (
@@ -109,9 +110,9 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         )}
         {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} fit={fit} lhostField focusToken={s.focusToken} />}
         {generator === "sql" && <SqlPanel fit={fit} onFocusToken={s.focusToken} lhostField />}
-        {s.status && <p role="alert" className="m-0 mt-2 text-meta text-warn">{s.status}</p>}
+        {s.status && <p role="alert" className="payloads-drawer__status">{s.status}</p>}
       </div>
-      <footer className="grid border-t border-line px-4 py-2">
+      <footer className="payloads-drawer__footer">
         <HintLine hints={hints} ariaLabel="Payloads shortcuts" />
       </footer>
     </div>
@@ -154,7 +155,7 @@ export function PayloadsDrawer() {
 
   if (!present) return null;
   return (
-    <aside ref={drawerRef} aria-label="Payloads" data-hint-surface="" className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid w-[560px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2`}>
+    <aside ref={drawerRef} aria-label="Payloads" data-hint-surface="" className={`payloads-drawer ${BELOW_TITLE_BAR}`}>
       <DrawerBody engagementId={engagementId} hostId={hostId} />
     </aside>
   );

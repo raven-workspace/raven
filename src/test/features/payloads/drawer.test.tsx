@@ -545,7 +545,7 @@ describe("Payloads drawer: chips and keys", () => {
       expect(field).toHaveFocus();
       expect(field).toHaveAttribute("aria-invalid", "true");
       expect(field).toHaveAccessibleDescription("1–65535");
-      expect(d.getByText("1–65535")).toHaveClass("text-warn");
+      expect(d.getByText("1–65535")).toHaveClass("context-chips__invalid");
       expect(usePayloadsStore.getState().overrides.h1?.port).toBeUndefined();
     }
     expect(await navigator.clipboard.readText()).toBe("untouched");
