@@ -75,11 +75,13 @@ export interface AuditFixtures {
 
 // ---------------------------------------------------------------- engagements
 
-const LAB_NAME = "Acme Corp — internal segment B (10.10.20.0/24) with the long-named finance DMZ";
+// Kept long (header-truncation coverage; fakeApi.test asserts ≥70 chars) but a natural engagement
+// name, not a meta description. The two areas match the two scope CIDRs below.
+const LAB_NAME = "Acme Corp — internal segment B, finance DMZ and backup VLAN (10.10.20.0/24, 10.10.21.0/24)";
 
 const engagements: Engagement[] = [
   {
-    id: "e-lab", name: LAB_NAME, kind: "lab", client: null, subLabel: "PEN-200 lab, challenge 3 (long-running)",
+    id: "e-lab", name: LAB_NAME, kind: "lab", client: null, subLabel: "Practice lab (long-running)",
     scopeCidrs: ["10.10.20.0/24", "10.10.21.0/24"], domain: "acme.corp", startsAt: null, endsAt: null,
     timeboxStart: null, timeboxMinutes: null, status: "active", createdAt: ago(72 * HOUR), updatedAt: ago(5 * MIN),
     lastActivityAt: ago(5 * MIN), lastRanOn: "Kali (VM)", msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
