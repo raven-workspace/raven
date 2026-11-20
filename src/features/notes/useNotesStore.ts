@@ -5,6 +5,7 @@ import { reportError } from "../../lib/lockSignal";
 import { RavenError } from "../../types/errors";
 import type { Note } from "../../types/notes";
 import { clearThreadCounts } from "./useThreadCounts";
+import { registerDrawer } from "../drawers";
 
 export type NotesScope = "host" | "engagement";
 
@@ -120,6 +121,7 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
     timer = setTimeout(flushQuietly, AUTOSAVE_MS);
   },
 }));
+registerDrawer("notes", useNotesStore);
 
 async function flushOnce(snapshot: Record<string, PendingNote>): Promise<void> {
   let failure: unknown;

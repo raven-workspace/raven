@@ -1,7 +1,7 @@
 //! Checklist item storage. The engine (TS) decides what the items mean; this module only
 //! persists them, keyed by (owner_id, goal_id) where owner_id is a host id or the engagement id.
 
-use crate::backup::system_now_ms;
+use crate::db::{check_scope, in_engagement, now_ms};
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -52,10 +52,6 @@ pub struct ChecklistItemInput {
     pub evidence: Vec<Evidence>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<ChecklistItem>> {
     let mut st = conn.prepare(
         "SELECT owner_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at, status_manual \
@@ -84,36 +80,24 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<ChecklistIt
 /// Upserts every item in one transaction (all or nothing) and returns the engagement's full list.
 pub fn put(conn: &Connection, engagement_id: &str, items: &[ChecklistItemInput]) -> AppResult<Vec<ChecklistItem>> {
     if items.len() > MAX_ITEMS {
-        return Err(invalid("items", "too many items (max 500)"));
+        return Err(AppError::validation("items", "too many items (max 500)"));
     }
-    let exists: bool =
-        conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
-    if !exists {
-        return Err(AppError::NotFound);
-    }
+    check_scope(conn, engagement_id, None)?;
     let tx = conn.unchecked_transaction()?;
-    let now = system_now_ms();
+    let now = now_ms();
     for it in items {
         if it.goal_id.trim().is_empty() {
-            return Err(invalid("goalId", "goal id is required"));
+            return Err(AppError::validation("goalId", "goal id is required"));
         }
         if !matches!(it.status.as_str(), "todo" | "in_progress" | "done" | "na") {
-            return Err(invalid("status", "status must be todo, in_progress, done or na"));
+            return Err(AppError::validation("status", "status must be todo, in_progress, done or na"));
         }
         if let Some(a) = &it.auto_from
             && !matches!(a.as_str(), "na" | "in_progress") {
-                return Err(invalid("autoFrom", "autoFrom must be na or in_progress"));
+                return Err(AppError::validation("autoFrom", "autoFrom must be na or in_progress"));
             }
-        let owned: bool = it.owner_id == engagement_id
-            || tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
-                params![it.owner_id, engagement_id],
-                |r| r.get(0),
-            )?;
-        if !owned {
-            return Err(invalid("ownerId", "owner is not part of this engagement"));
-        }
-        let evidence = serde_json::to_string(&it.evidence).map_err(|e| AppError::Db(e.to_string()))?;
+        check_owned(&tx, engagement_id, &it.owner_id)?;
+        let evidence = serde_json::to_string(&it.evidence)?;
         tx.execute(
             "INSERT INTO checklist_items \
                (owner_id, engagement_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at, status_manual) \
@@ -139,6 +123,31 @@ pub struct GoalRef {
     pub goal_id: String,
 }
 
+/// The owner must be the engagement itself or one of its hosts; otherwise `NotFound`.
+fn check_owned(conn: &Connection, engagement_id: &str, owner_id: &str) -> AppResult<()> {
+    if owner_id == engagement_id || in_engagement(conn, "hosts", engagement_id, owner_id)? {
+        Ok(())
+    } else {
+        Err(AppError::NotFound)
+    }
+}
+
+/// The checks `apply_cover` and `apply_facts` share: at most `MAX_ITEMS * 4` refs (else a `field` error), the
+/// engagement exists and every ref's owner is in it (else `NotFound`), and every ref names a goal.
+fn check_goal_refs(conn: &Connection, engagement_id: &str, field: &str, set: &[GoalRef], revert: &[GoalRef]) -> AppResult<()> {
+    if set.len() + revert.len() > MAX_ITEMS * 4 {
+        return Err(AppError::validation(field, "too many items"));
+    }
+    check_scope(conn, engagement_id, None)?;
+    for g in set.iter().chain(revert) {
+        check_owned(conn, engagement_id, &g.owner_id)?;
+        if g.goal_id.trim().is_empty() {
+            return Err(AppError::validation("goalId", "goal id is required"));
+        }
+    }
+    Ok(())
+}
+
 /// The domain admin cover, as conditional writes so a status set by hand is never overwritten (F-R1). `cover` goals
 /// become `na` with `auto` set, only where there is no row or the row is an untouched `todo` (not auto, not set by
 /// hand); notes and evidence stay. `revert` goals go back to `todo`, only where the row is cover-marked (`na`, auto,
@@ -149,27 +158,9 @@ pub fn apply_cover(
     cover: &[GoalRef],
     revert: &[GoalRef],
 ) -> AppResult<Vec<ChecklistItem>> {
-    if cover.len() + revert.len() > MAX_ITEMS * 4 {
-        return Err(invalid("cover", "too many items"));
-    }
-    let exists: bool =
-        conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
-    if !exists {
-        return Err(AppError::NotFound);
-    }
+    check_goal_refs(conn, engagement_id, "cover", cover, revert)?;
     let tx = conn.unchecked_transaction()?;
-    let now = system_now_ms();
-    for g in cover.iter().chain(revert.iter()) {
-        let owned: bool = g.owner_id == engagement_id
-            || tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
-                params![g.owner_id, engagement_id],
-                |r| r.get(0),
-            )?;
-        if !owned || g.goal_id.trim().is_empty() {
-            return Err(invalid("ownerId", "owner is not part of this engagement"));
-        }
-    }
+    let now = now_ms();
     for g in revert {
         tx.execute(
             "UPDATE checklist_items SET status='todo', auto=0, auto_from=NULL, completed_at=NULL, updated_at=?3 \
@@ -201,27 +192,9 @@ pub fn apply_facts(
     done: &[GoalRef],
     revert: &[GoalRef],
 ) -> AppResult<Vec<ChecklistItem>> {
-    if done.len() + revert.len() > MAX_ITEMS * 4 {
-        return Err(invalid("facts", "too many items"));
-    }
-    let exists: bool =
-        conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
-    if !exists {
-        return Err(AppError::NotFound);
-    }
+    check_goal_refs(conn, engagement_id, "facts", done, revert)?;
     let tx = conn.unchecked_transaction()?;
-    let now = system_now_ms();
-    for g in done.iter().chain(revert.iter()) {
-        let owned: bool = g.owner_id == engagement_id
-            || tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
-                params![g.owner_id, engagement_id],
-                |r| r.get(0),
-            )?;
-        if !owned || g.goal_id.trim().is_empty() {
-            return Err(invalid("ownerId", "owner is not part of this engagement"));
-        }
-    }
+    let now = now_ms();
     for g in revert {
         tx.execute(
             "UPDATE checklist_items SET status='todo', auto=0, auto_from=NULL, completed_at=NULL, updated_at=?3 \
@@ -507,10 +480,22 @@ mod tests {
         let e1 = eng(c);
         let e2 = eng(c);
         let h2 = host(c, &e2, "10.0.0.9");
-        assert!(matches!(put(c, &e1, &[item(&h2, "g", "todo")]), Err(AppError::Validation { .. })));
-        assert!(matches!(put(c, &e1, &[item(&e2, "g", "todo")]), Err(AppError::Validation { .. })));
-        assert!(matches!(put(c, &e1, &[item("nope", "g", "todo")]), Err(AppError::Validation { .. })));
+        assert_eq!(put(c, &e1, &[item(&h2, "g", "todo")]), Err(AppError::NotFound));
+        assert_eq!(put(c, &e1, &[item(&e2, "g", "todo")]), Err(AppError::NotFound));
+        assert_eq!(put(c, &e1, &[item("nope", "g", "todo")]), Err(AppError::NotFound));
+        assert_eq!(apply_cover(c, &e1, &[gref(&h2, "g")], &[]).map(|_| ()), Err(AppError::NotFound));
+        assert_eq!(apply_facts(c, &e1, &[], &[gref(&h2, "g")]).map(|_| ()), Err(AppError::NotFound));
         assert!(list(c, &e1).unwrap().is_empty());
+    }
+
+    #[test]
+    fn cover_and_facts_reject_a_blank_goal_id_as_goal_id() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let want = Err(AppError::validation("goalId", "goal id is required"));
+        assert_eq!(apply_cover(c, &e, &[gref(&e, " ")], &[]).map(|_| ()), want);
+        assert_eq!(apply_facts(c, &e, &[], &[gref(&e, "")]).map(|_| ()), want);
     }
 
     #[test]

@@ -1,3 +1,5 @@
+import type { Host } from "../types/host";
+
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
 /** The first DNS label of a host name; IPs and single labels come back unchanged. */
@@ -6,3 +8,6 @@ export function shortHostName(name: string): string {
   const label = name.split(".")[0];
   return label ? label : name;
 }
+
+/** A host as a label: its name, else its IP, else its id; "removed host" once it is gone. */
+export const hostLabel = (h: Host | undefined): string => (h ? h.name || h.ip || h.id : "removed host");

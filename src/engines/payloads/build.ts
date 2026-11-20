@@ -1,11 +1,10 @@
-import { utf16leBase64 } from "./encode";
+import { urlEncodeShell, utf16leBase64 } from "./encode";
 import { wrapForContext, type PasteContext } from "./context";
-import { applyFilter, FILTER_CONTEXTS, filterFitsOs, urlEncodeFiltered, type FilterId } from "./filters";
-import { fillListener, LISTENERS } from "./listeners";
+import { applyFilter, FILTER_CONTEXTS, filterFitsOs, type FilterId } from "./filters";
+import { fillListener, LISTENERS, PLACEHOLDER } from "./listeners";
 import { POWERSHELL_TCP } from "./psScripts";
 import type { BuiltPayload, ListenerId, PayloadDef } from "./types";
 
-const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
 /** The web server for a served file: 80, or 8000 when the listener takes 80, so the two never clash. */
 const ALT_SERVE_PORT = "8000";
 
@@ -99,7 +98,7 @@ export function buildPayload(
     notes.push(`${setFirst}: the script is encoded and wrapped for ${ctx} once it is.`);
   } else if (unresolved.length === 0 && filter && !(filter === "ps-b64" && def.encodePowerShell)) {
     const f = applyFilter(filled, filter);
-    text = ctx === "injected-linux" ? f.text : urlEncodeFiltered(f.text);
+    text = ctx === "injected-linux" ? f.text : urlEncodeShell(f.text);
     // Keep only def parts whose token still shows in the filtered text (outside the encoded blob), and not ones the
     // filter explains itself, so "what each part does" describes the shown output.
     const shown = f.text.replace(/[A-Za-z0-9+/=]{16,}|(?:\\x[0-9a-f]{2})+/g, " ");

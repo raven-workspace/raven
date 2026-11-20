@@ -6,13 +6,14 @@ import { serviceCoverage } from "./coverage";
 import { isWeakCaption } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
-import { byTime } from "./draft";
-import { entryIdsIn } from "./plain";
+import { byTime } from "./prove";
+import { entryIdsIn } from "./place";
 import { proofCompanions, proofFacts } from "./proof";
 import { sourceOf } from "./stamp";
 import { msfHosts, msfModules } from "./tools";
 import type { CoverageOverride, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
 import { absoluteClaims, splitAffected } from "./wording";
+import { escapeRegExp } from "../regex";
 
 export type CheckLevel = "fail" | "soft";
 export interface Check {
@@ -144,7 +145,7 @@ function credentialChecks(data: ReportData, hosts: Host[]): Check[] {
   const nameOf = (id: string) => data.hosts.find((h) => h.id === id)?.name ?? id;
   // The username as a whole word, any case: "admin" is not in "Administrator", "sa" is not in "salvador".
   const mentions = (text: string, user: string) =>
-    new RegExp(`(?<![\\w])${user.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w])`, "i").test(text);
+    new RegExp(`(?<![\\w])${escapeRegExp(user)}(?![\\w])`, "i").test(text);
   for (const c of data.credentials) {
     const user = c.username.trim();
     if (user === "" || !c.sourceHostId) continue;

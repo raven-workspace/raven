@@ -4,6 +4,7 @@ import type { Credential } from "../../types/credentials";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
+import { servicesByHostOf } from "../checklist/state";
 
 export interface Suggestion {
   value: string;
@@ -44,8 +45,7 @@ function dedupe(list: Suggestion[]): Suggestion[] {
  */
 export function tokenSuggestions(token: string, ctx: SuggestContext): Suggestion[] {
   const t = token.toUpperCase().replace(/-/g, "_");
-  const servicesByHost = new Map<string, Service[]>();
-  for (const s of ctx.services ?? []) servicesByHost.set(s.hostId, [...(servicesByHost.get(s.hostId) ?? []), s]);
+  const servicesByHost = servicesByHostOf(ctx.services ?? []);
   const domain = ctx.engagement?.domain?.trim() || "";
   const hostIps = (): Suggestion[] => ctx.hosts.filter((h) => h.ip?.trim()).map((h) => ({ value: h.ip!.trim(), hint: h.name }));
   const fqdn = (h: Host): string => (h.name.includes(".") || !domain ? h.name : `${h.name}.${domain}`);

@@ -12,15 +12,17 @@ import { useLog } from "../log/queries";
 import { LogDays } from "../log/LogDays";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
-import { byOrder, usePersistedOrder } from "../log/usePersistedOrder";
+import { byOrder, useLogOrder } from "../log/useLogOrder";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { StuckView } from "../stuck/StuckView";
 import { FactsColumn } from "./facts/FactsColumn";
 import { HostHeader } from "./HostHeader";
-import { FullChecklistToggle, NextTab } from "./NextTab";
+import { FullChecklistToggle } from "./NextTab";
+import { HostChecklist } from "../checklist/HostChecklist";
 import { useHosts } from "./queries";
+import { anyDrawerOpen } from "../drawers";
 
 const TABS = [
   { id: "next", label: "Next", code: "Digit1" },
@@ -41,7 +43,6 @@ const HINTS: Hint[] = [
 const SPLIT_HINTS = HINTS.filter((h) => h.keys !== "J" && h.keys !== "⌥1–3");
 
 /** The Arsenal or Payloads drawer is open over this page: its keys win (they are not role=dialog). Notes is left out: H and F still work over it, and J below checks it too. */
-const drawerOpen = () => useArsenalStore.getState().open || usePayloadsStore.getState().open;
 
 /** The first To do or Doing step on screen, in checklist order: its expand button gets focus and the row scrolls into view. */
 function focusFirstOpenStep(): boolean {
@@ -64,7 +65,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   // A Stuck check line arrives with the goal to open; the state is cleared below so back/forward does not repeat it.
   const arrivedGoal = (location.state as { goalId?: string } | null)?.goalId;
   const [tab, setTab] = useState<TabId>("next");
-  const [order, setOrder] = usePersistedOrder("raven.log.order", "oldest", "raven.story.order");
+  const [order, setOrder] = useLogOrder("oldest", true);
   const [openEntry, setOpenEntry] = useState<string>();
   const [focusGoal, setFocusGoal] = useState<{ id: string; n: number } | undefined>(arrivedGoal ? { id: arrivedGoal, n: 1 } : undefined);
   // A goal asked for (a Stuck check line) opens in the full checklist.
@@ -111,7 +112,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
     setSplit(f);
   };
   useKeydown((e) => {
-    if (!isFreeKey(e) || drawerOpen()) return;
+    if (!isFreeKey(e) || anyDrawerOpen("notes")) return;
     if (e.key === "h" || e.key === "H") {
       e.preventDefault();
       toggleStuck();
@@ -136,7 +137,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const widened = useRef(false);
   const [jumpNote, setJumpNote] = useState<string>();
   useKeydown((e) => {
-    if (!isFreeKey(e) || drawerOpen() || useNotesStore.getState().open || (e.key !== "j" && e.key !== "J") || split || stuckOpen) return;
+    if (!isFreeKey(e) || anyDrawerOpen() || (e.key !== "j" && e.key !== "J") || split || stuckOpen) return;
     e.preventDefault();
     // The Next tab's checklist is not on screen yet (loading): nothing to jump to, and no false "all done".
     if (tab === "next" && !document.querySelector("[data-checklist-ready]")) {
@@ -258,7 +259,8 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                   </div>
                 )
               ) : tab === "next" ? (
-                <NextTab engagementId={engagementId} host={host} full={fullChecklist} onShowFull={() => setFullChecklist(true)} focusGoal={focusGoal} onOpenEntry={openInLog} />
+                // The next steps: the current stage's open steps, or with the full checklist every stage, done ones included.
+                <HostChecklist engagementId={engagementId} host={host} scope={fullChecklist ? "all" : "next"} onShowFull={() => setFullChecklist(true)} focusGoal={focusGoal} onOpenEntry={openInLog} />
               ) : (
                 <HostFindings engagementId={engagementId} host={host} onOpenEntry={openInLog} onOpenFinding={openFinding} />
               )}

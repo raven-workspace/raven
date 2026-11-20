@@ -1,6 +1,6 @@
 import { renderHook, act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { usePersistedOrder } from "../features/log/usePersistedOrder";
+import { useLogOrder } from "../features/log/useLogOrder";
 
 beforeEach(() => {
   localStorage.clear();
@@ -24,23 +24,23 @@ describe("sidebar default width", () => {
   });
 });
 
-describe("usePersistedOrder legacy key", () => {
+describe("useLogOrder legacy key", () => {
   it("reads the old key once nothing is stored under the new one", () => {
     localStorage.setItem("raven.story.order", "newest");
-    const { result } = renderHook(() => usePersistedOrder("raven.log.order", "oldest", "raven.story.order"));
+    const { result } = renderHook(() => useLogOrder("oldest", true));
     expect(result.current[0]).toBe("newest");
   });
   it("the new key wins over the legacy one, and a set writes the new key", () => {
     localStorage.setItem("raven.story.order", "newest");
     localStorage.setItem("raven.log.order", "oldest");
-    const { result } = renderHook(() => usePersistedOrder("raven.log.order", "newest", "raven.story.order"));
+    const { result } = renderHook(() => useLogOrder("newest", true));
     expect(result.current[0]).toBe("oldest");
     act(() => result.current[1]("newest"));
     expect(localStorage.getItem("raven.log.order")).toBe("newest");
   });
   it("falls back when neither holds a valid value", () => {
     localStorage.setItem("raven.story.order", "sideways");
-    const { result } = renderHook(() => usePersistedOrder("raven.log.order", "oldest", "raven.story.order"));
+    const { result } = renderHook(() => useLogOrder("oldest", true));
     expect(result.current[0]).toBe("oldest");
   });
 });

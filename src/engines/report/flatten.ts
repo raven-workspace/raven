@@ -3,7 +3,8 @@ import { ADDITIONAL_HEADING, ENUM_HEADING, entryBlocks, PHASE_TITLE, PLAIN_NODE_
 import { hintPara, msfLine, plainTable, type PlainTableKind } from "./plainTables";
 import { sourceOf } from "./stamp";
 import { portRows } from "./tables";
-import { applyKeep } from "./trim";
+import { bold, codeBlock, figure, heading, listItem, para, sourced, text } from "./nodes";
+import { applyKeep, omitted } from "./trim";
 import type { Phase, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
 
 /**
@@ -23,11 +24,6 @@ export function needsFlatten(doc: ReportNode): boolean {
   return walk(doc);
 }
 
-const text = (value: string): ReportNode => ({ type: "text", text: value });
-const bold = (value: string): ReportNode => ({ type: "text", text: value, marks: [{ type: "bold" }] });
-const para = (content: ReportNode[]): ReportNode => (content.length > 0 ? { type: "paragraph", content } : { type: "paragraph" });
-const codeBlock = (value: string, source: string, language = ""): ReportNode => ({ type: "codeBlock", attrs: { language, source }, content: [text(value)] });
-const omitted = (count: number) => `[… ${count} ${count === 1 ? "line" : "lines"} omitted …]`;
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 
 /** Blocks the engine generated, without their `gen` stamps (at any depth). */
@@ -36,9 +32,6 @@ const unstamped = (blocks: ReportNode[]): ReportNode[] =>
     const attrs = b.attrs ? Object.fromEntries(Object.entries(b.attrs).filter(([k]) => k !== "gen")) : undefined;
     return { ...b, ...(attrs ? { attrs } : {}), ...(b.content ? { content: unstamped(b.content) } : {}) };
   });
-
-/** Each top-level block with `source` set. */
-const sourced = (blocks: ReportNode[], source: string): ReportNode[] => blocks.map((b) => ({ ...b, attrs: { ...(b.attrs ?? {}), source } }));
 
 /** A kept output as the page prints it: the kept ranges' lines, each gap one "[… N lines omitted …]" line. */
 function keptOutput(output: string, keep: unknown): string {
@@ -123,31 +116,25 @@ const shiftKeep = (keep: unknown, offset: number): [number, number][] | null =>
 
 /** An evidence block's text as code blocks: each command above its output (kept ranges applied unless `full`), a flag's
  *  proof, and its value when the proof does not hold it. */
-function textBlocks(t: EvidenceText, entryId: string, http: boolean, keep: unknown, full: boolean): ReportNode[] {
+function evidenceCodeBlocks(t: EvidenceText, entryId: string, http: boolean, keep: unknown, full: boolean): ReportNode[] {
   const trimEnd = (s: string) => s.replace(/\s+$/, "");
   if ("value" in t) {
     const out: ReportNode[] = [];
     const proof = trimEnd(t.proof);
     const value = t.value.trim();
-    if (proof.trim() !== "") out.push(codeBlock(proof, `entry:${entryId}:proof`));
-    if (value !== "" && !proof.includes(value)) out.push(codeBlock(value, `entry:${entryId}:value`));
+    if (proof.trim() !== "") out.push(codeBlock(proof, { source: `entry:${entryId}:proof` }));
+    if (value !== "" && !proof.includes(value)) out.push(codeBlock(value, { source: `entry:${entryId}:value` }));
     return out;
   }
   return t.segments.flatMap((seg) => {
     const out: ReportNode[] = [];
     const command = trimEnd(seg.command);
-    if (command.trim() !== "") out.push(codeBlock(command, http ? `entry:${entryId}:request` : `entry:${entryId}:${seg.at}:command`));
+    if (command.trim() !== "") out.push(codeBlock(command, { source: http ? `entry:${entryId}:request` : `entry:${entryId}:${seg.at}:command` }));
     const output = full ? trimEnd(seg.output) : keptOutput(seg.output, shiftKeep(keep, seg.offset));
-    if (output.trim() !== "") out.push(codeBlock(output, http ? `entry:${entryId}:response` : `entry:${entryId}:${seg.at}:output`));
+    if (output.trim() !== "") out.push(codeBlock(output, { source: http ? `entry:${entryId}:response` : `entry:${entryId}:${seg.at}:output` }));
     return out;
   });
 }
-
-const figure = (attachmentId: string, caption: string, entryId: string, width: unknown = null): ReportNode => ({
-  type: "figure",
-  attrs: { attachmentId, entryId, source: `entry:${entryId}`, ...(typeof width === "number" && width > 0 ? { width: Math.round(width) } : {}) },
-  ...(caption.trim() ? { content: [text(caption.trim())] } : {}),
-});
 
 /**
  * An evidence block: a screenshot as a figure; its copy as code blocks (the log's full text when the copy was cut, the
@@ -174,11 +161,11 @@ function evidence(n: ReportNode, ctx: Ctx): ReportNode[] {
 
   if (copy) {
     const fromLog = attrs.truncated === true && entry ? logText(entry, block) : null;
-    return [...textBlocks(fromLog ?? copyText(copy, block, entry), entryId, http, attrs.keep, full), ...flagPicture()];
+    return [...evidenceCodeBlocks(fromLog ?? copyText(copy, block, entry), entryId, http, attrs.keep, full), ...flagPicture()];
   }
   if (entry && full) {
     const t = logText(entry, block);
-    if (t) return [...textBlocks(t, entryId, http, null, true), ...flagPicture()];
+    if (t) return [...evidenceCodeBlocks(t, entryId, http, null, true), ...flagPicture()];
   }
   if (entry && ctx.data) {
     // The entry's blocks as a draft step holds them, its sentence left out (the step has the owner's); a block of a
@@ -282,7 +269,7 @@ function exploit(n: ReportNode, ctx: Ctx): ReportNode[] {
   const copy = n.attrs?.copy as { content?: unknown } | undefined;
   const content = typeof copy?.content === "string" ? copy.content : (file?.content ?? "");
   const code = content.replace(/\s+$/, "");
-  return code.trim() !== "" ? [codeBlock(code, `file:${fileId}`, file?.language ?? "")] : [];
+  return code.trim() !== "" ? [codeBlock(code, { language: file?.language ?? "", source: `file:${fileId}` })] : [];
 }
 
 /** Phase headings worded as the plain draft writes them, so a flattened page reads like a rebuilt one. */
@@ -297,8 +284,8 @@ function phase(n: ReportNode, ctx: Ctx): ReportNode[] {
   const named = findingId ? ctx.data?.findings.find((f) => f.id === findingId)?.title.trim() : undefined;
   const source = `phase:${hostId}:${p}${findingId ? `:${findingId}` : ""}`;
   // A finding's own heading under Additional findings is its title, one level down; elsewhere the phase names it.
-  if (named && p === "additional") return [{ type: "heading", attrs: { level: 3, source }, content: [text(named)] }];
-  return [{ type: "heading", attrs: { level: 2, source }, content: [text(named ? `${title}: ${named}` : title)] }];
+  if (named && p === "additional") return [heading(3, named, source)];
+  return [heading(2, named ? `${title}: ${named}` : title, source)];
 }
 
 /** A slot: its text as a paragraph (its label a bold lead-in), or an empty one with its hint. */
@@ -342,7 +329,7 @@ function flat(n: ReportNode, ctx: Ctx): ReportNode[] {
       return (n.content ?? []).flatMap((s) => {
         if (s.type !== "step") return flat(s, ctx);
         const content = (s.content ?? []).flatMap((c) => flat(c, ctx));
-        return [{ type: "list", attrs: { kind: "ordered" }, content: content.length > 0 ? content : [para([])] }];
+        return [listItem("ordered", content.length > 0 ? content : [para([])])];
       });
     case "slot":
       return slot(n, ctx);

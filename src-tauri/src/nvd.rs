@@ -5,7 +5,7 @@
 //! The request runs here in Rust, never in the webview (its CSP stays closed). Each successful
 //! answer is cached raw in `nvd_cache`, so a repeat lookup and later offline use cost nothing.
 
-use crate::backup::system_now_ms;
+use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
@@ -39,7 +39,7 @@ pub fn normalize_cve_id(cve: &str) -> AppResult<String> {
     if ok {
         Ok(id)
     } else {
-        Err(AppError::Validation { field: "cveId".into(), message: "use a CVE ID like CVE-2021-44228".into() })
+        Err(AppError::validation("cveId", "use a CVE ID like CVE-2021-44228"))
     }
 }
 
@@ -126,14 +126,7 @@ pub fn begin(conn: &Connection, key: &str, cve: &str) -> AppResult<Step> {
     Ok(Step::Fetch { cve })
 }
 
-/// Parses a fetched answer (empty `vulnerabilities` is `not_found`) and caches the raw JSON.
-pub fn finish(conn: &Connection, cve: &str, raw: &str) -> AppResult<NvdRecord> {
-    let rec = read_answer(raw)?;
-    store(conn, cve, raw)?;
-    Ok(rec)
-}
-
-/// Parses a fetched answer without caching it.
+/// Parses a fetched answer (empty `vulnerabilities` is `not_found`) without caching it.
 pub fn read_answer(raw: &str) -> AppResult<NvdRecord> {
     let json: Value =
         serde_json::from_str(raw).map_err(|_| AppError::Offline("NVD sent an answer Raven can't read".into()))?;
@@ -144,7 +137,7 @@ pub fn store(conn: &Connection, cve: &str, raw: &str) -> AppResult<()> {
     conn.execute(
         "INSERT INTO nvd_cache(cve_id, fetched_at, json) VALUES(?1, ?2, ?3) \
          ON CONFLICT(cve_id) DO UPDATE SET fetched_at = excluded.fetched_at, json = excluded.json",
-        params![cve, system_now_ms(), raw],
+        params![cve, now_ms(), raw],
     )?;
     Ok(())
 }
@@ -155,7 +148,7 @@ pub fn status_error(code: u16) -> AppError {
     match code {
         401 | 403 => AppError::KeyRejected,
         404 => AppError::NotFound,
-        429 | 500 | 502 | 503 | 504 => AppError::NvdBusy,
+        c if transient(c) => AppError::NvdBusy,
         _ => AppError::Offline(format!("NVD answered {code}")),
     }
 }
@@ -202,23 +195,6 @@ pub fn fetch(key: &str, cve: &str) -> AppResult<String> {
     fetch_from(NVD_URL, key, cve)
 }
 
-/// Cache first, then `fetch` (given the key and the normalized ID), caching the answer on success.
-pub fn lookup_with(
-    conn: &Connection,
-    key: &str,
-    cve: &str,
-    fetch: impl FnOnce(&str, &str) -> AppResult<String>,
-) -> AppResult<NvdRecord> {
-    match begin(conn, key, cve)? {
-        Step::Cached(rec) => Ok(rec),
-        Step::Fetch { cve } => finish(conn, &cve, &fetch(key, &cve)?),
-    }
-}
-
-pub fn lookup(conn: &Connection, key: &str, cve: &str) -> AppResult<NvdRecord> {
-    lookup_with(conn, key, cve, fetch)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,6 +203,24 @@ mod tests {
     use serde_json::json;
     use std::io::{Read, Write};
     use std::net::TcpListener;
+
+    /// The `nvd_lookup` command's flow (`begin` → fetch → `read_answer` → `store`) with an injectable fetch.
+    fn lookup_with(
+        conn: &Connection,
+        key: &str,
+        cve: &str,
+        fetch: impl FnOnce(&str, &str) -> AppResult<String>,
+    ) -> AppResult<NvdRecord> {
+        match begin(conn, key, cve)? {
+            Step::Cached(rec) => Ok(rec),
+            Step::Fetch { cve } => {
+                let raw = fetch(key, &cve)?;
+                let rec = read_answer(&raw)?;
+                store(conn, &cve, &raw)?;
+                Ok(rec)
+            }
+        }
+    }
 
     fn unlocked() -> (tempfile::TempDir, Vault) {
         let dir = tempfile::tempdir().unwrap();

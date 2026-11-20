@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -16,7 +16,6 @@ import {
   isValidOsid,
   needsFlatten,
   numberAppendices,
-  ownerMeta,
   reportChecks,
   reportDueAt,
   reportFileName,
@@ -31,23 +30,20 @@ import {
   type FlagKind,
   type PageMeta,
   type ReportData,
-  type ReportMeta,
   type ReportNode,
   type ReportTarget,
   type SectionMeta,
 } from "../../engines/report";
-import { api } from "../../lib/api";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { cx } from "../../lib/cx";
-import { useWidth } from "../../lib/useNarrow";
+import { useWidthRef } from "../../lib/useWidth";
 import { reportError } from "../../lib/lockSignal";
-import type { Report, ReportDoc, ReportPatch, ReportSection } from "../../types/report";
+import type { Report, ReportSection } from "../../types/report";
 import type { Settings } from "../../types/settings";
 import { Button, Dialog, EmptyState, ErrorState, LoadingState, queryState, TimedNotice, usePageShortcuts, type Hint } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
-import { reportSchema } from "./editor/extension";
 import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataContext";
 import { keepCopiedText, openFindBar, posAtPath, ReportEditor, selectBlockAt } from "./editor/ReportEditor";
 import { AddEvidenceButton } from "./AddEvidenceButton";
@@ -61,12 +57,12 @@ import {
   BACK_KINDS,
   createPage,
   deletePage,
-  ensureSections,
   FRONT_KINDS,
   hasCurrentPage,
   hasEngagementTested,
   patchCachedSection,
-  reportKey,
+  nextPosition,
+  reorderSections,
   reportSectionsKey,
   renamePage,
   restorePage,
@@ -74,10 +70,15 @@ import {
   useReport,
   useReportData,
   useReportSections,
+  useReportWriter,
   useSectionSaver,
-  wantedSections,
+  pageTitle,
 } from "./queries";
-import { flushReports, forgetReportSave, isReportSaveQueued, queueReportSave, settleReportSave, trackReportWrite, useReportSaveStore } from "./saveQueue";
+import { useReportSaveStore } from "./saveQueue";
+import { useDraftBuild, useEnsureSections, useOpenFlatten } from "./useSectionLifecycle";
+import { useSettings } from "../settings/queries";
+import { useEngagement } from "../engagements/queries";
+import { RavenError } from "../../types/errors";
 
 const HINTS: Hint[] = [
   { keys: "← →", label: "move along the tabs (J K from anywhere)", priority: 1 },
@@ -154,6 +155,21 @@ function usePageEdits(
 ) {
   // The latest page and meta of the open section, read by handlers that fire between renders.
   const current = useRef<{ id: string; doc: ReportNode; meta: SectionMeta } | null>(null);
+  /** Section `s`'s page and meta as they are now: the latest change if it is this section's, else as stored. */
+  const snapshot = useCallback(
+    (s: ReportSection) => (current.current?.id === s.id ? current.current : { id: s.id, doc: docOf(s), meta: s.meta as SectionMeta }),
+    [docOf],
+  );
+  /** Section `s` becomes `doc` with `meta`: kept as the latest, shown live (the page only if `docChanged`) and saved. */
+  const commit = useCallback(
+    (s: ReportSection, doc: ReportNode, meta: SectionMeta, docChanged: boolean) => {
+      current.current = { id: s.id, doc, meta };
+      if (docChanged) setLive({ id: s.id, doc });
+      setLiveMeta({ id: s.id, meta });
+      saver.save(doc, meta);
+    },
+    [saver, setLive, setLiveMeta],
+  );
   const onChange = useCallback(
     (doc: ReportNode) => {
       if (!openSection) return;
@@ -167,27 +183,21 @@ function usePageEdits(
   const onRemoveEvidence = useCallback(
     (entryId: string) => {
       if (!openSection) return;
-      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+      const cur = snapshot(openSection);
       const removed = cur.meta.removedEntryIds ?? [];
-      const meta: SectionMeta = { ...cur.meta, removedEntryIds: removed.includes(entryId) ? removed : [...removed, entryId] };
-      current.current = { ...cur, meta };
-      setLiveMeta({ id: openSection.id, meta });
-      saver.save(cur.doc, meta);
+      commit(openSection, cur.doc, { ...cur.meta, removedEntryIds: removed.includes(entryId) ? removed : [...removed, entryId] }, false);
     },
-    [openSection, docOf, saver, setLiveMeta],
+    [openSection, snapshot, commit],
   );
   /** An entry went back onto the page: it is no longer "removed". */
   const onRestoreEvidence = useCallback(
     (entryId: string) => {
       if (!openSection) return;
-      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+      const cur = snapshot(openSection);
       if (!cur.meta.removedEntryIds?.includes(entryId)) return;
-      const meta: SectionMeta = { ...cur.meta, removedEntryIds: cur.meta.removedEntryIds.filter((id) => id !== entryId) };
-      current.current = { ...cur, meta };
-      setLiveMeta({ id: openSection.id, meta });
-      saver.save(cur.doc, meta);
+      commit(openSection, cur.doc, { ...cur.meta, removedEntryIds: cur.meta.removedEntryIds.filter((id) => id !== entryId) }, false);
     },
-    [openSection, docOf, saver, setLiveMeta],
+    [openSection, snapshot, commit],
   );
   /**
    * Swaps the page with the one kept in the meta (`previousDoc`), given as `doc` in the plain schema: the page written
@@ -198,7 +208,7 @@ function usePageEdits(
   const swapPrevious = useCallback(
     (doc: ReportNode): { doc: ReportNode; meta: SectionMeta } | null => {
       if (!openSection) return null;
-      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+      const cur = snapshot(openSection);
       if (!cur.meta.previousDoc) return null;
       // The page swapped out stays in the archive as it was, whatever later swaps do to `previousDoc`.
       const meta: SectionMeta = {
@@ -208,36 +218,27 @@ function usePageEdits(
         restored: !cur.meta.restored,
         originals: archivePage(cur.meta, cur.doc, "restore"),
       };
-      current.current = { id: openSection.id, doc, meta };
-      setLive({ id: openSection.id, doc });
-      setLiveMeta({ id: openSection.id, meta });
-      saver.save(doc, meta);
+      commit(openSection, doc, meta, true);
       return { doc, meta };
     },
-    [openSection, docOf, saver, setLive, setLiveMeta],
+    [openSection, snapshot, commit],
   );
   /** The open page becomes `doc` with `meta` (an old page flattened as it opens), saved like any change. */
   const replacePage = useCallback(
     (doc: ReportNode, meta: SectionMeta) => {
       if (!openSection) return;
-      current.current = { id: openSection.id, doc, meta };
-      setLive({ id: openSection.id, doc });
-      setLiveMeta({ id: openSection.id, meta });
-      saver.save(doc, meta);
+      commit(openSection, doc, meta, true);
     },
-    [openSection, saver, setLive, setLiveMeta],
+    [openSection, commit],
   );
   /** Merges `patch` into the open page's meta (a page's title) and saves it with the page as it is now. */
   const patchMeta = useCallback(
     (patch: Partial<SectionMeta> & Record<string, unknown>) => {
       if (!openSection) return;
-      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
-      const meta: SectionMeta = { ...cur.meta, ...patch };
-      current.current = { ...cur, meta };
-      setLiveMeta({ id: openSection.id, meta });
-      saver.save(cur.doc, meta);
+      const cur = snapshot(openSection);
+      commit(openSection, cur.doc, { ...cur.meta, ...patch }, false);
     },
-    [openSection, docOf, saver, setLiveMeta],
+    [openSection, snapshot, commit],
   );
   return { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious, replacePage, patchMeta };
 }
@@ -245,7 +246,7 @@ function usePageEdits(
 /** The engagement's Report section: client engagements get a placeholder this round. */
 export function ReportSectionView() {
   const { id = "" } = useParams();
-  const engagement = useQuery({ queryKey: ["engagement", id], queryFn: () => api.engagementGet(id) });
+  const engagement = useEngagement(id);
   if (!engagement.data) return <Padded>{queryState([engagement], "the report")}</Padded>;
   if (engagement.data.kind === "client") {
     return (
@@ -271,10 +272,9 @@ interface Entry {
 }
 
 function ReportWorkspace({ eid }: { eid: string }) {
-  const qc = useQueryClient();
   const reportQ = useReport(eid);
   const dataQ = useReportData(eid);
-  const settingsQ = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
+  const settingsQ = useSettings();
   const sectionsQ = useReportSections(reportQ.data?.id);
 
   const failed = reportQ.error ?? dataQ.error ?? settingsQ.error ?? sectionsQ.error;
@@ -309,7 +309,7 @@ function ReportWorkspace({ eid }: { eid: string }) {
       </Padded>
     );
   }
-  return <ReportBody report={reportQ.data} data={dataQ.data} settings={settingsQ.data} sections={sectionsQ.data} qc={qc} />;
+  return <ReportBody report={reportQ.data} data={dataQ.data} settings={settingsQ.data} sections={sectionsQ.data} />;
 }
 
 function ReportBody({
@@ -317,42 +317,16 @@ function ReportBody({
   data,
   settings,
   sections,
-  qc,
 }: {
   report: Report;
   data: ReportData;
   settings: Settings;
   sections: ReportSection[];
-  qc: ReturnType<typeof useQueryClient>;
 }) {
-  const reportMeta = report.meta as ReportMeta;
+  const qc = useQueryClient();
+  const reportMeta = report.meta;
   const targets = useMemo(() => reportTargets(data, reportMeta), [data, reportMeta]);
-  const [ensureFailed, setEnsureFailed] = useState<string | null>(null);
-
-  // Missing sections (first open, a new host) are created once; one run at a time, so nothing is upserted twice.
-  const ensuring = useRef(false);
-  useEffect(() => {
-    if (ensuring.current || ensureFailed) return;
-    const have = new Set(sections.map((s) => sectionKey(s.kind, s.targetKey)));
-    if (wantedSections(targets, data).every((w) => have.has(sectionKey(w.kind, w.targetKey)))) return;
-    ensuring.current = true;
-    ensureSections(report, targets, data, sections)
-      .then((created) => {
-        qc.setQueryData<ReportSection[]>(reportSectionsKey(report.id), (list = []) => [
-          ...list.filter((s) => !created.some((c) => c.id === s.id)),
-          ...created,
-        ]);
-      })
-      .catch((e: unknown) => {
-        reportError(e);
-        // Sections created before the failure are stored: reload the list so the outline shows them.
-        void qc.invalidateQueries({ queryKey: reportSectionsKey(report.id) });
-        setEnsureFailed(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        ensuring.current = false;
-      });
-  }, [report, targets, data, sections, qc, ensureFailed]);
+  const { ensureFailed, retryEnsure } = useEnsureSections(report, targets, data, sections);
 
   // The report's sections in §5.7 order (numbering, figures and appendix letters follow it). Sections whose target is
   // gone (deleted host, unticked lab host) are hidden, never deleted.
@@ -380,7 +354,7 @@ function ReportBody({
     const pages = sections.filter((s) => s.kind === "page").sort((a, b) => a.position - b.position);
     const pageEntry = (s: ReportSection, group: EntryGroup): Entry => ({
       section: s,
-      item: { id: s.id, group, label: (s.meta as Partial<PageMeta>).title || (isAppendixPage(s) ? "Untitled appendix" : "Untitled page"), reorderable: true },
+      item: { id: s.id, group, label: (s.meta as Partial<PageMeta>).title || pageTitle(isAppendixPage(s) ? "appendix" : "body"), reorderable: true },
     });
     for (const s of pages) if (!isAppendixPage(s)) out.push(pageEntry(s, "pages"));
     const tested = byKey.get(sectionKey("engagement-tested", null));
@@ -416,7 +390,7 @@ function ReportBody({
   // Every section's stored page (or the draft it will get), in the plain schema. Only the open page changes per
   // keystroke; it is read live.
   const savedDocOf = useCallback(
-    (s: ReportSection): ReportNode => drafts.get(s.id) ?? (s.doc ? plainOf(s.doc as ReportNode, targetOf(s)) : EMPTY_DOC),
+    (s: ReportSection): ReportNode => drafts.get(s.id) ?? (s.doc ? plainOf(s.doc, targetOf(s)) : EMPTY_DOC),
     [drafts, plainOf, targetOf],
   );
   // Appendix pages' letters (+ Page, placement appendix): a plain page moves nothing out, so these are the only appendices.
@@ -496,7 +470,7 @@ function ReportBody({
   const started = (t: ReportTarget) => data.log.some((l) => !l.private && l.hostIds.some((h) => t.hostIds.includes(h)));
 
   // A page's title as it is now (a rename of the open page is in its live meta before it is saved).
-  const pageTitleOf = (s: ReportSection) => (metaOf(s) as Partial<PageMeta>).title || (isAppendixPage(s) ? "Untitled appendix" : "Untitled page");
+  const pageTitleOf = (s: ReportSection) => (metaOf(s) as Partial<PageMeta>).title || pageTitle(isAppendixPage(s) ? "appendix" : "body");
   // Page numbers and titles from the outline order (OffSec's sample: 1, 2, 3, then 4.N per target), never stored.
   const numbers = useMemo(
     () =>
@@ -557,15 +531,10 @@ function ReportBody({
   const saveFailed = useReportSaveStore((s) => s.unsaved);
   const saveRefused = useReportSaveStore((s) => s.refused);
   const saver = useSectionSaver(openSection?.id ?? "");
-  const editorRef = useRef<{ id: string; editor: Editor } | null>(null);
-  // The same editor as state too, so the evidence rail re-renders once the page has mounted.
+  // The editor of the page last mounted, as state, so the evidence rail re-renders once the page has mounted.
   const [readyEditor, setReadyEditor] = useState<{ id: string; editor: Editor } | null>(null);
   /** The open page's editor; null on Report details or before the page mounts. */
-  const openId_ = openSection?.id;
-  const openEditor = useCallback(
-    () => (editorRef.current && editorRef.current.id === openId_ ? editorRef.current.editor : null),
-    [openId_],
-  );
+  const pageEditor = readyEditor && readyEditor.id === openSection?.id ? readyEditor.editor : null;
 
   const { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious, replacePage, patchMeta } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
   // Each swap with the previous page remounts the editor on the page swapped in (it reads its document once).
@@ -577,61 +546,27 @@ function ReportBody({
     (s: ReportSection): ReportSection => qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id))?.find((x) => x.id === s.id) ?? s,
     [qc, report.id],
   );
-  // Pages flattened as they opened in this view: each is flattened and saved once.
-  const flattenSaved = useRef(new Set<string>());
-  /** The open page as the open-time flatten writes it, checked as Restore checks the page it swaps in; null for a page
-   *  that needs no flatten. One that doesn't fit (`error`) is never saved over the stored page. */
-  const openFlatten = useMemo((): { id: string; original: ReportNode; doc: ReportNode; error: string | null } | null => {
-    const s = openSection;
-    const original = s ? (cachedSection(s).doc as ReportNode | null) : null;
-    if (!s || !original || !needsFlatten(original)) return null;
-    const doc = plainOf(original, targetOf(s));
-    try {
-      reportSchema().nodeFromJSON(doc).check();
-      return { id: s.id, original, doc, error: null };
-    } catch (e) {
-      return { id: s.id, original, doc, error: e instanceof Error ? e.message : String(e) };
-    }
-  }, [openSection, cachedSection, plainOf, targetOf]);
-  const flattenFailed = openFlatten?.error ?? null;
+  const flattenFailed = useOpenFlatten(openSection, cachedSection, plainOf, targetOf, replacePage);
   /** The document a page mounts with, in the plain schema. A stored page holding old nodes (an owner page, a page
-   *  restored before plain pages) opens flattened; the effect below saves it once, the original kept in `previousDoc`. */
+   *  restored before plain pages) opens flattened; `useOpenFlatten` saves it once, the original kept in `previousDoc`. */
   const openDoc = (s: ReportSection): ReportNode => plainOf(cachedSection(s).doc as ReportNode, targetOf(s));
-  useEffect(() => {
-    const s = openSection;
-    if (!s || !hasCurrentPage(s) || flattenSaved.current.has(s.id)) return;
-    if (!openFlatten || openFlatten.id !== s.id || openFlatten.error !== null) return;
-    flattenSaved.current.add(s.id);
-    const { original, doc } = openFlatten;
-    const cached = cachedSection(s);
-    const was = cached.meta as SectionMeta;
-    // The page as stored goes into the archive. It becomes `previousDoc` (Restore) only when no earlier page holds that
-    // place: a page kept from a rebuild stays the one Restore brings back.
-    const originals = archivePage(was, original, "flatten");
-    const meta: SectionMeta = was.previousDoc
-      ? { ...was, originals }
-      : { ...was, previousDoc: original, previousLayout: was.layout ?? null, previousAt: Date.now(), restored: false, flattened: true, originals };
-    patchCachedSection(qc, s.id, { doc: doc as ReportDoc, meta: meta as Record<string, unknown> });
-    replacePage(doc, meta);
-  }, [openSection, openFlatten, cachedSection, qc, replacePage]);
   const [swapFailed, setSwapFailed] = useState<string | null>(null);
   const swapPage = () => {
     const s = openSection;
     const prev = (s && metaOf(s).previousDoc) || null;
-    const editor = openEditor();
-    if (!s || !prev || !editor) return;
+    if (!s || !prev || !pageEditor) return;
     // The page swapped in is written in the plain schema; should it still not fit the page, say so rather than break it.
     const plain = flattenToPlain(prev, data, open?.target ?? null, reportMeta);
     try {
-      editor.schema.nodeFromJSON(plain).check();
+      pageEditor.schema.nodeFromJSON(plain).check();
     } catch (e) {
-      setSwapFailed(e instanceof Error ? e.message : String(e));
+      setSwapFailed(RavenError.from(e).message);
       return;
     }
     setSwapFailed(null);
     const next = swapPrevious(plain);
     if (!next) return;
-    patchCachedSection(qc, s.id, { doc: next.doc as ReportDoc, meta: next.meta as Record<string, unknown> });
+    patchCachedSection(qc, s.id, { doc: next.doc, meta: next.meta as Record<string, unknown> });
     setSwaps((n) => n + 1);
   };
   // Front matter and Closing reopen on the part last shown in them.
@@ -648,116 +583,14 @@ function ReportBody({
       openItem(parts.some((p) => p.section.id === last) ? last! : parts[0].section.id);
     } else openItem(id);
   };
-  const onEditorReady = (id: string, editor: Editor) => {
-    editorRef.current = { id, editor };
-    setReadyEditor({ id, editor });
-  };
+  const onEditorReady = (id: string, editor: Editor) => setReadyEditor({ id, editor });
 
-  // A section opened with no page yet, or one under another layout, gets its plain draft, built and stored once
-  // (draftBuiltAt marks it).
-  const building = useRef(new Set<string>());
-  const [draftFailed, setDraftFailed] = useState<string | null>(null);
-  // A section whose rebuild waits on an earlier change to its old page that isn't saved (failed or refused).
-  const [draftBlocked, setDraftBlocked] = useState<string | null>(null);
-  // Sections the owner asked to rebuild anyway: their unsaved change goes into the archived old page instead.
-  const rebuildAnyway = useRef(new Set<string>());
-  useEffect(() => {
-    const s = openSection;
-    if (!s || hasCurrentPage(s) || s.kind === "details" || draftFailed || draftBlocked === s.id || building.current.has(s.id)) return;
-    const doc = drafts.get(s.id);
-    if (!doc) return;
-    building.current.add(s.id);
-    const fail = (e: unknown) => {
-      building.current.delete(s.id);
-      reportError(e);
-      setDraftFailed(e instanceof Error ? e.message : String(e));
-    };
-    // Rebuild anyway: once a write of it already on its way has settled (so it can't land after the rebuild), the
-    // unsaved change is dropped from the queue (it is never tried again) and lives on in the archived old page below
-    // (the queue patched the cache with it when it sent it). Should the rebuild fail, it is queued again.
-    let requeue: (() => void) | null = null;
-    const flushed = rebuildAnyway.current.delete(s.id)
-      ? settleReportSave(s.id).then(() => {
-          if (isReportSaveQueued(s.id)) {
-            const unsaved = cachedSection(s);
-            forgetReportSave(s.id);
-            requeue = () => queueReportSave(qc, s.id, unsaved.doc as ReportNode, unsaved.meta as SectionMeta);
-          }
-          return flushReports();
-        })
-      : // A queued write of the old page (mid-debounce, or failed and waiting for its retry; a refused one is tried once
-        // more) goes out first, so it can never land after the rebuild and overwrite it; the page it wrote is the one kept.
-        flushReports();
-    flushed
-      .then(() => {
-        // The section as the cache has it after the flush: the queue patches it with every write it sends, so its page
-        // and meta are the latest, saved or not; its position is the current one (the reply's is left out of the cache,
-        // so a reorder made meanwhile stays).
-        const now = cachedSection(s);
-        if (isReportSaveQueued(s.id)) {
-          requeue?.();
-          building.current.delete(s.id);
-          setDraftBlocked(s.id);
-          return;
-        }
-        if (hasCurrentPage(now)) {
-          building.current.delete(s.id);
-          return;
-        }
-        // A page written under another layout is never dropped: it is kept for "Restore your previous page" and, byte for
-        // byte with its meta, in the archive. The owner's own meta (coverage, removed entries) carries forward.
-        const was = now.meta as SectionMeta;
-        // The removals carried forward (the cache's, the latest) leave their entries off the page, so they survive.
-        const page = withoutRemoved(doc, was.removedEntryIds ?? []);
-        const meta: SectionMeta =
-          now.doc != null
-            ? {
-                ...ownerMeta(was),
-                layout: DRAFT_LAYOUT,
-                previousDoc: now.doc as ReportNode,
-                previousLayout: was.layout ?? null,
-                previousAt: Date.now(),
-                originals: archivePage(was, now.doc as ReportNode, "rebuild"),
-              }
-            : { ...ownerMeta(was), layout: DRAFT_LAYOUT, ...(was.originals ? { originals: was.originals } : {}) };
-        return api
-          .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position: now.position, doc: page, meta: meta as Record<string, unknown>, draftBuiltAt: Date.now() })
-          .then((saved) => patchCachedSection(qc, s.id, { doc: saved.doc, meta: saved.meta, draftBuiltAt: saved.draftBuiltAt }))
-          .catch((e: unknown) => {
-            requeue?.();
-            throw e;
-          });
-      })
-      .catch(fail);
-  }, [openSection, drafts, report.id, qc, draftFailed, draftBlocked, cachedSection]);
+  const { draftFailed, retryDraft, draftBlocked, retryBlocked, rebuildAnyway } = useDraftBuild(openSection, drafts, report.id, cachedSection);
 
-  // Report-details writes go out one at a time, in order; only the last one's reply reaches the cache, so a slower
-  // earlier reply never overwrites a later change.
-  const reportWrites = useRef<{ chain: Promise<unknown>; last: number }>({ chain: Promise.resolve(), last: 0 });
-  const saveReport = useCallback(
-    (patch: ReportPatch) => {
-      const key = reportKey(report.engagementId);
-      const before = qc.getQueryData<Report>(key);
-      const merged: ReportPatch = patch.meta && before ? { ...patch, meta: { ...before.meta, ...patch.meta } } : patch;
-      if (before) qc.setQueryData<Report>(key, { ...before, ...merged } as Report);
-      const writes = reportWrites.current;
-      const n = ++writes.last;
-      writes.chain = writes.chain
-        .then(() => api.reportUpdate(report.id, merged))
-        .then((saved) => {
-          if (n === writes.last) qc.setQueryData(key, saved);
-        })
-        .catch((e: unknown) => {
-          reportError(e);
-          void qc.invalidateQueries({ queryKey: key });
-        });
-      // A lock waits for it, as it does for the pages.
-      trackReportWrite(writes.chain);
-    },
-    [qc, report.engagementId, report.id],
-  );
+  // Report-details writes go out one at a time, in order.
+  const { saveReport, cachedMeta } = useReportWriter(report);
   const setFlags = (hostId: string, flags: FlagKind[]) => {
-    const cached = (qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta) as ReportMeta;
+    const cached = cachedMeta();
     saveReport({ meta: { expectedFlags: { ...(cached.expectedFlags ?? {}), [hostId]: flags } } });
   };
 
@@ -774,14 +607,7 @@ function ReportBody({
       // Every section gets a position: the outline order with the moved ones swapped, then the hidden ones as they were.
       const shown = entries.map((e) => (inGroup(e) ? movable.shift()! : e.section.id));
       const hidden = [...sections].sort((a, b) => a.position - b.position).map((s) => s.id).filter((s) => !shown.includes(s));
-      const ids = [...shown, ...hidden];
-      qc.setQueryData<ReportSection[]>(reportSectionsKey(report.id), (list = []) =>
-        list.map((s) => ({ ...s, position: ids.indexOf(s.id) })).sort((a, b) => a.position - b.position),
-      );
-      api.reportSectionsReorder(report.id, ids).catch((e: unknown) => {
-        reportError(e);
-        void qc.invalidateQueries({ queryKey: reportSectionsKey(report.id) });
-      });
+      reorderSections(qc, report.id, [...shown, ...hidden]);
     },
     [entries, sections, qc, report.id],
   );
@@ -789,8 +615,7 @@ function ReportBody({
   // + Page (§10.4): a new page goes after every section (last among its kind) and opens.
   const addPage = (placement: PageMeta["placement"]) => {
     const cached = qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id)) ?? sections;
-    const position = cached.length === 0 ? 0 : Math.max(...cached.map((s) => s.position)) + 1;
-    createPage(report, placement, position)
+    createPage(report, placement, nextPosition(cached))
       .then((created) => {
         qc.setQueryData<ReportSection[]>(reportSectionsKey(report.id), (list = []) => [...list.filter((s) => s.id !== created.id), created]);
         openItem(created.id);
@@ -821,7 +646,7 @@ function ReportBody({
       })
       .catch((e: unknown) => {
         reportError(e);
-        setDeleteError(e instanceof Error ? e.message : String(e));
+        setDeleteError(RavenError.from(e).message);
       })
       .finally(() => setDeleteBusy(false));
   };
@@ -839,7 +664,7 @@ function ReportBody({
   const navRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
-  const [sectionRef, paneWidth] = useWidth<HTMLElement>();
+  const [sectionRef, paneWidth] = useWidthRef<HTMLElement>();
   const railMode = railModeAt(paneWidth);
   // Under 1200px the column is a toggle (the strip's Evidence button, E); docked or a drawer is the width's call.
   const narrow = railMode !== "column";
@@ -886,10 +711,9 @@ function ReportBody({
   // ⌘F: the page's find bar, while focus is anywhere in the Report view (⌘K stays the app's search).
   useKeydown((e) => {
     if (!e.metaKey || e.altKey || e.ctrlKey || e.shiftKey || e.key.toLowerCase() !== "f" || e.defaultPrevented || isDialogOpen()) return;
-    const editor = openEditor();
-    if (!editor || !sectionRef.current?.contains(document.activeElement)) return;
+    if (!pageEditor || !sectionRef.current?.contains(document.activeElement)) return;
     e.preventDefault();
-    openFindBar(editor);
+    openFindBar(pageEditor);
   });
   useKeydown((e) => {
     if (!e.altKey || e.metaKey || e.ctrlKey || e.defaultPrevented || isDialogOpen()) return;
@@ -903,7 +727,7 @@ function ReportBody({
         setRailFocus((n) => n + 1);
       } else railRef.current?.focus();
     }
-    else if (openEditor()) openEditor()!.focus();
+    else if (pageEditor) pageEditor.focus();
     else pageRef.current?.querySelector<HTMLElement>("input, textarea, button")?.focus();
   });
 
@@ -916,7 +740,7 @@ function ReportBody({
       openItem(partSection.section.id);
       return;
     }
-    const editor = openEditor();
+    const editor = pageEditor;
     if (!editor) return;
     const doc = editor.state.doc;
     // A suggested move names its block by index path (`move:0.3`).
@@ -946,8 +770,7 @@ function ReportBody({
       return {
         label: "Keep the text",
         run: () => {
-          const editor = openEditor();
-          if (editor) keepCopiedText(editor, copied[1]);
+          if (pageEditor) keepCopiedText(pageEditor, copied[1]);
         },
       };
     }
@@ -978,7 +801,7 @@ function ReportBody({
     const next = (was: string[] = []) => (on ? [...new Set([...was, ...ids])] : was.filter((id) => !ids.includes(id)));
     if (open?.target && openSection) patchMeta({ dismissedChecks: next(metaOf(openSection).dismissedChecks) });
     else if (open?.item.group === "front") {
-      const cached = (qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta) as ReportMeta;
+      const cached = cachedMeta();
       saveReport({ meta: { dismissedChecks: next(cached.dismissedChecks) } });
     }
   };
@@ -1048,7 +871,7 @@ function ReportBody({
         target={open?.target}
         data={data}
         doc={railDoc}
-        editor={readyEditor && readyEditor.id === openSection?.id ? readyEditor.editor : null}
+        editor={pageEditor}
         didWell={openSection?.kind === "summary"}
         meta={reportMeta}
         onInserted={onRestoreEvidence}
@@ -1060,29 +883,26 @@ function ReportBody({
   const editorShown = openSection?.kind !== "details" && !!openSection && hasCurrentPage(openSection) && !!contextValue && !flattenFailed;
   const notices = (
     <>
-      {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={() => setEnsureFailed(null)} />}
+      {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={retryEnsure} />}
       {saveRefused && (
         <p role="alert" className="m-0 text-meta text-warn">
           {`${entries.find((e) => e.section.id === saveRefused.sectionId)?.item.label ?? "A page"}: ${saveRefused.message}`}
         </p>
       )}
       {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>}
-      {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} retryLabel="Retry building the draft" onRetry={() => setDraftFailed(null)} />}
+      {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} retryLabel="Retry building the draft" onRetry={retryDraft} />}
       {draftBlocked && draftBlocked === openSection?.id && (
         <div role="alert" className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3">
           <p className="m-0 text-meta text-warn">
             An earlier change to this page couldn't be saved, so Raven kept the old page and hasn't rebuilt it. Retry saves
             that change, then rebuilds. Rebuild anyway keeps the change in the old page, which Restore brings back.
           </p>
-          <Button size="sm" onClick={() => setDraftBlocked(null)}>
+          <Button size="sm" onClick={retryBlocked}>
             Retry
           </Button>
           <Button
             size="sm"
-            onClick={() => {
-              rebuildAnyway.current.add(draftBlocked);
-              setDraftBlocked(null);
-            }}
+            onClick={() => rebuildAnyway(draftBlocked)}
           >
             Rebuild anyway
           </Button>
@@ -1129,7 +949,7 @@ function ReportBody({
       {entries.length === 0 ? (
         ensureFailed ? (
           <Padded>
-            <ErrorState title="Couldn't set up the report" hint="Retry. If it keeps failing, lock and unlock Raven." onRetry={() => setEnsureFailed(null)} detail={ensureFailed} />
+            <ErrorState title="Couldn't set up the report" hint="Retry. If it keeps failing, lock and unlock Raven." onRetry={retryEnsure} detail={ensureFailed} />
           </Padded>
         ) : (
           <Padded>
@@ -1186,7 +1006,7 @@ function ReportBody({
                       open?.target && (
                         <AddEvidenceButton
                           key={openSection.id}
-                          editor={readyEditor && readyEditor.id === openSection.id ? readyEditor.editor : null}
+                          editor={pageEditor}
                           data={data}
                           target={open.target}
                           meta={reportMeta}

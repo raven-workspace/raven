@@ -3,6 +3,7 @@ import { FENCE, OUTLINE_HEADING, tableCaption } from "./anchors";
 import { lookupRows, plain, type LookupRow } from "./lookup";
 import { cells, TABLE_SEPARATOR } from "./markdown";
 import type { ManualNote } from "./types";
+import { escapeRegExp } from "../regex";
 
 export interface ManualHit {
   noteId: string;
@@ -14,7 +15,6 @@ export interface ManualHit {
   inTitle: boolean;
 }
 
-const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * The Manual's matcher: a case-insensitive substring of the trimmed query, where `_` and spaces are the same thing (so
@@ -23,7 +23,7 @@ const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 export function matchRegex(query: string): RegExp | null {
   const parts = query.trim().split(/[\s_]+/);
   if (!parts.some(Boolean)) return null;
-  return new RegExp(parts.map(escapeRe).join("[\\s_]+"), "gi");
+  return new RegExp(parts.map(escapeRegExp).join("[\\s_]+"), "gi");
 }
 
 /** Every match of `query` in `text` as `[start, end)` offsets, in order. */

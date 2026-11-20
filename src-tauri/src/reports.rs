@@ -1,9 +1,9 @@
 //! Report storage: one report per engagement, made of sections. Each section holds a ProseMirror JSON
 //! document (stored as text) that references evidence by id. No generated prose lives here.
 
-use crate::backup::system_now_ms;
+use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -116,13 +116,12 @@ fn report_row(r: &Row) -> rusqlite::Result<(Report, String)> {
 }
 
 fn report_by(conn: &Connection, col: &str, key: &str) -> AppResult<Option<Report>> {
-    match conn.query_row(&format!("SELECT {REPORT_COLS} FROM reports WHERE {col} = ?1"), [key], report_row) {
-        Ok((mut rep, meta)) => {
+    match conn.query_row(&format!("SELECT {REPORT_COLS} FROM reports WHERE {col} = ?1"), [key], report_row).optional()? {
+        Some((mut rep, meta)) => {
             rep.meta = parse(&meta)?;
             Ok(Some(rep))
         }
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.into()),
+        None => Ok(None),
     }
 }
 
@@ -135,7 +134,7 @@ pub fn get_or_create(conn: &Connection, engagement_id: &str, defaults: &ReportDe
     if exists == 0 {
         return Err(AppError::NotFound);
     }
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO reports (id, engagement_id, candidate_name, email, osid, title, meta, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,'{}',?7,?7)",
@@ -153,18 +152,18 @@ pub fn get_or_create(conn: &Connection, engagement_id: &str, defaults: &ReportDe
 }
 
 /// Name, email, OSID and title: at most 2000 characters each, like the report defaults in Settings.
-const MAX_REPORT_FIELD_LEN: usize = 2000;
+pub(crate) const MAX_REPORT_FIELD_LEN: usize = 2000;
 
 pub fn update(conn: &Connection, id: &str, patch: ReportPatch) -> AppResult<Report> {
     for (field, value) in [("candidateName", &patch.candidate_name), ("email", &patch.email), ("osid", &patch.osid), ("title", &patch.title)] {
         if value.as_deref().is_some_and(|v| v.chars().count() > MAX_REPORT_FIELD_LEN) {
-            return Err(AppError::Validation { field: field.into(), message: format!("at most {MAX_REPORT_FIELD_LEN} characters") });
+            return Err(AppError::validation(field, format!("at most {MAX_REPORT_FIELD_LEN} characters")));
         }
     }
     let cur = report_by(conn, "id", id)?.ok_or(AppError::NotFound)?;
     let title = patch.title.unwrap_or(cur.title);
     if title.trim().is_empty() {
-        return Err(AppError::Validation { field: "title".into(), message: "title is required".into() });
+        return Err(AppError::validation("title", "title is required"));
     }
     conn.execute(
         "UPDATE reports SET candidate_name=?1, email=?2, osid=?3, title=?4, meta=?5, updated_at=?6 WHERE id=?7",
@@ -174,7 +173,7 @@ pub fn update(conn: &Connection, id: &str, patch: ReportPatch) -> AppResult<Repo
             patch.osid.unwrap_or(cur.osid),
             title,
             to_text(&patch.meta.unwrap_or(cur.meta)),
-            system_now_ms(),
+            now_ms(),
             id
         ],
     )?;
@@ -212,11 +211,7 @@ fn finish(parts: (ReportSection, Option<String>, String)) -> AppResult<ReportSec
 }
 
 fn section_get(conn: &Connection, id: &str) -> AppResult<ReportSection> {
-    match conn.query_row(&format!("SELECT {SECTION_COLS} FROM report_sections WHERE id = ?1"), [id], section_row) {
-        Ok(p) => finish(p),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    finish(conn.query_row(&format!("SELECT {SECTION_COLS} FROM report_sections WHERE id = ?1"), [id], section_row).optional()?.ok_or(AppError::NotFound)?)
 }
 
 pub fn sections_list(conn: &Connection, report_id: &str) -> AppResult<Vec<ReportSection>> {
@@ -230,13 +225,13 @@ fn section_texts(doc: Option<&Value>, meta: &Value) -> AppResult<(Option<String>
     let doc = doc.map(to_text);
     let meta = to_text(meta);
     if doc.as_ref().map_or(0, String::len) + meta.len() > MAX_SECTION_BYTES {
-        return Err(AppError::Validation { field: "doc".into(), message: "this page is over 8 MiB".into() });
+        return Err(AppError::validation("doc", "this page is over 8 MiB"));
     }
     Ok((doc, meta))
 }
 
 fn validate(input: &SectionInput) -> AppResult<()> {
-    let bad = |field: &str, message: &str| Err(AppError::Validation { field: field.into(), message: message.into() });
+    let bad = |field: &str, message: &str| Err(AppError::validation(field, message));
     if !KINDS.contains(&input.kind.as_str()) {
         return bad("kind", "unknown section kind");
     }
@@ -258,16 +253,12 @@ pub fn section_upsert(conn: &Connection, report_id: &str, input: SectionInput) -
     if report_by(conn, "id", report_id)?.is_none() {
         return Err(AppError::NotFound);
     }
-    let existing: Option<String> = match conn.query_row(
+    let existing: Option<String> = conn.query_row(
         "SELECT id FROM report_sections WHERE report_id = ?1 AND kind = ?2 AND COALESCE(target_key, '') = COALESCE(?3, '')",
         params![report_id, input.kind, input.target_key],
         |r| r.get(0),
-    ) {
-        Ok(id) => Some(id),
-        Err(rusqlite::Error::QueryReturnedNoRows) => None,
-        Err(e) => return Err(e.into()),
-    };
-    let now = system_now_ms();
+    ).optional()?;
+    let now = now_ms();
     let id = match existing {
         Some(id) => {
             conn.execute(
@@ -292,7 +283,7 @@ pub fn section_save(conn: &Connection, id: &str, doc: Value, meta: Value) -> App
     let (doc, meta) = section_texts(Some(&doc), &meta)?;
     let n = conn.execute(
         "UPDATE report_sections SET doc=?1, meta=?2, updated_at=?3 WHERE id=?4",
-        params![doc, meta, system_now_ms(), id],
+        params![doc, meta, now_ms(), id],
     )?;
     if n == 0 {
         return Err(AppError::NotFound);
@@ -302,13 +293,9 @@ pub fn section_save(conn: &Connection, id: &str, doc: Value, meta: Value) -> App
 
 /// Deletes an owner-written page of the report. Other sections are part of the report's outline and are never deleted.
 pub fn section_delete(conn: &Connection, report_id: &str, id: &str) -> AppResult<()> {
-    let kind: String = match conn.query_row("SELECT kind FROM report_sections WHERE id = ?1 AND report_id = ?2", params![id, report_id], |r| r.get(0)) {
-        Ok(k) => k,
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
-        Err(e) => return Err(e.into()),
-    };
+    let kind: String = conn.query_row("SELECT kind FROM report_sections WHERE id = ?1 AND report_id = ?2", params![id, report_id], |r| r.get(0)).optional()?.ok_or(AppError::NotFound)?;
     if kind != "page" {
-        return Err(AppError::Validation { field: "kind".into(), message: "only pages can be deleted".into() });
+        return Err(AppError::validation("kind", "only pages can be deleted"));
     }
     conn.execute("DELETE FROM report_sections WHERE id = ?1", [id])?;
     Ok(())

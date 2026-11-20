@@ -1,10 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import { api } from "../../lib/api";
 import type { Host, HostAccess, HostInput, HostOs } from "../../types/host";
 import { Button, ChipSet, Dialog, Field, Input, Select, Toggle } from "../../ui";
 import { useHostMutations } from "./queries";
+import { useEngagement } from "../engagements/queries";
+import { ConfirmDelete } from "../checklist/ConfirmDelete";
+import { RavenError } from "../../types/errors";
+import { OS_LABELS } from "./columns";
 
 /** What a host delete takes with it (FK cascades) and what stays. */
 const HOST_DELETE_DETAIL =
@@ -14,9 +16,7 @@ const HOST_DELETE_DETAIL =
 
 const OS_OPTIONS = [
   { value: "unknown", label: "Unknown" },
-  { value: "windows", label: "Windows" },
-  { value: "linux", label: "Linux" },
-  { value: "other", label: "Other" },
+  ...(Object.keys(OS_LABELS) as HostOs[]).map((value) => ({ value, label: OS_LABELS[value] })),
 ];
 type AdChoice = "auto" | "on" | "off";
 const AD_CHOICES: { value: AdChoice; label: string }[] = [
@@ -54,7 +54,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
   const [os, setOs] = useState(host?.os ?? "unknown");
   const [access, setAccess] = useState<HostAccess>(host?.access ?? "none");
   const [dualHomed, setDualHomed] = useState(host?.dualHomed ?? false);
-  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
+  const engagement = useEngagement(engagementId);
   const examSim = engagement.data?.kind === "exam-sim";
   const [adChoice, setAdChoice] = useState<AdChoice>(host?.adSet == null ? "auto" : host.adSet ? "on" : "off");
   const [errors, setErrors] = useState<Partial<Record<"name" | "ip" | "form", string>>>({});
@@ -81,7 +81,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
     const opts = {
       onSuccess: onClose,
       onError: (err: Error) => {
-        const field = (err as { field?: string }).field;
+        const field = RavenError.from(err).field;
         setErrors(field === "name" || field === "ip" ? { [field]: err.message } : { form: err.message });
       },
     };
@@ -158,42 +158,15 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
 function DeleteHostDialog({ host, onClose }: { host: Host; onClose: () => void }) {
   const navigate = useNavigate();
   const { remove } = useHostMutations(host.engagementId);
-  const [error, setError] = useState<string>();
   return (
-    <Dialog
-      open
-      onOpenChange={(o) => !o && onClose()}
+    <ConfirmDelete
       title={`Delete ${host.name}?`}
-      description={
-        <>
-          {HOST_DELETE_DETAIL}
-          {error && (
-            <>
-              {" "}
-              <span role="alert" className="text-warn">
-                {error}
-              </span>
-            </>
-          )}
-        </>
-      }
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            variant="danger"
-            disabled={remove.isPending}
-            onClick={() =>
-              remove.mutate(host.id, {
-                onSuccess: () => void navigate(`/e/${host.engagementId}`),
-                onError: (e) => setError(e.message),
-              })
-            }
-          >
-            Delete host
-          </Button>
-        </>
-      }
+      detail={HOST_DELETE_DETAIL}
+      error={remove.error?.message}
+      pending={remove.isPending}
+      label="Delete host"
+      onCancel={onClose}
+      onConfirm={() => remove.mutate(host.id, { onSuccess: () => void navigate(`/e/${host.engagementId}`) })}
     />
   );
 }

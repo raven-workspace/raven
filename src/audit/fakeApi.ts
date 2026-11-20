@@ -123,7 +123,6 @@ const base = {
 
   backupNow: async () => unsupported("Backup"),
   backupsList: async () => clone(db.backups),
-  importApply: async () => unsupported("Import"),
   fieldManualScan: async () => unsupported("Field-Manual scan"),
   fieldManualLatestMtime: async () => null,
   fieldManualSave: async () => null,

@@ -13,8 +13,10 @@ import {
   type Tick,
 } from "../../engines/checklist";
 import {
+  asCredential,
   findStoredCredential,
   identifyHash,
+  ntHalf,
   planCredentialIntake,
   sameDomain,
   usernameKey,
@@ -35,6 +37,7 @@ import type { Service } from "../../types/service";
 import { byOwnerOf } from "../checklist/state";
 import { loadTickContext, outputTicksOf } from "../checklist/ticks";
 import { applyIntake } from "../credentials/applyIntake";
+import { RavenError } from "../../types/errors";
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 /** An impacket target (`corp.lan/jay:pw@10.10.1.5`): the host the dump came from, whatever the shell. */
@@ -157,7 +160,7 @@ export class ExtractionError extends Error {
   readonly reason: unknown;
   readonly applied: Applied;
   constructor(reason: unknown, applied: Applied) {
-    super(reason instanceof Error ? reason.message : String(reason));
+    super(RavenError.from(reason).message);
     this.name = "ExtractionError";
     this.reason = reason;
     this.applied = applied;
@@ -170,10 +173,7 @@ const GOALS = new Map<string, ChecklistGoal>(
 const HOST_GOAL_IDS = new Set([...HOST_GOALS, ...PIVOT_GOALS].map((g) => g.id));
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-const ntOf = (s: string): string => {
-  const t = s.trim().toLowerCase();
-  return /^[0-9a-f]{32}:[0-9a-f]{32}$/.test(t) ? t.slice(33) : t;
-};
+const ntOf = (s: string): string => ntHalf(s).toLowerCase();
 const isMachine = (username: string) => username.trim().endsWith("$");
 const lc = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
 
@@ -316,11 +316,10 @@ export async function applyInterpretation(
         username = `${shortHostName(name).toUpperCase()}$`;
       }
       if (c.scope === "local" && !hostId) continue;
-      const candidate: Credential = {
-        id: "", engagementId, type: c.type, username, domain: c.domain, secret: c.secret, hashType: c.hashType,
+      const candidate = asCredential({
+        engagementId, type: c.type, username, domain: c.domain, secret: c.secret, hashType: c.hashType,
         scope: c.scope, localHostId: c.scope === "local" ? hostId : null, sourceHostId: hostId, source: c.source,
-        notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null, createdAt: 0, updatedAt: 0,
-      };
+      });
       const stored = findStoredCredential(creds, candidate);
       if (stored) {
         noteReproved(record.reprovedCredentialIds, stored.id, before.credentials);

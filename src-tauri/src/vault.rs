@@ -238,6 +238,7 @@ impl Vault {
     }
 
     /// Replace the pre-migration backup hook (default: `backup::pre_migration_hook`).
+    #[cfg(test)]
     pub fn set_backup_hook(&mut self, hook: BackupHook) {
         self.backup_hook = Some(hook);
     }
@@ -274,10 +275,7 @@ impl Vault {
         let password = normalize_password(password);
         // Counts Unicode scalar values of the NFC form.
         if password.chars().count() < MIN_PASSWORD_CHARS {
-            return Err(AppError::Validation {
-                field: "password".into(),
-                message: format!("password must be at least {MIN_PASSWORD_CHARS} characters"),
-            });
+            return Err(AppError::validation("password", format!("password must be at least {MIN_PASSWORD_CHARS} characters")));
         }
         if self.exists() {
             return Err(AppError::VaultExists);

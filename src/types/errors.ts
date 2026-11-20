@@ -1,27 +1,5 @@
-export type ErrorCode =
-  | "locked"
-  | "wrong_password"
-  | "vault_exists"
-  | "no_vault"
-  | "not_found"
-  | "damaged"
-  | "validation"
-  | "io"
-  | "db"
-  | "no_key"
-  | "offline"
-  | "key_rejected"
-  | "nvd_busy"
-  | "conflict";
-
-/** The JSON shape of a rejected Tauri command (Rust `AppError`). */
-export interface AppError {
-  code: ErrorCode;
-  message: string;
-  field?: string;
-}
-
-const CODES: readonly ErrorCode[] = [
+/** Every Rust `AppError` code; `ErrorCode` is derived from it, so the two cannot drift. */
+const CODES = [
   "locked",
   "wrong_password",
   "vault_exists",
@@ -36,7 +14,16 @@ const CODES: readonly ErrorCode[] = [
   "key_rejected",
   "nvd_busy",
   "conflict",
-];
+] as const;
+
+export type ErrorCode = (typeof CODES)[number];
+
+/** The JSON shape of a rejected Tauri command (Rust `AppError`). */
+export interface AppError {
+  code: ErrorCode;
+  message: string;
+  field?: string;
+}
 
 export function isAppError(value: unknown): value is AppError {
   if (typeof value !== "object" || value === null) return false;

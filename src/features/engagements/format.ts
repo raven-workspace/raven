@@ -142,3 +142,9 @@ export function parseScope(text: string): string[] {
     .map((l) => l.trim())
     .filter((l) => l !== "");
 }
+
+/** The local time of day as HH:MM. */
+export const clockTime = (ms: number): string => {
+  const d = new Date(ms);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};

@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { openThreads, toggleThreadPrefix } from "../../engines/notes/threads";
 import { cx } from "../../lib/cx";
 import { RavenError } from "../../types/errors";
 import { ErrorState, Textarea, Toggle } from "../../ui";
 import { CloseThreadDialog, type ClosingThread } from "./CloseThreadDialog";
 import { ThreadsList } from "./ThreadsList";
-import { useNote } from "./queries";
+import { useNote, useRuledOut } from "./queries";
+import { RuledOutList } from "./RuledOutList";
 import { flushQuietly, noteKey, useNotesStore, type NoteTarget } from "./useNotesStore";
 
 /**
@@ -40,6 +41,8 @@ export function NoteEditor({ target, textRef, className }: {
 }) {
   const key = noteKey(target);
   const note = useNote(target.engagementId, target.hostId);
+  const ruledOutQ = useRuledOut(target.engagementId);
+  const ruledOut = useMemo(() => (ruledOutQ.data ?? []).filter((r) => r.hostId === target.hostId), [ruledOutQ.data, target.hostId]);
   const pending = useNotesStore((s) => s.pending[key]);
   const error = useNotesStore((s) => s.errors[key]);
   const edit = useNotesStore((s) => s.edit);
@@ -78,12 +81,17 @@ export function NoteEditor({ target, textRef, className }: {
     <div
       className={cx(
         "grid min-h-0 gap-2",
-        // Threads (when any), the text, then the footer: the text takes the slack.
-        openThreads(body).length > 0 ? "grid-rows-[auto_minmax(0,1fr)_auto]" : "grid-rows-[minmax(0,1fr)_auto]",
+        // Threads and ruled-out items (when any), the text, then the footer: the text takes the slack.
+        openThreads(body).length > 0 || ruledOut.length > 0 ? "grid-rows-[auto_minmax(0,1fr)_auto]" : "grid-rows-[minmax(0,1fr)_auto]",
         className,
       )}
     >
-      <ThreadsList body={body} onClose={(line, text) => setClosing({ line, text })} />
+      {(openThreads(body).length > 0 || ruledOut.length > 0) && (
+        <div className="grid content-start gap-3">
+          <ThreadsList body={body} onClose={(line, text) => setClosing({ line, text })} />
+          <RuledOutList engagementId={target.engagementId} items={ruledOut} />
+        </div>
+      )}
       <Textarea
         ref={ref}
         mono

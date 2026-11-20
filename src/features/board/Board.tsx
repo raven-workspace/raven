@@ -1,23 +1,13 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router";
-import { api } from "../../lib/api";
-import type { BoardColumn, Host } from "../../types/host";
+import { BOARD_COLUMNS, type BoardColumn, type Host } from "../../types/host";
 import { Button, EmptyState, labelClass, queryState } from "../../ui";
 import { cx } from "../../lib/cx";
 import { COLUMN_LABELS } from "../hosts/columns";
 import { HostDialog } from "../hosts/HostDialog";
 import { useHostMutations, useHosts } from "../hosts/queries";
 import { BoardCard } from "./BoardCard";
-
-const ORDER: BoardColumn[] = [
-  "information-gathering",
-  "vulnerability-detection",
-  "initial-foothold",
-  "privilege-escalation",
-  "post-exploitation",
-  "reporting",
-];
+import { useEngagement } from "../engagements/queries";
 
 /**
  * A break point for the one lane title word longer than a narrow lane ("Vulnerabil-ity"); the section's aria-label
@@ -31,7 +21,7 @@ function softHyphenate(label: string): string {
 export function Board() {
   const { id = "" } = useParams();
   const hosts = useHosts(id);
-  const msfHostId = useQuery({ queryKey: ["engagement", id], queryFn: () => api.engagementGet(id) }).data?.msfHostId ?? null;
+  const msfHostId = useEngagement(id).data?.msfHostId ?? null;
   const { move } = useHostMutations(id);
   const [over, setOver] = useState<BoardColumn | null>(null);
   const [adding, setAdding] = useState(false);
@@ -83,7 +73,7 @@ export function Board() {
   }
 
   function shift(host: Host, delta: -1 | 1) {
-    const next = ORDER[ORDER.indexOf(host.boardColumn) + delta];
+    const next = BOARD_COLUMNS[BOARD_COLUMNS.indexOf(host.boardColumn) + delta];
     if (!next) return;
     refocus.current = host.id;
     moveHost(host, next);
@@ -113,11 +103,11 @@ export function Board() {
         ref={root}
         className="grid gap-3"
         style={{
-          gridTemplateColumns: `repeat(${ORDER.length}, minmax(0, 1fr))`,
+          gridTemplateColumns: `repeat(${BOARD_COLUMNS.length}, minmax(0, 1fr))`,
           gridTemplateRows: "auto 1fr",
         }}
       >
-        {ORDER.map((col) => {
+        {BOARD_COLUMNS.map((col) => {
           const cards = list.filter((h) => h.boardColumn === col);
           return (
             <section

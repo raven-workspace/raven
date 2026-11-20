@@ -1,7 +1,7 @@
+import { escapeRegExp } from "../../engines/regex";
 /** A command in a plain block: wraps at whitespace; only a word longer than the whole line breaks, so it never scrolls sideways. */
 export const COMMAND_PRE = "m-0 overflow-x-hidden whitespace-pre-wrap rounded-sm border border-line bg-surface px-2 py-2 font-mono text-code text-fg";
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** One word with its unresolved tokens wrapped in a warn-coloured mark (no background). */
 function Marked({ word, re, tokens }: { word: string; re: RegExp | null; tokens: string[] }) {
@@ -25,7 +25,7 @@ function Marked({ word, re, tokens }: { word: string; re: RegExp | null; tokens:
  * stay plain text, so copying the text is unchanged.
  */
 export function MarkedText({ text, tokens }: { text: string; tokens: string[] }) {
-  const re = tokens.length > 0 ? new RegExp(`(${tokens.map(escape).join("|")})`) : null;
+  const re = tokens.length > 0 ? new RegExp(`(${tokens.map(escapeRegExp).join("|")})`) : null;
   return (
     <>
       {text.split(/(\s+)/).map((part, i) =>

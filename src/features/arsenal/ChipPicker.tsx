@@ -1,6 +1,7 @@
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent, Ref } from "react";
 import { PickerTrigger } from "../../ui";
+import { useEscapeWhile } from "../../lib/keys";
 
 export interface ChipPickerHandle { open(): void; focus(): void }
 export interface ChipOption {
@@ -95,16 +96,7 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
   };
 
   // Esc with the list open closes only the list. Window capture runs before the drawer's and Radix's Esc handlers.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      close(true);
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [open]);
+  useEscapeWhile(open, () => close(true));
 
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.nativeEvent.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;

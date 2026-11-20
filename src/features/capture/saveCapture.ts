@@ -1,5 +1,5 @@
 import { identityBlocksOf, isIdentityBlockFor, mergeIdentity, usableIdentity, vectorsFromIdentity, type IdentityFields } from "../../engines/facts";
-import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
+import { buildDraft, type CaptureDraft, type DraftInput, OPEN_STATES } from "../../engines/capture";
 import { api } from "../../lib/api";
 import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError } from "../checklist/ticks";
 import type { Host } from "../../types/host";
@@ -9,8 +9,8 @@ import type { Service } from "../../types/service";
 import type { ResolvedInterpretation } from "../../engines/interpret/resolve";
 import { applyInterpretation, ExtractionError, interpretEntry, type Applied, type FiledBySave } from "./applyInterpretation";
 import { newHostScans } from "./resolve";
+import { RavenError } from "../../types/errors";
 
-const OPEN_STATES = new Set(["open", "open|filtered"]);
 
 /** The user-edited final fields of a capture; the draft supplies `scan` and `unknownScopeIps`. */
 export interface CaptureEdits {
@@ -100,7 +100,7 @@ export class PartialSaveError extends Error {
   /** The summary of the extraction this save stored despite the failure (it can be undone); null when none was. */
   readonly summary: ExtractionSummary | null;
   constructor(entry: LogEntry, cause: unknown, message?: string, reasons?: unknown[], summary: ExtractionSummary | null = null) {
-    const detail = cause instanceof Error ? cause.message : String(cause);
+    const detail = RavenError.from(cause).message;
     super(message ?? `Saved, but services didn't update: ${detail}`);
     this.name = "PartialSaveError";
     this.entry = entry;

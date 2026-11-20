@@ -2,15 +2,18 @@ import type { Finding, FindingFile } from "../../types/findings";
 import type { LogEntry } from "../../types/log";
 import { findingBlocks, inlineMarkdown, labelled } from "./findingText";
 import { testedLine, testedNotExploited } from "./coverage";
-import { entryPhase, findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
+import { findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
 import { msfLine, PLAIN_TABLE_KINDS, plainTable } from "./plainTables";
-import { placingEntries } from "./prove";
+import { bold, code, codeBlock, figure, heading, listItem, para, sourced, table, text, textTable } from "./nodes";
+import { ADDRESS_COMMAND } from "./proof";
+import { isFlag, placingEntries } from "./prove";
 import { attackPathRows, portRows, resultLine } from "./tables";
 import { blockHash, sourceOf, stamp } from "./stamp";
 import { reportTargets } from "./targets";
 import { isPortScan } from "./tools";
 import type { Phase, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
-import { splitAffected } from "./wording";
+import { omitted } from "./trim";
+import { capitalize, splitAffected } from "./wording";
 
 /**
  * A target written as a plain document (the owner's sample report, §4.1 Quartz): only ordinary editable nodes
@@ -50,34 +53,9 @@ export const ADDITIONAL_HEADING = "Additional findings (not on the path to root)
 export const TESTED_HEADING = "Also tested";
 export const ENUM_HEADING = "Service enumeration";
 
-type Mark = { type: string };
-const text = (value: string, marks: Mark[] = []): ReportNode => (marks.length > 0 ? { type: "text", text: value, marks } : { type: "text", text: value });
-const bold = (value: string) => text(value, [{ type: "bold" }]);
-const code = (value: string) => text(value, [{ type: "code" }]);
-const para = (content: ReportNode[], source?: string): ReportNode => ({
-  type: "paragraph",
-  ...(source ? { attrs: { source } } : {}),
-  ...(content.length > 0 ? { content } : {}),
-});
-const heading = (level: number, value: string, source: string): ReportNode => ({ type: "heading", attrs: { level, source }, content: [text(value)] });
-const codeBlock = (value: string, language: string, source: string): ReportNode => ({
-  type: "codeBlock",
-  attrs: { language, source },
-  content: [text(value)],
-});
-const listItem = (kind: "ordered" | "bullet", content: ReportNode[], source?: string): ReportNode => ({
-  type: "list",
-  attrs: { kind, ...(source ? { source } : {}) },
-  content,
-});
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/** Top-level blocks with their source set (inner paragraphs of a list keep none). */
-const sourced = (blocks: ReportNode[], source: string): ReportNode[] => blocks.map((b) => ({ ...b, attrs: { ...(b.attrs ?? {}), source } }));
-
 /** Finding or observation text as blocks (`findingBlocks`: pasted terminal text as code), each code block without the
  *  indent all its lines share (text pasted as an indented block). */
-function textBlocks(value: string): ReportNode[] {
+function writtenBlocks(value: string): ReportNode[] {
   return findingBlocks(value).map((b) => {
     if (b.type !== "codeBlock" || !b.content?.[0]?.text) return b;
     const lines = b.content[0].text.split("\n");
@@ -101,10 +79,7 @@ const PROVING_LINE = [
   // A diff's added or removed line (not its ---/+++ file headers).
   /^[+-](?![+-]{2}\s)\s*\S/,
 ];
-const omitted = (count: number) => `[… ${count} ${count === 1 ? "line" : "lines"} omitted …]`;
 
-/** A command that prints the machine's addresses: `ip a`, `ip addr`, `ifconfig`, `ipconfig`. */
-const ADDRESS_COMMAND = /\bip\s+(?:-\S+\s+)*a(?:ddr(?:ess)?)?\b|\bifconfig\b|\bipconfig\b/i;
 /** An `ip a` interface line ("2: ens3: <…>") or an ipconfig adapter line ("Ethernet adapter Ethernet0:"). */
 const INTERFACE_LINE = /^\d+:\s+\S+:\s|^\S.*adapter .*:\s*$/;
 /** A line of `ip a` / ifconfig / ipconfig detail under an interface. */
@@ -204,14 +179,14 @@ export function titleSentence(title: string): string {
 
 /** A step's sentence: the owner's observations when written (as written), else the title as a sentence. Never empty. */
 function sentenceOf(entry: LogEntry): ReportNode[] {
-  const said = entry.observations?.trim() ? textBlocks(entry.observations.trim()) : [];
+  const said = entry.observations?.trim() ? writtenBlocks(entry.observations.trim()) : [];
   if (said.length > 0 && said[0].type === "paragraph") return sourced(said, `entry:${entry.id}:observations`);
   return [para(inlineMarkdown(titleSentence(entry.title)), `entry:${entry.id}:title`), ...sourced(said, `entry:${entry.id}:observations`)];
 }
 
 /** A flag's sentence: the owner's observations when written, else "Read local.txt:". */
 function flagSentence(flag: LogEntry): ReportNode[] {
-  if (flag.observations?.trim()) return sourced(textBlocks(flag.observations.trim()), `entry:${flag.id}:observations`);
+  if (flag.observations?.trim()) return sourced(writtenBlocks(flag.observations.trim()), `entry:${flag.id}:observations`);
   return [para([text(`Read ${flag.content.kind === "flag" ? flag.content.flagKind : "the"}.txt:`)], `entry:${flag.id}:title`)];
 }
 
@@ -234,33 +209,27 @@ function evidence(data: ReportData, entry: LogEntry, step: Step) {
       if (command !== "") pending.push({ command, at: i });
       if (output === "" && i < c.blocks.length - 1) return;
       if (pending.length > 0) {
-        step.blocks.push(codeBlock(pending.map((p) => p.command).join("\n"), "", `entry:${entry.id}:${pending[0].at}:command`));
+        step.blocks.push(codeBlock(pending.map((p) => p.command).join("\n"), { source: `entry:${entry.id}:${pending[0].at}:command` }));
       }
       pending = [];
       if (output !== "") {
-        step.blocks.push(codeBlock(output, "", `entry:${entry.id}:${i}:output`));
+        step.blocks.push(codeBlock(output, { source: `entry:${entry.id}:${i}:output` }));
         step.shown.push(b.output ?? "");
       }
     });
   } else if (c.kind === "http") {
-    if (c.request.trim()) step.blocks.push(codeBlock(c.request.trim(), "", `entry:${entry.id}:request`));
+    if (c.request.trim()) step.blocks.push(codeBlock(c.request.trim(), { source: `entry:${entry.id}:request` }));
     const response = trimmedOutput(c.response ?? "");
     if (response) {
-      step.blocks.push(codeBlock(response, "", `entry:${entry.id}:response`));
+      step.blocks.push(codeBlock(response, { source: `entry:${entry.id}:response` }));
       step.shown.push(c.response ?? "");
     }
   } else if (c.kind === "screenshot") {
     step.blocks.push(figure(c.attachmentId, c.caption.trim() || entry.title, entry.id));
   } else if (c.kind === "note") {
-    step.blocks.push(...sourced(textBlocks(c.text), `entry:${entry.id}:note`));
+    step.blocks.push(...sourced(writtenBlocks(c.text), `entry:${entry.id}:note`));
   }
 }
-
-const figure = (attachmentId: string, caption: string, entryId: string): ReportNode => ({
-  type: "figure",
-  attrs: { attachmentId, entryId, source: `entry:${entryId}` },
-  ...(caption.trim() ? { content: [text(caption.trim())] } : {}),
-});
 
 /** A pasted prompt line (`ronan@garnet:~$ id`, `root@x:/tmp# id`, `PS C:\x> whoami`): the command, already shown. */
 const PROMPT_LINE = /^(?:\S+@\S+?:\S*\s*[$#]|PS [A-Za-z]:\\[^>]*>|\*Evil-WinRM\* PS [^>]*>)\s/;
@@ -287,10 +256,10 @@ function flagEvidence(data: ReportData, entry: LogEntry, step: Step) {
   if (proof !== "" && !printed(proof, step.shown)) {
     const ip = data.hosts.find((h) => entry.hostIds.includes(h.id))?.ip ?? null;
     // A pasted proof holds its own commands: `ip a` in it cuts the addresses to the machine's own.
-    step.blocks.push(codeBlock(trimmedOutput(proof, proof, ip), "", `entry:${entry.id}:proof`));
+    step.blocks.push(codeBlock(trimmedOutput(proof, proof, ip), { source: `entry:${entry.id}:proof` }));
     step.shown.push(proof);
   } else if (proof === "" && c.value.trim() !== "" && !shown.includes(c.value.trim())) {
-    step.blocks.push(codeBlock(c.value.trim(), "", `entry:${entry.id}:value`));
+    step.blocks.push(codeBlock(c.value.trim(), { source: `entry:${entry.id}:value` }));
     step.shown.push(c.value);
   }
   if (c.attachmentId) step.blocks.push(figure(c.attachmentId, `${c.flagKind}.txt`, entry.id));
@@ -318,7 +287,6 @@ function absorb(step: Step, entryId: string, value: string) {
   if (!also.includes(entryId)) step.blocks[at] = { ...b, attrs: { ...b.attrs, also: [...also, entryId] } };
 }
 
-const isFlag = (e: LogEntry | undefined) => e?.content.kind === "flag";
 const flagValue = (e: LogEntry) => (e.content.kind === "flag" ? e.content.value.trim() : "");
 
 /** A walk step: the lead entry's sentence, then every entry's evidence (screenshots that came along included). */
@@ -340,9 +308,9 @@ interface Section {
 function findingHeader(f: Finding, files: FindingFile[]): ReportNode[] {
   const out: ReportNode[] = [];
   const { affected, explanation } = splitAffected(f.description ?? "");
-  const expl = textBlocks(explanation);
+  const expl = writtenBlocks(explanation);
   if (expl.length > 0) out.push(...sourced(labelled("Vulnerability explanation:", expl), `finding:${f.id}:explanation`));
-  const fix = textBlocks((f.remediation ?? "").trim());
+  const fix = writtenBlocks((f.remediation ?? "").trim());
   if (fix.length > 0) out.push(...sourced(labelled("Vulnerability fix:", fix), `finding:${f.id}:fix`));
   if (f.severity) out.push(para([bold("Severity:"), text(` ${capitalize(f.severity)}`)], `finding:${f.id}:severity`));
   if (affected) out.push(...sourced(labelled("Affected:", [para(inlineMarkdown(affected))]), `finding:${f.id}:affected`));
@@ -353,7 +321,7 @@ function findingHeader(f: Finding, files: FindingFile[]): ReportNode[] {
 /** "Exploit code:": the public exploit's URL when used unmodified, the code when modified; the finding's exploit notes
  *  carry on after it. */
 function exploitLines(f: Finding, files: FindingFile[]): ReportNode[] {
-  const notes = textBlocks((f.exploitNotes ?? "").trim());
+  const notes = writtenBlocks((f.exploitNotes ?? "").trim());
   const out: ReportNode[] = [];
   const lead = (intro: ReportNode[], blocks: ReportNode[]): ReportNode[] => {
     const [first, ...rest] = blocks;
@@ -368,7 +336,7 @@ function exploitLines(f: Finding, files: FindingFile[]): ReportNode[] {
       out.push(...sourced(labelled("Exploit code:", lead(intro, tail)), source));
     } else {
       const intro = file.originalUrl ? [text(`Modified from ${file.originalUrl}:`)] : [code(file.name), text(":")];
-      const body = file.content.trim() ? [codeBlock(file.content.replace(/\s+$/, ""), file.language ?? "", source)] : [];
+      const body = file.content.trim() ? [codeBlock(file.content.replace(/\s+$/, ""), { language: file.language ?? "", source })] : [];
       out.push(...sourced(labelled("Exploit code:", [para(intro), ...body, ...tail]), source));
     }
   });
@@ -401,17 +369,12 @@ const serviceName = (name: string, fromNmap: boolean) => (fromNmap && /^[a-z0-9]
 function portTable(data: ReportData, hostId: string): ReportNode | null {
   const rows = portRows(data, hostId);
   if (rows.length === 0) return null;
-  const cell = (type: string, value: string): ReportNode => ({ type, content: [para(value ? [text(value)] : [])] });
-  const row = (type: string, values: string[]): ReportNode => ({ type: "tableRow", content: values.map((v) => cell(type, v)) });
   const nmapNamed = (serviceId: string) => data.services.find((s) => s.id === serviceId)?.confirmedProduct == null;
-  return {
-    type: "table",
-    attrs: { source: `ports:${hostId}` },
-    content: [
-      row("tableHeaderCell", ["Port", "Service", "Version", "Notes"]),
-      ...rows.map((r) => row("tableCell", [r.port, serviceName(r.service, nmapNamed(r.serviceId)), r.version, ""])),
-    ],
-  };
+  return textTable(
+    ["Port", "Service", "Version", "Notes"],
+    rows.map((r) => [r.port, serviceName(r.service, nmapNamed(r.serviceId)), r.version, ""]),
+    `ports:${hostId}`,
+  );
 }
 
 /** The host's first port scan: the one Service enumeration prints. */
@@ -432,9 +395,9 @@ function portScan(data: ReportData, hostId: string): ReportNode[] {
   const out: ReportNode[] = [];
   scan.content.blocks.forEach((b, i) => {
     if ((b.command ?? "").trim() === "") return;
-    out.push(codeBlock(b.command.trim(), "", `entry:${scan.id}:${i}:command`));
+    out.push(codeBlock(b.command.trim(), { source: `entry:${scan.id}:${i}:command` }));
     const output = openPortLines(b.output ?? "", scripted) || trimmedOutput(b.output ?? "");
-    if (output) out.push(codeBlock(output, "", `entry:${scan.id}:${i}:output`));
+    if (output) out.push(codeBlock(output, { source: `entry:${scan.id}:${i}:output` }));
   });
   return out;
 }
@@ -442,7 +405,7 @@ function portScan(data: ReportData, hostId: string): ReportNode[] {
 /** A finding as one Additional findings bullet: "**<title>** (<Severity>): <description>", code runs as code blocks. */
 function additionalItem(f: Finding): ReportNode {
   const lead = [bold(f.title), text(f.severity ? ` (${capitalize(f.severity)})` : "")];
-  const blocks = textBlocks(splitAffected(f.description ?? "").explanation);
+  const blocks = writtenBlocks(splitAffected(f.description ?? "").explanation);
   const [first, ...rest] = blocks;
   const content =
     first?.type === "paragraph"
@@ -466,18 +429,13 @@ function attackPathBlocks(data: ReportData, hostIds: string[]): ReportNode[] {
   const rows = attackPathRows(data, hostIds);
   if (rows.length === 0) return [];
   const ticked = (value: string) => value.split(/`([^`]*)`/).flatMap((t, i) => (t === "" ? [] : [i % 2 === 1 ? code(t) : text(t)]));
-  const cell = (type: string, content: ReportNode[]): ReportNode => ({ type, content: [para(content)] });
-  const row = (type: string, cells: ReportNode[][]): ReportNode => ({ type: "tableRow", content: cells.map((c) => cell(type, c)) });
   return [
     para([bold("Attack path")], "attack-path"),
-    {
-      type: "table",
-      attrs: { source: "attack-path" },
-      content: [
-        row("tableHeaderCell", ["Step", "From", "Technique", "To", "Access gained"].map((h) => [text(h)])),
-        ...rows.map((r) => row("tableCell", [[text(String(r.step))], [text(r.from)], [text(r.technique)], [text(r.to)], ticked(r.access)])),
-      ],
-    },
+    table(
+      ["Step", "From", "Technique", "To", "Access gained"].map((h) => [text(h)]),
+      rows.map((r) => [[text(String(r.step))], [text(r.from)], [text(r.technique)], [text(r.to)], ticked(r.access)]),
+      "attack-path",
+    ),
   ];
 }
 
@@ -601,7 +559,7 @@ export function buildPlainTarget(data: ReportData, target: ReportTarget, meta: R
 /* ------------------------------------------------------------------ Refresh */
 
 /** Blocks as the page holds them: text normalised, sourced blocks stamped. */
-const finish = (blocks: ReportNode[]): ReportNode[] => stamp(blocks.map(normalize));
+export const finish = (blocks: ReportNode[]): ReportNode[] => stamp(blocks.map(normalize));
 
 /** Every block an entry can put on a page, as a draft step holds them (a flag: "Read local.txt:" and its proof). */
 function entryRun(data: ReportData, entry: LogEntry): ReportNode[] {
@@ -703,6 +661,9 @@ export function refreshBlocks(source: string, data: ReportData, target: ReportTa
   return blocks && blocks.length > 0 ? blocks : null;
 }
 
+/** A block's source, or "" when it has none. */
+export const srcOf = (n: ReportNode) => sourceOf(n) ?? "";
+
 /** A target's draft (`buildPlainTarget`) by machine: the top-level blocks from each machine's heading to the next. */
 function machineParts(draft: ReportNode): Map<string, ReportNode[]> {
   const parts = new Map<string, ReportNode[]>();
@@ -722,7 +683,7 @@ export interface Drafted {
   byMachine: Map<string, ReportNode[]>;
 }
 
-/** `target`'s draft, built once, for the placing functions below. */
+/** `target`'s draft, built once, for the placing functions (`place.ts`). */
 export function draftOf(data: ReportData, target: ReportTarget, meta: ReportMeta): Drafted {
   const doc = buildPlainTarget(data, target, meta);
   return { target, doc, byMachine: machineParts(doc) };
@@ -749,78 +710,6 @@ function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, ta
   });
 }
 
-/** The entry ids a page holds: those in `entry:<id>…` sources at any depth, every figure's `entryId`, and every id in
- *  an `also` attr (an entry a block already shows). */
-export function entryIdsIn(doc: ReportNode): Set<string> {
-  const ids = new Set<string>();
-  const walk = (n: ReportNode) => {
-    const source = sourceOf(n);
-    const m = source ? /^entry:([^:]+)/.exec(source) : null;
-    if (m) ids.add(m[1]);
-    if (n.type === "figure" && typeof n.attrs?.entryId === "string" && n.attrs.entryId !== "") ids.add(n.attrs.entryId);
-    if (Array.isArray(n.attrs?.also)) for (const id of n.attrs.also) if (typeof id === "string" && id !== "") ids.add(id);
-    n.content?.forEach(walk);
-  };
-  walk(doc);
-  return ids;
-}
-
-/* ------------------------------------------------------------------ Placing an entry */
-
-/** The phases with a heading of their own, in page order. */
-const PAGE_PHASES: Phase[] = ["enum", "foothold", "lateral", "privesc", "domain", "post"];
-
-const srcOf = (n: ReportNode) => sourceOf(n) ?? "";
-/** Whether a level 1 or 2 heading ends the region before it. */
-const breaksRegion = (n: ReportNode) => n.type === "heading" && ((n.attrs?.level as number | undefined) ?? 1) <= 2;
-const isStepList = (n: ReportNode) => n.type === "list" && n.attrs?.kind === "ordered";
-/** The entries a block names itself (its source, a figure's entry, its `also`), not its children's. */
-const ownIds = (n: ReportNode) => entryIdsIn({ type: n.type, attrs: n.attrs });
-
-/** The top-level index where a machine's part of the page ends: its next machine's heading, else the end. */
-function hostEnd(content: ReportNode[], hostId: string): number {
-  const facts = content.findIndex((n) => srcOf(n) === `facts:${hostId}`);
-  const next = facts === -1 ? -1 : content.findIndex((n, i) => i > facts && srcOf(n).startsWith("facts:"));
-  return next === -1 ? content.length : next;
-}
-/** The end of the region a heading at `head` opens: the next level 1 or 2 heading, else the end. */
-function regionEnd(content: ReportNode[], head: number): number {
-  let end = head + 1;
-  while (end < content.length && !breaksRegion(content[end])) end++;
-  return end;
-}
-
-/**
- * Where a new step for `entry` goes on a page with no cursor: `index` is the top-level index at the end of the region
- * of the last heading whose source is `phase:<hostId>:<phase>` (or `…:<findingId>`), the region running to the next
- * level 1 or 2 heading or the end. `before` lists the blocks to insert first: the phase's heading when it has none
- * (before the host's first later-phase heading, else its Additional findings or Also tested heading, else the next
- * machine's heading, else at the end), and "Steps to reproduce:" when the region holds no step yet. The phase is
- * `entryPhase`'s; `enum` is the Service enumeration region. A phase with no step heading of its own goes at the end of
- * the machine's part of the page.
- */
-export function phaseInsertAt(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { index: number; before: ReportNode[] } {
-  const { hostId, phase } = entryPhase(data, target, entry);
-  const content = doc.content ?? [];
-  const ofPhase = (n: ReportNode, p: Phase) => n.type === "heading" && (srcOf(n) === `phase:${hostId}:${p}` || srcOf(n).startsWith(`phase:${hostId}:${p}:`));
-  const stepsLabel = para([bold("Steps to reproduce:")], `phase-steps:${hostId}`);
-  if (!PAGE_PHASES.includes(phase)) return { index: hostEnd(content, hostId), before: [] };
-
-  const head = content.reduce((found, n, i) => (ofPhase(n, phase) ? i : found), -1);
-  if (head !== -1) {
-    const end = regionEnd(content, head);
-    const labelled = content.slice(head + 1, end).some((n) => isStepList(n) || srcOf(n) === `phase-steps:${hostId}`);
-    return { index: end, before: finish(labelled ? [] : [stepsLabel]) };
-  }
-
-  const later = PAGE_PHASES.slice(PAGE_PHASES.indexOf(phase) + 1);
-  let at = content.findIndex((n) => later.some((p) => ofPhase(n, p)));
-  if (at === -1) at = content.findIndex((n) => ofPhase(n, "additional") || ofPhase(n, "tested"));
-  if (at === -1) at = hostEnd(content, hostId);
-  const title = phase === "enum" ? ENUM_HEADING : PHASE_TITLE[phase]!;
-  return { index: at, before: finish([heading(2, title, `phase:${hostId}:${phase}`), stepsLabel]) };
-}
-
 /**
  * One entry's blocks as the draft places them (`entryBlocks`), each carrying the `also` the draft records on it: an
  * entry whose evidence one of these blocks already shows (a flag its output prints) is placed with it, never twice.
@@ -840,152 +729,6 @@ export function draftedEntryBlocks(data: ReportData, target: ReportTarget, meta:
   });
 }
 
-/**
- * Where a screenshot that came along with a step goes on a page with no cursor: the draft's step that holds it (with
- * another entry leading it) is matched to the page's numbered step holding any of that step's other entries, and the
- * screenshot's own blocks from the draft go at its end. Null when the screenshot leads a step of its own, or the page
- * has no such step: it then goes as a step of its own.
- */
-export function companionStepAt(
-  doc: ReportNode,
-  data: ReportData,
-  target: ReportTarget,
-  meta: ReportMeta,
-  entry: LogEntry,
-  drafted?: Drafted,
-): { index: number; blocks: ReportNode[] } | null {
-  if (entry.content.kind !== "screenshot") return null;
-  const step = ((drafted ?? draftOf(data, target, meta)).doc.content ?? []).find((n) => isStepList(n) && (n.content ?? []).some((b) => ownIds(b).has(entry.id)));
-  if (!step || ownIds(step.content![0]).has(entry.id)) return null;
-  const others = [...entryIdsIn(step)].filter((id) => id !== entry.id);
-  const content = doc.content ?? [];
-  const index = content.findIndex((n) => isStepList(n) && others.some((id) => entryIdsIn(n).has(id)));
-  if (index === -1) return null;
-  return { index, blocks: step.content!.filter((b) => ownIds(b).has(entry.id)) };
-}
-
-/**
- * Add new evidence's entries: those the draft would place now (`entryIdsIn(buildPlainTarget(…))`) that the page holds
- * no block of and the owner hasn't removed, in time order.
- */
-export function missingEntries(doc: ReportNode, data: ReportData, target: ReportTarget, meta: ReportMeta, removed: readonly string[], drafted?: Drafted): LogEntry[] {
-  const wanted = entryIdsIn(drafted?.doc ?? buildPlainTarget(data, target, meta));
-  const onPage = entryIdsIn(doc);
-  return data.log
-    .filter((e) => wanted.has(e.id) && !onPage.has(e.id) && !removed.includes(e.id))
-    .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
-}
-
-/** What `removedEntryIds` records when the owner deletes a machine's whole Also tested list. */
-export const testedKey = (hostId: string) => `tested:${hostId}`;
-
-/** What a page places that its owner can remove and Add new evidence would bring back: its entries (`entryIdsIn`)
- *  and each machine's Also tested list (`testedKey`, from a `tested:<hostId>` block). */
-export function placedIdsIn(doc: ReportNode): Set<string> {
-  const ids = entryIdsIn(doc);
-  const walk = (n: ReportNode) => {
-    const m = /^tested:([^:]+)$/.exec(srcOf(n));
-    if (m) ids.add(testedKey(m[1]));
-    n.content?.forEach(walk);
-  };
-  walk(doc);
-  return ids;
-}
-
-/**
- * A draft without what the owner took off the page (`removedEntryIds`), so a rebuild never puts it back: every block of
- * a removed entry (its source's, a figure's), a numbered step left with nothing in it, and for a `tested:<hostId>` key
- * that machine's Also tested heading and bullets. A block that shows a removed entry only in its `also` stays (it is
- * another entry's), the removed id taken out of its `also`, so the page doesn't count that entry as placed. Then what
- * that leaves bare goes too (`withoutBare`): a "Steps to reproduce:" label with no step after it in its region, and a
- * phase heading with nothing under it.
- */
-export function withoutRemoved(doc: ReportNode, removed: readonly string[]): ReportNode {
-  if (removed.length === 0) return doc;
-  const gone = new Set(removed);
-  const tested = new Set(removed.flatMap((k) => /^tested:([^:]+)$/.exec(k)?.[1] ?? []));
-  const entryOf = (n: ReportNode) => /^entry:([^:]+)/.exec(srcOf(n))?.[1] ?? (n.type === "figure" && typeof n.attrs?.entryId === "string" ? n.attrs.entryId : null);
-  const dropped = (n: ReportNode) => {
-    const id = entryOf(n);
-    if (id !== null && gone.has(id)) return true;
-    const m = /^(?:tested:([^:]+)|phase:([^:]+):tested)$/.exec(srcOf(n));
-    return m !== null && tested.has(m[1] ?? m[2]);
-  };
-  const clean = (n: ReportNode): ReportNode | null => {
-    if (dropped(n)) return null;
-    let out = n;
-    const also = n.attrs?.also;
-    if (Array.isArray(also) && also.some((id) => gone.has(id))) {
-      const kept = also.filter((id) => !gone.has(id));
-      const attrs = Object.fromEntries(Object.entries(n.attrs!).filter(([k]) => k !== "also"));
-      out = { ...n, attrs: kept.length > 0 ? { ...attrs, also: kept } : attrs };
-    }
-    if (!n.content || n.type === "text") return out;
-    const content = n.content.map(clean).filter((c): c is ReportNode => c !== null);
-    if (content.length === 0 && n.content.length > 0 && n.type === "list") return null;
-    return { ...out, content };
-  };
-  const out = clean(doc) ?? { ...doc, content: [] };
-  return { ...out, content: withoutBare(out.content ?? []) };
-}
-
-/** Top-level blocks without a "Steps to reproduce:" label (`phase-steps:*`) that has no numbered step after it before
- *  the next level 1 or 2 heading, and without a phase heading (`phase:*`) whose next block is a heading of its level
- *  or above, or the end. Read from the end, so a heading left bare by a sub-heading going goes too. */
-function withoutBare(content: ReportNode[]): ReportNode[] {
-  const level = (n: ReportNode) => (n.attrs?.level as number | undefined) ?? 1;
-  const out: ReportNode[] = [];
-  for (let i = content.length - 1; i >= 0; i--) {
-    const n = content[i];
-    if (srcOf(n).startsWith("phase-steps:")) {
-      const end = out.findIndex(breaksRegion);
-      if (!(end === -1 ? out : out.slice(0, end)).some(isStepList)) continue;
-    }
-    const next = out[0];
-    if (n.type === "heading" && srcOf(n).startsWith("phase:") && (!next || (next.type === "heading" && level(next) <= level(n)))) continue;
-    out.unshift(n);
-  }
-  return out;
-}
-
-/**
- * Whether a screenshot comes along with another entry's step in the draft (it is not that step's lead), so on a page
- * with no cursor it joins the step holding that entry (`companionStepAt`).
- */
-export function joinsAStep(data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry, drafted?: Drafted): boolean {
-  if (entry.content.kind !== "screenshot") return false;
-  const d = drafted ?? draftOf(data, target, meta);
-  return companionStepAt(d.doc, data, target, meta, entry, d) !== null;
-}
-
-/**
- * A machine's Also tested run as the draft writes it, for Add new evidence, when the page holds no `tested:<hostId>`
- * block and the draft has some: the bullets at the end of the page's Also tested region, or the heading and the
- * bullets at the end of the machine's part of the page. Null otherwise, and when the owner deleted it (its
- * `testedKey` is in `removed`).
- */
-export function missingTested(
-  doc: ReportNode,
-  data: ReportData,
-  target: ReportTarget,
-  meta: ReportMeta,
-  hostId: string,
-  removed: readonly string[] = [],
-  drafted?: Drafted,
-): { index: number; blocks: ReportNode[] } | null {
-  // The owner deleted the list: it stays deleted.
-  if (removed.includes(testedKey(hostId))) return null;
-  const content = doc.content ?? [];
-  const has = (n: ReportNode): boolean => srcOf(n) === `tested:${hostId}` || (n.content ?? []).some(has);
-  if (content.some(has)) return null;
-  const draft = (drafted?.doc ?? buildPlainTarget(data, target, meta)).content ?? [];
-  const bullets = draft.filter((n) => srcOf(n) === `tested:${hostId}`);
-  if (bullets.length === 0) return null;
-  const head = content.findIndex((n) => n.type === "heading" && srcOf(n) === `phase:${hostId}:tested`);
-  if (head !== -1) return { index: regionEnd(content, head), blocks: bullets };
-  const title = draft.filter((n) => srcOf(n) === `phase:${hostId}:tested`);
-  return { index: hostEnd(content, hostId), blocks: [...title, ...bullets] };
-}
 
 /** Text nodes as ProseMirror stores them: neighbours with the same marks joined, empty ones dropped. */
 function normalize(n: ReportNode): ReportNode {

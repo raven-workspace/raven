@@ -1,17 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { hopsKey, tunnelsKey } from "../checklist/queries";
+import { hopsKey, tunnelsKey } from "../network/queries";
 import { accessGrantsKey, credAttemptsKey, credentialsKey } from "../credentials/queries";
 import { cleanupCountsKey, cleanupKey } from "../cleanup/queries";
-import { findingsKey } from "../findings/queries";
+import { failedAttemptsKey, findingsKey } from "../findings/queries";
 import { resyncAndRefresh } from "../checklist/resync";
 import { dropPendingNotes } from "../notes/useNotesStore";
 import { invalidateRuledOut } from "../services/queries";
 import type { BoardColumn, HostInput } from "../../types/host";
 import type { HostIdentity, VectorInput, VectorStatus } from "../../types/hostFacts";
+import { engagementKey, engagementsKey } from "../engagements/queries";
+import { logKey } from "../log/queries";
 
-export function useHosts(engagementId: string) {
-  return useQuery({ queryKey: ["hosts", engagementId], queryFn: () => api.hostsList(engagementId) });
+export const hostsKey = (engagementId: string) => ["hosts", engagementId] as const;
+
+export function useHosts(engagementId: string, enabled = true) {
+  return useQuery({ queryKey: hostsKey(engagementId), queryFn: () => api.hostsList(engagementId), enabled });
 }
 
 /** Per-engagement host and flag counts, keyed by engagement id. */
@@ -22,7 +26,7 @@ export function useProgress() {
 export function useHostMutations(engagementId: string) {
   const qc = useQueryClient();
   const onSuccess = () => {
-    void qc.invalidateQueries({ queryKey: ["hosts", engagementId] });
+    void qc.invalidateQueries({ queryKey: hostsKey(engagementId) });
     void qc.invalidateQueries({ queryKey: ["progress"] });
     // Host facts (OS, IP) change applicability; a deleted host takes its checklist rows and services with it.
     void qc.invalidateQueries({ queryKey: ["checklist", engagementId] });
@@ -58,9 +62,9 @@ export function useHostMutations(engagementId: string) {
       onSuccess: (_r, id) => {
         onSuccess();
         // Log entries lose the deleted host's link.
-        void qc.invalidateQueries({ queryKey: ["log", engagementId] });
+        void qc.invalidateQueries({ queryKey: logKey(engagementId) });
         // Attempts on it keep their record but lose the host.
-        void qc.invalidateQueries({ queryKey: ["failedAttempts", engagementId] });
+        void qc.invalidateQueries({ queryKey: failedAttemptsKey(engagementId) });
         // Its credential test results and access grants go; credentials lose it as local or source host;
         // findings lose their link to it.
         void qc.invalidateQueries({ queryKey: credAttemptsKey(engagementId) });
@@ -71,8 +75,8 @@ export function useHostMutations(engagementId: string) {
         dropPendingNotes(engagementId, id);
         void qc.invalidateQueries({ queryKey: ["notes", engagementId] });
         // The Metasploit lock on it is cleared by the store; tunnels and hops through it go too.
-        void qc.invalidateQueries({ queryKey: ["engagement", engagementId] });
-        void qc.invalidateQueries({ queryKey: ["engagements"] });
+        void qc.invalidateQueries({ queryKey: engagementKey(engagementId) });
+        void qc.invalidateQueries({ queryKey: engagementsKey });
         void qc.invalidateQueries({ queryKey: tunnelsKey(engagementId) });
         void qc.invalidateQueries({ queryKey: hopsKey(engagementId) });
         // Its cleanup items lose the host.

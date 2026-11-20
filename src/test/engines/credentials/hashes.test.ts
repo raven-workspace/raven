@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { identifyHash, formatCrackingList, groupByHashcatMode, getCrackingCommands, HashCandidate } from '../../../engines/credentials/hashes';
+import { identifyHash, getCrackingCommands, HashCandidate } from '../../../engines/credentials/hashes';
 
 function top(input: string, hint?: 'windows' | 'linux' | 'web'): HashCandidate | undefined {
   return identifyHash(input, hint)[0];
@@ -75,73 +75,6 @@ describe('identifyHash - 32-hex ambiguity (MD5 vs NTLM)', () => {
   it('keeps MD5 first for linux/web hints', () => {
     expect(identifyHash(hex32, 'linux').map((c) => c.name)).toEqual(['MD5', 'NTLM']);
     expect(identifyHash(hex32, 'web').map((c) => c.name)).toEqual(['MD5', 'NTLM']);
-  });
-});
-
-describe('formatCrackingList', () => {
-  it('formats hashcat mode as one hash per line', () => {
-    const out = formatCrackingList(
-      [{ username: 'admin', hash: '5d41402abc4b2a76b9719d911017c592' }, { hash: 'b89eaac7e61417341b710b727768294d0e6a277b' }],
-      'hashcat'
-    );
-    expect(out).toBe('5d41402abc4b2a76b9719d911017c592\nb89eaac7e61417341b710b727768294d0e6a277b');
-  });
-
-  it('keeps native pwdump/NetNTLM lines intact for hashcat mode', () => {
-    const pwdumpLine = 'admin:1001:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::';
-    const out = formatCrackingList([{ hash: pwdumpLine }], 'hashcat');
-    expect(out).toBe(pwdumpLine);
-  });
-
-  it('formats john mode as user:hash when username present', () => {
-    const out = formatCrackingList([{ username: 'admin', hash: '5d41402abc4b2a76b9719d911017c592' }], 'john');
-    expect(out).toBe('admin:5d41402abc4b2a76b9719d911017c592');
-  });
-
-  it('formats john mode as bare hash when no username', () => {
-    const out = formatCrackingList([{ hash: '5d41402abc4b2a76b9719d911017c592' }], 'john');
-    expect(out).toBe('5d41402abc4b2a76b9719d911017c592');
-  });
-
-  it('handles multiple entries joined by newlines', () => {
-    const out = formatCrackingList(
-      [
-        { username: 'alice', hash: '5d41402abc4b2a76b9719d911017c592' },
-        { username: 'bob', hash: 'b89eaac7e61417341b710b727768294d0e6a277b' },
-      ],
-      'john'
-    );
-    expect(out).toBe('alice:5d41402abc4b2a76b9719d911017c592\nbob:b89eaac7e61417341b710b727768294d0e6a277b');
-  });
-});
-
-describe('groupByHashcatMode', () => {
-  it('groups hashes by their top-candidate hashcat mode', () => {
-    const groups = groupByHashcatMode([
-      'b89eaac7e61417341b710b727768294d0e6a277b', // SHA1 -> 100
-      '127e6fbfe24a750e72930c220a8e138275656b8e5d8f48a98c3c92df2caba935', // SHA256 -> 1400
-      '$2a$05$LhayLxezLhK1LhWvKxCyLOj0j1u.Kj0jZ0pEmm134uzrQlFvQJLF6', // bcrypt -> 3200
-    ]);
-    expect(groups['100']).toEqual(['b89eaac7e61417341b710b727768294d0e6a277b']);
-    expect(groups['1400']).toEqual(['127e6fbfe24a750e72930c220a8e138275656b8e5d8f48a98c3c92df2caba935']);
-    expect(groups['3200']).toEqual(['$2a$05$LhayLxezLhK1LhWvKxCyLOj0j1u.Kj0jZ0pEmm134uzrQlFvQJLF6']);
-  });
-
-  it('groups unidentifiable and no-hashcat-mode hashes under unknown', () => {
-    const groups = groupByHashcatMode([
-      'totally-not-a-hash',
-      '$y$j9T$abcdefghijklmnopqrstuv$WxR4G0XKsZ8pQ1b2c3d4e5f6g7h8i9j0k1l2m3n4o5', // yescrypt -> null mode
-    ]);
-    expect(groups.unknown).toEqual([
-      'totally-not-a-hash',
-      '$y$j9T$abcdefghijklmnopqrstuv$WxR4G0XKsZ8pQ1b2c3d4e5f6g7h8i9j0k1l2m3n4o5',
-    ]);
-  });
-
-  it('groups multiple hashes of the same mode together', () => {
-    const groups = groupByHashcatMode(['5d41402abc4b2a76b9719d911017c592', '098f6bcd4621d373cade4e832627b4f6']);
-    // both 32-hex -> MD5 is top candidate by default (no hint) -> mode 0
-    expect(groups['0']).toEqual(['5d41402abc4b2a76b9719d911017c592', '098f6bcd4621d373cade4e832627b4f6']);
   });
 });
 

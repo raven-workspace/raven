@@ -2,7 +2,7 @@ import type { ListenerId } from "./types";
 
 export interface ListenerDef {
   label: string;
-  /** Placeholders ({LPORT} {LHOST} {TARGET_IP} {BIND_PORT} {MSF_PAYLOAD}) are filled by buildListener. */
+  /** Placeholders ({LPORT} {LHOST} {TARGET_IP} {BIND_PORT} {MSF_PAYLOAD}) are filled by fillListener. */
   template: string;
   /** Kali connects out to a bind shell instead of waiting for a callback. */
   connect?: boolean;
@@ -27,7 +27,8 @@ export const LISTENERS: Record<ListenerId, ListenerDef> = {
   "connect-penelope": { label: "penelope", template: "penelope -O -c {TARGET_IP} -p {BIND_PORT}", connect: true },
 };
 
-const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
+/** A `{NAME}` template placeholder. Global: use it only with `.replace` / `.matchAll`, which ignore and reset `lastIndex`. */
+export const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
 
 /** Fills a listener template; a blank or missing value stays visible as its {NAME}. */
 export function fillListener(template: string, values: Record<string, string>): string {
@@ -35,8 +36,4 @@ export function fillListener(template: string, values: Record<string, string>): 
     const v = (values[name] ?? "").trim();
     return v === "" ? m : v;
   });
-}
-
-export function buildListener(id: ListenerId, values: Record<string, string>): string {
-  return fillListener(LISTENERS[id].template, values);
 }

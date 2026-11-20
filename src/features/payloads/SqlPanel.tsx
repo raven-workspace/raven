@@ -7,6 +7,7 @@ import { CommandBlock, Disclosure, DisclosureCaret, Input, labelClass, Toggle } 
 import type { PayloadFit } from "./usePayloadFit";
 import { lhostPlaceholder } from "./usePayloadSession";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
+import { RavenError } from "../../types/errors";
 
 const ENGINE_LABEL: Record<SqlEngine, string> = { mssql: "MSSQL", mysql: "MySQL", postgres: "PostgreSQL", oracle: "Oracle", sqlite: "SQLite" };
 const POINTS: { id: SqlPoint; label: string }[] = [
@@ -39,7 +40,7 @@ function tryBuild(id: string, title: string, engine: SqlEngine, point: SqlPoint,
   try {
     return { built: buildSql(id, engine, point, values) };
   } catch (e) {
-    return { error: (e instanceof Error ? e.message : String(e)).replace(id, title) };
+    return { error: (RavenError.from(e).message).replace(id, title) };
   }
 }
 
@@ -148,7 +149,7 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
     setStatus(undefined);
     copyPlain(b.text).then(() => setStatus(`Copied: ${b.def.title}`), (e: unknown) => {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
     });
     return "copied";
   };

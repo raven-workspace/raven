@@ -2,10 +2,9 @@
 //!
 //! Secrets are stored as entered (the database is encrypted); masking is a UI concern.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
 use crate::error::{AppError, AppResult};
-use crate::notes::check_scope;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -119,10 +118,6 @@ pub struct AccessGrantInput {
     pub at: Option<i64>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 /// Ruling F-R1: a secret keeps its spaces as entered; only leading and trailing line breaks go.
 fn strip_line_breaks(s: &str) -> &str {
     s.trim_matches(|c| c == '\r' || c == '\n')
@@ -136,10 +131,6 @@ fn clean_secret<'a>(kind: &str, s: &'a str) -> &'a str {
     } else {
         strip_line_breaks(s)
     }
-}
-
-fn blank_to_none(s: Option<&str>) -> Option<String> {
-    s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
 
 const CRED_COLS: &str = "id, engagement_id, type, username, domain, secret, hash_type, scope, local_host_id, \
@@ -213,44 +204,22 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Credential>
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Credential> {
-    match conn.query_row(&format!("SELECT {CRED_COLS} FROM credentials WHERE id = ?1"), [id], cred_row) {
-        Ok(c) => Ok(c),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
-}
-
-fn check_cred_scope(conn: &Connection, engagement_id: &str, id: &str) -> AppResult<()> {
-    let ok: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM credentials WHERE id = ?1 AND engagement_id = ?2)",
-        params![id, engagement_id],
-        |r| r.get(0),
-    )?;
-    if ok { Ok(()) } else { Err(AppError::NotFound) }
-}
-
-fn check_log_scope(conn: &Connection, engagement_id: &str, id: &str) -> AppResult<()> {
-    let ok: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM log_entries WHERE id = ?1 AND engagement_id = ?2)",
-        params![id, engagement_id],
-        |r| r.get(0),
-    )?;
-    if ok { Ok(()) } else { Err(AppError::NotFound) }
+    conn.query_row(&format!("SELECT {CRED_COLS} FROM credentials WHERE id = ?1"), [id], cred_row).optional()?.ok_or(AppError::NotFound)
 }
 
 /// Validates and normalises an input into a Credential (id and timestamps filled by the caller).
 fn build(conn: &Connection, engagement_id: &str, i: CredentialInput) -> AppResult<Credential> {
     if !matches!(i.kind.as_str(), "password" | "hash" | "ticket" | "key" | "token" | "other") {
-        return Err(invalid("type", "type must be password, hash, ticket, key, token or other"));
+        return Err(AppError::validation("type", "type must be password, hash, ticket, key, token or other"));
     }
     let scope = blank_to_none(i.scope.as_deref()).unwrap_or_else(|| "domain".into());
     if !matches!(scope.as_str(), "domain" | "local" | "app") {
-        return Err(invalid("scope", "scope must be domain, local or app"));
+        return Err(AppError::validation("scope", "scope must be domain, local or app"));
     }
     let local_host_id = blank_to_none(i.local_host_id.as_deref());
     match (scope == "local", &local_host_id) {
-        (true, None) => return Err(invalid("localHostId", "a local credential needs its host")),
-        (false, Some(_)) => return Err(invalid("localHostId", "only a local credential has a host")),
+        (true, None) => return Err(AppError::validation("localHostId", "a local credential needs its host")),
+        (false, Some(_)) => return Err(AppError::validation("localHostId", "only a local credential has a host")),
         _ => {}
     }
     check_scope(conn, engagement_id, local_host_id.as_deref())?;
@@ -262,11 +231,11 @@ fn build(conn: &Connection, engagement_id: &str, i: CredentialInput) -> AppResul
     }
     let cracked_from = blank_to_none(i.cracked_from.as_deref());
     if let Some(id) = &cracked_from {
-        check_cred_scope(conn, engagement_id, id)?;
+        check_in_engagement(conn, "credentials", engagement_id, id)?;
     }
     let from_secret_id = blank_to_none(i.from_secret_id.as_deref());
     if let Some(id) = &from_secret_id {
-        check_cred_scope(conn, engagement_id, id)?;
+        check_in_engagement(conn, "credentials", engagement_id, id)?;
     }
     let secret = clean_secret(&i.kind, &i.secret).to_string();
     let hash_type = if i.kind == "hash" {
@@ -299,7 +268,7 @@ fn check_crack_status(s: &str) -> AppResult<()> {
     if matches!(s, "uncracked" | "cracked" | "uncrackable") {
         Ok(())
     } else {
-        Err(invalid("crackStatus", "crack status must be uncracked, cracked or uncrackable"))
+        Err(AppError::validation("crackStatus", "crack status must be uncracked, cracked or uncrackable"))
     }
 }
 
@@ -325,7 +294,7 @@ pub fn create(conn: &Connection, engagement_id: &str, input: CredentialInput) ->
     if let Some(existing) = find_duplicate(conn, &c, "")? {
         return Ok(existing);
     }
-    let now = system_now_ms();
+    let now = now_ms();
     c.id = uuid::Uuid::new_v4().to_string();
     c.created_at = now;
     c.updated_at = now;
@@ -339,11 +308,11 @@ pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<
     let current = get(conn, id)?;
     let c = build(conn, &current.engagement_id, input)?;
     if find_duplicate(conn, &c, id)?.is_some() {
-        return Err(invalid("secret", "A credential with these values already exists"));
+        return Err(AppError::validation("secret", "A credential with these values already exists"));
     }
     for link in [&c.cracked_from, &c.from_secret_id] {
         if link.as_deref() == Some(id) {
-            return Err(invalid("crackedFrom", "a credential cannot link to itself"));
+            return Err(AppError::validation("crackedFrom", "a credential cannot link to itself"));
         }
     }
     // Absent keeps the current status; a hash with none starts uncracked; a non-hash has none.
@@ -365,24 +334,21 @@ pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<
             id, c.kind, c.username, c.domain, c.secret, c.hash_type, c.scope, c.local_host_id, source_host,
             c.source, c.notes,
             status,
-            cracked_from, from_secret, system_now_ms()
+            cracked_from, from_secret, now_ms()
         ],
     )?;
     get(conn, id)
 }
 
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM credentials WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "credentials", id)
 }
 
 pub fn set_crack_status(conn: &Connection, id: &str, status: &str) -> AppResult<Credential> {
     check_crack_status(status)?;
     let n = conn.execute(
         "UPDATE credentials SET crack_status=?2, updated_at=?3 WHERE id=?1",
-        params![id, status, system_now_ms()],
+        params![id, status, now_ms()],
     )?;
     if n == 0 {
         return Err(AppError::NotFound);
@@ -395,14 +361,14 @@ pub fn set_crack_status(conn: &Connection, id: &str, status: &str) -> AppResult<
 pub fn crack(conn: &Connection, hash_id: &str, plaintext: &str) -> AppResult<Credential> {
     let hash = get(conn, hash_id)?;
     if hash.kind != "hash" {
-        return Err(invalid("type", "only a hash can be cracked"));
+        return Err(AppError::validation("type", "only a hash can be cracked"));
     }
     let plaintext = strip_line_breaks(plaintext);
     if plaintext.trim().is_empty() {
-        return Err(invalid("plaintext", "plaintext is required"));
+        return Err(AppError::validation("plaintext", "plaintext is required"));
     }
     let tx = conn.unchecked_transaction()?;
-    let now = system_now_ms();
+    let now = now_ms();
     let pw = Credential {
         id: uuid::Uuid::new_v4().to_string(),
         engagement_id: hash.engagement_id.clone(),
@@ -464,27 +430,18 @@ pub fn usernames_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<U
 }
 
 fn username_get(conn: &Connection, id: &str) -> AppResult<Username> {
-    match conn.query_row(&format!("SELECT {USER_COLS} FROM usernames WHERE id = ?1"), [id], user_row) {
-        Ok(u) => Ok(u),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {USER_COLS} FROM usernames WHERE id = ?1"), [id], user_row).optional()?.ok_or(AppError::NotFound)
 }
 
 fn username_find(conn: &Connection, engagement_id: &str, username: &str, domain: Option<&str>) -> AppResult<Option<Username>> {
-    let r = conn.query_row(
+    Ok(conn.query_row(
         &format!(
             "SELECT {USER_COLS} FROM usernames WHERE engagement_id = ?1 AND lower(username) = lower(?2) \
              AND lower(ifnull(domain,'')) = lower(?3)"
         ),
         params![engagement_id, username, domain.unwrap_or("")],
         user_row,
-    );
-    match r {
-        Ok(u) => Ok(Some(u)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.into()),
-    }
+    ).optional()?)
 }
 
 /// Creates a username, or returns the existing one (case-insensitive on username and domain).
@@ -492,7 +449,7 @@ pub fn username_create(conn: &Connection, engagement_id: &str, input: UsernameIn
     check_scope(conn, engagement_id, None)?;
     let username = input.username.trim().to_string();
     if username.is_empty() {
-        return Err(invalid("username", "username is required"));
+        return Err(AppError::validation("username", "username is required"));
     }
     let domain = blank_to_none(input.domain.as_deref());
     let source_host_id = blank_to_none(input.source_host_id.as_deref());
@@ -503,16 +460,13 @@ pub fn username_create(conn: &Connection, engagement_id: &str, input: UsernameIn
     let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
         &format!("INSERT INTO usernames ({USER_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7)"),
-        params![id, engagement_id, username, domain, source_host_id, blank_to_none(input.source.as_deref()), system_now_ms()],
+        params![id, engagement_id, username, domain, source_host_id, blank_to_none(input.source.as_deref()), now_ms()],
     )?;
     username_get(conn, &id)
 }
 
 pub fn username_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM usernames WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "usernames", id)
 }
 
 // ------------------------------------------------------------ access grants
@@ -541,29 +495,22 @@ pub fn grants_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Acce
 
 fn grant_insert(conn: &Connection, engagement_id: &str, username_id: &str, i: &AccessGrantInput) -> AppResult<AccessGrant> {
     if !matches!(i.level.as_str(), "user" | "admin" | "system") {
-        return Err(invalid("level", "level must be user, admin or system"));
+        return Err(AppError::validation("level", "level must be user, admin or system"));
     }
     let via = i.via.trim();
     if via.is_empty() {
-        return Err(invalid("via", "say how access was gained"));
+        return Err(AppError::validation("via", "say how access was gained"));
     }
     check_scope(conn, engagement_id, Some(&i.host_id))?;
-    let ok: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM usernames WHERE id = ?1 AND engagement_id = ?2)",
-        params![username_id, engagement_id],
-        |r| r.get(0),
-    )?;
-    if !ok {
-        return Err(AppError::NotFound);
-    }
+    check_in_engagement(conn, "usernames", engagement_id, username_id)?;
     let log_entry_id = blank_to_none(i.log_entry_id.as_deref());
     if let Some(l) = &log_entry_id {
-        check_log_scope(conn, engagement_id, l)?;
+        check_in_engagement(conn, "log_entries", engagement_id, l)?;
     }
     let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
         &format!("INSERT INTO access_grants ({GRANT_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"),
-        params![id, engagement_id, username_id, i.host_id, i.level, via, log_entry_id, i.at.unwrap_or_else(system_now_ms)],
+        params![id, engagement_id, username_id, i.host_id, i.level, via, log_entry_id, i.at.unwrap_or_else(now_ms)],
     )?;
     Ok(conn.query_row(&format!("SELECT {GRANT_COLS} FROM access_grants WHERE id = ?1"), [&id], grant_row)?)
 }
@@ -574,10 +521,7 @@ pub fn grant_create(conn: &Connection, engagement_id: &str, input: AccessGrantIn
 }
 
 pub fn grant_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM access_grants WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "access_grants", id)
 }
 
 /// For an old placeholder-secret credential: finds or creates its username, records the grant, and
@@ -586,10 +530,10 @@ pub fn convert_to_access(conn: &Connection, cred_id: &str, grant: AccessGrantInp
     let cred = get(conn, cred_id)?;
     let placeholder = matches!(cred.secret.trim().to_lowercase().as_str(), "" | "none" | "n/a" | "-");
     if cred.kind != "password" || !placeholder {
-        return Err(invalid("secret", "only a placeholder password credential can be converted"));
+        return Err(AppError::validation("secret", "only a placeholder password credential can be converted"));
     }
     if cred.username.trim().is_empty() {
-        return Err(invalid("username", "the credential has no username to convert"));
+        return Err(AppError::validation("username", "the credential has no username to convert"));
     }
     let tx = conn.unchecked_transaction()?;
     let user = username_create(

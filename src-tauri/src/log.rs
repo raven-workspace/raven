@@ -1,10 +1,10 @@
 //! Engagement log: typed entries, host links, screenshot/flag attachments.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
 use crate::error::{AppError, AppResult};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -121,14 +121,6 @@ const COLS: &str = "id, engagement_id, kind, title, title_edited, ran_on, observ
     returned_nothing, private, content, at, created_at, updated_at, payload_id, payload_values";
 const MAX_ATTACHMENT: usize = 25 * 1024 * 1024;
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
-fn opt_trim(v: &Option<String>) -> Option<String> {
-    v.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
-}
-
 fn from_row(r: &Row) -> rusqlite::Result<LogEntry> {
     let json: String = r.get(9)?;
     let content = serde_json::from_str(&json)
@@ -165,11 +157,7 @@ fn fill_hosts(conn: &Connection, e: &mut LogEntry) -> AppResult<()> {
 }
 
 fn get(conn: &Connection, id: &str) -> AppResult<LogEntry> {
-    let mut e = match conn.query_row(&format!("SELECT {COLS} FROM log_entries WHERE id = ?1"), [id], from_row) {
-        Ok(e) => e,
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
-        Err(e) => return Err(e.into()),
-    };
+    let mut e = conn.query_row(&format!("SELECT {COLS} FROM log_entries WHERE id = ?1"), [id], from_row).optional()?.ok_or(AppError::NotFound)?;
     fill_hosts(conn, &mut e)?;
     Ok(e)
 }
@@ -189,13 +177,13 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<LogEntry>> 
 pub(crate) fn check_title(t: &str) -> AppResult<String> {
     let t = t.trim().to_string();
     if t.is_empty() || t.chars().count() > 300 {
-        return Err(invalid("title", "title must be 1-300 characters"));
+        return Err(AppError::validation("title", "title must be 1-300 characters"));
     }
     Ok(t)
 }
 
 pub(crate) fn check_content(c: &LogContent) -> AppResult<()> {
-    let bad = |m: &str| Err(invalid("content", m));
+    let bad = |m: &str| Err(AppError::validation("content", m));
     match c {
         LogContent::Command { blocks } => {
             if blocks.is_empty() || blocks.iter().any(|b| b.command.trim().is_empty()) {
@@ -215,14 +203,7 @@ pub(crate) fn check_content(c: &LogContent) -> AppResult<()> {
 fn check_hosts(conn: &Connection, engagement_id: &str, ids: &[String]) -> AppResult<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
     for id in ids {
-        let ok: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
-            params![id, engagement_id],
-            |r| r.get(0),
-        )?;
-        if !ok {
-            return Err(invalid("hostIds", "host does not belong to this engagement"));
-        }
+        check_in_engagement(conn, "hosts", engagement_id, id)?;
         if !out.contains(id) {
             out.push(id.clone());
         }
@@ -232,7 +213,7 @@ fn check_hosts(conn: &Connection, engagement_id: &str, ids: &[String]) -> AppRes
 
 /// Validates the upload and returns the decoded bytes.
 pub(crate) fn decode_attachment(a: &NewAttachment) -> AppResult<Vec<u8>> {
-    let bad = |m: &str| invalid("attachment", m);
+    let bad = |m: &str| AppError::validation("attachment", m);
     if !matches!(a.mime.as_str(), "image/png" | "image/jpeg" | "image/webp" | "image/gif") {
         return Err(bad("attachment must be a png, jpeg, webp or gif image"));
     }
@@ -255,11 +236,7 @@ fn write_hosts(conn: &Connection, entry_id: &str, host_ids: &[String]) -> AppRes
 }
 
 pub fn create(conn: &Connection, engagement_id: &str, input: LogEntryInput) -> AppResult<LogEntry> {
-    let exists: bool =
-        conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
-    if !exists {
-        return Err(AppError::NotFound);
-    }
+    check_scope(conn, engagement_id, None)?;
     let title = check_title(&input.title)?;
     check_content(&input.content)?;
     let host_ids = check_hosts(conn, engagement_id, &input.host_ids)?;
@@ -267,12 +244,12 @@ pub fn create(conn: &Connection, engagement_id: &str, input: LogEntryInput) -> A
     let wants_attachment = matches!(content, LogContent::Screenshot { .. } | LogContent::Flag { .. });
     let attachment = match (&input.attachment, &content) {
         (Some(a), _) if wants_attachment => Some(decode_attachment(a)?),
-        (None, LogContent::Screenshot { .. }) => return Err(invalid("attachment", "a screenshot needs an image")),
-        (Some(_), _) => return Err(invalid("attachment", "this kind of entry takes no attachment")),
+        (None, LogContent::Screenshot { .. }) => return Err(AppError::validation("attachment", "a screenshot needs an image")),
+        (Some(_), _) => return Err(AppError::validation("attachment", "this kind of entry takes no attachment")),
         _ => None,
     };
 
-    let now = system_now_ms();
+    let now = now_ms();
     let at = input.at.unwrap_or(now);
     let id = uuid::Uuid::new_v4().to_string();
     let tx = conn.unchecked_transaction()?;
@@ -298,7 +275,7 @@ pub fn create(conn: &Connection, engagement_id: &str, input: LogEntryInput) -> A
     }
     write_hosts(&tx, &id, &host_ids)?;
     tx.execute("UPDATE engagements SET last_activity_at = ?2 WHERE id = ?1", params![engagement_id, at])?;
-    if let Some(r) = opt_trim(&input.ran_on) {
+    if let Some(r) = blank_to_none(input.ran_on.as_deref()) {
         crate::engagements::set_last_ran_on(&tx, engagement_id, Some(&r))?;
     }
     tx.commit()?;
@@ -316,7 +293,7 @@ fn insert_entry(
     at: i64,
     now: i64,
 ) -> AppResult<()> {
-    let json = serde_json::to_string(content).map_err(|e| AppError::Db(e.to_string()))?;
+    let json = serde_json::to_string(content)?;
     tx.execute(
         "INSERT INTO log_entries (id, engagement_id, kind, title, title_edited, ran_on, observations, \
          returned_nothing, private, content, at, created_at, updated_at, payload_id, payload_values) \
@@ -327,14 +304,14 @@ fn insert_entry(
             content.kind(),
             title,
             input.title_edited,
-            opt_trim(&input.ran_on),
-            opt_trim(&input.observations),
+            blank_to_none(input.ran_on.as_deref()),
+            blank_to_none(input.observations.as_deref()),
             input.returned_nothing,
             input.private,
             json,
             at,
             now,
-            opt_trim(&input.payload_id),
+            blank_to_none(input.payload_id.as_deref()),
             values_json(&input.payload_values)?
         ],
     )?;
@@ -342,7 +319,7 @@ fn insert_entry(
 }
 
 fn values_json(v: &Option<BTreeMap<String, String>>) -> AppResult<Option<String>> {
-    v.as_ref().map(|m| serde_json::to_string(m).map_err(|e| AppError::Db(e.to_string()))).transpose()
+    Ok(v.as_ref().map(serde_json::to_string).transpose()?)
 }
 
 /// Full update. The attachment is ignored and the kind cannot change; a stored
@@ -352,7 +329,7 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
     let title = check_title(&input.title)?;
     check_content(&input.content)?;
     if input.content.kind() != old.kind {
-        return Err(invalid("content", "an entry's kind cannot change"));
+        return Err(AppError::validation("content", "an entry's kind cannot change"));
     }
     let host_ids = check_hosts(conn, &old.engagement_id, &input.host_ids)?;
     let mut content = input.content.clone();
@@ -363,11 +340,11 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
         (LogContent::Flag { attachment_id, .. }, LogContent::Flag { attachment_id: o, .. }) => *attachment_id = o.clone(),
         _ => {}
     }
-    let json = serde_json::to_string(&content).map_err(|e| AppError::Db(e.to_string()))?;
+    let json = serde_json::to_string(&content)?;
     // None keeps the stored payload; a blank string clears it, and the values it was built with go with it.
     let payload_id = match input.payload_id.as_deref() {
         None => old.payload_id.clone(),
-        Some(_) => opt_trim(&input.payload_id),
+        Some(_) => blank_to_none(input.payload_id.as_deref()),
     };
     let tx = conn.unchecked_transaction()?;
     tx.execute(
@@ -377,13 +354,13 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
             id,
             title,
             input.title_edited,
-            opt_trim(&input.ran_on),
-            opt_trim(&input.observations),
+            blank_to_none(input.ran_on.as_deref()),
+            blank_to_none(input.observations.as_deref()),
             input.returned_nothing,
             input.private,
             json,
             input.at.unwrap_or(old.at),
-            system_now_ms(),
+            now_ms(),
             payload_id,
             match (&payload_id, &input.payload_values) {
                 (None, _) => None,
@@ -399,20 +376,14 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
 }
 
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM log_entries WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "log_entries", id)
 }
 
 pub fn attachment_get(conn: &Connection, id: &str) -> AppResult<Attachment> {
-    match conn.query_row("SELECT id, mime, bytes FROM attachments WHERE id = ?1", [id], |r| {
+    let (id, mime, bytes) = conn.query_row("SELECT id, mime, bytes FROM attachments WHERE id = ?1", [id], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Vec<u8>>(2)?))
-    }) {
-        Ok((id, mime, bytes)) => Ok(Attachment { id, mime, data_base64: STANDARD.encode(bytes) }),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    }).optional()?.ok_or(AppError::NotFound)?;
+    Ok(Attachment { id, mime, data_base64: STANDARD.encode(bytes) })
 }
 
 #[cfg(test)]
@@ -589,7 +560,7 @@ mod tests {
         let hb = host(c, &b, "10.0.0.9");
         let mut i = input(cmd());
         i.host_ids = vec![hb];
-        assert_eq!(field(create(c, &a, i)), "hostIds");
+        assert_eq!(create(c, &a, i), Err(AppError::NotFound));
         assert!(list(c, &a).unwrap().is_empty());
     }
 

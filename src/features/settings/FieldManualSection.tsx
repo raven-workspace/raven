@@ -1,15 +1,16 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router";
 import { api } from "../../lib/api";
 import { Button, Disclosure, Field, Input, Panel } from "../../ui";
 import type { Drift } from "../../engines/fieldManual/drift";
 import { useFieldManual, useImportFieldManual } from "../fieldManual/queries";
+import { settingsKey, useSettings } from "./queries";
 
 /** Settings › Field Manual: where the vault is, import it now, and what the last import did. */
 export function FieldManualSection() {
   const qc = useQueryClient();
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
+  const settings = useSettings();
   const snap = useFieldManual();
   const imp = useImportFieldManual();
   useEffect(() => {
@@ -32,7 +33,7 @@ export function FieldManualSection() {
       return true;
     }
     try {
-      qc.setQueryData(["settings"], await api.settingsUpdate({ fieldManualPath: v }));
+      qc.setQueryData(settingsKey, await api.settingsUpdate({ fieldManualPath: v }));
       setPath(null);
       return true;
     } catch (e) {

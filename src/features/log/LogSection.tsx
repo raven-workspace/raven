@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { OrderButton } from "./OrderButton";
-import { byOrder, usePersistedOrder } from "./usePersistedOrder";
+import { byOrder, useLogOrder } from "./useLogOrder";
 import { useParams } from "react-router";
 import type { LogKind } from "../../types/log";
 import { EmptyState, Select, queryState } from "../../ui";
@@ -23,7 +23,7 @@ export function LogSection() {
   const [host, setHost] = useState("all");
   const [kind, setKind] = useState("all");
   const [ranOn, setRanOn] = useState("all");
-  const [order, setOrder] = usePersistedOrder("raven.log.order", "newest");
+  const [order, setOrder] = useLogOrder("newest");
 
   const entries = log.data ?? [];
   const state = queryState([log], "the log");

@@ -37,7 +37,7 @@ const entry = (o: Record<string, unknown>) =>
   }) as unknown as LogEntry;
 const shot = (id: string, caption: string) =>
   entry({ id, kind: "screenshot", title: caption, content: { kind: "screenshot", attachmentId: "a1", caption, fileName: "x.png" } });
-const data = (log: LogEntry[], hosts: Host[] = [host("h1", "ms01")]) =>
+const data = (log: LogEntry[], hosts: Host[] = [host("h1", "ms01")], attempts: unknown[] = []) =>
   ({
     engagement: { id: "eng", kind: "exam-sim" },
     hosts,
@@ -46,7 +46,7 @@ const data = (log: LogEntry[], hosts: Host[] = [host("h1", "ms01")]) =>
     checklist: [],
     findings: [],
     findingFiles: [],
-    attempts: [],
+    attempts,
     ruledOut: [],
     grants: [],
     usernames: [],
@@ -61,7 +61,7 @@ const code = (text: string): ReportNode => ({ type: "codeBlock", attrs: { langua
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
 const standalone: ReportTarget = { key: "h1", kind: "standalone", hostIds: ["h1"] };
 
-type Opts = { target?: ReportTarget; hosts?: Host[]; subNumbers?: (doc: ReportNode) => Map<number, string> };
+type Opts = { target?: ReportTarget; hosts?: Host[]; attempts?: unknown[]; subNumbers?: (doc: ReportNode) => Map<number, string> };
 function setup(page: ReportNode, log: LogEntry[] = [entry({})], opts: Opts = {}) {
   const onChange = vi.fn();
   const ref: { editor: Editor | null } = { editor: null };
@@ -70,7 +70,7 @@ function setup(page: ReportNode, log: LogEntry[] = [entry({})], opts: Opts = {})
   const utils = render(
     <QueryClientProvider client={qc}>
       <ReportDataContext.Provider
-        value={{ data: data(log, opts.hosts), onRemoveEvidence: vi.fn(), target: opts.target ?? standalone }}
+        value={{ data: data(log, opts.hosts, opts.attempts), onRemoveEvidence: vi.fn(), target: opts.target ?? standalone }}
       >
         <ReportEditor doc={page} subNumbers={opts.subNumbers} onChange={onChange} onReady={(e) => (ref.editor = e)} />
       </ReportDataContext.Provider>
@@ -262,6 +262,18 @@ describe("Slash menu", () => {
     fireEvent.click(within(list).getByRole("option", { name: /Full port scan/, hidden: true }));
     // Plain blocks with their sources, where the empty line was.
     expect(json(editor()).content?.map((n) => n.attrs?.source ?? n.content?.[0]?.text)).toEqual(["Scanned it", "entry:e1:title", "entry:e1:0:command", "entry:e1:0:output"]);
+  });
+
+  it("offers what the evidence rail offers: an entry behind an operator-reason attempt stays out", async () => {
+    const log = [entry({}), entry({ id: "op", title: "Typo in the payload" })];
+    const attempts = [{ id: "a1", logEntryId: "op", private: false, reasonKind: "operator" }];
+    const { editor } = await ready(doc(para()), log, { attempts });
+    act(() => editor().view.focus());
+    cursorAt(editor(), 1);
+    type(editor(), "/");
+    const list = await screen.findByRole("listbox", { name: "Insert", hidden: true });
+    await waitFor(() => expect(within(list).getByRole("option", { name: /Full port scan/, hidden: true })).toBeInTheDocument());
+    expect(within(list).queryByRole("option", { name: /Typo in the payload/, hidden: true })).toBeNull();
   });
 
   it("the toolbar's Insert evidence opens it on log entries alone", async () => {

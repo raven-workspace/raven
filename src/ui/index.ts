@@ -24,7 +24,7 @@ export { HintLine, type Hint } from "./HintLine";
 export { Disclosure, type DisclosureProps } from "./Disclosure";
 export { Collapse, type CollapseProps } from "./Collapse";
 export { DisclosureCaret, CARET_TURN } from "./DisclosureCaret";
-export { useDrawerPresence, useFadeOnChange } from "./motion";
+export { useDrawerPresence, useFadeOnChange, useFlash } from "./motion";
 export { CommandBlock, type CommandBlockProps } from "./CommandBlock";
 export { LoadingState } from "./LoadingState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState";

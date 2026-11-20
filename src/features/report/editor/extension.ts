@@ -124,7 +124,8 @@ const figureSpec = defineNodeSpec({
 });
 
 /** Whether a paragraph is empty and has a hint to show. */
-const showsHint = (node: PMNode) => node.type.name === "paragraph" && node.content.size === 0 && typeof node.attrs.hint === "string" && node.attrs.hint !== "";
+/** An empty paragraph that shows a guide hint until the owner types. */
+export const showsHint = (node: PMNode) => node.type.name === "paragraph" && node.content.size === 0 && typeof node.attrs.hint === "string" && node.attrs.hint !== "";
 
 /** An empty paragraph with a hint shows it (`p.report-hint[data-hint]`, drawn by page.css) until the owner types. */
 const hintPlaceholders = definePlugin(

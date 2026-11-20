@@ -19,7 +19,7 @@ import { TextSelection } from "prosekit/pm/state";
 import { AutocompleteEmpty, AutocompleteItem, AutocompletePopup, AutocompletePositioner, AutocompleteRoot } from "prosekit/react/autocomplete";
 import { useEditor } from "prosekit/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { entryIdsIn, type ReportNode } from "../../../engines/report";
+import { entryIdsIn, keptFromReport, type ReportData, type ReportNode } from "../../../engines/report";
 import type { LogEntry } from "../../../types/log";
 import { cx } from "../../../lib/cx";
 import { labelClass } from "../../../ui";
@@ -27,7 +27,8 @@ import { KIND_LABELS } from "../../log/kindLabels";
 import { inPageHeading, insertTable, setBlockKind, type PageEditor } from "./commands";
 import type { EditingExtension } from "./extension";
 import { insertEntry, usePageActions } from "./pageActions";
-import { useReportData } from "./ReportDataContext";
+import { usePageContext } from "./ReportDataContext";
+import { clockTime } from "../../engagements/format";
 
 interface BlockItem {
   id: string;
@@ -75,19 +76,17 @@ export function fuzzyScore(query: string, text: string): number | null {
   return score;
 }
 
-/** Evidence the slash menu offers: this target's non-private entries not on the page yet. */
-function candidates(log: LogEntry[], hostIds: string[], doc: ReportNode): LogEntry[] {
+/** Evidence the slash menu offers: what the rail offers (this target's entries not on the page yet, none kept from the report). */
+function candidates(data: ReportData, hostIds: string[], doc: ReportNode): LogEntry[] {
   const onPage = entryIdsIn(doc);
-  return log
-    .filter((e) => !e.private && !onPage.has(e.id) && e.hostIds.some((h) => hostIds.includes(h)))
+  return data.log
+    .filter((e) => !keptFromReport(data, e) && !onPage.has(e.id) && e.hostIds.some((h) => hostIds.includes(h)))
     .sort((a, b) => b.at - a.at || b.createdAt - a.createdAt);
 }
 
 const searchText = (e: LogEntry) =>
   `${e.title} ${e.content.kind === "command" ? e.content.blocks.map((b) => b.command).join(" ") : e.content.kind === "note" ? e.content.text : ""}`;
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const clock = (at: number) => `${pad(new Date(at).getHours())}:${pad(new Date(at).getMinutes())}`;
 
 /** What opening the evidence picker from the toolbar put on the page: where its `/` is and whether it added a
  *  paragraph for it, so closing without a pick takes them away again. */
@@ -180,7 +179,7 @@ const ITEM =
 export function SlashMenu() {
   const editor = useEditor<EditingExtension>();
   const actions = usePageActions();
-  const { data, target, reportMeta } = useReportData();
+  const { data, target, reportMeta } = usePageContext();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [onlyEvidence, setOnlyEvidence] = useState(false);
@@ -200,7 +199,7 @@ export function SlashMenu() {
   }, [query, onlyEvidence, structural]);
   const entries = useMemo(() => {
     if (!open || !target || !editor.mounted) return [];
-    const all = candidates(data.log, target.hostIds, editor.getDocJSON() as ReportNode);
+    const all = candidates(data, target.hostIds, editor.getDocJSON() as ReportNode);
     if (query.trim() === "") return all.slice(0, onlyEvidence ? 12 : 5);
     return all
       .map((e) => ({ e, s: fuzzyScore(query, searchText(e)) }))
@@ -208,7 +207,7 @@ export function SlashMenu() {
       .sort((x, y) => y.s - x.s)
       .slice(0, 8)
       .map((x) => x.e);
-  }, [open, target, editor, data.log, query, onlyEvidence]);
+  }, [open, target, editor, data, query, onlyEvidence]);
 
   const q = query.trim().toLowerCase();
   // ↵ takes the first item: a log entry only when the owner has clearly named it.
@@ -304,7 +303,7 @@ export function SlashMenu() {
                   if (target) insertEntry(editor, data, target, e, true, reportMeta);
                 }}
               >
-                <span className="font-mono text-code text-muted tabular-nums">{clock(e.at)}</span>
+                <span className="font-mono text-code text-muted tabular-nums">{clockTime(e.at)}</span>
                 <span className="grid min-w-0 gap-1">
                   <span className="truncate text-body text-fg" title={e.title}>
                     {e.title}

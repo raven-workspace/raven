@@ -1,5 +1,5 @@
 import { useQueries, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   DRAFT_LAYOUT,
   testedNotExploited,
@@ -10,16 +10,21 @@ import {
   type SectionMeta,
 } from "../../engines/report";
 import { api } from "../../lib/api";
+import { reportError } from "../../lib/lockSignal";
 import type { FindingFile } from "../../types/findings";
-import type { Report, ReportSection, SectionInput, SectionKind } from "../../types/report";
-import { useChecklist, useEngagementServices, useHops } from "../checklist/queries";
+import type { Report, ReportPatch, ReportSection, SectionInput, SectionKind } from "../../types/report";
+import { useChecklist } from "../checklist/queries";
+import { useHops } from "../network/queries";
+import { useEngagementServices } from "../services/queries";
 import { useCleanup } from "../cleanup/queries";
 import { useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../credentials/queries";
 import { findingFilesKey, useFailedAttempts, useFindings } from "../findings/queries";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { useNotes } from "../notes/queries";
-import { flushReports, forgetReportSave, patchCachedSection, pruneRemoved, queueReportSave } from "./saveQueue";
+import { flushReports, forgetReportSave, patchCachedSection, pruneRemoved, queueReportSave, trackReportWrite } from "./saveQueue";
+import { useEngagement } from "../engagements/queries";
+import { useRuledOut } from "../notes/queries";
 
 export const reportKey = (eid: string) => ["report", eid] as const;
 export const reportSectionsKey = (reportId: string) => ["reportSections", reportId] as const;
@@ -49,14 +54,14 @@ function combineFiles(results: UseQueryResult<FindingFile[]>[]) {
 
 /** Everything the report engine reads for one engagement, from the queries the rest of the app already keeps fresh. */
 export function useReportData(eid: string): { data: ReportData | undefined; isLoading: boolean; error: Error | null; refetch(): void } {
-  const engagement = useQuery({ queryKey: ["engagement", eid], queryFn: () => api.engagementGet(eid) });
+  const engagement = useEngagement(eid);
   const hosts = useHosts(eid);
   const services = useEngagementServices(eid).query;
   const log = useLog(eid);
   const checklist = useChecklist(eid).query;
   const findings = useFindings(eid);
   const attempts = useFailedAttempts(eid);
-  const ruledOut = useQuery({ queryKey: ["ruledOut", eid], queryFn: () => api.ruledOutList(eid) });
+  const ruledOut = useRuledOut(eid);
   const grants = useAccessGrants(eid);
   const usernames = useUsernames(eid);
   const hops = useHops(eid).query;
@@ -132,6 +137,9 @@ export function wantedSections(targets: ReportTarget[], data: ReportData): { kin
   ];
 }
 
+/** The position after every one of `sections`: a section placed there goes last. */
+export const nextPosition = (sections: ReportSection[]) => (sections.length === 0 ? 0 : Math.max(...sections.map((s) => s.position)) + 1);
+
 /**
  * Upserts the sections the report lacks, with `doc: null`; existing sections are never touched (an upsert would
  * overwrite their page). On a first open they take positions in §5.7 order; a later one (a new host) goes after every
@@ -145,7 +153,7 @@ export async function ensureSections(
 ): Promise<ReportSection[]> {
   const have = new Set(existing.map((s) => sectionKey(s.kind, s.targetKey)));
   const missing = wantedSections(targets, data).filter((w) => !have.has(sectionKey(w.kind, w.targetKey)));
-  let next = existing.length === 0 ? 0 : Math.max(...existing.map((s) => s.position)) + 1;
+  let next = nextPosition(existing);
   const created: ReportSection[] = [];
   for (const w of missing) {
     const input: SectionInput = { kind: w.kind, targetKey: w.targetKey, position: next++, doc: null, meta: {}, draftBuiltAt: null };
@@ -176,6 +184,51 @@ export function createPage(report: Report, placement: PageMeta["placement"], pos
 }
 
 /**
+ * Report-details writes for `report`. `saveReport` patches the cached report at once, then writes: one at a time, in
+ * order; only the last one's reply reaches the cache, so a slower earlier reply never overwrites a later change.
+ * `cachedMeta` is the report's meta as the cache has it now (the latest, saved or not).
+ */
+export function useReportWriter(report: Report) {
+  const qc = useQueryClient();
+  const reportWrites = useRef<{ chain: Promise<unknown>; last: number }>({ chain: Promise.resolve(), last: 0 });
+  const saveReport = useCallback(
+    (patch: ReportPatch) => {
+      const key = reportKey(report.engagementId);
+      const before = qc.getQueryData<Report>(key);
+      const merged: ReportPatch = patch.meta && before ? { ...patch, meta: { ...before.meta, ...patch.meta } } : patch;
+      if (before) qc.setQueryData<Report>(key, { ...before, ...merged } as Report);
+      const writes = reportWrites.current;
+      const n = ++writes.last;
+      writes.chain = writes.chain
+        .then(() => api.reportUpdate(report.id, merged))
+        .then((saved) => {
+          if (n === writes.last) qc.setQueryData(key, saved);
+        })
+        .catch((e: unknown) => {
+          reportError(e);
+          void qc.invalidateQueries({ queryKey: key });
+        });
+      // A lock waits for it, as it does for the pages.
+      trackReportWrite(writes.chain);
+    },
+    [qc, report.engagementId, report.id],
+  );
+  const cachedMeta = () => qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta;
+  return { saveReport, cachedMeta };
+}
+
+/** Stores the report's sections in the order `ids` gives (every section's position is its index), the cache first. */
+export function reorderSections(qc: QueryClient, reportId: string, ids: string[]) {
+  qc.setQueryData<ReportSection[]>(reportSectionsKey(reportId), (list = []) =>
+    list.map((s) => ({ ...s, position: ids.indexOf(s.id) })).sort((a, b) => a.position - b.position),
+  );
+  api.reportSectionsReorder(reportId, ids).catch((e: unknown) => {
+    reportError(e);
+    void qc.invalidateQueries({ queryKey: reportSectionsKey(reportId) });
+  });
+}
+
+/**
  * Renames a page that is not open: its cached page with the new title goes through the save queue (the queue patches
  * the cache before every write, so the cached page is the latest one). The open page renames through its own editor's
  * meta instead, so a keystroke's save never carries the old title.
@@ -184,7 +237,7 @@ export function renamePage(qc: QueryClient, section: ReportSection, title: strin
   const cached = qc.getQueryData<ReportSection[]>(reportSectionsKey(section.reportId))?.find((s) => s.id === section.id) ?? section;
   const meta = { ...cached.meta, title } as SectionMeta;
   patchCachedSection(qc, section.id, { meta: meta as Record<string, unknown> });
-  queueReportSave(qc, section.id, (cached.doc ?? { type: "doc", content: [] }) as ReportNode, meta);
+  queueReportSave(qc, section.id, cached.doc ?? { type: "doc", content: [] }, meta);
 }
 
 /**

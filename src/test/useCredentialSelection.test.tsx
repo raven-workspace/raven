@@ -12,7 +12,7 @@ const y = cred({ id: "y", createdAt: 2 });
 function setup(initial: string) {
   const wrapper = ({ children }: { children: ReactNode }) => <MemoryRouter initialEntries={[initial]}>{children}</MemoryRouter>;
   return renderHook(
-    (p: { creds: typeof x[]; ready: boolean }) => ({ sel: useCredentialSelection("e", p.creds, ctx, p.ready), loc: useLocation() }),
+    (p: { creds: typeof x[]; ready: boolean }) => ({ sel: useCredentialSelection(p.creds, ctx, p.ready), loc: useLocation() }),
     { wrapper, initialProps: { creds: [] as typeof x[], ready: false } },
   );
 }

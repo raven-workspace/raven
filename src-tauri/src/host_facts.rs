@@ -1,9 +1,9 @@
 //! Host facts the user or a parser records: who the user is on the host (`host_identity`) and
 //! the privilege-escalation vectors worth trying (`privesc_vectors`).
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_in_engagement, now_ms};
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -38,16 +38,8 @@ pub struct VectorInput {
     pub source: String,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 fn host_engagement(conn: &Connection, host_id: &str) -> AppResult<String> {
-    match conn.query_row("SELECT engagement_id FROM hosts WHERE id = ?1", [host_id], |r| r.get(0)) {
-        Ok(e) => Ok(e),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row("SELECT engagement_id FROM hosts WHERE id = ?1", [host_id], |r| r.get(0)).optional()?.ok_or(AppError::NotFound)
 }
 
 fn clean_list(items: &[String]) -> Vec<String> {
@@ -73,15 +65,11 @@ fn identity_from_row(r: &Row) -> rusqlite::Result<HostIdentity> {
 }
 
 pub fn identity_get(conn: &Connection, host_id: &str) -> AppResult<Option<HostIdentity>> {
-    match conn.query_row(
+    Ok(conn.query_row(
         "SELECT host_id, username, privileges, groups, entry_id, updated_at FROM host_identity WHERE host_id = ?1",
         [host_id],
         identity_from_row,
-    ) {
-        Ok(i) => Ok(Some(i)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.into()),
-    }
+    ).optional()?)
 }
 
 /// One identity per host; a new one replaces the old. `entry_id`, when given, must be a log
@@ -89,27 +77,20 @@ pub fn identity_get(conn: &Connection, host_id: &str) -> AppResult<Option<HostId
 pub fn identity_set(conn: &Connection, input: HostIdentity) -> AppResult<HostIdentity> {
     let username = input.username.trim().to_string();
     if username.is_empty() || username.chars().count() > 200 {
-        return Err(invalid("username", "username must be 1-200 characters"));
+        return Err(AppError::validation("username", "username must be 1-200 characters"));
     }
     let engagement_id = host_engagement(conn, &input.host_id)?;
-    let entry_id = input.entry_id.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let entry_id = blank_to_none(input.entry_id.as_deref());
     if let Some(e) = &entry_id {
-        let ok: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM log_entries WHERE id = ?1 AND engagement_id = ?2)",
-            params![e, engagement_id],
-            |r| r.get(0),
-        )?;
-        if !ok {
-            return Err(invalid("entryId", "entry must belong to this engagement"));
-        }
+        check_in_engagement(conn, "log_entries", &engagement_id, e)?;
     }
-    let privileges = serde_json::to_string(&clean_list(&input.privileges)).map_err(|e| AppError::Db(e.to_string()))?;
-    let groups = serde_json::to_string(&clean_list(&input.groups)).map_err(|e| AppError::Db(e.to_string()))?;
+    let privileges = serde_json::to_string(&clean_list(&input.privileges))?;
+    let groups = serde_json::to_string(&clean_list(&input.groups))?;
     conn.execute(
         "INSERT INTO host_identity (host_id, username, privileges, groups, entry_id, updated_at) VALUES (?1,?2,?3,?4,?5,?6) \
          ON CONFLICT (host_id) DO UPDATE SET username = excluded.username, privileges = excluded.privileges, \
            groups = excluded.groups, entry_id = excluded.entry_id, updated_at = excluded.updated_at",
-        params![input.host_id, username, privileges, groups, entry_id, system_now_ms()],
+        params![input.host_id, username, privileges, groups, entry_id, now_ms()],
     )?;
     identity_get(conn, &input.host_id)?.ok_or(AppError::NotFound)
 }
@@ -129,11 +110,7 @@ fn vector_from_row(r: &Row) -> rusqlite::Result<PrivescVector> {
 }
 
 pub fn vector_get(conn: &Connection, id: &str) -> AppResult<PrivescVector> {
-    match conn.query_row(&format!("SELECT {VEC_COLS} FROM privesc_vectors WHERE id = ?1"), [id], vector_from_row) {
-        Ok(v) => Ok(v),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {VEC_COLS} FROM privesc_vectors WHERE id = ?1"), [id], vector_from_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn vectors_list(conn: &Connection, host_id: &str) -> AppResult<Vec<PrivescVector>> {
@@ -146,7 +123,7 @@ fn check_status(status: &str) -> AppResult<()> {
     if matches!(status, "try" | "untested" | "ruled_out") {
         Ok(())
     } else {
-        Err(invalid("status", "status must be try, untested or ruled_out"))
+        Err(AppError::validation("status", "status must be try, untested or ruled_out"))
     }
 }
 
@@ -157,17 +134,17 @@ fn check_status(status: &str) -> AppResult<()> {
 pub fn vector_upsert(conn: &Connection, host_id: &str, input: VectorInput) -> AppResult<PrivescVector> {
     let title = input.title.trim().to_string();
     if title.is_empty() || title.chars().count() > 200 {
-        return Err(invalid("title", "title must be 1-200 characters"));
+        return Err(AppError::validation("title", "title must be 1-200 characters"));
     }
     check_status(&input.status)?;
     if !matches!(input.source.as_str(), "auto" | "manual") {
-        return Err(invalid("source", "source must be auto or manual"));
+        return Err(AppError::validation("source", "source must be auto or manual"));
     }
     if input.status == "ruled_out" {
-        return Err(invalid("status", "rule a vector out with a reason"));
+        return Err(AppError::validation("status", "rule a vector out with a reason"));
     }
     host_engagement(conn, host_id)?;
-    let now = system_now_ms();
+    let now = now_ms();
     let existing: Option<PrivescVector> = vectors_list(conn, host_id)?.into_iter().find(|v| v.title == title);
     match existing {
         None => {
@@ -206,7 +183,7 @@ pub fn vector_set_status(conn: &Connection, id: &str, status: &str, reason: Opti
     check_status(status)?;
     let reason = reason.map(str::trim).filter(|s| !s.is_empty());
     if status == "ruled_out" && reason.is_none() {
-        return Err(invalid("reason", "a ruled-out vector needs a reason"));
+        return Err(AppError::validation("reason", "a ruled-out vector needs a reason"));
     }
     let v = vector_get(conn, id)?;
     let engagement_id = host_engagement(conn, &v.host_id)?;
@@ -218,7 +195,7 @@ pub fn vector_set_status(conn: &Connection, id: &str, status: &str, reason: Opti
     // Hand-set status marks the row manual, so a later parser run cannot undo it.
     tx.execute(
         "UPDATE privesc_vectors SET status = ?2, source = 'manual', updated_at = ?3 WHERE id = ?1",
-        params![id, status, system_now_ms()],
+        params![id, status, now_ms()],
     )?;
     tx.commit()?;
     vector_get(conn, id)
@@ -334,7 +311,7 @@ mod tests {
         assert_eq!(identity_set(c, ident("nope", "u", &[])), Err(AppError::NotFound));
         let mut bad = ident(&h, "u", &[]);
         bad.entry_id = Some("missing".into());
-        assert!(matches!(identity_set(c, bad), Err(AppError::Validation { field, .. }) if field == "entryId"));
+        assert_eq!(identity_set(c, bad), Err(AppError::NotFound));
     }
 
     #[test]

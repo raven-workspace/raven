@@ -1,8 +1,8 @@
 //! Payload build memory: which baked payload was last built for a host, and with what LHOST/LPORT. No payload text.
 //! One row per (host, payload); recording again replaces it.
 
+use crate::db::check_scope;
 use crate::error::{AppError, AppResult};
-use crate::notes::check_scope;
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
@@ -39,7 +39,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<PayloadBuil
 /// Upserts on (host, payload). The host must belong to the engagement (NotFound otherwise).
 pub fn record(conn: &Connection, input: PayloadBuild) -> AppResult<PayloadBuild> {
     if input.payload_id.trim().is_empty() {
-        return Err(AppError::Validation { field: "payloadId".into(), message: "payload id is required".into() });
+        return Err(AppError::validation("payloadId", "payload id is required"));
     }
     check_scope(conn, &input.engagement_id, Some(&input.host_id))?;
     conn.execute(

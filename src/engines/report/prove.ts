@@ -1,6 +1,21 @@
 import type { LogEntry } from "../../types/log";
 import type { ReportData } from "./types";
 
+/** Log entries in time order: by time, then by creation, then by id. */
+export const byTime = (a: LogEntry, b: LogEntry) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id);
+
+/**
+ * An entry the report keeps to the operator: private, or behind a failed attempt logged with an operator-only reason
+ * (or kept private). The evidence rail and the slash menu never offer one.
+ */
+export const keptFromReport = (data: Pick<ReportData, "attempts">, e: LogEntry) =>
+  e.private || data.attempts.some((a) => a.logEntryId === e.id && (a.private || a.reasonKind === "operator"));
+
+export const isFlag = (e: LogEntry | undefined) => e?.content.kind === "flag";
+
+/** A host's name, its id when the host is gone; "" for none. */
+export const hostName = (data: ReportData, id: string | null) => (id ? (data.hosts.find((h) => h.id === id)?.name ?? id) : "");
+
 export type ProofReason = "goal" | "service" | "access" | "hop" | "flag" | "finding-step";
 
 /** Linked from a failed attempt, or logged as returning nothing. */

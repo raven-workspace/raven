@@ -11,6 +11,7 @@ import { useLog } from "../../log/queries";
 import { useHostFactsMutations, useHostIdentity } from "../queries";
 import { EntryLink, FactGroup, SummaryCell } from "./FactGroup";
 import { identityFromLog } from "./identityFromLog";
+import { RavenError } from "../../../types/errors";
 
 /** `MS01\iis`, `iis@corp` and `iis` are the same account name. */
 export const bareName = (name: string) => (name.split("\\").pop() ?? name).split("@")[0].trim().toLowerCase();
@@ -49,7 +50,7 @@ function IdentityForm({ engagementId, host, identity, onDone }: {
       }
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(RavenError.from(err).message);
     }
   };
   return (
@@ -116,7 +117,7 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
         await upsertVector.mutateAsync({ title, status: "try", source: "auto" });
       }
     } catch (err) {
-      setReadError(err instanceof Error ? err.message : String(err));
+      setReadError(RavenError.from(err).message);
     }
   };
 

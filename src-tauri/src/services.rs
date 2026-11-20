@@ -1,8 +1,8 @@
 //! Service repository. Nmap supplies guesses (`nmap_*`); only the user sets the confirmed identity.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, now_ms};
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -59,10 +59,6 @@ pub struct ConfirmInput {
 const COLS: &str = "id, host_id, port, protocol, state, nmap_service, nmap_version, \
     confirmed_product, confirmed_version, confirmed_entry_id, verdict, created_at, updated_at";
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 fn from_row(r: &Row) -> rusqlite::Result<Service> {
     Ok(Service {
         id: r.get(0)?,
@@ -82,15 +78,11 @@ fn from_row(r: &Row) -> rusqlite::Result<Service> {
 }
 
 /// Trims; empty becomes `None`.
-fn blank_to_none(s: Option<&str>) -> Option<String> {
-    s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
-}
-
 fn check_port(port: i64) -> AppResult<()> {
     if (1..=65535).contains(&port) {
         Ok(())
     } else {
-        Err(invalid("port", "port must be 1-65535"))
+        Err(AppError::validation("port", "port must be 1-65535"))
     }
 }
 
@@ -99,7 +91,7 @@ fn check_protocol(p: &str) -> AppResult<String> {
     if matches!(p.as_str(), "tcp" | "udp") {
         Ok(p)
     } else {
-        Err(invalid("protocol", "protocol must be tcp or udp"))
+        Err(AppError::validation("protocol", "protocol must be tcp or udp"))
     }
 }
 
@@ -128,11 +120,7 @@ pub fn list_engagement(conn: &Connection, engagement_id: &str) -> AppResult<Vec<
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Service> {
-    match conn.query_row(&format!("SELECT {COLS} FROM services WHERE id = ?1"), [id], from_row) {
-        Ok(s) => Ok(s),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {COLS} FROM services WHERE id = ?1"), [id], from_row).optional()?.ok_or(AppError::NotFound)
 }
 
 /// Applies nmap results: new `(port, protocol)` rows are inserted, existing ones get fresh
@@ -146,7 +134,7 @@ pub fn upsert_scan(conn: &Connection, host_id: &str, ports: &[ScanPort]) -> AppR
         clean.push((p.port, check_protocol(&p.protocol)?, state, blank_to_none(Some(&p.service)), blank_to_none(Some(&p.version))));
     }
     let tx = conn.unchecked_transaction()?;
-    let now = system_now_ms();
+    let now = now_ms();
     for (port, protocol, state, svc, ver) in clean {
         tx.execute(
             "INSERT INTO services (id, host_id, port, protocol, state, nmap_service, nmap_version, created_at, updated_at) \
@@ -183,10 +171,10 @@ pub fn create(conn: &Connection, host_id: &str, input: ServiceInput) -> AppResul
     let (port, protocol, svc, ver) = clean_input(&input)?;
     host_exists(conn, host_id)?;
     if port_taken(conn, host_id, port, &protocol, "")? {
-        return Err(invalid("port", DUP_PORT));
+        return Err(AppError::validation("port", DUP_PORT));
     }
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO services (id, host_id, port, protocol, nmap_service, nmap_version, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?7)",
@@ -199,11 +187,11 @@ pub fn update(conn: &Connection, id: &str, input: ServiceInput) -> AppResult<Ser
     let (port, protocol, svc, ver) = clean_input(&input)?;
     let current = get(conn, id)?;
     if port_taken(conn, &current.host_id, port, &protocol, id)? {
-        return Err(invalid("port", DUP_PORT));
+        return Err(AppError::validation("port", DUP_PORT));
     }
     conn.execute(
         "UPDATE services SET port=?2, protocol=?3, nmap_service=?4, nmap_version=?5, updated_at=?6 WHERE id=?1",
-        params![id, port, protocol, svc, ver, system_now_ms()],
+        params![id, port, protocol, svc, ver, now_ms()],
     )?;
     get(conn, id)
 }
@@ -213,7 +201,7 @@ pub fn update(conn: &Connection, id: &str, input: ServiceInput) -> AppResult<Ser
 pub fn confirm(conn: &Connection, id: &str, input: ConfirmInput) -> AppResult<Service> {
     let product = input.product.trim().to_string();
     if product.is_empty() || product.chars().count() > 80 {
-        return Err(invalid("product", "product must be 1-80 characters"));
+        return Err(AppError::validation("product", "product must be 1-80 characters"));
     }
     let version = blank_to_none(input.version.as_deref());
     let entry_id = blank_to_none(input.entry_id.as_deref());
@@ -226,12 +214,12 @@ pub fn confirm(conn: &Connection, id: &str, input: ConfirmInput) -> AppResult<Se
             |r| r.get(0),
         )?;
         if !ok {
-            return Err(invalid("entryId", "entry must belong to this engagement"));
+            return Err(AppError::NotFound);
         }
     }
     conn.execute(
         "UPDATE services SET confirmed_product=?2, confirmed_version=?3, confirmed_entry_id=?4, updated_at=?5 WHERE id=?1",
-        params![id, product, version, entry_id, system_now_ms()],
+        params![id, product, version, entry_id, now_ms()],
     )?;
     get(conn, id)
 }
@@ -239,7 +227,7 @@ pub fn confirm(conn: &Connection, id: &str, input: ConfirmInput) -> AppResult<Se
 pub fn unconfirm(conn: &Connection, id: &str) -> AppResult<Service> {
     let n = conn.execute(
         "UPDATE services SET confirmed_product=NULL, confirmed_version=NULL, confirmed_entry_id=NULL, updated_at=?2 WHERE id=?1",
-        params![id, system_now_ms()],
+        params![id, now_ms()],
     )?;
     if n == 0 {
         return Err(AppError::NotFound);
@@ -265,12 +253,12 @@ fn service_label(s: &Service) -> String {
 pub fn set_verdict(conn: &Connection, id: &str, verdict: Option<&str>, reason: Option<&str>) -> AppResult<Service> {
     if let Some(v) = verdict {
         if !matches!(v, "candidate" | "untested" | "dead_end") {
-            return Err(invalid("verdict", "verdict must be candidate, untested or dead_end"));
+            return Err(AppError::validation("verdict", "verdict must be candidate, untested or dead_end"));
         }
     }
     let reason = blank_to_none(reason);
     if verdict == Some("dead_end") && reason.is_none() {
-        return Err(invalid("reason", "a dead end needs a reason"));
+        return Err(AppError::validation("reason", "a dead end needs a reason"));
     }
     let svc = get(conn, id)?;
     let tx = conn.unchecked_transaction()?;
@@ -280,7 +268,7 @@ pub fn set_verdict(conn: &Connection, id: &str, verdict: Option<&str>, reason: O
             tx.query_row("SELECT engagement_id FROM hosts WHERE id = ?1", [&svc.host_id], |r| r.get(0))?;
         crate::notes::link_ruled_out(&tx, &engagement_id, &svc.host_id, "service", id, &service_label(&svc), reason)?;
     }
-    tx.execute("UPDATE services SET verdict = ?2, updated_at = ?3 WHERE id = ?1", params![id, verdict, system_now_ms()])?;
+    tx.execute("UPDATE services SET verdict = ?2, updated_at = ?3 WHERE id = ?1", params![id, verdict, now_ms()])?;
     tx.commit()?;
     get(conn, id)
 }
@@ -434,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn confirm_validates_entry_belongs_to_engagement() {
+    fn confirm_rejects_entry_from_another_engagement() {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let e1 = eng(c);
@@ -445,9 +433,9 @@ mod tests {
         let s = create(c, &h, sin(80)).unwrap();
         let mut ci = cin("nginx");
         ci.entry_id = Some("theirs".into());
-        assert_eq!(field(confirm(c, &s.id, ci.clone())).0, "entryId");
+        assert_eq!(confirm(c, &s.id, ci.clone()), Err(AppError::NotFound));
         ci.entry_id = Some("missing".into());
-        assert_eq!(field(confirm(c, &s.id, ci.clone())).0, "entryId");
+        assert_eq!(confirm(c, &s.id, ci.clone()), Err(AppError::NotFound));
         ci.entry_id = Some("mine".into());
         let ok = confirm(c, &s.id, ci).unwrap();
         assert_eq!(ok.confirmed_entry_id.as_deref(), Some("mine"));

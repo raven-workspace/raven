@@ -10,8 +10,8 @@ import { EditEntryDialog } from "./EditEntryDialog";
 import { KIND_LABELS } from "./kindLabels";
 import { LogEntryBody } from "./LogEntryBody";
 import { useLogMutations } from "./queries";
+import { clockTime } from "../engagements/format";
 
-const pad = (n: number) => String(n).padStart(2, "0");
 
 /**
  * The IP a command targets when it is no known host's: titles never name the target, so without this a row about a box
@@ -79,7 +79,7 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
       className={`grid w-full items-center gap-3 px-1 py-2 text-left cursor-default ${cols}`}
     >
       <time dateTime={d.toISOString()} title={d.toLocaleString()} className="text-code text-muted">
-        {`${pad(d.getHours())}:${pad(d.getMinutes())}`}
+        {clockTime(entry.at)}
       </time>
       <span className={`truncate text-meta text-muted ${picking ? "hidden @min-[30rem]/ctx:block" : ""}`}>{KIND_LABELS[entry.kind]}</span>
       <span data-testid="entry-title" className="truncate text-body text-fg">{entry.title}</span>

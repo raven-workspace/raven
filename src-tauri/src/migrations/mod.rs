@@ -159,7 +159,7 @@ fn backfill_hosts(conn: &Connection) -> AppResult<()> {
             if taken {
                 continue;
             }
-            let now = crate::backup::system_now_ms();
+            let now = crate::db::now_ms();
             conn.execute(
                 "INSERT INTO hosts (id, engagement_id, name, ip, created_at, updated_at) VALUES (?1,?2,?3,?3,?4,?4)",
                 rusqlite::params![uuid::Uuid::new_v4().to_string(), id, ip, now],

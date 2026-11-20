@@ -1,9 +1,9 @@
 //! Host repository. A host belongs to one engagement; deleting the engagement deletes its hosts.
 
-use crate::backup::system_now_ms;
-use crate::engagements::valid_cidr;
+use crate::db::{blank_to_none, check_scope, now_ms};
+use crate::engagements::valid_ipv4;
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 /// SQL for a host's effective AD-set flag; `alias` names the hosts table in the query. The one
@@ -74,14 +74,10 @@ fn present_or_null<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Opti
     Option::<bool>::deserialize(d).map(Some)
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 /// A single IPv4 address (no prefix, or `/32`), returned without the `/32`.
 pub(crate) fn single_ip(s: &str) -> Option<String> {
     let bare = s.strip_suffix("/32").unwrap_or(s);
-    (!bare.contains('/') && valid_cidr(bare)).then(|| bare.to_string())
+    valid_ipv4(bare).then(|| bare.to_string())
 }
 
 struct Clean {
@@ -96,23 +92,23 @@ struct Clean {
 fn normalise(i: HostInput) -> AppResult<Clean> {
     let ip = match i.ip.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         None => None,
-        Some(raw) => Some(single_ip(raw).ok_or_else(|| invalid("ip", "must be a single IPv4 address"))?),
+        Some(raw) => Some(single_ip(raw).ok_or_else(|| AppError::validation("ip", "must be a single IPv4 address"))?),
     };
     let mut name = i.name.trim().to_string();
     if name.is_empty() {
         name = ip.clone().unwrap_or_default();
     }
     if name.is_empty() || name.chars().count() > 80 {
-        return Err(invalid("name", "name must be 1-80 characters"));
+        return Err(AppError::validation("name", "name must be 1-80 characters"));
     }
-    let os = i.os.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let os = blank_to_none(i.os.as_deref());
     if let Some(o) = &os
         && !matches!(o.as_str(), "windows" | "linux" | "other") {
-            return Err(invalid("os", "os must be windows, linux or other"));
+            return Err(AppError::validation("os", "os must be windows, linux or other"));
         }
     let access = i.access.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("none").to_string();
     if !matches!(access.as_str(), "none" | "user" | "root") {
-        return Err(invalid("access", "access must be none, user or root"));
+        return Err(AppError::validation("access", "access must be none, user or root"));
     }
     Ok(Clean { name, ip, os, access, dual_homed: i.dual_homed, ad_set: i.ad_set })
 }
@@ -154,11 +150,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Host>> {
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Host> {
-    match conn.query_row(&format!("SELECT {} FROM hosts WHERE id = ?1", cols()), [id], from_row) {
-        Ok(h) => Ok(h),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {} FROM hosts WHERE id = ?1", cols()), [id], from_row).optional()?.ok_or(AppError::NotFound)
 }
 
 fn ip_taken(conn: &Connection, engagement_id: &str, ip: &str, except_id: &str) -> AppResult<bool> {
@@ -173,17 +165,13 @@ const DUP_IP: &str = "A host with this IP already exists";
 
 pub fn create(conn: &Connection, engagement_id: &str, input: HostInput) -> AppResult<Host> {
     let c = normalise(input)?;
-    let exists: bool =
-        conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
-    if !exists {
-        return Err(AppError::NotFound);
-    }
+    check_scope(conn, engagement_id, None)?;
     if let Some(ip) = &c.ip
         && ip_taken(conn, engagement_id, ip, "")? {
-            return Err(invalid("ip", DUP_IP));
+            return Err(AppError::validation("ip", DUP_IP));
         }
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO hosts (id, engagement_id, name, ip, os, access, dual_homed, ad_set, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)",
@@ -197,24 +185,28 @@ pub fn update(conn: &Connection, id: &str, input: HostInput) -> AppResult<Host> 
     let current = get(conn, id)?;
     if let Some(ip) = &c.ip
         && ip_taken(conn, &current.engagement_id, ip, id)? {
-            return Err(invalid("ip", DUP_IP));
+            return Err(AppError::validation("ip", DUP_IP));
         }
     conn.execute(
         "UPDATE hosts SET name=?2, ip=?3, os=?4, access=?5, dual_homed=COALESCE(?6, dual_homed), \
          ad_set=CASE WHEN ?7 THEN ?8 ELSE ad_set END, updated_at=?9 WHERE id=?1",
-        params![id, c.name, c.ip, c.os, c.access, c.dual_homed, c.ad_set.is_some(), c.ad_set.flatten(), system_now_ms()],
+        params![id, c.name, c.ip, c.os, c.access, c.dual_homed, c.ad_set.is_some(), c.ad_set.flatten(), now_ms()],
     )?;
     get(conn, id)
 }
 
+/// The six PEN-200 stages, in board order.
+const BOARD_COLUMNS: [&str; 6] =
+    ["information-gathering", "vulnerability-detection", "initial-foothold", "privilege-escalation", "post-exploitation", "reporting"];
+
 /// Moves a host to a board column by hand; this pins it there (`board_manual`).
 pub fn move_to(conn: &Connection, id: &str, column: &str) -> AppResult<Host> {
-    if !matches!(column, "information-gathering" | "vulnerability-detection" | "initial-foothold" | "privilege-escalation" | "post-exploitation" | "reporting") {
-        return Err(invalid("column", "column must be one of the six PEN-200 stages"));
+    if !BOARD_COLUMNS.contains(&column) {
+        return Err(AppError::validation("column", "column must be one of the six PEN-200 stages"));
     }
     let n = conn.execute(
         "UPDATE hosts SET board_column=?2, board_manual=1, updated_at=?3 WHERE id=?1",
-        params![id, column, system_now_ms()],
+        params![id, column, now_ms()],
     )?;
     if n == 0 {
         return Err(AppError::NotFound);
@@ -224,7 +216,7 @@ pub fn move_to(conn: &Connection, id: &str, column: &str) -> AppResult<Host> {
 
 /// Stamps the host as access-reviewed now.
 pub fn mark_access_reviewed(conn: &Connection, id: &str) -> AppResult<Host> {
-    let now = system_now_ms();
+    let now = now_ms();
     let n = conn.execute("UPDATE hosts SET access_reviewed_at=?2, updated_at=?2 WHERE id=?1", params![id, now])?;
     if n == 0 {
         return Err(AppError::NotFound);
@@ -235,8 +227,8 @@ pub fn mark_access_reviewed(conn: &Connection, id: &str) -> AppResult<Host> {
 /// Applies the board column the checklist derived. Only when `derived` differs from the last
 /// derived value does the host move (and unpin), so a hand placement holds until the next stage completes.
 pub fn sync_board(conn: &Connection, id: &str, derived: &str) -> AppResult<Host> {
-    if !matches!(derived, "information-gathering" | "vulnerability-detection" | "initial-foothold" | "privilege-escalation" | "post-exploitation" | "reporting") {
-        return Err(invalid("derived", "column must be one of the six PEN-200 stages"));
+    if !BOARD_COLUMNS.contains(&derived) {
+        return Err(AppError::validation("derived", "column must be one of the six PEN-200 stages"));
     }
     let current = get(conn, id)?;
     if current.board_derived.as_deref() == Some(derived) {
@@ -247,13 +239,13 @@ pub fn sync_board(conn: &Connection, id: &str, derived: &str) -> AppResult<Host>
     if current.board_derived.is_none() && current.board_manual {
         conn.execute(
             "UPDATE hosts SET board_derived=?2, updated_at=?3 WHERE id=?1",
-            params![id, derived, system_now_ms()],
+            params![id, derived, now_ms()],
         )?;
         return get(conn, id);
     }
     conn.execute(
         "UPDATE hosts SET board_column=?2, board_manual=0, board_derived=?2, updated_at=?3 WHERE id=?1",
-        params![id, derived, system_now_ms()],
+        params![id, derived, now_ms()],
     )?;
     get(conn, id)
 }
@@ -286,7 +278,7 @@ pub fn sync_scope(conn: &Connection, engagement_id: &str, scope: &[String]) -> A
         if ip_taken(conn, engagement_id, &ip, "")? {
             continue;
         }
-        let now = system_now_ms();
+        let now = now_ms();
         conn.execute(
             "INSERT INTO hosts (id, engagement_id, name, ip, created_at, updated_at) VALUES (?1,?2,?3,?3,?4,?4)",
             params![uuid::Uuid::new_v4().to_string(), engagement_id, ip, now],

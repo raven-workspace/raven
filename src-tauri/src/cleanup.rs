@@ -3,9 +3,9 @@
 //! `dismissed` rows exist only to hide a suggestion (`suggestion_key`); they are never edited,
 //! removed or deleted through the item commands.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_in_engagement, check_scope, now_ms};
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -42,14 +42,6 @@ pub struct CleanupInput {
     pub suggestion_key: Option<String>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
-fn blank_to_none(s: Option<&str>) -> Option<String> {
-    s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
-}
-
 const COLS: &str = "id, engagement_id, host_id, kind, target, notes, source_entry_id, suggestion_key, status, removed_at, created_at, updated_at";
 
 fn row(r: &Row) -> rusqlite::Result<CleanupItem> {
@@ -70,18 +62,14 @@ fn row(r: &Row) -> rusqlite::Result<CleanupItem> {
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<CleanupItem> {
-    match conn.query_row(&format!("SELECT {COLS} FROM cleanup_items WHERE id = ?1"), [id], row) {
-        Ok(i) => Ok(i),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {COLS} FROM cleanup_items WHERE id = ?1"), [id], row).optional()?.ok_or(AppError::NotFound)
 }
 
 /// An existing, non-dismissed item.
 fn get_live(conn: &Connection, id: &str) -> AppResult<CleanupItem> {
     let item = get(conn, id)?;
     if item.status == "dismissed" {
-        return Err(invalid("status", "a dismissed suggestion cannot be changed"));
+        return Err(AppError::validation("status", "a dismissed suggestion cannot be changed"));
     }
     Ok(item)
 }
@@ -103,49 +91,26 @@ struct Clean {
 
 fn clean(conn: &Connection, engagement_id: &str, i: &CleanupInput) -> AppResult<Clean> {
     if !matches!(i.kind.as_str(), "file" | "account" | "service" | "other") {
-        return Err(invalid("kind", "kind must be file, account, service or other"));
+        return Err(AppError::validation("kind", "kind must be file, account, service or other"));
     }
     let target = i.target.trim().to_string();
     let n = target.chars().count();
     if n == 0 || n > 500 {
-        return Err(invalid("target", "target must be 1-500 characters"));
+        return Err(AppError::validation("target", "target must be 1-500 characters"));
     }
     let notes = blank_to_none(i.notes.as_deref());
     if notes.as_ref().is_some_and(|n| n.chars().count() > 2000) {
-        return Err(invalid("notes", "notes must be at most 2000 characters"));
+        return Err(AppError::validation("notes", "notes must be at most 2000 characters"));
     }
     let host_id = blank_to_none(i.host_id.as_deref());
     if let Some(h) = &host_id {
-        let ok: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
-            params![h, engagement_id],
-            |r| r.get(0),
-        )?;
-        if !ok {
-            return Err(invalid("hostId", "host is not part of this engagement"));
-        }
+        check_in_engagement(conn, "hosts", engagement_id, h)?;
     }
     let source_entry_id = blank_to_none(i.source_entry_id.as_deref());
     if let Some(s) = &source_entry_id {
-        let ok: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM log_entries WHERE id = ?1 AND engagement_id = ?2)",
-            params![s, engagement_id],
-            |r| r.get(0),
-        )?;
-        if !ok {
-            return Err(invalid("sourceEntryId", "log entry is not part of this engagement"));
-        }
+        check_in_engagement(conn, "log_entries", engagement_id, s)?;
     }
     Ok(Clean { host_id, kind: i.kind.clone(), target, notes, source_entry_id })
-}
-
-fn engagement_exists(conn: &Connection, engagement_id: &str) -> AppResult<()> {
-    let ok: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)",
-        [engagement_id],
-        |r| r.get(0),
-    )?;
-    if ok { Ok(()) } else { Err(AppError::NotFound) }
 }
 
 fn key_taken(conn: &Connection, engagement_id: &str, key: &str) -> AppResult<bool> {
@@ -157,16 +122,16 @@ fn key_taken(conn: &Connection, engagement_id: &str, key: &str) -> AppResult<boo
 }
 
 pub fn create(conn: &Connection, engagement_id: &str, input: CleanupInput) -> AppResult<CleanupItem> {
-    engagement_exists(conn, engagement_id)?;
+    check_scope(conn, engagement_id, None)?;
     let c = clean(conn, engagement_id, &input)?;
     let key = blank_to_none(input.suggestion_key.as_deref());
     if let Some(k) = &key
         && key_taken(conn, engagement_id, k)?
     {
-        return Err(invalid("suggestionKey", "this suggestion is already on the list or dismissed"));
+        return Err(AppError::validation("suggestionKey", "this suggestion is already on the list or dismissed"));
     }
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO cleanup_items (id, engagement_id, host_id, kind, target, notes, source_entry_id, \
          suggestion_key, status, removed_at, created_at, updated_at) \
@@ -182,14 +147,14 @@ pub fn update(conn: &Connection, id: &str, input: CleanupInput) -> AppResult<Cle
     let c = clean(conn, &cur.engagement_id, &input)?;
     conn.execute(
         "UPDATE cleanup_items SET host_id=?2, kind=?3, target=?4, notes=?5, source_entry_id=?6, updated_at=?7 WHERE id=?1",
-        params![id, c.host_id, c.kind, c.target, c.notes, c.source_entry_id, system_now_ms()],
+        params![id, c.host_id, c.kind, c.target, c.notes, c.source_entry_id, now_ms()],
     )?;
     get(conn, id)
 }
 
 pub fn set_removed(conn: &Connection, id: &str, removed: bool) -> AppResult<CleanupItem> {
     get_live(conn, id)?;
-    let now = system_now_ms();
+    let now = now_ms();
     let (status, at) = if removed { ("removed", Some(now)) } else { ("open", None) };
     conn.execute(
         "UPDATE cleanup_items SET status=?2, removed_at=?3, updated_at=?4 WHERE id=?1",
@@ -200,16 +165,16 @@ pub fn set_removed(conn: &Connection, id: &str, removed: bool) -> AppResult<Clea
 
 /// Hides a suggestion: inserts a `dismissed` row keyed by the suggestion.
 pub fn dismiss(conn: &Connection, engagement_id: &str, suggestion_key: &str) -> AppResult<()> {
-    engagement_exists(conn, engagement_id)?;
+    check_scope(conn, engagement_id, None)?;
     let key = suggestion_key.trim();
     let n = key.chars().count();
     if n == 0 || n > 500 {
-        return Err(invalid("suggestionKey", "suggestion key must be 1-500 characters"));
+        return Err(AppError::validation("suggestionKey", "suggestion key must be 1-500 characters"));
     }
     if key_taken(conn, engagement_id, key)? {
-        return Err(invalid("suggestionKey", "this suggestion is already on the list or dismissed"));
+        return Err(AppError::validation("suggestionKey", "this suggestion is already on the list or dismissed"));
     }
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO cleanup_items (id, engagement_id, host_id, kind, target, notes, source_entry_id, \
          suggestion_key, status, removed_at, created_at, updated_at) \
@@ -348,8 +313,8 @@ mod tests {
         assert_eq!(field(update(c, &first.id, CleanupInput { kind: "zzz".into(), ..inp("x") }).unwrap_err()), "kind");
         let other = eng(c, "B");
         assert_eq!(
-            field(update(c, &first.id, CleanupInput { source_entry_id: Some(log_entry(c, &other)), ..inp("x") }).unwrap_err()),
-            "sourceEntryId"
+            update(c, &first.id, CleanupInput { source_entry_id: Some(log_entry(c, &other)), ..inp("x") }).unwrap_err(),
+            AppError::NotFound
         );
     }
 
@@ -408,9 +373,9 @@ mod tests {
         let b = eng(c, "B");
         let hb = host(c, &b, "10.0.0.9");
         let err = create(c, &a, CleanupInput { host_id: Some(hb.clone()), ..inp("x") }).unwrap_err();
-        assert_eq!(field(err), "hostId");
+        assert_eq!(err, AppError::NotFound);
         let it = create(c, &a, inp("x")).unwrap();
-        assert_eq!(field(update(c, &it.id, CleanupInput { host_id: Some(hb), ..inp("x") }).unwrap_err()), "hostId");
+        assert_eq!(update(c, &it.id, CleanupInput { host_id: Some(hb), ..inp("x") }).unwrap_err(), AppError::NotFound);
         assert_eq!(create(c, "nope", inp("x")).unwrap_err(), AppError::NotFound);
     }
 

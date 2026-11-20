@@ -10,7 +10,7 @@ import { Button, IconButton, queryState } from "../../ui";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../../ui/shadcn/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
-import { useEngagementServices } from "../checklist/queries";
+import { useEngagementServices } from "../services/queries";
 import { useHosts } from "../hosts/queries";
 import { CredentialDock } from "./CredentialDock";
 import { CredentialForm } from "./CredentialForm";
@@ -73,7 +73,7 @@ export function CredentialsSection() {
   const landed = !!cracked && shown.creds.some((c) => c.id === cracked.passwordId);
   const settled = !credsQ.isFetching && Math.max(credsQ.dataUpdatedAt, credsQ.errorUpdatedAt) > (cracked?.since ?? Infinity);
   const waiting = !!cracked && !(settled && !landed) && (params.get("cred") !== cracked.passwordId || !landed);
-  const { selectedId, select, tab, setTab } = useCredentialSelection(id, shown.creds, ctx, loaded && !waiting);
+  const { selectedId, select, tab, setTab } = useCredentialSelection(shown.creds, ctx, loaded && !waiting);
   // Landed: let go, so a later delete of that password can't hold the fallback off again.
   if (cracked && !waiting) setCracked(undefined);
 

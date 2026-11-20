@@ -17,7 +17,7 @@ export interface ReportDataValue {
 
 export const ReportDataContext = createContext<ReportDataValue | null>(null);
 
-export function useReportData(): ReportDataValue {
+export function usePageContext(): ReportDataValue {
   const value = useContext(ReportDataContext);
   if (!value) throw new Error("ReportDataContext is missing");
   return value;

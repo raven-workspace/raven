@@ -1,6 +1,7 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { Input } from "../../ui";
 import type { Suggestion } from "./suggest";
+import { useEscapeWhile } from "../../lib/keys";
 
 const LIST_MAX = 224;
 const GAP = 4;
@@ -42,16 +43,7 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
 
   // Esc with the list open closes only the list. Window capture runs before Radix's document-level Esc (which
   // dismisses the palette unless the event is already defaultPrevented); the drawer skips an expanded combobox.
-  useEffect(() => {
-    if (!expanded) return;
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      setOpen(false);
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [expanded]);
+  useEscapeWhile(expanded, () => setOpen(false));
 
   const fieldRef = useRef<HTMLSpanElement>(null);
   const listRef = useRef<HTMLUListElement>(null);

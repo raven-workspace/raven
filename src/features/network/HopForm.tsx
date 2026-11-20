@@ -3,7 +3,8 @@ import type { Host } from "../../types/host";
 import type { Hop } from "../../types/network";
 import { Button, Dialog, Field, Input, Select } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
-import { useHopMutations } from "../checklist/queries";
+import { useHopMutations } from "./queries";
+import { RavenError } from "../../types/errors";
 
 const KALI = "kali";
 
@@ -31,7 +32,7 @@ export function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: s
     const opts = {
       onSuccess: onClose,
       onError: (err: Error) => {
-        const field = (err as { field?: string }).field;
+        const field = RavenError.from(err).field;
         setErrors(field === "via" || field === "toHostId" ? { [field]: err.message } : { form: err.message });
       },
     };

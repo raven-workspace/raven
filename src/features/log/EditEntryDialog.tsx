@@ -1,12 +1,11 @@
 import { useCallback, useId, useState, type FormEvent } from "react";
 import type { Host } from "../../types/host";
 import type { LogEntry, LogEntryInput } from "../../types/log";
-import { useQuery } from "@tanstack/react-query";
 import { proofShotFlag, screenshotFileName } from "../../engines/capture";
-import { api } from "../../lib/api";
 import { Button, Dialog, Field, Input, Select, Textarea, Toggle, Toolbar } from "../../ui";
 import { HostChips } from "../capture/HostChips";
 import { useLog, useLogMutations } from "./queries";
+import { useSettings } from "../settings/queries";
 
 const NONE = "__none";
 const NO_MACHINES: string[] = [];
@@ -64,7 +63,7 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
   };
   const [error, setError] = useState<string>();
   const [titleError, setTitleError] = useState<string>();
-  const machines = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.machines ?? NO_MACHINES;
+  const machines = useSettings().data?.machines ?? NO_MACHINES;
   const ranOnOptions = Array.from(new Set([...machines, ...hosts.map((h) => h.name), ...(entry.ranOn ? [entry.ranOn] : []), ...(ranOn ? [ranOn] : [])]));
 
   function submit(e: FormEvent) {

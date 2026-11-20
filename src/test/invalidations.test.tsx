@@ -46,7 +46,7 @@ describe("cache invalidation (M4)", () => {
     await act(() => result.current.remove.mutateAsync("l1"));
     expect(keys()).toContainEqual(["services"]);
     expect(keys()).toContainEqual(["log", "e1"]);
-    expect(keys()).toContainEqual(["services", "engagement", "e1"]);
+    // The ["services"] prefix also covers the engagement-wide list (["services", "engagement", "e1"]).
     expect(keys()).toContainEqual(["checklist", "e1"]);
     expect(keys()).toContainEqual(["hosts", "e1"]);
     // Attempts and grants that cited the entry lose their proof link.

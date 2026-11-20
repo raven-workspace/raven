@@ -39,10 +39,6 @@ export function urlEncodeShell(s: string, keep: readonly string[] = []): string 
   });
 }
 
-export function urlEncodeFull(s: string): string {
-  return encodeURIComponent(s);
-}
-
 /** Doubles single quotes for use inside a SQL string literal. */
 export function sqlQuote(s: string): string {
   return s.replace(/'/g, "''");

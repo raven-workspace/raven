@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import {
+  asCredential,
   credLabel,
   findDuplicateCredential,
   identifyHash,
@@ -10,9 +11,11 @@ import {
 import type { Credential, CredentialInput, CredentialScope, CredentialType } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import { Button, ChipSet, Dialog, Field, Input, Select, Textarea, Toggle, labelClass } from "../../ui";
-import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./AccessGrants";
+import { AccessFields, EMPTY_ACCESS, type AccessDraft } from "./AccessGrants";
 import { useAccessGrantMutations, useCredentialMutations, useUsernameMutations, useUsernames } from "./queries";
 import { parseUsername } from "./UsernamesList";
+import { RavenError } from "../../types/errors";
+import { hostLabel } from "../../lib/hostName";
 
 type Mode = "credential" | "secret" | "username";
 const MODES: { id: Mode; label: string }[] = [
@@ -104,12 +107,7 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
         ...(type === "hash" && hashType.trim() ? { hashType: hashType.trim() } : {}),
       };
       // Never create a duplicate: offer the existing one instead.
-      const probe: Credential = {
-        id: "", engagementId: eid, type, username: input.username ?? "", domain: input.domain ?? null, secret,
-        hashType: input.hashType ?? null, scope, localHostId: input.localHostId ?? null, sourceHostId: null,
-        source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null, createdAt: 0, updatedAt: 0,
-      };
-      const dup = findDuplicateCredential(credentials.filter((c) => c.id !== edit?.id), probe);
+      const dup = findDuplicateCredential(credentials.filter((c) => c.id !== edit?.id), asCredential({ ...input, engagementId: eid }));
       if (dup) {
         setDuplicate(dup);
         return;
@@ -124,8 +122,8 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
       onSaved?.(created);
       onClose();
     } catch (err) {
-      const field = (err as { field?: string }).field;
-      const message = err instanceof Error ? err.message : String(err);
+      const field = RavenError.from(err).field;
+      const message = RavenError.from(err).message;
       setErrors(field === "username" || field === "secret" || field === "via" ? { [field]: message } : { form: message });
     } finally {
       setBusy(false);

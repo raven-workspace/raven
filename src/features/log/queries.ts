@@ -5,9 +5,14 @@ import type { LogEntry, LogEntryInput } from "../../types/log";
 import { cleanupKey } from "../cleanup/queries";
 import { accessGrantsKey, credAttemptsKey } from "../credentials/queries";
 import { afterEntrySaved, deleteEntryWithTicks, FollowUpError } from "../checklist/ticks";
+import { engagementKey } from "../engagements/queries";
+import { hostsKey } from "../hosts/queries";
+import { failedAttemptsKey, findingsKey } from "../findings/queries";
 
-export function useLog(engagementId: string) {
-  return useQuery({ queryKey: ["log", engagementId], queryFn: () => api.logList(engagementId) });
+export const logKey = (engagementId: string) => ["log", engagementId] as const;
+
+export function useLog(engagementId: string, enabled = true) {
+  return useQuery({ queryKey: logKey(engagementId), queryFn: () => api.logList(engagementId), enabled });
 }
 
 /** Runs the checklist and Metasploit follow-up; a `locked` cause still reaches the vault gate. */
@@ -24,18 +29,17 @@ export function useLogMutations(engagementId: string) {
   const qc = useQueryClient();
   // Settled, not success: the entry is saved even when its checklist follow-up failed.
   const onSettled = () => {
-    void qc.invalidateQueries({ queryKey: ["log", engagementId] });
+    void qc.invalidateQueries({ queryKey: logKey(engagementId) });
     void qc.invalidateQueries({ queryKey: ["progress"] });
     // A service's confirmation can cite an entry; editing or deleting the entry changes that.
     void qc.invalidateQueries({ queryKey: ["services"] });
-    void qc.invalidateQueries({ queryKey: ["services", "engagement", engagementId] });
     void qc.invalidateQueries({ queryKey: ["checklist", engagementId] });
-    void qc.invalidateQueries({ queryKey: ["hosts", engagementId] });
-    void qc.invalidateQueries({ queryKey: ["engagement", engagementId] });
+    void qc.invalidateQueries({ queryKey: hostsKey(engagementId) });
+    void qc.invalidateQueries({ queryKey: engagementKey(engagementId) });
     // A deleted entry leaves the reproduction steps of any finding that used it.
-    void qc.invalidateQueries({ queryKey: ["findings", engagementId] });
+    void qc.invalidateQueries({ queryKey: findingsKey(engagementId) });
     // An attempt that linked the entry loses the link.
-    void qc.invalidateQueries({ queryKey: ["failedAttempts", engagementId] });
+    void qc.invalidateQueries({ queryKey: failedAttemptsKey(engagementId) });
     // Credential test results and access grants that cited it as proof lose the link.
     void qc.invalidateQueries({ queryKey: credAttemptsKey(engagementId) });
     void qc.invalidateQueries({ queryKey: accessGrantsKey(engagementId) });

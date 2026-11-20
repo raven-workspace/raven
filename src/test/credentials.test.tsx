@@ -7,7 +7,7 @@ import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
-import type { AccessGrant, Credential, CredentialInput, Username } from "../types/credentials";
+import type { AccessGrant, Credential, CredentialInput, TriedPair, Username } from "../types/credentials";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { Service } from "../types/service";
@@ -57,7 +57,7 @@ function LocationProbe() {
 }
 const search = () => new URLSearchParams(screen.getByTestId("location").textContent ?? "");
 
-function mount(seed: { creds?: Credential[]; users?: Username[]; services?: Service[]; url?: string } = {}) {
+function mount(seed: { creds?: Credential[]; users?: Username[]; services?: Service[]; tried?: TriedPair[]; url?: string } = {}) {
   creds = seed.creds ?? [];
   users = seed.users ?? [];
   grants = [];
@@ -74,7 +74,12 @@ function mount(seed: { creds?: Credential[]; users?: Username[]; services?: Serv
   m.usernamesList.mockImplementation(async () => [...users]);
   m.accessGrantsList.mockImplementation(async () => [...grants]);
   m.credAttemptsList.mockResolvedValue([]);
-  m.triedPairsList.mockResolvedValue([]);
+  let tried = [...(seed.tried ?? [])];
+  m.triedPairsList.mockImplementation(async () => [...tried]);
+  m.triedPairDelete.mockImplementation(async (id) => {
+    tried = tried.filter((t) => t.id !== id);
+    return null;
+  });
   m.credentialCreate.mockImplementation(async (_e, input) => {
     const c = toCred(input);
     creds.push(c);
@@ -547,6 +552,24 @@ const TEN = Array.from({ length: 10 }, (_, i) => pw(i + 1));
 const TWO_USERS: Username[] = ["alice", "bob"].map((u, i) => ({ id: `u-${u}`, engagementId: "e1", username: u, domain: null, sourceHostId: null, source: null, createdAt: i }));
 const dock = () => screen.getByRole("region", { name: "Credential" });
 const NT_HASH = cred({ id: "h", type: "hash", username: "jsmith", domain: "CORP", secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "NTLM", crackStatus: "uncracked", createdAt: 20 });
+
+describe("tried pairs", () => {
+  const tp = (id: string, service: string): TriedPair => ({
+    id, engagementId: "e1", username: "eve", domain: "CORP", secret: "Typo1", secretKind: "password", hostId: "h1", service,
+    authMode: "domain", logEntryId: null, at: 1,
+  });
+
+  it("Forget removes a tried row: every pair for that username and secret, after a confirm", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [cred({ id: "c1" })], services: [...SMB, svc("s2", 5985, "wsman")], tried: [tp("t1", "smb"), tp("t2", "winrm")] });
+    await user.click(await screen.findByRole("button", { name: "Forget the tried password for CORP\\eve" }));
+    const dlg = await screen.findByRole("dialog", { name: "Forget the tried password for CORP\\eve?" });
+    expect(within(dlg).getByText(/2 cells/)).toBeInTheDocument();
+    await user.click(within(dlg).getByRole("button", { name: "Forget" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Forget the tried password/ })).toBeNull());
+    expect(m.triedPairDelete.mock.calls.map((c) => c[0])).toEqual(["t1", "t2"]);
+  });
+});
 
 describe("credentials dock page", () => {
   it("opens on the Matrix tab with the newest testable credential selected and docked", async () => {

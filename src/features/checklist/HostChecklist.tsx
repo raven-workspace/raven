@@ -1,7 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
 import { Fragment, useMemo, useRef, useState } from "react";
 import { applicableGoals, currentStage, hostViewStages, loggedListenerPorts, type FillInput } from "../../engines/checklist";
-import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
 import { Button, Input, Select, fieldLabelClass, labelClass, queryState } from "../../ui";
 import { COLUMN_LABELS } from "../hosts/columns";
@@ -14,7 +12,12 @@ import { usePortPickStore } from "./portPick";
 import { goalCommands } from "./goalCommands";
 import { shortHostName } from "../../lib/hostName";
 import { GoalRow } from "./GoalRow";
-import { useChecklist, useChecklistMutations, useEngagementServices, useHopMutations, useTunnels } from "./queries";
+import { useChecklist, useChecklistMutations } from "./queries";
+import { useHopMutations, useTunnels } from "../network/queries";
+import { useEngagementServices } from "../services/queries";
+import { useSettings, settingsFill } from "../settings/queries";
+import { useEngagement } from "../engagements/queries";
+import { RavenError } from "../../types/errors";
 
 const KALI = "kali";
 const EXAM_EMPTY = "Nothing allowed in an exam sim; do it by hand";
@@ -32,7 +35,7 @@ function ArrivedFrom({ host, hosts, onSave }: { host: Host; hosts: Host[]; onSav
       await onSave(from === KALI ? null : from, via.trim());
       setVia("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(RavenError.from(e).message);
     } finally {
       setSaving(false);
     }
@@ -73,8 +76,8 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   useFilePickStore((s) => s.file); // a chip pick refills the rows' commands
   usePortPickStore((s) => s.picks); // a port pick refills them too
   const hostsQ = useHosts(engagementId);
-  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
+  const engagement = useEngagement(engagementId);
+  const settings = useSettings();
   const log = useLog(engagementId);
   const { byOwner } = useChecklist(engagementId);
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
@@ -100,7 +103,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   const entries = log.data ?? [];
   const input: FillInput = {
     host, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", kaliUser: settings.data?.kaliUser, listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+    ...settingsFill(settings.data), cred: creds.cred,
     listenerPorts: loggedListenerPorts(entries),
   };
 

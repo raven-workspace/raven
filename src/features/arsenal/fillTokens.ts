@@ -4,7 +4,7 @@ import type { FillInput } from "../../engines/checklist";
 const TOKEN_RE = /(?<![$%])\{([A-Z][A-Z0-9_-]+)\}|<([A-Z][A-Z0-9_]+)>/g;
 const TARGET_ALIASES = new Set(["TARGET", "IP", "TARGET-IP"]);
 /** Never a field: they come from the picked credential and stay masked. */
-export const SECRET_TOKENS = new Set(["PASS", "HASH", "CRED"]);
+const SECRET_TOKENS = new Set(["PASS", "HASH", "CRED"]);
 
 /** The editable fill tokens a set of templates uses, in first-seen order, aliases folded onto their canonical name. */
 export function tokensOf(templates: string[]): string[] {
@@ -29,6 +29,3 @@ export function autoFill(tokens: string[], input: FillInput): Record<string, { t
   }
   return out;
 }
-
-/** True when any template uses a token the credential chip fills. */
-export const usesCred = (templates: string[]): boolean => templates.some((t) => /\{(USER|DOMAIN|PASS|HASH|CRED)\}|<(USER|DOMAIN|PASS|HASH|CRED)>/.test(t));

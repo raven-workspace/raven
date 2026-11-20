@@ -4,26 +4,14 @@ import type { Node as PMNode } from "prosekit/pm/model";
 import { useEditor } from "prosekit/react";
 import { BlockHandleDraggable, BlockHandlePopup, BlockHandlePositioner, BlockHandleRoot } from "prosekit/react/block-handle";
 import { DropIndicator } from "prosekit/react/drop-indicator";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { refreshBlocks } from "../../../engines/report";
 import { Button, Dialog, Tooltip } from "../../../ui";
 import { currentRun, deleteBlockAt, isEdited, refreshLabel, refreshRun, sourceRun, type SourceRun } from "./pageActions";
-import { useReportData } from "./ReportDataContext";
+import { usePageContext } from "./ReportDataContext";
+import { MENU_ITEM, walkMenuItems } from "../menuItems";
 
 type Hovered = { node: PMNode; pos: number } | null;
-
-const ITEM =
-  "grid h-7 items-center rounded-sm border-0 bg-transparent px-2 text-left text-body text-fg-2 outline-none hover:bg-surface-hi hover:text-fg focus-visible:bg-surface-hi focus-visible:text-fg";
-
-/** ↑↓ walk a menu's items, wrapping. */
-function walkItems(e: KeyboardEvent<HTMLDivElement>) {
-  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  e.preventDefault();
-  const items = [...e.currentTarget.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
-  const at = items.indexOf(document.activeElement as HTMLButtonElement);
-  const next = (at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
-  items[next]?.focus();
-}
 
 /**
  * The page's drag handle: hovering a block shows it in the left gutter, and dragging it moves the block (attrs and
@@ -33,7 +21,7 @@ function walkItems(e: KeyboardEvent<HTMLDivElement>) {
  */
 export function BlockHandle() {
   const editor = useEditor();
-  const { data, target, reportMeta } = useReportData();
+  const { data, target, reportMeta } = usePageContext();
   // The block the handle is beside, and the one the open menu acts on (held while the pointer is in the menu).
   const hovered = useRef<Hovered>(null);
   const [menu, setMenu] = useState<Hovered>(null);
@@ -99,14 +87,14 @@ export function BlockHandle() {
                   sideOffset={4}
                   role="menu"
                   aria-label="Block actions"
-                  onKeyDown={walkItems}
+                  onKeyDown={walkMenuItems}
                   className="z-50 grid min-w-40 gap-1 rounded-md border border-line-strong bg-surface p-1 shadow-[0_12px_32px_rgba(0,0,0,.6)]"
                 >
                   {canRefresh && (
                     <button
                       type="button"
                       role="menuitem"
-                      className={ITEM}
+                      className={MENU_ITEM}
                       onClick={() => {
                         setMenu(null);
                         if (isEdited(run.nodes)) setConfirm(run);
@@ -123,7 +111,7 @@ export function BlockHandle() {
                     <button
                       type="button"
                       role="menuitem"
-                      className={ITEM}
+                      className={MENU_ITEM}
                       onClick={() => {
                         const { pos, node } = menu;
                         if (editor.state.doc.nodeAt(pos) === node) editor.view.dispatch(editor.state.tr.setNodeAttribute(pos, "width", null));
@@ -136,7 +124,7 @@ export function BlockHandle() {
                   <button
                     type="button"
                     role="menuitem"
-                    className={`${ITEM} hover:text-warn focus-visible:text-warn`}
+                    className={`${MENU_ITEM} hover:text-warn focus-visible:text-warn`}
                     onClick={() => {
                       if (menu) deleteBlockAt(editor, menu);
                       done();

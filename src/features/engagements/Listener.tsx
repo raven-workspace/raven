@@ -1,15 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
-import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import { labelClass } from "../../ui";
+import { useSettings } from "../settings/queries";
 
 /**
  * Your listener (Settings → Your IP / Listener port) on the strip, as filled into checklist commands.
  * Links to Settings; "not set" is in the warn colour because commands then show LHOST unresolved.
  */
 export function Listener({ step }: { step?: number }) {
-  const s = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data;
+  const s = useSettings().data;
   if (!s) return null;
   const ip = s.attackerIp.trim();
   const port = s.listenerPort.trim();

@@ -1,11 +1,11 @@
 import type { AccessGrant } from "../../types/credentials";
 import type { Severity } from "../../types/findings";
 import type { FlagKind } from "../../types/log";
-import { byTime, hostEntry, machinesInOrder, severityRank, findingPhaseMap } from "./draft";
+import { hostEntry, machinesInOrder, severityRank, findingPhaseMap } from "./draft";
+import { byTime, hostName } from "./prove";
 import { expectedFlags } from "./meta";
 import type { ReportData, ReportMeta, ReportTarget } from "./types";
 
-const hostName = (data: ReportData, id: string) => data.hosts.find((h) => h.id === id)?.name ?? id;
 const userName = (data: ReportData, usernameId: string) => data.usernames.find((u) => u.id === usernameId)?.username ?? "?";
 const LEVEL_RANK = { user: 0, admin: 1, system: 2 } as const;
 const byGrantTime = (a: AccessGrant, b: AccessGrant) => a.at - b.at || a.id.localeCompare(b.id);

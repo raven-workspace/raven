@@ -27,6 +27,27 @@ export function isFreeKey(e: KeyboardEvent): boolean {
   return !e.defaultPrevented && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingTarget(e.target) && !isDialogOpen();
 }
 
+/**
+ * While `active`, Esc runs `onEscape` and nothing else: a window capture listener runs before a drawer's, a dialog's or
+ * Radix's own Esc handlers, and preventDefault stops Radix dismissing. For a picker whose open list Esc should close.
+ */
+export function useEscapeWhile(active: boolean, onEscape: () => void) {
+  const ref = useRef(onEscape);
+  useEffect(() => {
+    ref.current = onEscape;
+  });
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      ref.current();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [active]);
+}
+
 /** Global keydown listener whose handler always sees the latest props. */
 export function useKeydown(handler: (e: KeyboardEvent) => void) {
   const ref = useRef(handler);

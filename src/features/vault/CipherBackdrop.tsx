@@ -1,6 +1,7 @@
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import { cx } from "../../lib/cx";
 import { CipherField, type PulseKind } from "./cipherField";
+import { prefersReducedMotion } from "../../ui/motion";
 
 export interface CipherHandle {
   pulse: (kind: PulseKind) => void;
@@ -12,10 +13,6 @@ export interface CipherHandle {
 export const CIPHER_CLEAR = { "data-cipher-clear": "" } as const;
 /** Marks the element rings start from (the password field). With several, the focused one wins. */
 export const CIPHER_ORIGIN = { "data-cipher-origin": "" } as const;
-
-function reducedMotion(): boolean {
-  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-}
 
 /**
  * The lock screen's ciphertext field. Fills its positioned parent; the parent also holds the form marked with
@@ -47,7 +44,7 @@ export function CipherBackdrop({ ref, front, onClosed }: { ref?: Ref<CipherHandl
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const field = new CipherField(canvas, reducedMotion());
+    const field = new CipherField(canvas, prefersReducedMotion());
     fieldRef.current = field;
     let live = true;
     let laidOut = false;

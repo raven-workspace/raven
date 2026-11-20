@@ -15,6 +15,7 @@ import { CommandList } from "../checklist/CommandList";
 import { fillLibraryCommand } from "../checklist/goalCommands";
 import { useFillBase } from "../palette/fillData";
 import { FilePicker } from "./FilePicker";
+import { RavenError } from "../../types/errors";
 
 type Os = "windows" | "linux";
 const DEFAULT_DIR: Record<Os, string> = { windows: "C:\\Windows\\Temp", linux: "/tmp" };
@@ -131,7 +132,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
       setStatus("Copied and logged");
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
     }
   };
   useKeydown((e) => {

@@ -29,21 +29,10 @@ export const files = [
 const isEngine = (file: string) => file.startsWith("src/engines/");
 
 /**
- * Engine files the narrow joined-strings check skips, and why. They write stored data, never UI labels: an imported
- * flag keeps its old "local.txt · host" title and imported notes keep their "- 80: status — note" lines (the stored data
- * is real and stays as it was).
- */
-const ENGINE_JOIN_ALLOWED: Record<string, string> = {
-  "src/engines/import/plan.ts": "imported flag titles and note bodies keep their stored form",
-  "src/engines/import/loot.ts": "imported loot becomes a note section in its stored form",
-};
-
-/**
  * Engines hold prose (field manual, playbook text) where a dash or arrow is punctuation. Only a separator touching a
  * `${…}` interpolation in a template literal is a joined structured value (`${host} — no foothold`).
  */
-function engineJoined(file: string, src: string): boolean {
-  if (file in ENGINE_JOIN_ALLOWED) return false;
+function engineJoined(src: string): boolean {
   const code = stripComments(src);
   for (const m of code.matchAll(/`(?:[^`\\]|\\.)*`/g)) {
     if (/\}\s+(·|—|→)\s|\s(·|—|→)\s+\$\{/.test(m[0])) return true;
@@ -368,7 +357,7 @@ function offScaleSpacing(file: string, src: string): string[] {
 
 export function breaks(rule: RuleId, file: string, src: string): boolean {
   // Engines render no markup: only the narrow joined-strings check reads them.
-  if (isEngine(file)) return rule === "joined-strings" && engineJoined(file, src);
+  if (isEngine(file)) return rule === "joined-strings" && engineJoined(src);
   switch (rule) {
     case "tiny-type":
       return /\btext-xs\b|text-\[(\d+(\.\d+)?|\.\d+)(px|r?em)\]/.test(stripComments(src));

@@ -30,6 +30,7 @@ import { manualSearchPath } from "../manual/searchPath";
 import { capGroups, searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
 import { usePaletteStore } from "./usePaletteStore";
 import type { SuggestContext } from "./suggest";
+import { RavenError } from "../../types/errors";
 
 const MAX_RESULTS = 30;
 
@@ -181,7 +182,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       onClose();
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
     }
   };
 

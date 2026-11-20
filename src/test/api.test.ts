@@ -68,17 +68,6 @@ describe("api", () => {
     expect(invoke).toHaveBeenCalledWith("backup_restore_locked", { file: "f.db", password: "pw" });
   });
 
-  it("wraps import_apply", async () => {
-    const summary = { hosts: { added: 1, present: 0 } };
-    invoke.mockResolvedValueOnce(summary);
-    const plan = {
-      engagements: [], hosts: [], services: [], logEntries: [], notes: [], checklist: [], hops: [], tunnels: [],
-      findings: [], credentials: [], usernames: [], accessGrants: [], credAttempts: [], skipped: {},
-    };
-    await expect(api.importApply(plan)).resolves.toBe(summary);
-    expect(invoke).toHaveBeenCalledWith("import_apply", { plan });
-  });
-
   it("wraps the host commands", async () => {
     invoke.mockResolvedValue(null);
     await api.hostsList("e1");

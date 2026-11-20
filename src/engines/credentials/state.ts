@@ -5,9 +5,8 @@ import type { Hop } from "../../types/network";
 import type { Service } from "../../types/service";
 import { domainAdminConfirmed } from "../checklist/daCover";
 import { adHosts, findDcHost } from "../checklist/facts";
+import type { PlaybookId } from "../checklist/types";
 import { hostSprayServices, isSprayable } from "./matrix";
-
-export type PlaybookId = "nocreds" | "user" | "da";
 
 const isDomainCred = (c: Credential): boolean => c.scope === "domain";
 const hasAccess = (a: CredAttempt): boolean => a.result === "valid" || a.result === "admin";

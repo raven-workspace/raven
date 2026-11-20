@@ -1,9 +1,9 @@
 //! Free-text notes (one per host, one per engagement) and ruled-out items.
 //! "Private" marks content that must never reach a client report or export.
 
-use crate::backup::system_now_ms;
+use crate::db::{check_scope, delete_by_id, now_ms};
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 pub(crate) const MAX_BODY: usize = 1024 * 1024;
@@ -47,23 +47,6 @@ pub struct RuledOutInput {
     pub private: bool,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
-/// The engagement must exist, and a host (if given) must belong to it; otherwise `NotFound`.
-pub(crate) fn check_scope(conn: &Connection, engagement_id: &str, host_id: Option<&str>) -> AppResult<()> {
-    let ok: bool = match host_id {
-        None => conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?,
-        Some(h) => conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
-            params![h, engagement_id],
-            |r| r.get(0),
-        )?,
-    };
-    if ok { Ok(()) } else { Err(AppError::NotFound) }
-}
-
 fn note_row(r: &Row) -> rusqlite::Result<Note> {
     Ok(Note {
         owner_id: r.get(0)?,
@@ -81,9 +64,9 @@ const NOTE_COLS: &str = "owner_id, engagement_id, host_id, body, private, update
 pub fn get(conn: &Connection, engagement_id: &str, host_id: Option<&str>) -> AppResult<Note> {
     check_scope(conn, engagement_id, host_id)?;
     let owner = host_id.unwrap_or(engagement_id);
-    match conn.query_row(&format!("SELECT {NOTE_COLS} FROM notes WHERE owner_id = ?1"), [owner], note_row) {
-        Ok(n) => Ok(n),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(Note {
+    match conn.query_row(&format!("SELECT {NOTE_COLS} FROM notes WHERE owner_id = ?1"), [owner], note_row).optional()? {
+        Some(n) => Ok(n),
+        None => Ok(Note {
             owner_id: owner.to_string(),
             engagement_id: engagement_id.to_string(),
             host_id: host_id.map(str::to_string),
@@ -91,7 +74,6 @@ pub fn get(conn: &Connection, engagement_id: &str, host_id: Option<&str>) -> App
             private: false,
             updated_at: 0,
         }),
-        Err(e) => Err(e.into()),
     }
 }
 
@@ -103,14 +85,14 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Note>> {
 
 pub fn save(conn: &Connection, engagement_id: &str, host_id: Option<&str>, body: &str, private: bool) -> AppResult<Note> {
     if body.len() > MAX_BODY {
-        return Err(invalid("body", "note is too long (1 MiB max)"));
+        return Err(AppError::validation("body", "note is too long (1 MiB max)"));
     }
     check_scope(conn, engagement_id, host_id)?;
     let owner = host_id.unwrap_or(engagement_id);
     conn.execute(
         "INSERT INTO notes (owner_id, engagement_id, host_id, body, private, updated_at) VALUES (?1,?2,?3,?4,?5,?6) \
          ON CONFLICT (owner_id) DO UPDATE SET body = excluded.body, private = excluded.private, updated_at = excluded.updated_at",
-        params![owner, engagement_id, host_id, body, private, system_now_ms()],
+        params![owner, engagement_id, host_id, body, private, now_ms()],
     )?;
     get(conn, engagement_id, host_id)
 }
@@ -141,22 +123,22 @@ pub fn ruled_out_create(conn: &Connection, input: RuledOutInput) -> AppResult<Ru
     let text = input.text.trim().to_string();
     let reason = input.reason.trim().to_string();
     if text.is_empty() {
-        return Err(invalid("text", "text must not be blank"));
+        return Err(AppError::validation("text", "text must not be blank"));
     }
     if reason.is_empty() {
-        return Err(invalid("reason", "reason must not be blank"));
+        return Err(AppError::validation("reason", "reason must not be blank"));
     }
     if text.len() > MAX_BODY {
-        return Err(invalid("text", "text is too long (1 MiB max)"));
+        return Err(AppError::validation("text", "text is too long (1 MiB max)"));
     }
     if reason.len() > MAX_BODY {
-        return Err(invalid("reason", "reason is too long (1 MiB max)"));
+        return Err(AppError::validation("reason", "reason is too long (1 MiB max)"));
     }
     check_scope(conn, &input.engagement_id, input.host_id.as_deref())?;
     let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO ruled_out (id, engagement_id, host_id, text, reason, private, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-        params![id, input.engagement_id, input.host_id, text, reason, input.private, system_now_ms()],
+        params![id, input.engagement_id, input.host_id, text, reason, input.private, now_ms()],
     )?;
     Ok(conn.query_row(&format!("SELECT {RULED_COLS} FROM ruled_out WHERE id = ?1"), [&id], ruled_row)?)
 }
@@ -175,7 +157,7 @@ pub(crate) fn link_ruled_out(
     conn.execute(
         "INSERT INTO ruled_out (id, engagement_id, host_id, text, reason, private, created_at, source_kind, source_id) \
          VALUES (?1,?2,?3,?4,?5,0,?6,?7,?8)",
-        params![uuid::Uuid::new_v4().to_string(), engagement_id, host_id, text, reason, system_now_ms(), source_kind, source_id],
+        params![uuid::Uuid::new_v4().to_string(), engagement_id, host_id, text, reason, now_ms(), source_kind, source_id],
     )?;
     Ok(())
 }
@@ -187,10 +169,7 @@ pub(crate) fn unlink_ruled_out(conn: &Connection, source_kind: &str, source_id: 
 }
 
 pub fn ruled_out_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM ruled_out WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "ruled_out", id)
 }
 
 #[cfg(test)]

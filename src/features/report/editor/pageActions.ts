@@ -23,6 +23,8 @@ import {
 import { api } from "../../../lib/api";
 import type { LogEntry } from "../../../types/log";
 import { readImage, releaseImage } from "../../capture/imagePaste";
+import { logKey } from "../../log/queries";
+import { showsHint } from "./extension";
 
 /** What the page's menus and toolbar ask the page to do beyond ProseKit's own commands. */
 export interface PageActions {
@@ -80,8 +82,8 @@ export async function saveScreenshot(qc: QueryClient, engagementId: string, host
     content: { kind: "screenshot", attachmentId: "", caption: "", fileName: fileNameOf(file) },
     attachment: { mime: image.mime, dataBase64: image.dataBase64 },
   });
-  qc.setQueryData<LogEntry[]>(["log", engagementId], (list) => (list ? [...list, entry] : list));
-  void qc.invalidateQueries({ queryKey: ["log", engagementId] });
+  qc.setQueryData<LogEntry[]>(logKey(engagementId), (list) => (list ? [...list, entry] : list));
+  void qc.invalidateQueries({ queryKey: logKey(engagementId) });
   return entry;
 }
 
@@ -356,12 +358,11 @@ export function currentRun(doc: PMNode, run: SourceRun): SourceRun | null {
 }
 
 /** An empty paragraph showing a hint: it holds no words of anyone's. */
-const isEmptyHint = (n: PMNode) => n.type.name === "paragraph" && n.content.size === 0 && typeof n.attrs.hint === "string" && n.attrs.hint !== "";
 
 /** Whether the owner changed any of these blocks since they were generated: its hash differs from its `gen`, or it has
  *  none (a flattened block, whose words may be the owner's). An empty hint paragraph is never edited. */
 export function isEdited(nodes: PMNode[]): boolean {
-  return nodes.some((n) => !isEmptyHint(n) && (typeof n.attrs.gen !== "string" || n.attrs.gen === "" || blockHash(n.toJSON() as ReportNode) !== n.attrs.gen));
+  return nodes.some((n) => !showsHint(n) && (typeof n.attrs.gen !== "string" || n.attrs.gen === "" || blockHash(n.toJSON() as ReportNode) !== n.attrs.gen));
 }
 
 /** Replaces a run with its source's blocks as the draft writes them now (`refreshBlocks`), in one undo step of its own

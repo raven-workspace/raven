@@ -34,12 +34,6 @@ export function readImage(file: File): Promise<PastedImage> {
   });
 }
 
-/** Reads an image from a paste event; null when the clipboard holds none. */
-export function readPastedImage(e: Pick<ClipboardEvent, "clipboardData">): Promise<PastedImage | null> {
-  const file = clipboardImage(e.clipboardData);
-  return file ? readImage(file) : Promise.resolve(null);
-}
-
 export function releaseImage(image: PastedImage | null | undefined) {
   // jsdom has no object URLs.
   if (image) URL.revokeObjectURL?.(image.objectUrl);

@@ -1,9 +1,8 @@
 //! Findings (with linked hosts, services and ordered reproduction steps), finding files and failed attempts.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
 use crate::error::{AppError, AppResult};
-use crate::notes::check_scope;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -128,20 +127,9 @@ pub struct FailedAttemptInput {
     #[serde(default)]
     pub reason_kind: Option<String>,
     pub reason: String,
-    /// Ignored: privacy is derived from `reason_kind`.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub private: bool,
+    // No `private`: privacy is derived from `reason_kind`, and a client's flag is dropped on deserialize.
     #[serde(default)]
     pub log_entry_id: Option<String>,
-}
-
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
-fn blank_to_none(s: Option<&str>) -> Option<String> {
-    s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
 
 fn dedupe(ids: &[String]) -> Vec<String> {
@@ -149,21 +137,8 @@ fn dedupe(ids: &[String]) -> Vec<String> {
     ids.iter().filter(|i| seen.insert(i.as_str())).cloned().collect()
 }
 
-fn in_scope(conn: &Connection, table: &str, engagement_id: &str, id: &str) -> AppResult<()> {
-    let ok: bool = conn.query_row(
-        &format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id = ?1 AND engagement_id = ?2)"),
-        params![id, engagement_id],
-        |r| r.get(0),
-    )?;
-    if ok { Ok(()) } else { Err(AppError::NotFound) }
-}
-
 fn finding_engagement(conn: &Connection, id: &str) -> AppResult<String> {
-    match conn.query_row("SELECT engagement_id FROM findings WHERE id = ?1", [id], |r| r.get(0)) {
-        Ok(e) => Ok(e),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row("SELECT engagement_id FROM findings WHERE id = ?1", [id], |r| r.get(0)).optional()?.ok_or(AppError::NotFound)
 }
 
 // ---- findings ----
@@ -210,11 +185,7 @@ fn fill_links(conn: &Connection, f: &mut Finding) -> AppResult<()> {
 }
 
 fn get(conn: &Connection, id: &str) -> AppResult<Finding> {
-    let mut f = match conn.query_row(&format!("SELECT {F_COLS} FROM findings WHERE id = ?1"), [id], finding_row) {
-        Ok(f) => f,
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
-        Err(e) => return Err(e.into()),
-    };
+    let mut f = conn.query_row(&format!("SELECT {F_COLS} FROM findings WHERE id = ?1"), [id], finding_row).optional()?.ok_or(AppError::NotFound)?;
     fill_links(conn, &mut f)?;
     Ok(f)
 }
@@ -245,27 +216,27 @@ struct CleanFinding {
 fn clean_finding(conn: &Connection, engagement_id: &str, i: &FindingInput) -> AppResult<CleanFinding> {
     let title = i.title.trim().to_string();
     if title.is_empty() {
-        return Err(invalid("title", "title must not be blank"));
+        return Err(AppError::validation("title", "title must not be blank"));
     }
     let severity = blank_to_none(i.severity.as_deref());
     if severity.as_deref().is_some_and(|s| !matches!(s, "critical" | "high" | "medium" | "low" | "info")) {
-        return Err(invalid("severity", "severity must be critical, high, medium, low or info"));
+        return Err(AppError::validation("severity", "severity must be critical, high, medium, low or info"));
     }
     let status = i.status.clone().unwrap_or_else(|| "draft".into());
     if !matches!(status.as_str(), "draft" | "confirmed" | "reported") {
-        return Err(invalid("status", "status must be draft, confirmed or reported"));
+        return Err(AppError::validation("status", "status must be draft, confirmed or reported"));
     }
     if i.cvss_score.is_some_and(|s| !(0.0..=10.0).contains(&s)) {
-        return Err(invalid("cvssScore", "CVSS score must be 0-10"));
+        return Err(AppError::validation("cvssScore", "CVSS score must be 0-10"));
     }
     if i.refs.len() > MAX_REFS {
-        return Err(invalid("refs", "at most 100 references"));
+        return Err(AppError::validation("refs", "at most 100 references"));
     }
     let mut refs = Vec::with_capacity(i.refs.len());
     for r in &i.refs {
         let r = r.trim();
         if r.is_empty() {
-            return Err(invalid("refs", "references must not be blank"));
+            return Err(AppError::validation("refs", "references must not be blank"));
         }
         refs.push(r.to_string());
     }
@@ -277,7 +248,7 @@ fn clean_finding(conn: &Connection, engagement_id: &str, i: &FindingInput) -> Ap
         ("lessons", &i.lessons),
     ] {
         if text.len() > MAX_CONTENT {
-            return Err(invalid(field, "text is too long (1 MiB max)"));
+            return Err(AppError::validation(field, "text is too long (1 MiB max)"));
         }
     }
     let host_ids = dedupe(&i.host_ids);
@@ -297,7 +268,7 @@ fn clean_finding(conn: &Connection, engagement_id: &str, i: &FindingInput) -> Ap
     }
     let step_entry_ids = dedupe(&i.step_entry_ids);
     for e in &step_entry_ids {
-        in_scope(conn, "log_entries", engagement_id, e)?;
+        check_in_engagement(conn, "log_entries", engagement_id, e)?;
     }
     Ok(CleanFinding {
         title,
@@ -305,7 +276,7 @@ fn clean_finding(conn: &Connection, engagement_id: &str, i: &FindingInput) -> Ap
         cvss_vector: blank_to_none(i.cvss_vector.as_deref()),
         cvss_score: i.cvss_score,
         status,
-        refs_json: serde_json::to_string(&refs).map_err(|e| AppError::Db(e.to_string()))?,
+        refs_json: serde_json::to_string(&refs)?,
         host_ids,
         service_ids,
         step_entry_ids,
@@ -335,7 +306,7 @@ pub fn finding_create(conn: &Connection, engagement_id: &str, input: FindingInpu
     check_scope(conn, engagement_id, None)?;
     let c = clean_finding(conn, engagement_id, &input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     let tx = conn.unchecked_transaction()?;
     tx.execute(
         "INSERT INTO findings (id, engagement_id, title, severity, cvss_vector, cvss_score, status, description, impact, \
@@ -360,7 +331,7 @@ pub fn finding_update(conn: &Connection, id: &str, input: FindingInput) -> AppRe
          remediation=?9, exploit_notes=?10, lessons=?11, refs=?12, updated_at=?13 WHERE id=?1",
         params![
             id, c.title, c.severity, c.cvss_vector, c.cvss_score, c.status, input.description, input.impact,
-            input.remediation, input.exploit_notes, input.lessons, c.refs_json, system_now_ms()
+            input.remediation, input.exploit_notes, input.lessons, c.refs_json, now_ms()
         ],
     )?;
     replace_links(&tx, id, &c)?;
@@ -369,10 +340,7 @@ pub fn finding_update(conn: &Connection, id: &str, input: FindingInput) -> AppRe
 }
 
 pub fn finding_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM findings WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "findings", id)
 }
 
 // ---- finding files ----
@@ -397,23 +365,19 @@ fn file_row(r: &Row) -> rusqlite::Result<FindingFile> {
 fn clean_file(i: &FindingFileInput) -> AppResult<(String, Option<String>)> {
     let name = i.name.trim().to_string();
     if name.is_empty() {
-        return Err(invalid("name", "name must not be blank"));
+        return Err(AppError::validation("name", "name must not be blank"));
     }
     if i.content.len() > MAX_CONTENT {
-        return Err(invalid("content", "content is too long (1 MiB max)"));
+        return Err(AppError::validation("content", "content is too long (1 MiB max)"));
     }
     if i.original_content.as_deref().is_some_and(|c| c.len() > MAX_CONTENT) {
-        return Err(invalid("originalContent", "original content is too long (1 MiB max)"));
+        return Err(AppError::validation("originalContent", "original content is too long (1 MiB max)"));
     }
     Ok((name, blank_to_none(i.language.as_deref())))
 }
 
 fn file_get(conn: &Connection, id: &str) -> AppResult<FindingFile> {
-    match conn.query_row(&format!("SELECT {FILE_COLS} FROM finding_files WHERE id = ?1"), [id], file_row) {
-        Ok(f) => Ok(f),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {FILE_COLS} FROM finding_files WHERE id = ?1"), [id], file_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn files_list(conn: &Connection, finding_id: &str) -> AppResult<Vec<FindingFile>> {
@@ -428,7 +392,7 @@ pub fn file_create(conn: &Connection, finding_id: &str, input: FindingFileInput)
     finding_engagement(conn, finding_id)?;
     let (name, language) = clean_file(&input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO finding_files (id, finding_id, name, language, content, modified, original_url, original_content, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)",
@@ -456,16 +420,13 @@ pub fn file_update(conn: &Connection, id: &str, input: FindingFileInput) -> AppR
          original_url=CASE WHEN ?6 IS NULL THEN original_url ELSE NULLIF(trim(?6), '') END, \
          original_content=CASE WHEN ?7 IS NULL THEN original_content ELSE NULLIF(?7, '') END, \
          updated_at=?8 WHERE id=?1",
-        params![id, name, language, input.content, input.modified, input.original_url, input.original_content, system_now_ms()],
+        params![id, name, language, input.content, input.modified, input.original_url, input.original_content, now_ms()],
     )?;
     file_get(conn, id)
 }
 
 pub fn file_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM finding_files WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "finding_files", id)
 }
 
 // ---- failed attempts ----
@@ -502,21 +463,21 @@ struct CleanAttempt {
 fn clean_attempt(conn: &Connection, engagement_id: &str, i: &FailedAttemptInput) -> AppResult<CleanAttempt> {
     let title = i.title.trim().to_string();
     if title.is_empty() {
-        return Err(invalid("title", "title must not be blank"));
+        return Err(AppError::validation("title", "title must not be blank"));
     }
     let reason = i.reason.trim().to_string();
     if reason.is_empty() {
-        return Err(invalid("reason", "reason must not be blank"));
+        return Err(AppError::validation("reason", "reason must not be blank"));
     }
     if reason.len() > MAX_CONTENT {
-        return Err(invalid("reason", "reason is too long (1 MiB max)"));
+        return Err(AppError::validation("reason", "reason is too long (1 MiB max)"));
     }
     let reason_kind = blank_to_none(i.reason_kind.as_deref());
     if reason_kind.is_none() {
-        return Err(invalid("reasonKind", "say why it failed"));
+        return Err(AppError::validation("reasonKind", "say why it failed"));
     }
     if reason_kind.as_deref().is_some_and(|k| !matches!(k, "control" | "precondition" | "access" | "operator")) {
-        return Err(invalid("reasonKind", "reason kind must be control, precondition, access or operator"));
+        return Err(AppError::validation("reasonKind", "reason kind must be control, precondition, access or operator"));
     }
     let host_id = blank_to_none(i.host_id.as_deref());
     if let Some(h) = &host_id {
@@ -524,22 +485,18 @@ fn clean_attempt(conn: &Connection, engagement_id: &str, i: &FailedAttemptInput)
     }
     let finding_id = blank_to_none(i.finding_id.as_deref());
     if let Some(f) = &finding_id {
-        in_scope(conn, "findings", engagement_id, f)?;
+        check_in_engagement(conn, "findings", engagement_id, f)?;
     }
     let log_entry_id = blank_to_none(i.log_entry_id.as_deref());
     if let Some(l) = &log_entry_id {
-        in_scope(conn, "log_entries", engagement_id, l)?;
+        check_in_engagement(conn, "log_entries", engagement_id, l)?;
     }
     let private = reason_kind.as_deref() == Some("operator");
     Ok(CleanAttempt { host_id, finding_id, title, reason_kind, reason, private, log_entry_id })
 }
 
 fn attempt_get(conn: &Connection, id: &str) -> AppResult<FailedAttempt> {
-    match conn.query_row(&format!("SELECT {A_COLS} FROM failed_attempts WHERE id = ?1"), [id], attempt_row) {
-        Ok(a) => Ok(a),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {A_COLS} FROM failed_attempts WHERE id = ?1"), [id], attempt_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn attempts_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<FailedAttempt>> {
@@ -554,7 +511,7 @@ pub fn attempt_create(conn: &Connection, engagement_id: &str, input: FailedAttem
     check_scope(conn, engagement_id, None)?;
     let c = clean_attempt(conn, engagement_id, &input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         &format!("INSERT INTO failed_attempts ({A_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10)"),
         params![id, engagement_id, c.host_id, c.finding_id, c.title, c.reason_kind, c.reason, c.private, c.log_entry_id, now],
@@ -568,16 +525,13 @@ pub fn attempt_update(conn: &Connection, id: &str, input: FailedAttemptInput) ->
     conn.execute(
         "UPDATE failed_attempts SET host_id=?2, finding_id=?3, title=?4, reason_kind=?5, reason=?6, private=?7, \
          log_entry_id=?8, updated_at=?9 WHERE id=?1",
-        params![id, c.host_id, c.finding_id, c.title, c.reason_kind, c.reason, c.private, c.log_entry_id, system_now_ms()],
+        params![id, c.host_id, c.finding_id, c.title, c.reason_kind, c.reason, c.private, c.log_entry_id, now_ms()],
     )?;
     attempt_get(conn, id)
 }
 
 pub fn attempt_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM failed_attempts WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "failed_attempts", id)
 }
 
 #[cfg(test)]
@@ -643,14 +597,13 @@ mod tests {
         FindingInput { title: title.into(), ..Default::default() }
     }
 
-    fn att(title: &str, kind: Option<&str>, private: bool) -> FailedAttemptInput {
+    fn att(title: &str, kind: Option<&str>) -> FailedAttemptInput {
         FailedAttemptInput {
             host_id: None,
             finding_id: None,
             title: title.into(),
             reason_kind: kind.map(str::to_string),
             reason: "because".into(),
-            private,
             log_entry_id: None,
         }
     }
@@ -753,24 +706,26 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let e = eng(c, "A");
-        let a = attempt_create(c, &e, att("typo'd the payload", Some("operator"), false)).unwrap();
+        let a = attempt_create(c, &e, att("typo'd the payload", Some("operator"))).unwrap();
         assert!(a.private);
-        let b = attempt_create(c, &e, att("blocked by EDR", Some("control"), true)).unwrap();
+        // A client-sent `"private": true` is dropped on deserialize.
+        let json = r#"{"title":"blocked by EDR","reasonKind":"control","reason":"because","private":true}"#;
+        let b = attempt_create(c, &e, serde_json::from_str::<FailedAttemptInput>(json).unwrap()).unwrap();
         assert!(!b.private);
-        let n = attempt_create(c, &e, att("other", Some("precondition"), true)).unwrap();
+        let n = attempt_create(c, &e, att("other", Some("precondition"))).unwrap();
         assert!(!n.private);
         // update re-derives
-        let mut u = att("blocked by EDR", Some("operator"), false);
+        let mut u = att("blocked by EDR", Some("operator"));
         u.reason = "my mistake".into();
         let b2 = attempt_update(c, &b.id, u).unwrap();
         assert!(b2.private);
-        let a2 = attempt_update(c, &a.id, att("x", Some("access"), true)).unwrap();
+        let a2 = attempt_update(c, &a.id, att("x", Some("access"))).unwrap();
         assert!(!a2.private);
         let stored: i64 = c.query_row("SELECT private FROM failed_attempts WHERE id = ?1", [&a.id], |r| r.get(0)).unwrap();
         assert_eq!(stored, 0);
         assert_eq!(attempts_list(c, &e).unwrap().len(), 3);
-        assert!(attempt_create(c, &e, att("  ", Some("control"), false)).is_err());
-        let mut blank = att("t", Some("control"), false);
+        assert!(attempt_create(c, &e, att("  ", Some("control"))).is_err());
+        let mut blank = att("t", Some("control"));
         blank.reason = " ".into();
         assert!(matches!(attempt_create(c, &e, blank), Err(AppError::Validation { field, .. }) if field == "reason"));
         attempt_delete(c, &a.id).unwrap();
@@ -783,11 +738,11 @@ mod tests {
         let c = v.conn().unwrap();
         let e = eng(c, "A");
         let is_kind = |r: Result<FailedAttempt, AppError>| matches!(r, Err(AppError::Validation { field, .. }) if field == "reasonKind");
-        assert!(is_kind(attempt_create(c, &e, att("t", None, false))));
-        assert!(is_kind(attempt_create(c, &e, att("t", Some("  "), false))));
-        let a = attempt_create(c, &e, att("t", Some("control"), false)).unwrap();
-        assert!(is_kind(attempt_update(c, &a.id, att("t", None, false))));
-        assert!(is_kind(attempt_update(c, &a.id, att("t", Some(""), false))));
+        assert!(is_kind(attempt_create(c, &e, att("t", None))));
+        assert!(is_kind(attempt_create(c, &e, att("t", Some("  ")))));
+        let a = attempt_create(c, &e, att("t", Some("control"))).unwrap();
+        assert!(is_kind(attempt_update(c, &a.id, att("t", None))));
+        assert!(is_kind(attempt_update(c, &a.id, att("t", Some("")))));
     }
 
     #[test]
@@ -884,14 +839,14 @@ mod tests {
         u.host_ids = vec![hb.clone()];
         assert!(matches!(finding_update(c, &fa.id, u), Err(AppError::NotFound)));
         assert!(findings_list(c, &a).unwrap()[0].host_ids.is_empty());
-        let mut x = att("t", Some("control"), false);
+        let mut x = att("t", Some("control"));
         x.host_id = Some(hb);
         assert!(matches!(attempt_create(c, &a, x), Err(AppError::NotFound)));
-        let mut x = att("t", Some("control"), false);
+        let mut x = att("t", Some("control"));
         x.log_entry_id = Some(eb);
         assert!(matches!(attempt_create(c, &a, x), Err(AppError::NotFound)));
         let fb = finding_create(c, &b, fin("b")).unwrap();
-        let mut x = att("t", Some("control"), false);
+        let mut x = att("t", Some("control"));
         x.finding_id = Some(fb.id);
         assert!(matches!(attempt_create(c, &a, x), Err(AppError::NotFound)));
         assert!(matches!(findings_list(c, "nope"), Err(AppError::NotFound)));

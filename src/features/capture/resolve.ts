@@ -1,7 +1,7 @@
-import { buildDraft, credentialsInPaste, type PastedCredential, detectKind, findFlagInPaste, flagTitle, noteTitle, proofShotFlag, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
+import { buildDraft, credentialsInPaste, type PastedCredential, detectKind, findFlagInPaste, flagTitle, noteTitle, proofShotFlag, screenshotFileName, type CaptureDraft, type DraftInput, OPEN_STATES } from "../../engines/capture";
 import { OS_LABELS } from "../hosts/columns";
 import { KIND_LABELS } from "../log/kindLabels";
-import type { BoardColumn, Host, HostOs } from "../../types/host";
+import { BOARD_COLUMNS, type Host, type HostOs } from "../../types/host";
 import type { FlagKind, LogContent, LogEntry, LogKind } from "../../types/log";
 import { shortHostName } from "../../lib/hostName";
 import type { CaptureEdits } from "./saveCapture";
@@ -15,13 +15,9 @@ export const KINDS: { kind: LogKind; label: string }[] = [
   { kind: "flag", label: "Flag" },
 ];
 
-const COLUMNS: BoardColumn[] = [
-  "information-gathering", "vulnerability-detection", "initial-foothold", "privilege-escalation", "post-exploitation", "reporting",
-];
-
 /** Flags default to `proof` once the host is at Privilege escalation or later. */
 export function defaultFlagKind(host: Host | null): FlagKind {
-  return host && COLUMNS.indexOf(host.boardColumn) >= COLUMNS.indexOf("privilege-escalation") ? "proof" : "local";
+  return host && BOARD_COLUMNS.indexOf(host.boardColumn) >= BOARD_COLUMNS.indexOf("privilege-escalation") ? "proof" : "local";
 }
 
 export interface CaptureContext {
@@ -156,7 +152,6 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   };
 }
 
-const OPEN_STATES = new Set(["open", "open|filtered"]);
 
 /**
  * The scans of a command's IPs that aren't hosts yet and show an open port (which proves the host; it is made on

@@ -1,9 +1,10 @@
-import { Check, Copy, X } from "@phosphor-icons/react";
+import { X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isCveId, nvdFill, scoreCvss, scoreToSeverity, type NvdFillResult } from "../../engines/findings";
 import { api } from "../../lib/api";
 import { copyPlain } from "../../lib/clipboard";
-import { shortHostName } from "../../lib/hostName";
+import { CopySecretButton } from "../credentials/MaskedSecret";
+import { shortHostName, hostLabel } from "../../lib/hostName";
 import { isDialogOpen } from "../../lib/keys";
 import { reportError } from "../../lib/lockSignal";
 import { RavenError } from "../../types/errors";
@@ -11,7 +12,6 @@ import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import type { Finding, FindingInput, FindingStatus, NvdRecord, Severity } from "../../types/findings";
 import { ActionCell, Button, Chip, ChipSet, Dialog, Disclosure, Field, IconButton, Input, Select, Textarea, Toggle, fieldLabelClass } from "../../ui";
-import { hostLabel } from "../credentials/AccessGrants";
 import { useLog } from "../log/queries";
 import { CvssBuilder } from "./CvssBuilder";
 import { FindingFiles, type FileFormDraft } from "./FindingFiles";
@@ -104,21 +104,6 @@ function lookupLine(cve: string, e: unknown): string {
     default:
       return `Couldn't look up ${cve}: ${err.message}`;
   }
-}
-
-/** Copies a reference URL (there is no opener plugin to open it in a browser). */
-function CopyRef({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  const copy = () => {
-    void copyPlain(value).then(() => {
-      setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 1500);
-    });
-  };
-  return <IconButton icon={copied ? Check : Copy} label={`Copy ${value}`} onClick={copy} />;
 }
 
 /**
@@ -300,7 +285,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
       onError: (e: Error) => {
         // Shown here, so the store's after-close record is not needed.
         if (draftKey) useFindingDraftStore.getState().takeSaveError(draftKey);
-        const field = (e as { field?: string }).field;
+        const field = RavenError.from(e).field;
         if (field === "title") setTitleError(e.message);
         else setFormError(e.message);
       },
@@ -412,7 +397,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
                   {/* No opener plugin: a link would be a dead click in the desktop app, so a URL is copied instead. */}
                   <span className="truncate font-mono text-code text-fg" title={r}>{r}</span>
                   <ActionCell>
-                    {isUrl(r) ? <CopyRef value={r} /> : <span aria-hidden className="size-7" />}
+                    {isUrl(r) ? <CopySecretButton secret={r} label={r} copy={copyPlain} /> : <span aria-hidden className="size-7" />}
                     <IconButton icon={X} tone="destructive" label={`Remove ${r}`} onClick={() => update((p) => ({ ...p, refs: p.refs.filter((x) => x !== r), nvdPending: p.nvdPending.filter((x) => x !== r) }))} />
                   </ActionCell>
                 </li>

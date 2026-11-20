@@ -27,7 +27,7 @@ export function ReportDetails({
   includedHostIds: string[];
   onSave(patch: ReportPatch): void;
 }) {
-  const meta = report.meta as ReportMeta;
+  const meta = report.meta;
   const [name, setName] = useState(report.candidateName);
   const [email, setEmail] = useState(report.email);
   const [osid, setOsid] = useState(report.osid);

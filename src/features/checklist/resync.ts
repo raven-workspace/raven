@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { reportError } from "../../lib/lockSignal";
 import { checklistKey } from "./state";
 import { resyncBoards } from "./ticks";
+import { hostsKey } from "../hosts/queries";
 
 /**
  * `resyncBoards`, then a refetch of what it may have written: the checklist (the domain admin cover) and the hosts
@@ -17,6 +18,6 @@ export async function resyncAndRefresh(qc: QueryClient, engagementId: string): P
   }
   await Promise.all([
     qc.invalidateQueries({ queryKey: checklistKey(engagementId) }),
-    qc.invalidateQueries({ queryKey: ["hosts", engagementId] }),
+    qc.invalidateQueries({ queryKey: hostsKey(engagementId) }),
   ]);
 }

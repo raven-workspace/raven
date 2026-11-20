@@ -1,8 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useMatch } from "react-router";
 import { create } from "zustand";
-import { api } from "../../lib/api";
+import { useEngagements } from "../engagements/queries";
 
 interface LastEngagement {
   /** The engagement last open in the route, so full-screen Arsenal can keep filling for it. */
@@ -41,7 +40,7 @@ export function useFillScope(): FillScope {
     if (routeEngagement) useLastEngagementStore.setState({ engagementId: routeEngagement, hostId: routeHost });
   }, [routeEngagement, routeHost]);
 
-  const engagements = useQuery({ queryKey: ["engagements"], queryFn: api.engagementsList, enabled: onFull });
+  const engagements = useEngagements(onFull);
 
   if (routeEngagement) return { engagementId: routeEngagement, hostId: routeHost, remembered: false };
   if (!onFull) return { engagementId: "", hostId: null, remembered: false };

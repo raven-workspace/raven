@@ -150,7 +150,7 @@ export function mergeImport(
         if (b.why !== undefined) next.why = b.why;
         // A built-in's exam rule is authoritative; only vault-added commands are classified.
         if (!builtinIds.has(hit.id)) {
-          const exam = classifyExam(b.template, card.exam, b.note);
+          const exam = classifyExam(b.template, card.exam);
           if (exam) next.exam = exam;
           else delete next.exam;
           if (exam && exam !== hit.exam) classified.push({ id: hit.id, exam });
@@ -165,7 +165,7 @@ export function mergeImport(
         let id = `fm-${cardId}-v${b.index}`;
         for (let n = 2; usedIds.has(id); n++) id = `fm-${cardId}-v${b.index}-${n}`;
         usedIds.add(id);
-        const exam = classifyExam(b.template, card.exam, b.note);
+        const exam = classifyExam(b.template, card.exam);
         const cmd: LibraryCommand = {
           id,
           title: b.title,

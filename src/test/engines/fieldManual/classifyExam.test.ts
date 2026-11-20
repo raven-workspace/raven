@@ -21,11 +21,6 @@ describe('classifyExam', () => {
     expect(classifyExam('sqlmap -u x', 'prohibited')).toBe('banned');
   });
 
-  it('classifyExam ignores note prose', () => {
-    expect(classifyExam('x', 'allowed', 'Banned in the exam.')).toBeUndefined();
-    expect(classifyExam('wpscan --url http://{TARGET_IP}', undefined, 'wpscan is not on the prohibited list')).toBeUndefined();
-  });
-
   it('classifyExam bans prohibited automatic tools by command word', () => {
     expect(classifyExam('sqlmap -u http://{TARGET_IP}/?id=1')).toBe('banned');
     expect(classifyExam('sudo sqlmap -u x')).toBe('banned');

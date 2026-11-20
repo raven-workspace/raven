@@ -1,10 +1,9 @@
 //! Pivot network: tunnels (how traffic reaches a subnet) and hops (who we moved from and to).
 
-use crate::backup::system_now_ms;
-use crate::engagements::valid_cidr;
+use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
+use crate::engagements::{valid_cidr, valid_ipv4};
 use crate::error::{AppError, AppResult};
-use crate::notes::check_scope;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 pub(crate) const MAX_SUBNETS: usize = 50;
@@ -64,10 +63,6 @@ pub struct HopInput {
     pub at: Option<i64>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 struct CleanTunnel {
     kind: String,
     via: String,
@@ -79,24 +74,24 @@ struct CleanTunnel {
 
 fn clean_tunnel(conn: &Connection, engagement_id: &str, i: TunnelInput) -> AppResult<CleanTunnel> {
     if !matches!(i.kind.as_str(), "ligolo" | "chisel" | "ssh" | "socks" | "other") {
-        return Err(invalid("kind", "kind must be ligolo, chisel, ssh, socks or other"));
+        return Err(AppError::validation("kind", "kind must be ligolo, chisel, ssh, socks or other"));
     }
     if !matches!(i.status.as_str(), "up" | "down") {
-        return Err(invalid("status", "status must be up or down"));
+        return Err(AppError::validation("status", "status must be up or down"));
     }
     let subnets: Vec<String> = i.subnets.iter().map(|s| s.trim().to_string()).collect();
     if subnets.len() > MAX_SUBNETS {
-        return Err(invalid("subnets", "too many subnets"));
+        return Err(AppError::validation("subnets", "too many subnets"));
     }
     if let Some(bad) = subnets.iter().find(|s| !valid_cidr(s)) {
-        return Err(invalid("subnets", &format!("invalid IPv4 CIDR: {bad}")));
+        return Err(AppError::validation("subnets", format!("invalid IPv4 CIDR: {bad}")));
     }
     let callback_ip = i.callback_ip.trim().to_string();
-    if !callback_ip.is_empty() && (callback_ip.contains('/') || !valid_cidr(&callback_ip)) {
-        return Err(invalid("callbackIp", "must be a single IPv4 address"));
+    if !callback_ip.is_empty() && !valid_ipv4(&callback_ip) {
+        return Err(AppError::validation("callbackIp", "must be a single IPv4 address"));
     }
     check_scope(conn, engagement_id, Some(&i.via_host_id))?;
-    let notes = i.notes.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let notes = blank_to_none(i.notes.as_deref());
     Ok(CleanTunnel { kind: i.kind, via: i.via_host_id, subnets, callback_ip, status: i.status, notes })
 }
 
@@ -119,11 +114,7 @@ fn tunnel_row(r: &Row) -> rusqlite::Result<Tunnel> {
 }
 
 fn tunnel_get(conn: &Connection, id: &str) -> AppResult<Tunnel> {
-    match conn.query_row(&format!("SELECT {TUNNEL_COLS} FROM tunnels WHERE id = ?1"), [id], tunnel_row) {
-        Ok(t) => Ok(t),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {TUNNEL_COLS} FROM tunnels WHERE id = ?1"), [id], tunnel_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn tunnels_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Tunnel>> {
@@ -132,19 +123,15 @@ pub fn tunnels_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Tun
     Ok(rows)
 }
 
-fn subnets_json(s: &[String]) -> AppResult<String> {
-    serde_json::to_string(s).map_err(|e| AppError::Db(e.to_string()))
-}
-
 pub fn tunnel_create(conn: &Connection, engagement_id: &str, input: TunnelInput) -> AppResult<Tunnel> {
     check_scope(conn, engagement_id, None)?;
     let c = clean_tunnel(conn, engagement_id, input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO tunnels (id, engagement_id, kind, via_host_id, subnets, callback_ip, status, notes, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)",
-        params![id, engagement_id, c.kind, c.via, subnets_json(&c.subnets)?, c.callback_ip, c.status, c.notes, now],
+        params![id, engagement_id, c.kind, c.via, serde_json::to_string(&c.subnets)?, c.callback_ip, c.status, c.notes, now],
     )?;
     tunnel_get(conn, &id)
 }
@@ -154,16 +141,13 @@ pub fn tunnel_update(conn: &Connection, id: &str, input: TunnelInput) -> AppResu
     let c = clean_tunnel(conn, &current.engagement_id, input)?;
     conn.execute(
         "UPDATE tunnels SET kind=?2, via_host_id=?3, subnets=?4, callback_ip=?5, status=?6, notes=?7, updated_at=?8 WHERE id=?1",
-        params![id, c.kind, c.via, subnets_json(&c.subnets)?, c.callback_ip, c.status, c.notes, system_now_ms()],
+        params![id, c.kind, c.via, serde_json::to_string(&c.subnets)?, c.callback_ip, c.status, c.notes, now_ms()],
     )?;
     tunnel_get(conn, id)
 }
 
 pub fn tunnel_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM tunnels WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "tunnels", id)
 }
 
 struct CleanHop {
@@ -177,24 +161,17 @@ struct CleanHop {
 fn clean_hop(conn: &Connection, engagement_id: &str, i: HopInput) -> AppResult<CleanHop> {
     let via = i.via.trim().to_string();
     if via.is_empty() {
-        return Err(invalid("via", "via must not be blank"));
+        return Err(AppError::validation("via", "via must not be blank"));
     }
     if i.from_host_id.as_deref() == Some(i.to_host_id.as_str()) {
-        return Err(invalid("toHostId", "a hop must go to a different host"));
+        return Err(AppError::validation("toHostId", "a hop must go to a different host"));
     }
     check_scope(conn, engagement_id, Some(&i.to_host_id))?;
     if let Some(f) = &i.from_host_id {
         check_scope(conn, engagement_id, Some(f))?;
     }
     if let Some(l) = &i.log_entry_id {
-        let ok: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM log_entries WHERE id = ?1 AND engagement_id = ?2)",
-            params![l, engagement_id],
-            |r| r.get(0),
-        )?;
-        if !ok {
-            return Err(AppError::NotFound);
-        }
+        check_in_engagement(conn, "log_entries", engagement_id, l)?;
     }
     Ok(CleanHop { from: i.from_host_id, to: i.to_host_id, via, log_entry_id: i.log_entry_id, at: i.at })
 }
@@ -215,11 +192,7 @@ fn hop_row(r: &Row) -> rusqlite::Result<Hop> {
 }
 
 fn hop_get(conn: &Connection, id: &str) -> AppResult<Hop> {
-    match conn.query_row(&format!("SELECT {HOP_COLS} FROM hops WHERE id = ?1"), [id], hop_row) {
-        Ok(h) => Ok(h),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {HOP_COLS} FROM hops WHERE id = ?1"), [id], hop_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn hops_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Hop>> {
@@ -232,7 +205,7 @@ pub fn hop_create(conn: &Connection, engagement_id: &str, input: HopInput) -> Ap
     check_scope(conn, engagement_id, None)?;
     let c = clean_hop(conn, engagement_id, input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO hops (id, engagement_id, from_host_id, to_host_id, via, log_entry_id, at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
         params![id, engagement_id, c.from, c.to, c.via, c.log_entry_id, c.at.unwrap_or(now), now],
@@ -245,16 +218,13 @@ pub fn hop_update(conn: &Connection, id: &str, input: HopInput) -> AppResult<Hop
     let c = clean_hop(conn, &current.engagement_id, input)?;
     conn.execute(
         "UPDATE hops SET from_host_id=?2, to_host_id=?3, via=?4, log_entry_id=?5, at=?6, updated_at=?7 WHERE id=?1",
-        params![id, c.from, c.to, c.via, c.log_entry_id, c.at.unwrap_or(current.at), system_now_ms()],
+        params![id, c.from, c.to, c.via, c.log_entry_id, c.at.unwrap_or(current.at), now_ms()],
     )?;
     hop_get(conn, id)
 }
 
 pub fn hop_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM hops WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "hops", id)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -281,18 +251,14 @@ pub fn interface_dismissals_list(conn: &Connection, engagement_id: &str) -> AppR
 
 /// Remember that the user declined a tunnel nudge for this host and subnet. Dismissing twice is a no-op.
 pub fn interface_dismiss(conn: &Connection, engagement_id: &str, host_id: &str, subnet: &str) -> AppResult<()> {
-    check_scope(conn, engagement_id, None)?;
-    match check_scope(conn, engagement_id, Some(host_id)) {
-        Err(AppError::NotFound) => return Err(invalid("hostId", "host is not in this engagement")),
-        r => r?,
-    }
+    check_scope(conn, engagement_id, Some(host_id))?;
     let subnet = subnet.trim();
     if !valid_cidr(subnet) {
-        return Err(invalid("subnet", &format!("invalid IPv4 CIDR: {subnet}")));
+        return Err(AppError::validation("subnet", format!("invalid IPv4 CIDR: {subnet}")));
     }
     conn.execute(
         "INSERT OR IGNORE INTO interface_dismissals (engagement_id, host_id, subnet, created_at) VALUES (?1,?2,?3,?4)",
-        params![engagement_id, host_id, subnet, system_now_ms()],
+        params![engagement_id, host_id, subnet, now_ms()],
     )?;
     Ok(())
 }
@@ -447,8 +413,8 @@ mod tests {
         let a = host(c, &e, "10.0.0.5");
         let e2 = eng(c);
         let foreign = host(c, &e2, "10.0.0.5");
-        assert_eq!(field(interface_dismiss(c, &e, &foreign, "10.10.0.0/24")), "hostId");
-        assert_eq!(field(interface_dismiss(c, &e, "missing", "10.10.0.0/24")), "hostId");
+        assert_eq!(interface_dismiss(c, &e, &foreign, "10.10.0.0/24"), Err(AppError::NotFound));
+        assert_eq!(interface_dismiss(c, &e, "missing", "10.10.0.0/24"), Err(AppError::NotFound));
         assert_eq!(field(interface_dismiss(c, &e, &a, "nope")), "subnet");
         assert!(interface_dismissals_list(c, &e).unwrap().is_empty());
         assert!(interface_dismissals_list(c, &e2).unwrap().is_empty());

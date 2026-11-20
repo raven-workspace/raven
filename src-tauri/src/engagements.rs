@@ -1,8 +1,8 @@
 //! Engagement repository.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_scope, delete_by_id, now_ms};
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 const COLS: &str = "id, name, kind, client, sub_label, scope_cidrs, domain, starts_at, ends_at, \
@@ -59,10 +59,6 @@ pub struct EngagementInput {
     pub timebox_minutes: Option<i64>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 pub(crate) fn valid_cidr(s: &str) -> bool {
     let (ip, prefix) = match s.split_once('/') {
         Some((ip, p)) => (ip, Some(p)),
@@ -77,36 +73,37 @@ pub(crate) fn valid_cidr(s: &str) -> bool {
         && parts.iter().all(|o| !o.is_empty() && o.len() <= 3 && !(o.len() > 1 && o.starts_with('0')) && o.bytes().all(|b| b.is_ascii_digit()) && o.parse::<u16>().is_ok_and(|n| n <= 255))
 }
 
-fn opt_trim(v: &Option<String>) -> Option<String> {
-    v.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
+/// A single IPv4 address with no prefix.
+pub(crate) fn valid_ipv4(s: &str) -> bool {
+    !s.contains('/') && valid_cidr(s)
 }
 
 /// Validated, normalised input ready to store.
 fn normalise(mut i: EngagementInput) -> AppResult<EngagementInput> {
     i.name = i.name.trim().to_string();
     if i.name.is_empty() || i.name.chars().count() > 120 {
-        return Err(invalid("name", "name must be 1-120 characters"));
+        return Err(AppError::validation("name", "name must be 1-120 characters"));
     }
     if !matches!(i.kind.as_str(), "exam-sim" | "lab" | "client") {
-        return Err(invalid("kind", "kind must be exam-sim, lab or client"));
+        return Err(AppError::validation("kind", "kind must be exam-sim, lab or client"));
     }
-    i.client = opt_trim(&i.client);
-    i.sub_label = opt_trim(&i.sub_label);
-    i.domain = opt_trim(&i.domain);
+    i.client = blank_to_none(i.client.as_deref());
+    i.sub_label = blank_to_none(i.sub_label.as_deref());
+    i.domain = blank_to_none(i.domain.as_deref());
     i.scope_cidrs = i.scope_cidrs.iter().map(|c| c.trim().to_string()).collect();
     if let Some(bad) = i.scope_cidrs.iter().find(|c| !valid_cidr(c)) {
-        return Err(invalid("scopeCidrs", &format!("invalid IPv4 CIDR: {bad}")));
+        return Err(AppError::validation("scopeCidrs", format!("invalid IPv4 CIDR: {bad}")));
     }
     if let (Some(s), Some(e)) = (i.starts_at, i.ends_at)
         && e < s {
-            return Err(invalid("endsAt", "end must not be before start"));
+            return Err(AppError::validation("endsAt", "end must not be before start"));
         }
     if i.kind != "exam-sim" {
         i.timebox_start = None;
         i.timebox_minutes = None;
     } else if let Some(m) = i.timebox_minutes
         && !(1..=4320).contains(&m) {
-            return Err(invalid("timeboxMinutes", "timebox must be 1-4320 minutes"));
+            return Err(AppError::validation("timeboxMinutes", "timebox must be 1-4320 minutes"));
         }
     Ok(i)
 }
@@ -145,17 +142,13 @@ pub fn list(conn: &Connection) -> AppResult<Vec<Engagement>> {
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Engagement> {
-    match conn.query_row(&format!("SELECT {COLS} FROM engagements WHERE id = ?1"), [id], from_row) {
-        Ok(e) => Ok(e),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
-        Err(e) => Err(e.into()),
-    }
+    conn.query_row(&format!("SELECT {COLS} FROM engagements WHERE id = ?1"), [id], from_row).optional()?.ok_or(AppError::NotFound)
 }
 
 pub fn create(conn: &Connection, input: EngagementInput) -> AppResult<Engagement> {
     let i = normalise(input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     // The scope sync shares the transaction: both land or neither does.
     let tx = conn.unchecked_transaction()?;
     tx.execute(
@@ -164,7 +157,7 @@ pub fn create(conn: &Connection, input: EngagementInput) -> AppResult<Engagement
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'active',?12,?12)",
         params![
             id, i.name, i.kind, i.client, i.sub_label,
-            serde_json::to_string(&i.scope_cidrs).map_err(|e| AppError::Db(e.to_string()))?,
+            serde_json::to_string(&i.scope_cidrs)?,
             i.domain, i.starts_at, i.ends_at, i.timebox_start, i.timebox_minutes, now
         ],
     )?;
@@ -176,11 +169,8 @@ pub fn create(conn: &Connection, input: EngagementInput) -> AppResult<Engagement
 pub fn update(conn: &Connection, id: &str, input: EngagementInput) -> AppResult<Engagement> {
     let i = normalise(input)?;
     let tx = conn.unchecked_transaction()?;
-    let previous: Vec<String> = match tx.query_row("SELECT scope_cidrs FROM engagements WHERE id = ?1", params![id], |r| r.get::<_, String>(0)) {
-        Ok(json) => serde_json::from_str(&json).unwrap_or_default(),
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
-        Err(e) => return Err(e.into()),
-    };
+    let json = tx.query_row("SELECT scope_cidrs FROM engagements WHERE id = ?1", params![id], |r| r.get::<_, String>(0)).optional()?.ok_or(AppError::NotFound)?;
+    let previous: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
     let n = tx.execute(
         "UPDATE engagements SET name=?2, kind=?3, client=?4, sub_label=?5, scope_cidrs=?6, domain=?7, \
          starts_at=?8, ends_at=?9, timebox_start=?10, timebox_minutes=?11, updated_at=?12, \
@@ -189,8 +179,8 @@ pub fn update(conn: &Connection, id: &str, input: EngagementInput) -> AppResult<
          WHERE id=?1",
         params![
             id, i.name, i.kind, i.client, i.sub_label,
-            serde_json::to_string(&i.scope_cidrs).map_err(|e| AppError::Db(e.to_string()))?,
-            i.domain, i.starts_at, i.ends_at, i.timebox_start, i.timebox_minutes, system_now_ms()
+            serde_json::to_string(&i.scope_cidrs)?,
+            i.domain, i.starts_at, i.ends_at, i.timebox_start, i.timebox_minutes, now_ms()
         ],
     )?;
     if n == 0 {
@@ -211,8 +201,8 @@ pub fn set_last_ran_on(conn: &Connection, id: &str, value: Option<&str>) -> AppR
 
 /// Sets or clears the Metasploit lock. The host must belong to the engagement.
 pub fn set_msf_host(conn: &Connection, id: &str, host_id: Option<&str>) -> AppResult<Engagement> {
-    crate::notes::check_scope(conn, id, host_id)?;
-    conn.execute("UPDATE engagements SET msf_host_id = ?2, updated_at = ?3 WHERE id = ?1", params![id, host_id, system_now_ms()])?;
+    check_scope(conn, id, host_id)?;
+    conn.execute("UPDATE engagements SET msf_host_id = ?2, updated_at = ?3 WHERE id = ?1", params![id, host_id, now_ms()])?;
     get(conn, id)
 }
 
@@ -220,14 +210,14 @@ pub fn set_msf_host(conn: &Connection, id: &str, host_id: Option<&str>) -> AppRe
 /// one, changes nothing. Only a started exam-sim timebox can pause.
 pub fn set_timebox_paused(conn: &Connection, id: &str, paused: bool) -> AppResult<Engagement> {
     let e = get(conn, id)?;
-    let now = system_now_ms();
+    let now = now_ms();
     if paused {
         if e.timebox_paused_at.is_some() {
             return Ok(e);
         }
         match (e.kind.as_str(), e.timebox_start, e.timebox_minutes) {
             ("exam-sim", Some(start), Some(_)) if start <= now => {}
-            _ => return Err(invalid("timeboxPaused", "only a started exam-sim timebox can pause")),
+            _ => return Err(AppError::validation("timeboxPaused", "only a started exam-sim timebox can pause")),
         }
         conn.execute("UPDATE engagements SET timebox_paused_at = ?2, updated_at = ?2 WHERE id = ?1", params![id, now])?;
     } else {
@@ -321,9 +311,9 @@ pub fn progress_all(conn: &Connection) -> AppResult<std::collections::HashMap<St
 
 pub fn set_status(conn: &Connection, id: &str, status: &str) -> AppResult<Engagement> {
     if !matches!(status, "active" | "archived") {
-        return Err(invalid("status", "status must be active or archived"));
+        return Err(AppError::validation("status", "status must be active or archived"));
     }
-    let n = conn.execute("UPDATE engagements SET status=?2, updated_at=?3 WHERE id=?1", params![id, status, system_now_ms()])?;
+    let n = conn.execute("UPDATE engagements SET status=?2, updated_at=?3 WHERE id=?1", params![id, status, now_ms()])?;
     if n == 0 {
         return Err(AppError::NotFound);
     }
@@ -331,10 +321,7 @@ pub fn set_status(conn: &Connection, id: &str, status: &str) -> AppResult<Engage
 }
 
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM engagements WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "engagements", id)
 }
 #[cfg(test)]
 mod tests {
@@ -400,7 +387,7 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let mut i = input("sim", "exam-sim");
-        i.timebox_start = Some(system_now_ms() - 60_000);
+        i.timebox_start = Some(now_ms() - 60_000);
         i.timebox_minutes = Some(1425);
         let e = create(c, i.clone()).unwrap();
         assert_eq!((e.timebox_paused_ms, e.timebox_paused_at), (0, None));
@@ -434,7 +421,7 @@ mod tests {
         i.timebox_minutes = Some(1425);
         let not_started = create(c, i.clone()).unwrap();
         assert_eq!(field(set_timebox_paused(c, &not_started.id, true)), "timeboxPaused");
-        i.timebox_start = Some(system_now_ms() + 3_600_000);
+        i.timebox_start = Some(now_ms() + 3_600_000);
         let future = create(c, i).unwrap();
         assert_eq!(field(set_timebox_paused(c, &future.id, true)), "timeboxPaused");
         assert!(matches!(set_timebox_paused(c, "nope", true), Err(AppError::NotFound)));

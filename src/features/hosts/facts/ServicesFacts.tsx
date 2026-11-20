@@ -6,12 +6,13 @@ import { isFreeKey } from "../../../lib/keys";
 import type { ServiceVerdict } from "../../../types/hostFacts";
 import type { LogEntry } from "../../../types/log";
 import type { Service } from "../../../types/service";
-import { Button, Chip, Collapse, Dialog, DisclosureCaret, Input, Tooltip, type ChipVariant } from "../../../ui";
+import { Button, Chip, Collapse, DisclosureCaret, Input, Tooltip, type ChipVariant } from "../../../ui";
 import { ToggleGroup, ToggleGroupItem } from "../../../ui/shadcn/toggle-group";
 import { useServiceMutations, useServices } from "../../services/queries";
 import { ConfirmServiceDialog } from "../ConfirmServiceDialog";
 import { ServiceDialog } from "../ServiceDialog";
 import { FactGroup, SummaryCell } from "./FactGroup";
+import { ConfirmDelete } from "../../checklist/ConfirmDelete";
 
 const VERDICT_LABEL: Record<EffectiveVerdict, string> = {
   candidate: "candidate",
@@ -234,25 +235,14 @@ export function FoldedRows({ label, services, render, defaultOpen = false }: {
 
 function DeleteServiceDialog({ engagementId, service, onClose }: { engagementId: string; service: Service; onClose: () => void }) {
   const { remove } = useServiceMutations(engagementId, service.hostId);
-  const [error, setError] = useState<string>();
   return (
-    <Dialog
-      open
-      onOpenChange={(o) => !o && onClose()}
+    <ConfirmDelete
       title={`Delete ${service.port}/${service.protocol}?`}
-      description={error ? <span role="alert" className="text-warn">{error}</span> : undefined}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            variant="danger"
-            disabled={remove.isPending}
-            onClick={() => remove.mutate(service.id, { onSuccess: onClose, onError: (e) => setError(e.message) })}
-          >
-            Delete service
-          </Button>
-        </>
-      }
+      error={remove.error?.message}
+      pending={remove.isPending}
+      label="Delete service"
+      onCancel={onClose}
+      onConfirm={() => remove.mutate(service.id, { onSuccess: onClose })}
     />
   );
 }

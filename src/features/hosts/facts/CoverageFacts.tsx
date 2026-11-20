@@ -1,14 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { applicableGoals, currentStage, hostViewStages } from "../../../engines/checklist";
-import { api } from "../../../lib/api";
 import { cx } from "../../../lib/cx";
 import type { ItemState } from "../../../types/checklist";
 import type { Host } from "../../../types/host";
-import { useChecklist, useEngagementServices } from "../../checklist/queries";
+import { useChecklist } from "../../checklist/queries";
+import { useEngagementServices } from "../../services/queries";
 import { COLUMN_LABELS } from "../columns";
 import { useHosts } from "../queries";
 import { FactGroup, SummaryCell } from "./FactGroup";
+import { useEngagement } from "../../engagements/queries";
 
 /** Steps done out of the ones that apply (N/A steps don't count against the stage). */
 function tally(goalIds: string[], state: Record<string, ItemState | undefined>) {
@@ -24,7 +24,7 @@ export function CoverageFacts({ engagementId, host, open, onToggle }: {
   onToggle: () => void;
 }) {
   const hostsQ = useHosts(engagementId);
-  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
+  const engagement = useEngagement(engagementId);
   const { byOwner, query: checklistQ } = useChecklist(engagementId);
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
   const hosts = hostsQ.data;

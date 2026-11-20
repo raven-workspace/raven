@@ -1,3 +1,4 @@
+import { singleQuoted } from "../checklist/shellQuote";
 import { sqlQuote, urlEncodeShell } from "./encode";
 
 export type PasteContext =
@@ -24,7 +25,7 @@ export const PASTE_CONTEXTS: { id: PasteContext; label: string; os: Os | "any" }
 ];
 
 /** Single-quotes for bash -c; an embedded ' becomes '\'' . */
-const bashC = (cmd: string) => `bash -c '${cmd.replace(/'/g, `'\\''`)}'`;
+const bashC = (cmd: string) => `bash -c ${singleQuoted(cmd)}`;
 
 /**
  * PEN-200 form: Str built in short chunks, run through WScript.Shell. Inside a VBA string only " needs escaping (doubled);

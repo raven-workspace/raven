@@ -7,6 +7,7 @@ import { Button, Chip, Field, Input, Wordmark } from "../../ui";
 import { CIPHER_CLEAR, CIPHER_ORIGIN } from "./CipherBackdrop";
 import type { PulseKind } from "./cipherField";
 import { DecodingWordmark } from "./DecodingWordmark";
+import { prefersReducedMotion } from "../../ui/motion";
 
 function errorText(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -107,7 +108,7 @@ function UnlockForm({
       }
       setError(code === "wrong_password" ? "Wrong password" : errorText(err, "Couldn't unlock"));
       pulse?.("error");
-      if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      if (!prefersReducedMotion()) {
         fieldRef.current?.animate?.(SHAKE, { duration: 260, easing: "ease-out" });
       }
       ref.current?.focus();

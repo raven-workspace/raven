@@ -1,14 +1,32 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { api } from "../../lib/api";
 import { resyncAndRefresh } from "../checklist/resync";
+import { ruledOutKey } from "../notes/queries";
+import { servicesByHostOf } from "../checklist/state";
 import type { ServiceVerdict } from "../../types/hostFacts";
-import type { ConfirmInput, ServiceInput } from "../../types/service";
+import type { ConfirmInput, Service, ServiceInput } from "../../types/service";
+
+const NO_SERVICES: Service[] = [];
+
+export const engagementServicesKey = (engagementId: string) => ["services", "engagement", engagementId] as const;
 
 /** Ruled-out items and the notes that list them; a dead-end verdict or a ruled-out vector writes one. */
 export function invalidateRuledOut(qc: QueryClient, engagementId: string) {
-  void qc.invalidateQueries({ queryKey: ["ruledOut", engagementId] });
+  void qc.invalidateQueries({ queryKey: ruledOutKey(engagementId) });
   void qc.invalidateQueries({ queryKey: ["notes", engagementId] });
   void qc.invalidateQueries({ queryKey: ["note", engagementId] });
+}
+
+/** Every service in the engagement, grouped by host (`servicesByHost` for applicability and ticks). */
+export function useEngagementServices(engagementId: string) {
+  const query = useQuery({
+    queryKey: engagementServicesKey(engagementId),
+    queryFn: () => api.servicesListEngagement(engagementId),
+  });
+  const services = query.data ?? NO_SERVICES;
+  const servicesByHost = useMemo(() => servicesByHostOf(services), [services]);
+  return { servicesByHost, services, query };
 }
 
 export function useServices(hostId: string) {

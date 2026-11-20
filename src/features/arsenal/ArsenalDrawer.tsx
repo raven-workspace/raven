@@ -29,6 +29,7 @@ import { useArsenalStore } from "./useArsenalStore";
 import type { GeneratorId } from "../../engines/payloads/types";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { useFillScope } from "./useFillScope";
+import { RavenError } from "../../types/errors";
 
 type Row = ResultRow & ({ kind: "category"; category: string } | { kind: "hit"; hit: ArsenalHit });
 
@@ -172,7 +173,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
       }
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
     }
   };
 

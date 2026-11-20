@@ -3,6 +3,8 @@
  * Returns null when the text is not a credential, so the paste falls through to the input as plain text.
  */
 
+import { isNtShape } from "./matrix";
+
 export interface ParsedCredentialPaste {
   username: string;
   domain: string | null;
@@ -10,8 +12,6 @@ export interface ParsedCredentialPaste {
   type: "password" | "hash";
 }
 
-const NTLM_RE = /^[0-9a-f]{32}$/i;
-const LM_NT_RE = /^[0-9a-f]{32}:[0-9a-f]{32}$/i;
 /** `user:RID:LM:NT:::`, the line secretsdump and pwdump print. */
 const DUMP_RE = /^(.+?):\d+:([0-9a-f]{32}):([0-9a-f]{32}):::?$/i;
 /** An IPv4 address or a dotted host name: what `host:port` has before its colon. */
@@ -47,7 +47,7 @@ export function parseCredentialPaste(text: string): ParsedCredentialPaste | null
   }
   if (username === "") return null;
 
-  const isHash = NTLM_RE.test(secret) || LM_NT_RE.test(secret);
+  const isHash = isNtShape(secret);
   return {
     username,
     domain: domain === "" ? null : domain,

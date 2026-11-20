@@ -1,9 +1,11 @@
 import { Check, Copy } from "@phosphor-icons/react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment } from "react";
 import { copyPlain, copySecret } from "../lib/clipboard";
+import { useFlash } from "./motion";
 import { reportError } from "../lib/lockSignal";
 import { highlight as highlightText, rangesOf } from "./highlight";
 import { IconButton } from "./IconButton";
+import { escapeRegExp } from "../engines/regex";
 
 export interface CommandBlockProps {
   text: string;
@@ -37,7 +39,6 @@ export interface CommandBlockProps {
   attached?: boolean;
 }
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Splits one whitespace-free token into plain and warn parts (the capture group puts matches at odd indexes). */
 function marks(token: string, re: RegExp | null): { text: string; warn: boolean }[] {
@@ -50,21 +51,14 @@ function marks(token: string, re: RegExp | null): { text: string; warn: boolean 
 
 export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction, highlight, wrap = true, copyTabIndex, attached }: CommandBlockProps) {
   const token = wrap ? "inline-block max-w-full [overflow-wrap:anywhere]" : "inline-block";
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  const pattern = [...(placeholders ? ["\\{[A-Za-z0-9_]+\\}"] : []), ...[...(tokens ?? [])].sort((a, b) => b.length - a.length).map(escapeRe)];
+  const [copied, flashDone] = useFlash(1200);
+  const pattern = [...(placeholders ? ["\\{[A-Za-z0-9_]+\\}"] : []), ...[...(tokens ?? [])].sort((a, b) => b.length - a.length).map(escapeRegExp)];
   const re = pattern.length > 0 ? new RegExp(`(${pattern.join("|")})`) : null;
   const found = rangesOf(text, highlight);
   const pieces = text.split(/(\s+)/);
   // Where each piece starts in `text`, so a match is marked across the token spans (only worked out with a search).
   const starts: number[] = [];
   if (found.length > 0) pieces.reduce((at, t) => (starts.push(at), at + t.length), 0);
-  const flashDone = () => {
-    setCopied(true);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setCopied(false), 1200);
-  };
   return (
     <div className="grid gap-1">
       {label && <span className="text-meta text-muted-2">{label}</span>}

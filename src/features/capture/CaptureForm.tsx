@@ -1,14 +1,13 @@
 import * as RD from "@radix-ui/react-dialog";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
 import { metasploitHostIds, metasploitWarning } from "../../engines/checklist";
-import { api } from "../../lib/api";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
 import { KeyIcon, XIcon } from "@phosphor-icons/react";
 import { Button, Chip, Field, IconButton, Input, Kbd, Select, Textarea, Toggle, Toolbar } from "../../ui";
-import { useHosts } from "../hosts/queries";
+import { hostsKey, useHosts } from "../hosts/queries";
 import { invalidateAfterSave } from "../log/extractions";
 import { useLog } from "../log/queries";
 import { HostChips } from "./HostChips";
@@ -21,6 +20,8 @@ import { useSaveSummaryStore } from "./useSaveSummaryStore";
 import { PartialSaveError, saveCapture } from "./saveCapture";
 import { reportError } from "../../lib/lockSignal";
 import { EMPTY_DRAFT, useCaptureStore, type PanelDraft } from "./useCaptureStore";
+import { useSettings } from "../settings/queries";
+import { RavenError } from "../../types/errors";
 
 const NO_HOSTS: Host[] = [];
 const NO_MACHINES: string[] = [];
@@ -29,7 +30,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
   const id = engagement.id;
   const qc = useQueryClient();
   const listed = useHosts(id).data ?? NO_HOSTS;
-  const machines = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.machines ?? NO_MACHINES;
+  const machines = useSettings().data?.machines ?? NO_MACHINES;
   const pd = useCaptureStore((s) => s.drafts[id]) ?? EMPTY_DRAFT;
   // Hosts a failed save already created count as known, even before the list refetches.
   const hosts = useMemo(
@@ -113,8 +114,8 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         // The extraction was stored all the same: its summary (and Undo) still shows.
         useSaveSummaryStore.getState().show(e.entry.id, e.summary);
       } else {
-        void qc.invalidateQueries({ queryKey: ["hosts", id] });
-        setError(e instanceof Error ? e.message : String(e));
+        void qc.invalidateQueries({ queryKey: hostsKey(id) });
+        setError(RavenError.from(e).message);
       }
     } finally {
       setSaving(false);

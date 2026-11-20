@@ -2,7 +2,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { DERIVED_TOKENS } from "../../engines/payloads/build";
 import { encodePs } from "../../engines/payloads/encodePs";
-import { LISTENERS } from "../../engines/payloads/listeners";
+import { LISTENERS, PLACEHOLDER } from "../../engines/payloads/listeners";
 import type { BuiltPayload, GeneratorId, ListenerId, PayloadDef } from "../../engines/payloads/types";
 import { api } from "../../lib/api";
 import { copyPlain } from "../../lib/clipboard";
@@ -14,12 +14,12 @@ import { Input, type Hint } from "../../ui";
 import type { ChipPickerHandle } from "../arsenal/ChipPicker";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 import { isHostPickKey, type HostChipHandle } from "../arsenal/HostChip";
-import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { logCommand } from "../capture/logCommand";
-import { useNotesStore } from "../notes/useNotesStore";
 import { payloadBuildsKey } from "./queries";
 import { contextLabel, hasToggles, isRanked, OS_LABEL, showsFilter, usePayloadFit } from "./usePayloadFit";
 import { usePayloadsStore } from "./usePayloadsStore";
+import { RavenError } from "../../types/errors";
+import { anyDrawerOpen } from "../drawers";
 
 /** In ⌥1–⌥6 order. */
 export const GENERATORS: { id: GeneratorId; label: string }[] = [
@@ -61,13 +61,12 @@ export function hintsFor(g: GeneratorId, esc: string, extra: Hint[] = [], ordere
   ];
 }
 /** The Arsenal or Notes drawer is open over this view: its keys win. */
-export const otherDrawerOpen = () => useArsenalStore.getState().open || useNotesStore.getState().open;
+export const otherDrawerOpen = () => anyDrawerOpen("payloads");
 /** The Workbench's generator list (`P` focuses it). */
 export const GENERATOR_LIST_ID = "payloads-generators";
 export const inGeneratorList = () => document.activeElement?.closest(`#${GENERATOR_LIST_ID}`) != null;
 export const isGenerator = (g: string | null): g is GeneratorId => GENERATORS.some((x) => x.id === g);
 
-const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
 const namesIn = (text: string) => [...text.matchAll(PLACEHOLDER)].map((m) => m[1]!);
 /** The listener placeholders that are fill values; LHOST and LPORT have their own fields, MSF_PAYLOAD comes from the def. */
 const LISTENER_FIELDS = new Set(["TARGET_IP", "BIND_PORT"]);
@@ -184,7 +183,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       await recordBuild(qc, { engagementId, hostId: host.id, payloadId: d.id, lhost, lport });
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
     }
   };
 
@@ -208,7 +207,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       if (r !== "copied") return "guarded";
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
       return "guarded";
     }
     await record(b.def);
@@ -227,7 +226,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       if (r !== "copied") return "guarded";
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
       return "guarded";
     }
     if (mayRecord) await record(b.def);
@@ -264,7 +263,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       return "copied";
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
       return "guarded";
     }
   };

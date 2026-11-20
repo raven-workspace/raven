@@ -1,4 +1,5 @@
 import {
+  asCredential,
   defaultHashType,
   findDuplicateCredential,
   usernameKey,
@@ -40,17 +41,6 @@ function withoutEngagement<T extends { engagementId: string }>(o: T): Omit<T, "e
   const copy: Partial<T> = { ...o };
   delete copy.engagementId;
   return copy as Omit<T, "engagementId">;
-}
-
-/** A planned credential as a stored one, so `findDuplicateCredential` (the one dedupe rule) applies to it. */
-function asCredential(i: PlannedCredential): Credential {
-  return {
-    id: "", engagementId: i.engagementId, type: i.type, username: i.username ?? "", domain: i.domain ?? null,
-    secret: i.secret ?? "", hashType: i.hashType ?? null, scope: i.scope ?? "domain", localHostId: i.localHostId ?? null,
-    sourceHostId: i.sourceHostId ?? null, source: i.source ?? null, notes: i.notes ?? null,
-    crackStatus: i.crackStatus ?? null, crackedFrom: i.crackedFrom ?? null, fromSecretId: i.fromSecretId ?? null,
-    createdAt: 0, updatedAt: 0,
-  };
 }
 
 /**

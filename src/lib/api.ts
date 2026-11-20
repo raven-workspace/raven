@@ -3,8 +3,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { FieldManualSnapshot } from "../engines/fieldManual/merge";
 import type { VaultFile } from "../types/fieldManual";
 import type { BackupInfo } from "../types/backup";
-import type { ImportPlan } from "../engines/import/plan";
-import type { ImportSummary } from "../types/import";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
 import type { GoalRef } from "../engines/checklist";
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
@@ -43,7 +41,7 @@ import type {
   UsernameInput,
 } from "../types/credentials";
 import type { PayloadBuild } from "../types/payloadBuild";
-import type { Report, ReportDoc, ReportPatch, ReportSection, SectionInput } from "../types/report";
+import type { Report, ReportNode, ReportPatch, ReportSection, SectionInput } from "../types/report";
 import type { Hop, HopInput, InterfaceDismissal, Tunnel, TunnelInput } from "../types/network";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
@@ -81,9 +79,6 @@ export const api = {
 
   backupNow: () => call<BackupInfo>("backup_now"),
   backupsList: () => call<BackupInfo[]>("backups_list"),
-  /** Takes a `pre-import` backup, then adds the plan's records in one transaction. Existing rows are never
-   *  changed; a dangling reference fails the whole import (validation) and nothing is written. */
-  importApply: (plan: ImportPlan) => call<ImportSummary>("import_apply", { plan }),
   /** Reads the vault's Toolkit, playbooks and cards. Read-only; a missing folder is `not_found`. */
   fieldManualScan: (path: string) => call<VaultFile[]>("field_manual_scan", { path }),
   /** Newest modified time (ms) among the files a scan reads, or null when there are none. */
@@ -221,7 +216,7 @@ export const api = {
   reportUpdate: (id: string, patch: ReportPatch) => call<Report>("report_update", { id, patch }),
   reportSectionsList: (reportId: string) => call<ReportSection[]>("report_sections_list", { reportId }),
   reportSectionUpsert: (reportId: string, input: SectionInput) => call<ReportSection>("report_section_upsert", { reportId, input }),
-  reportSectionSave: (id: string, doc: ReportDoc, meta: Record<string, unknown>) =>
+  reportSectionSave: (id: string, doc: ReportNode, meta: Record<string, unknown>) =>
     call<ReportSection>("report_section_save", { id, doc, meta }),
   reportSectionsReorder: (reportId: string, ids: string[]) => call<null>("report_sections_reorder", { reportId, ids }),
   /** Owner-written pages only (kind `page`); any other section is refused. */

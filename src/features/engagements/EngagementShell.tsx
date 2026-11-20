@@ -19,6 +19,8 @@ import { EngagementHeader } from "./EngagementHeader";
 import { Sidebar } from "./Sidebar";
 import { StatusStrip } from "./StatusStrip";
 import { SECTIONS, SectionView, sectionPath, type SectionId } from "./sections";
+import { engagementKey, engagementsKey } from "./queries";
+import { hostsKey } from "../hosts/queries";
 
 /** Layout for `/e/:id/*`: sidebar, header, status strip and the routed section. */
 export function EngagementShell() {
@@ -27,9 +29,9 @@ export function EngagementShell() {
   const navigate = useNavigate();
   const openCapture = useCaptureStore((s) => s.openCapture);
   const query = useQuery({
-    queryKey: ["engagement", id],
+    queryKey: engagementKey(id),
     queryFn: () => api.engagementGet(id),
-    initialData: () => qc.getQueryData<Engagement[]>(["engagements"])?.find((e) => e.id === id),
+    initialData: () => qc.getQueryData<Engagement[]>(engagementsKey)?.find((e) => e.id === id),
   });
 
   // F-R1: an engagement logged before step 3 has an empty checklist; tick it from its log once, on open, before
@@ -40,7 +42,7 @@ export function EngagementShell() {
       .then((ran) => {
         if (!ran) return;
         void qc.invalidateQueries({ queryKey: checklistKey(id) });
-        void qc.invalidateQueries({ queryKey: ["hosts", id] });
+        void qc.invalidateQueries({ queryKey: hostsKey(id) });
         void qc.invalidateQueries({ queryKey: ["progress"] });
       })
       // Then once more, so an imported or older engagement gets the domain admin cover. Runs whether the tick ran or not.

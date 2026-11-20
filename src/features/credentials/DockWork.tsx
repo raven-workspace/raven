@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
   ROUTINE_STEPS,
   buildRoastCommands,
@@ -13,7 +12,6 @@ import {
   type RoutineStepId,
   type SprayService,
 } from "../../engines/credentials";
-import { api } from "../../lib/api";
 import type { CredAttempt, Credential, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
@@ -24,6 +22,7 @@ import { MASK } from "./MaskedSecret";
 import { useCredentialMutations } from "./queries";
 import type { DockTab } from "./selection";
 import { TestCommands } from "./TestCommands";
+import { useEngagement } from "../engagements/queries";
 
 /** Plaintext for a hash. The server records a linked password; the hash then folds into it. */
 export function CrackDialog({ eid, hash, onClose, onCracked }: {
@@ -135,7 +134,7 @@ function CrackPane({ eid, cred, onCracked }: { eid: string; cred: Credential; on
 }
 
 export function DockWork({ eid, cred, tabs, hosts, servicesByHost, attempts, usernames, creds, onCracked }: Props) {
-  const engagement = useQuery({ queryKey: ["engagement", eid], queryFn: () => api.engagementGet(eid) });
+  const engagement = useEngagement(eid);
   const { byOwner } = useChecklist(eid);
   const { setStatus } = useChecklistMutations(eid);
   const [tab, setTab] = useState<DockTab>(tabs[0]);

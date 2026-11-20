@@ -164,45 +164,6 @@ export function identifyHash(input: string, hint?: 'windows' | 'linux' | 'web'):
 }
 
 /**
- * Formats a list of (username, hash) entries into a cracking-list string
- * suitable for the given tool. hashcat mode keeps native multi-field lines
- * (pwdump / NetNTLM) intact since hashcat parses those directly; john mode
- * prefixes with 'user:' whenever a username is present.
- */
-export function formatCrackingList(entries: { username?: string; hash: string }[], mode: 'hashcat' | 'john'): string {
-  return entries
-    .map(({ username, hash }) => {
-      const h = (hash ?? '').trim();
-      if (mode === 'hashcat') {
-        return h;
-      }
-      // john mode
-      if (username && username.trim()) {
-        return `${username.trim()}:${h}`;
-      }
-      return h;
-    })
-    .join('\n');
-}
-
-/**
- * Groups a list of raw hash strings by their top-candidate hashcat mode.
- * Key is the mode number as a string, or 'unknown' when no candidate is
- * identified or the top candidate has no hashcat mode (e.g. yescrypt).
- */
-export function groupByHashcatMode(hashes: string[]): Record<string, string[]> {
-  const result: Record<string, string[]> = {};
-  for (const raw of hashes) {
-    const candidates = identifyHash(raw);
-    const top = candidates[0];
-    const key = top && top.hashcatMode !== null ? String(top.hashcatMode) : 'unknown';
-    if (!result[key]) result[key] = [];
-    result[key].push(raw);
-  }
-  return result;
-}
-
-/**
  * Returns ready-to-run hashcat and john cracking commands for a given hash.
  */
 export function getCrackingCommands(

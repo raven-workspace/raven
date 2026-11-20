@@ -15,6 +15,7 @@ import { api } from "../../lib/api";
 import type { ChecklistItemInput, ChecklistState } from "../../types/checklist";
 import type { LogEntry, OutputTick } from "../../types/log";
 import { byOwnerOf, servicesByHostOf, stateToInput } from "./state";
+import { RavenError } from "../../types/errors";
 
 /** checklist_put accepts at most this many items per call. */
 const PUT_LIMIT = 500;
@@ -346,7 +347,7 @@ export async function deleteEntryWithTicks(engagementId: string, entryId: string
       if (undo.length > 0) await write(engagementId, undo);
       await resyncBoards(engagementId);
     } catch (restore) {
-      const detail = e instanceof Error ? e.message : String(e);
+      const detail = RavenError.from(e).message;
       throw new FollowUpError(`${detail}. The checklist lost this entry's ticks: use Tick from log on the Engagement checklist.`, restore);
     }
     throw e;

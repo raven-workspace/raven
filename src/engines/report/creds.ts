@@ -1,5 +1,6 @@
 import type { AccessGrant, Credential, Username } from "../../types/credentials";
 import type { ReportData } from "./types";
+import { escapeRegExp } from "../regex";
 
 /** A credential tied to a target, with each way it is tied ("works on SSH, files03", "found on web01"). */
 export interface TargetCredential {
@@ -15,7 +16,6 @@ export interface TargetAccess {
   user: Username | undefined;
 }
 
-const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** A command that passes a secret: `-p`, `-H`, `-hashes`, `--password`, `--hashes`, `/p:`, `/pth:`, or `user:pw@host`. */
 const SECRET_ARG = /(?:^|\s)(?:-p|-H|-hashes|--password|--hashes|--pass)(?:\s|=|$)|\/p(?:th)?:|[^\s:/@]:[^\s@]+@/i;
 /** Whether a command passes a secret. ssh, scp and sftp take `-p`/`-P` as a port, not a password. */
@@ -30,7 +30,7 @@ const FAILED_LOGIN = /\[-\]|Permission denied|LOGON_FAILURE|Authentication faile
 const loginFailed = (output: string) => FAILED_LOGIN.test(output) && !output.includes("[+]");
 
 /** The username as a whole word of the command (not `bobby` for `bob`). */
-const namesUser = (cmd: string, username: string) => new RegExp(`(?<![\\w.-])${esc(username)}(?![\\w-])`, "i").test(cmd);
+const namesUser = (cmd: string, username: string) => new RegExp(`(?<![\\w.-])${escapeRegExp(username)}(?![\\w-])`, "i").test(cmd);
 
 /**
  * Whether the command passes the credential's secret as a whole word (a hash also by its NT half). A secret under 4
@@ -39,8 +39,8 @@ const namesUser = (cmd: string, username: string) => new RegExp(`(?<![\\w.-])${e
 function passesSecret(cmd: string, c: Credential): boolean {
   const secrets = c.type === "hash" ? [c.secret, c.secret.split(":").pop() ?? ""].filter((x) => x.length >= 16) : [c.secret];
   return secrets.some((x) => {
-    if (x.length < 4) return new RegExp(`(?:(?:^|\\s)(?:-p|--password)\\s+['"]?|/p:['"]?)${esc(x)}['"]?(?:\\s|$)`).test(cmd);
-    return new RegExp(`(?<![^${AROUND}])${esc(x)}(?![^${AROUND}])`).test(cmd);
+    if (x.length < 4) return new RegExp(`(?:(?:^|\\s)(?:-p|--password)\\s+['"]?|/p:['"]?)${escapeRegExp(x)}['"]?(?:\\s|$)`).test(cmd);
+    return new RegExp(`(?<![^${AROUND}])${escapeRegExp(x)}(?![^${AROUND}])`).test(cmd);
   });
 }
 
@@ -114,7 +114,7 @@ export function targetCredentials(data: ReportData, hostIds: string[]): { creden
       for (const c of named) {
         if (bySecret.some((x) => sameUser(x.username, c.username))) continue;
         if (data.credentials.filter((x) => sameUser(x.username, c.username)).length !== 1) continue;
-        const atHost = hosts.some((h) => [h.ip, h.name].some((t) => t && new RegExp(`(?<![\\w.-])${esc(c.username)}@${esc(t)}(?![\\w-]|\\.\\d)`, "i").test(cmd)));
+        const atHost = hosts.some((h) => [h.ip, h.name].some((t) => t && new RegExp(`(?<![\\w.-])${escapeRegExp(c.username)}@${escapeRegExp(t)}(?![\\w-]|\\.\\d)`, "i").test(cmd)));
         if (atHost) tie(c.id, { username: c.username, domain: c.domain, type: c.type, at: c.createdAt }, `used on ${name(on)}`);
       }
     }

@@ -6,6 +6,7 @@
 //! leaves a half-written file under a real backup name and two backups in the same second
 //! never overwrite each other (the second gets a `-2` suffix, and so on).
 
+use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::paths::DataPaths;
 use crate::vault::{is_unreadable, normalize_password, open_keyed, pragma_for, write_private_file, BackupHook, Vault, VaultMeta};
@@ -25,13 +26,6 @@ pub struct BackupInfo {
     pub reason: String,
     pub created_at: i64,
     pub size_bytes: u64,
-}
-
-pub fn system_now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }
 
 /// `backup_retention` from the `settings` table (integer text); default 14, minimum 1.
@@ -260,12 +254,12 @@ fn open_with_pragma(path: &Path, pragma: &str) -> Result<Connection, rusqlite::E
 
 /// Encrypted copy of the live database (same key). Prunes to the retention count afterwards.
 pub fn take(vault: &Vault, reason: &str) -> AppResult<BackupInfo> {
-    take_at(vault, reason, system_now_ms())
+    take_at(vault, reason, now_ms())
 }
 
 pub fn take_at(vault: &Vault, reason: &str, now_ms: i64) -> AppResult<BackupInfo> {
     if !valid_reason(reason) {
-        return Err(AppError::Validation { field: "reason".into(), message: "invalid backup reason".into() });
+        return Err(AppError::validation("reason", "invalid backup reason"));
     }
     let conn = vault.conn()?;
     let pragma = vault.key_pragma()?;
@@ -299,7 +293,7 @@ pub fn take_at(vault: &Vault, reason: &str, now_ms: i64) -> AppResult<BackupInfo
 /// so the next normal `take` prunes with the real setting.
 pub fn take_file_level(paths: &DataPaths, reason: &str, now_ms: i64) -> AppResult<BackupInfo> {
     if !valid_reason(reason) {
-        return Err(AppError::Validation { field: "reason".into(), message: "invalid backup reason".into() });
+        return Err(AppError::validation("reason", "invalid backup reason"));
     }
     ensure_backups_dir(paths)?;
     let tmp = tmp_path(paths);
@@ -315,12 +309,12 @@ pub fn take_file_level(paths: &DataPaths, reason: &str, now_ms: i64) -> AppResul
 
 /// The Vault's default pre-migration hook: file-level copy with reason `pre-migration`.
 pub fn pre_migration_hook(paths: DataPaths) -> BackupHook {
-    Box::new(move |_from, _to| take_file_level(&paths, "pre-migration", system_now_ms()).map(|_| ()))
+    Box::new(move |_from, _to| take_file_level(&paths, "pre-migration", now_ms()).map(|_| ()))
 }
 
 /// Take a `daily` backup if the newest backup (any reason) is older than 24h, or none exists.
 pub fn take_daily_if_due(vault: &Vault) -> AppResult<Option<BackupInfo>> {
-    take_daily_if_due_at(vault, system_now_ms())
+    take_daily_if_due_at(vault, now_ms())
 }
 
 pub fn take_daily_if_due_at(vault: &Vault, now_ms: i64) -> AppResult<Option<BackupInfo>> {
@@ -335,15 +329,15 @@ pub fn take_daily_if_due_at(vault: &Vault, now_ms: i64) -> AppResult<Option<Back
 // ---- restore ----
 
 pub fn restore(vault: &mut Vault, file: &str) -> AppResult<()> {
-    restore_at(vault, file, system_now_ms())
+    restore_at(vault, file, now_ms())
 }
 
 fn validate_backup_name(file: &str) -> AppResult<()> {
     if file.is_empty() || file.contains('/') || file.contains('\\') || file.contains("..") || file.contains('\0') {
-        return Err(AppError::Validation { field: "file".into(), message: "invalid backup file name".into() });
+        return Err(AppError::validation("file", "invalid backup file name"));
     }
     if parse_name(file).is_none() {
-        return Err(AppError::Validation { field: "file".into(), message: "not a Raven backup file".into() });
+        return Err(AppError::validation("file", "not a Raven backup file"));
     }
     Ok(())
 }
@@ -375,10 +369,7 @@ pub fn restore_at(vault: &mut Vault, file: &str, now_ms: i64) -> AppResult<()> {
         match open_with_pragma(&staged, &pragma) {
             Ok(_) => {}
             Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == ErrorCode::NotADatabase => {
-                return Err(AppError::Validation {
-                    field: "file".into(),
-                    message: "This backup was made with a different password".into(),
-                });
+                return Err(AppError::validation("file", "This backup was made with a different password"));
             }
             Err(e) => return Err(e.into()),
         }
@@ -399,17 +390,14 @@ pub fn restore_at(vault: &mut Vault, file: &str, now_ms: i64) -> AppResult<()> {
 /// `raven.db.damaged-<ms>` and kept; no pre-restore backup is taken because it can't be
 /// read. The companion meta then replaces `vault.json`. The vault is left locked.
 pub fn restore_locked(vault: &mut Vault, file: &str, password: &str) -> AppResult<()> {
-    restore_locked_at(vault, file, password, system_now_ms())
+    restore_locked_at(vault, file, password, now_ms())
 }
 
 pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: i64) -> AppResult<()> {
     validate_backup_name(file)?;
     // While unlocked, `restore` is the path: it takes a pre-restore backup first.
     if vault.is_unlocked() {
-        return Err(AppError::Validation {
-            field: "file".into(),
-            message: "Lock Raven before restoring this way".into(),
-        });
+        return Err(AppError::validation("file", "Lock Raven before restoring this way"));
     }
     let paths = vault.paths().clone();
     let src = paths.backups.join(file);
@@ -420,7 +408,7 @@ pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: 
     let companion = companion.is_file().then_some(companion);
     let meta = VaultMeta::read(companion.as_deref().unwrap_or(&paths.vault_meta))?;
     let wrong_password =
-        || AppError::Validation { field: "password".into(), message: "Wrong password for this backup".into() };
+        || AppError::validation("password", "Wrong password for this backup");
     let key = meta.derive_key(&normalize_password(password))?;
     let verified = match meta.verifier_matches(&key) {
         Some(false) => return Err(wrong_password()),
@@ -440,7 +428,7 @@ pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: 
             Ok(_) => {}
             // The verifier proved the password, so the backup file itself is unreadable.
             Err(e) if verified && is_unreadable(&e) => {
-                return Err(AppError::Validation { field: "file".into(), message: "This backup is damaged".into() });
+                return Err(AppError::validation("file", "This backup is damaged"));
             }
             Err(rusqlite::Error::SqliteFailure(e, _)) if !verified && e.code == ErrorCode::NotADatabase => {
                 return Err(wrong_password());
@@ -731,7 +719,7 @@ mod tests {
         let (_d, mut v) = setup();
         let b = take_at(&v, "manual", T0).unwrap();
         v.lock();
-        let l = crate::commands::backups_list_inner(&v).unwrap();
+        let l = list(v.paths()).unwrap();
         assert_eq!(l.len(), 1);
         assert_eq!(l[0].file, b.file);
     }

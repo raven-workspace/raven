@@ -3,9 +3,9 @@ import type { CommandBlock } from "../../types/log";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import { credKey, findDuplicateCredential, sameDomain, usernameKey } from "./keys";
-import { isOwnerless } from "./matrix";
+import { ATTEMPT_RESULT_RANK, LOCAL_ONLY_SERVICES, isNtShape, isOwnerless, ntHalf } from "./matrix";
 import { parseNxcAuthResults, parseRoastHashes, type NxcAuthResult } from "./nxc";
-import type { CredAuthMode } from "./types";
+import type { CredAuthMode, SprayService } from "./types";
 
 /** Every planned record names its engagement (the one being planned for). */
 export type PlannedCredential = CredentialInput & { engagementId: string };
@@ -59,8 +59,10 @@ export interface CredentialIntakePlan {
   summary: { admin: number; valid: number; failed: number; errored: number };
 }
 
-export const LOCAL_ONLY = new Set(['ssh', 'ftp', 'vnc', 'nfs']);
-export const HASH_RE = /^[0-9a-f]{32}(?::[0-9a-f]{32})?$/i;
+/** An nxc result's auth mode: local when the command passed --local-auth or the protocol has no domain auth. */
+export function nxcAuthMode(command: string, protocol: SprayService): CredAuthMode {
+  return /--local-auth/.test(command) || LOCAL_ONLY_SERVICES.has(protocol) ? 'local' : 'domain';
+}
 
 /** Split a command into shell words: adjacent quoted/bare pieces, '\'' joins, backslash escapes. */
 function shellWords(command: string): string[] {
@@ -120,26 +122,21 @@ export function knownSecretsOf(command: string): string[] {
   return out;
 }
 
-const ntPart = (s: string): string => {
-  const t = s.trim().toLowerCase();
-  return /^[0-9a-f]{32}:[0-9a-f]{32}$/.test(t) ? t.slice(33) : t;
-};
-
-const RANK: Record<string, number> = { admin: 3, valid: 2, failed: 1, errored: 0 };
+const ntPart = (s: string): string => ntHalf(s).toLowerCase();
 
 // Any host counts: a local credential tried elsewhere (--local-auth reuse or -d) is a result in its own grid cell.
 function secretMatches(cred: Credential, secret: string): boolean {
   if (!cred.secret) return false;
-  if (cred.type === 'hash') return HASH_RE.test(cred.secret.trim()) && ntPart(cred.secret) === ntPart(secret);
+  if (cred.type === 'hash') return isNtShape(cred.secret.trim()) && ntPart(cred.secret) === ntPart(secret);
   if (cred.type === 'password') return cred.secret === secret;
   return false;
 }
 
 /**
  * A planned credential as a stored one, so the keys and `findDuplicateCredential` (the one dedupe rule) apply to
- * it. The id is synthetic and never stored.
+ * it. The id is synthetic and never stored (empty by default: an unsaved credential).
  */
-function asCredential(i: PlannedCredential, id: string): Credential {
+export function asCredential(i: PlannedCredential, id = ''): Credential {
   return {
     id, engagementId: i.engagementId, type: i.type, username: i.username ?? '', domain: i.domain ?? null,
     secret: i.secret ?? '', hashType: i.hashType ?? null, scope: i.scope ?? 'domain', localHostId: i.localHostId ?? null,
@@ -194,7 +191,7 @@ export function planCredentialIntake(input: {
   /** R6: strongest result wins (admin > valid > failed > errored); equal strength keeps the later line. */
   const merge = <T extends { result: PlannedAttemptBase['result'] }>(m: Map<string, T>, key: string, a: T) => {
     const prior = m.get(key);
-    if (!prior || RANK[a.result] >= RANK[prior.result]) m.set(key, a);
+    if (!prior || ATTEMPT_RESULT_RANK[a.result] >= ATTEMPT_RESULT_RANK[prior.result]) m.set(key, a);
   };
   const ensurePending = (key: string, input: PlannedCredential): PendingCredential => {
     let p = pending.get(key);
@@ -212,7 +209,7 @@ export function planCredentialIntake(input: {
   const deferred: { key: string; aKey: string; attempt: PlannedAttempt; base: Omit<PlannedAttemptBase, 'credId'>; hostId: string; authMode: CredAuthMode; protocol: string; port: number }[] = [];
 
   const credInputFor = (username: string, secret: string, r: NxcAuthResult, hostId: string, authMode: CredAuthMode, domain?: string): PlannedCredential => ({
-    type: HASH_RE.test(secret) ? 'hash' : 'password', username, secret,
+    type: isNtShape(secret) ? 'hash' : 'password', username, secret,
     ...(domain ? { domain } : {}),
     scope: authMode === 'local' ? 'local' : 'domain',
     ...(authMode === 'local' ? { localHostId: hostId } : {}),
@@ -222,12 +219,11 @@ export function planCredentialIntake(input: {
   });
   // Local credentials are per-host; keep them apart even when username and secret coincide.
   const pendingKey = (input: PlannedCredential, authMode: CredAuthMode, hostId: string) =>
-    credKey(asCredential(input, '')) + (authMode === 'local' ? `|local:${hostId}` : '');
+    credKey(asCredential(input)) + (authMode === 'local' ? `|local:${hostId}` : '');
 
   for (const block of blocks) {
     const results: NxcAuthResult[] = parseNxcAuthResults(block.output, knownSecretsOf(block.command));
     if (results.length) sawAuth = true;
-    const localFlag = /--local-auth/.test(block.command);
 
     for (const r of results) {
       let host = hostByIp.get(r.ip);
@@ -241,7 +237,7 @@ export function planCredentialIntake(input: {
         if (!unknownHosts.includes(r.ip)) unknownHosts.push(r.ip);
         continue;
       }
-      const authMode: CredAuthMode = localFlag || LOCAL_ONLY.has(r.protocol) ? 'local' : 'domain';
+      const authMode = nxcAuthMode(block.command, r.protocol);
       const domain = authMode === 'local' ? undefined : r.domain;
       const base = {
         engagementId: engagement.id, hostId: host.id, service: r.protocol, port: r.port, result: r.result, authMode,
