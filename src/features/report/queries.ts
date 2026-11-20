@@ -12,7 +12,9 @@ import {
 import { api } from "../../lib/api";
 import type { FindingFile } from "../../types/findings";
 import type { Report, ReportSection, SectionInput, SectionKind } from "../../types/report";
-import { useChecklist, useEngagementServices, useHops } from "../checklist/queries";
+import { useChecklist } from "../checklist/queries";
+import { useHops } from "../network/queries";
+import { useEngagementServices } from "../services/queries";
 import { useCleanup } from "../cleanup/queries";
 import { useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../credentials/queries";
 import { findingFilesKey, useFailedAttempts, useFindings } from "../findings/queries";

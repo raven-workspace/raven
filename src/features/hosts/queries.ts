@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { hopsKey, tunnelsKey } from "../checklist/queries";
+import { hopsKey, tunnelsKey } from "../network/queries";
 import { accessGrantsKey, credAttemptsKey, credentialsKey } from "../credentials/queries";
 import { cleanupCountsKey, cleanupKey } from "../cleanup/queries";
 import { failedAttemptsKey, findingsKey } from "../findings/queries";

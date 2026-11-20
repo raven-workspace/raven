@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { readInterfaces } from "../../engines/facts";
 import type { Host } from "../../types/host";
 import { Button, IconButton, labelClass } from "../../ui";
-import { useInterfaceDismiss, useInterfaceDismissals, useTunnels } from "../checklist/queries";
+import { useInterfaceDismiss, useInterfaceDismissals, useTunnels } from "./queries";
 import { useHostMutations, useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { TunnelForm } from "./TunnelForm";

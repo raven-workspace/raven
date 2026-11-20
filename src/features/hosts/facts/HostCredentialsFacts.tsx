@@ -14,7 +14,7 @@ import type { Host } from "../../../types/host";
 import type { Service } from "../../../types/service";
 import { Button, Chip, Dialog, Field, Input, Select, labelClass } from "../../../ui";
 import { ConfirmDelete } from "../../checklist/ConfirmDelete";
-import { useEngagementServices } from "../../checklist/queries";
+import { useEngagementServices } from "../../services/queries";
 import { LEVEL_LABEL } from "../../credentials/AccessGrants";
 import { useAccessGrantMutations, useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../../credentials/queries";
 import { TestGrid } from "../../credentials/TestGrid";

@@ -10,7 +10,7 @@ import { Button, IconButton, queryState } from "../../ui";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../../ui/shadcn/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
-import { useEngagementServices } from "../checklist/queries";
+import { useEngagementServices } from "../services/queries";
 import { useHosts } from "../hosts/queries";
 import { CredentialDock } from "./CredentialDock";
 import { CredentialForm } from "./CredentialForm";

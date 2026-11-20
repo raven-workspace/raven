@@ -4,7 +4,7 @@ import type { Host } from "../../types/host";
 import type { Tunnel, TunnelInput, TunnelKind, TunnelStatus } from "../../types/network";
 import { Button, Dialog, Field, Input, Select, Toggle, fieldLabelClass } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
-import { useTunnelMutations } from "../checklist/queries";
+import { useTunnelMutations } from "./queries";
 
 const KINDS: { value: TunnelKind; label: string }[] = [
   { value: "ligolo", label: "Ligolo" },

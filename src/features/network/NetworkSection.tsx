@@ -6,7 +6,7 @@ import { useWidth } from "../../lib/useWidth";
 import type { Host } from "../../types/host";
 import type { Hop, Tunnel } from "../../types/network";
 import { Button, labelClass, queryState } from "../../ui";
-import { useHops, useTunnels } from "../checklist/queries";
+import { useHops, useTunnels } from "./queries";
 import { useHosts } from "../hosts/queries";
 import { HopForm } from "./HopForm";
 import { CONNECTOR_PX, HostNode, NODE_MAX_PX, NODE_PX, PathTree, type NodeContext } from "./PathTree";

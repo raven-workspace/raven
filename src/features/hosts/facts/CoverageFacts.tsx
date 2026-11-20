@@ -3,7 +3,8 @@ import { applicableGoals, currentStage, hostViewStages } from "../../../engines/
 import { cx } from "../../../lib/cx";
 import type { ItemState } from "../../../types/checklist";
 import type { Host } from "../../../types/host";
-import { useChecklist, useEngagementServices } from "../../checklist/queries";
+import { useChecklist } from "../../checklist/queries";
+import { useEngagementServices } from "../../services/queries";
 import { COLUMN_LABELS } from "../columns";
 import { useHosts } from "../queries";
 import { FactGroup, SummaryCell } from "./FactGroup";

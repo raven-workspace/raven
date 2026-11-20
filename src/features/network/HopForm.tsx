@@ -3,7 +3,7 @@ import type { Host } from "../../types/host";
 import type { Hop } from "../../types/network";
 import { Button, Dialog, Field, Input, Select } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
-import { useHopMutations } from "../checklist/queries";
+import { useHopMutations } from "./queries";
 
 const KALI = "kali";
 

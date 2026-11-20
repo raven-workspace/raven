@@ -11,7 +11,9 @@ import { BELOW_TITLE_BAR, Disclosure, HintLine, IconButton, LoadingState, labelC
 import { useCredFill } from "../checklist/credPick";
 import { CommandList, type FilledCommand } from "../checklist/CommandList";
 import { goalCommands } from "../checklist/goalCommands";
-import { useChecklist, useEngagementServices, useTunnels } from "../checklist/queries";
+import { useChecklist } from "../checklist/queries";
+import { useTunnels } from "../network/queries";
+import { useEngagementServices } from "../services/queries";
 import { useCredAttempts, useCredentials, useUsernames } from "../credentials/queries";
 import { sectionPath } from "../engagements/sections";
 import { useHosts } from "../hosts/queries";

@@ -7,7 +7,7 @@ import type { Finding } from "../../types/findings";
 import { Button } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
-import { useEngagementServices } from "../checklist/queries";
+import { useEngagementServices } from "../services/queries";
 import { hostLabel } from "../credentials/AccessGrants";
 import { useHosts } from "../hosts/queries";
 import { useNotesStore } from "../notes/useNotesStore";

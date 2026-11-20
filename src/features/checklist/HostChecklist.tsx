@@ -12,7 +12,9 @@ import { usePortPickStore } from "./portPick";
 import { goalCommands } from "./goalCommands";
 import { shortHostName } from "../../lib/hostName";
 import { GoalRow } from "./GoalRow";
-import { useChecklist, useChecklistMutations, useEngagementServices, useHopMutations, useTunnels } from "./queries";
+import { useChecklist, useChecklistMutations } from "./queries";
+import { useHopMutations, useTunnels } from "../network/queries";
+import { useEngagementServices } from "../services/queries";
 import { useSettings } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
 

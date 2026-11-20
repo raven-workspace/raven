@@ -33,7 +33,6 @@ export function useLogMutations(engagementId: string) {
     void qc.invalidateQueries({ queryKey: ["progress"] });
     // A service's confirmation can cite an entry; editing or deleting the entry changes that.
     void qc.invalidateQueries({ queryKey: ["services"] });
-    void qc.invalidateQueries({ queryKey: ["services", "engagement", engagementId] });
     void qc.invalidateQueries({ queryKey: ["checklist", engagementId] });
     void qc.invalidateQueries({ queryKey: hostsKey(engagementId) });
     void qc.invalidateQueries({ queryKey: engagementKey(engagementId) });
