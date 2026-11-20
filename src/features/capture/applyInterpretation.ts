@@ -15,6 +15,7 @@ import {
 import {
   findStoredCredential,
   identifyHash,
+  ntHalf,
   planCredentialIntake,
   sameDomain,
   usernameKey,
@@ -171,10 +172,7 @@ const GOALS = new Map<string, ChecklistGoal>(
 const HOST_GOAL_IDS = new Set([...HOST_GOALS, ...PIVOT_GOALS].map((g) => g.id));
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-const ntOf = (s: string): string => {
-  const t = s.trim().toLowerCase();
-  return /^[0-9a-f]{32}:[0-9a-f]{32}$/.test(t) ? t.slice(33) : t;
-};
+const ntOf = (s: string): string => ntHalf(s).toLowerCase();
 const isMachine = (username: string) => username.trim().endsWith("$");
 const lc = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
 

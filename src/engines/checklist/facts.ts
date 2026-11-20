@@ -15,15 +15,16 @@ export interface HostFacts {
   kind: EngagementKind;
 }
 
-const isDead = (s: Service): boolean => {
+/** A scanned service that is not closed or filtered (open, open|filtered, or no state recorded). */
+export function isOpenService(s: Service): boolean {
   const state = (s.state ?? '').toLowerCase();
-  return state.startsWith('closed') || state.startsWith('filtered');
-};
+  return !state.startsWith('closed') && !state.startsWith('filtered');
+}
 
 /** Open TCP/UDP ports from scanned services that are not closed/filtered. */
 export function openPorts(services: Service[]): Set<number> {
   const ports = new Set<number>();
-  for (const s of services) if (!isDead(s)) ports.add(s.port);
+  for (const s of services) if (isOpenService(s)) ports.add(s.port);
   return ports;
 }
 
@@ -54,7 +55,7 @@ const isNotWeb = (version: string | null, port: number): boolean =>
 export function serviceNames(services: Service[]): Set<string> {
   const out = new Set<string>();
   for (const s of services) {
-    if (isDead(s)) continue;
+    if (!isOpenService(s)) continue;
     if (s.confirmedProduct) {
       const product = s.confirmedProduct.toLowerCase();
       const hit = CONFIRMED_WORDS.find(([re]) => re.test(product));

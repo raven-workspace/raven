@@ -2,7 +2,7 @@ import type { CredAttempt, Credential, Username } from '../../types/credentials'
 import type { Host } from '../../types/host';
 import { singleQuoted } from '../checklist/shellQuote';
 import type { Service } from '../../types/service';
-import { authModesFor, cellFor, hostSprayServices, isNtlmHash, isOwnerless, isSprayable } from './matrix';
+import { LOCAL_ONLY_SERVICES, SPRAY_SERVICE_ORDER, authModesFor, cellFor, hostSprayServices, isNtlmHash, isOwnerless, isSprayable, ntHalf } from './matrix';
 import type { CredAuthMode, SprayService } from './types';
 
 export interface TestCommand {
@@ -17,9 +17,7 @@ export interface CommandSet {
   notice?: 'no-services' | 'nothing-left' | 'not-sprayable';
 }
 
-const SERVICE_ORDER: SprayService[] = ['smb', 'winrm', 'rdp', 'mssql', 'ssh', 'ftp', 'ldap', 'wmi', 'vnc', 'nfs'];
-// ssh/ftp/vnc/nfs: auth mode 'local' is a storage key only; nxc rejects -d / --local-auth there.
-const NO_AUTH_FLAGS: SprayService[] = ['ssh', 'ftp', 'vnc', 'nfs'];
+// LOCAL_ONLY_SERVICES (ssh/ftp/vnc/nfs): auth mode 'local' is a storage key only; nxc rejects -d / --local-auth there.
 
 export function shellQuote(s: string): string {
   return singleQuoted(s);
@@ -30,15 +28,13 @@ const safeName = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, '_') || 'cred';
 /** `-H`/`-p` is chosen from the real credential; `mask` (display builds) replaces the quoted value, unquoted. */
 function secretFlag(cred: Credential, mask?: string): string {
   if (isNtlmHash(cred)) {
-    const s = cred.secret.trim();
-    const nt = s.includes(':') ? s.split(':')[1] : s;
-    return `-H ${mask ?? shellQuote(nt)}`;
+    return `-H ${mask ?? shellQuote(ntHalf(cred.secret))}`;
   }
   return `-p ${mask ?? shellQuote(cred.secret)}`;
 }
 
 function authFlag(cred: Credential, service: SprayService, mode: CredAuthMode, domain?: string): string {
-  if (NO_AUTH_FLAGS.includes(service)) return '';
+  if (LOCAL_ONLY_SERVICES.has(service)) return '';
   if (mode === 'local') return '--local-auth';
   const d = cred.scope === 'app' ? undefined : (cred.domain || domain);
   return d ? `-d ${shellQuote(d)}` : '';
@@ -75,9 +71,9 @@ export function buildTestCommands(input: {
   const { cred, hosts, attempts } = input;
   const sv = (h: Host) => input.servicesByHost.get(h.id) ?? [];
   if (!isSprayable(cred) || isOwnerless(cred)) return { commands: [], notice: 'not-sprayable' };
-  const wanted = (input.services ?? SERVICE_ORDER).filter((s) => SERVICE_ORDER.includes(s));
+  const wanted = (input.services ?? SPRAY_SERVICE_ORDER).filter((s) => SPRAY_SERVICE_ORDER.includes(s));
   const runnable = hosts.filter((h) => h.ip!);
-  const present = SERVICE_ORDER.filter((s) => wanted.includes(s) && runnable.some((h) => hostSprayServices(h, sv(h)).includes(s)));
+  const present = SPRAY_SERVICE_ORDER.filter((s) => wanted.includes(s) && runnable.some((h) => hostSprayServices(h, sv(h)).includes(s)));
   if (present.length === 0) return { commands: [], notice: 'no-services' };
 
   const commands: TestCommand[] = [];
@@ -95,7 +91,7 @@ export function buildTestCommands(input: {
         'nxc', service, input.useTargetsFile ? 'targets.txt' : ips.join(' '),
         `-u ${shellQuote(cred.username)}`, secretFlag(cred, input.secretMask),
         authFlag(cred, service, mode, input.domain), input.extraFlags?.trim(),
-        `| tee nxc-${service}-${safeName(cred.username)}${mode === 'local' && !NO_AUTH_FLAGS.includes(service) ? '-local' : ''}${input.teeSuffix ? `-${safeName(input.teeSuffix)}` : ''}.txt`,
+        `| tee nxc-${service}-${safeName(cred.username)}${mode === 'local' && !LOCAL_ONLY_SERVICES.has(service) ? '-local' : ''}${input.teeSuffix ? `-${safeName(input.teeSuffix)}` : ''}.txt`,
       );
       commands.push({
         service, authMode: mode, hostIds: todo.map((h) => h.id), command,
@@ -175,7 +171,7 @@ export function buildUsernameSprayCommands(input: {
         'nxc', service, todo.map((h) => h.ip!).join(' '),
         '-u users.txt', secretFlag(cred, input.secretMask), '--continue-on-success',
         authFlag(cred, service, mode, input.domain),
-        `| tee nxc-${service}-spray-${sprayTag}${mode === 'local' && !NO_AUTH_FLAGS.includes(service) ? '-local' : ''}.txt`,
+        `| tee nxc-${service}-spray-${sprayTag}${mode === 'local' && !LOCAL_ONLY_SERVICES.has(service) ? '-local' : ''}.txt`,
       ),
     });
   }

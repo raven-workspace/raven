@@ -4,7 +4,7 @@ import type { Host } from '../../types/host';
 import type { Tunnel } from '../../types/network';
 import type { Service } from '../../types/service';
 import { ipInScope, parseScopeList } from '../parse/scope';
-import { isNtlmHash, isOwnerless } from '../credentials/matrix';
+import { isNtlmHash, isOwnerless, ntHalf } from '../credentials/matrix';
 import { dcFillChoice, dcForFill, hostFacts, serviceNames } from './facts';
 import type { ChecklistGoal } from './types';
 import { quoteContextAt, shellEscape } from './shellQuote';
@@ -187,7 +187,7 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
   const secret = cred ? cred.secret.trim() : '';
   // Decided from the real credential; the mask only replaces the value.
   const pass = cred?.type === 'password' && secret ? (opts.secretMask ?? cred.secret) : undefined;
-  const hash = cred && secret && isNtlmHash(cred) ? (opts.secretMask ?? secret.split(':').pop()) : undefined;
+  const hash = cred && secret && isNtlmHash(cred) ? (opts.secretMask ?? ntHalf(secret)) : undefined;
   const facts = hostFacts(host, engagement, hosts, servicesByHost);
   const hostName = host.name?.trim() || undefined;
   const pivot = tunnel ? hosts.find((h) => h.id === tunnel.viaHostId) : undefined;

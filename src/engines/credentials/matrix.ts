@@ -1,4 +1,4 @@
-import type { CredAttempt, Credential } from '../../types/credentials';
+import type { AttemptResult, CredAttempt, Credential } from '../../types/credentials';
 import type { Host } from '../../types/host';
 import type { Service } from '../../types/service';
 import type { CredAuthMode, SprayService } from './types';
@@ -16,7 +16,14 @@ export const SERVICE_PORTS: Record<SprayService, number[]> = {
   nfs: [2049],
 };
 
-const SERVICE_ORDER: SprayService[] = ['smb', 'winrm', 'rdp', 'mssql', 'ssh', 'ftp', 'ldap', 'wmi', 'vnc', 'nfs'];
+/** The order spray services are listed and run in. */
+export const SPRAY_SERVICE_ORDER: readonly SprayService[] = ['smb', 'winrm', 'rdp', 'mssql', 'ssh', 'ftp', 'ldap', 'wmi', 'vnc', 'nfs'];
+
+/** Services with no domain auth: only local, and nxc takes no -d / --local-auth there. */
+export const LOCAL_ONLY_SERVICES: ReadonlySet<SprayService> = new Set<SprayService>(['ssh', 'ftp', 'vnc', 'nfs']);
+
+/** How strong an attempt's result is: errored < failed < valid < admin. */
+export const ATTEMPT_RESULT_RANK: Readonly<Record<AttemptResult, number>> = { errored: 0, failed: 1, valid: 2, admin: 3 };
 
 const SERVICE_NAMES: Record<string, SprayService> = {
   'microsoft-ds': 'smb', 'netbios-ssn': 'smb', smb: 'smb',
@@ -33,7 +40,7 @@ const SERVICE_NAMES: Record<string, SprayService> = {
 export function hostSprayServices(_host: Host, services: Service[]): SprayService[] {
   const found = new Set<SprayService>();
   const byPort = (port: number) => {
-    for (const s of SERVICE_ORDER) if (SERVICE_PORTS[s].includes(port)) found.add(s);
+    for (const s of SPRAY_SERVICE_ORDER) if (SERVICE_PORTS[s].includes(port)) found.add(s);
   };
   for (const sp of services) {
     if (sp.state !== 'open') continue;
@@ -41,17 +48,27 @@ export function hostSprayServices(_host: Host, services: Service[]): SprayServic
     const named = SERVICE_NAMES[(sp.nmapService ?? '').toLowerCase()];
     if (named) found.add(named);
   }
-  return SERVICE_ORDER.filter((s) => found.has(s));
+  return SPRAY_SERVICE_ORDER.filter((s) => found.has(s));
 }
 
 const NT_RE = /^[0-9a-f]{32}$/i;
 const LMNT_RE = /^[0-9a-f]{32}:[0-9a-f]{32}$/i;
 
+/** A bare NT hash or an LM:NT pair, as written (callers trim). */
+export function isNtShape(s: string): boolean {
+  return NT_RE.test(s) || LMNT_RE.test(s);
+}
+
+/** The NT half of a trimmed LM:NT pair; any other secret comes back trimmed, case kept. */
+export function ntHalf(s: string): string {
+  const t = s.trim();
+  return LMNT_RE.test(t) ? t.slice(33) : t;
+}
+
 /** An NT (or LM:NT) hash credential. A plaintext password that happens to be 32 hex chars is not one. */
 export function isNtlmHash(cred: Credential): boolean {
   if (cred.type !== 'hash') return false;
-  const s = cred.secret.trim();
-  return NT_RE.test(s) || LMNT_RE.test(s);
+  return isNtShape(cred.secret.trim());
 }
 
 /** A secret with no known owner (found without a username). Sprayable only at the engagement's usernames. */
@@ -84,11 +101,9 @@ export function isSprayable(cred: Credential): boolean {
   return true;
 }
 
-const LOCAL_ONLY: SprayService[] = ['ssh', 'ftp', 'vnc', 'nfs'];
-
 export function authModesFor(cred: Credential, service: SprayService): CredAuthMode[] {
   const isHash = cred.type === 'hash';
-  if (LOCAL_ONLY.includes(service)) return isHash ? [] : ['local'];
+  if (LOCAL_ONLY_SERVICES.has(service)) return isHash ? [] : ['local'];
   if (service === 'ldap') return ['domain'];
   // A local account's password is often reused by a same-named domain account: try both, local first.
   return cred.scope === 'local' ? ['local', 'domain'] : ['domain', 'local'];
@@ -102,8 +117,6 @@ export interface Cell {
   /** Applicable modes with no result, or only errored ones (a 'failed' cell with any of these is partial). */
   untriedModes: CredAuthMode[];
 }
-
-const RANK: Record<string, number> = { admin: 4, valid: 3, failed: 2, errored: 1 };
 
 export function cellFor(
   cred: Credential,
@@ -139,7 +152,7 @@ export function cellFor(
   const untriedModes = applicable.filter((m) => !byMode[m] || byMode[m]!.result === 'errored');
   const results = Object.values(byMode).map((a) => a!.result);
   if (results.length === 0) return { state: 'untested', byMode, modesDiffer: false, untriedModes };
-  const best = results.reduce((a, b) => (RANK[b] > RANK[a] ? b : a));
+  const best = results.reduce((a, b) => (ATTEMPT_RESULT_RANK[b] > ATTEMPT_RESULT_RANK[a] ? b : a));
   const real = results.filter((r) => r !== 'errored');
   return {
     state: best as CellState,

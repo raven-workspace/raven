@@ -4,6 +4,7 @@ import type { Host } from '../../types/host';
 import type { Service } from '../../types/service';
 import type { GoalRef } from './daCover';
 import { FACT_GOALS } from './data/hostChecklist';
+import { isOpenService } from './facts';
 
 type ServicesByHost = Map<string, Service[]>;
 
@@ -11,11 +12,6 @@ type ServicesByHost = Map<string, Service[]>;
 export function isFactMarked(goalId: string, item: ItemState | undefined): boolean {
   return (FACT_GOALS as readonly string[]).includes(goalId) && item?.auto === true && item.status === 'done' && !item.evidence?.length;
 }
-
-const isOpen = (s: Service) => {
-  const st = (s.state ?? '').toLowerCase();
-  return !st.startsWith('closed') && !st.startsWith('filtered');
-};
 
 const nonEmpty = (v: string | null) => !!v && v.trim() !== '';
 
@@ -29,7 +25,7 @@ function identified(s: Service): boolean {
 
 function holds(goalId: string, host: Host, services: Service[]): boolean {
   if (goalId === 'h-enum-os') return host.os !== null;
-  const open = services.filter(isOpen);
+  const open = services.filter(isOpenService);
   return open.length > 0 && open.every(identified);
 }
 

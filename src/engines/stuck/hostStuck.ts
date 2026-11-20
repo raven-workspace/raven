@@ -3,7 +3,7 @@ import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
 import type { Service } from "../../types/service";
-import { applicableGoals, isCoverMarked } from "../checklist";
+import { applicableGoals, isCoverMarked, isOpenService } from "../checklist";
 import type { LibraryCommand } from "../library/types";
 import { openThreads, type Thread } from "../notes/threads";
 import { shellEscape } from "../checklist/shellQuote";
@@ -32,11 +32,6 @@ export interface HostStuck {
 const AFTER_STAGES = ["privilege-escalation", "post-exploitation", "lateral-movement"];
 
 const statusOf = (state: ChecklistState, goalId: string) => state[goalId]?.status ?? "todo";
-
-const isOpen = (s: Service) => {
-  const st = (s.state ?? "").toLowerCase();
-  return !st.startsWith("closed") && !st.startsWith("filtered");
-};
 
 /**
  * Whether a `-p` / `--ports` argument (`-p 1-1000`, `-p22,80-90`, `--ports=1-100`, `T:80,8000-`) covers the port.
@@ -75,7 +70,7 @@ export function hostStuck(input: {
   library?: LibraryCommand[];
 }): HostStuck {
   const { host, state } = input;
-  const services = (input.servicesByHost.get(host.id) ?? []).filter(isOpen);
+  const services = (input.servicesByHost.get(host.id) ?? []).filter(isOpenService);
   const stages = applicableGoals(host, input.engagement, input.hosts, input.servicesByHost);
   const foothold = hasFoothold(host, state);
   const threads = openThreads(input.hostNote);
