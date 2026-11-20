@@ -40,7 +40,7 @@ import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { cx } from "../../lib/cx";
 import { useWidthRef } from "../../lib/useWidth";
 import { reportError } from "../../lib/lockSignal";
-import type { Report, ReportPatch, ReportSection } from "../../types/report";
+import type { Report, ReportSection } from "../../types/report";
 import type { Settings } from "../../types/settings";
 import { Button, Dialog, EmptyState, ErrorState, LoadingState, queryState, TimedNotice, usePageShortcuts, type Hint } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
@@ -65,7 +65,8 @@ import {
   hasCurrentPage,
   hasEngagementTested,
   patchCachedSection,
-  reportKey,
+  nextPosition,
+  reorderSections,
   reportSectionsKey,
   renamePage,
   restorePage,
@@ -73,11 +74,12 @@ import {
   useReport,
   useReportData,
   useReportSections,
+  useReportWriter,
   useSectionSaver,
   wantedSections,
   pageTitle,
 } from "./queries";
-import { flushReports, forgetReportSave, isReportSaveQueued, queueReportSave, settleReportSave, trackReportWrite, useReportSaveStore } from "./saveQueue";
+import { flushReports, forgetReportSave, isReportSaveQueued, queueReportSave, settleReportSave, useReportSaveStore } from "./saveQueue";
 import { useSettings } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
 import { RavenError } from "../../types/errors";
@@ -274,7 +276,6 @@ interface Entry {
 }
 
 function ReportWorkspace({ eid }: { eid: string }) {
-  const qc = useQueryClient();
   const reportQ = useReport(eid);
   const dataQ = useReportData(eid);
   const settingsQ = useSettings();
@@ -312,7 +313,7 @@ function ReportWorkspace({ eid }: { eid: string }) {
       </Padded>
     );
   }
-  return <ReportBody report={reportQ.data} data={dataQ.data} settings={settingsQ.data} sections={sectionsQ.data} qc={qc} />;
+  return <ReportBody report={reportQ.data} data={dataQ.data} settings={settingsQ.data} sections={sectionsQ.data} />;
 }
 
 function ReportBody({
@@ -320,14 +321,13 @@ function ReportBody({
   data,
   settings,
   sections,
-  qc,
 }: {
   report: Report;
   data: ReportData;
   settings: Settings;
   sections: ReportSection[];
-  qc: ReturnType<typeof useQueryClient>;
 }) {
+  const qc = useQueryClient();
   const reportMeta = report.meta;
   const targets = useMemo(() => reportTargets(data, reportMeta), [data, reportMeta]);
   const [ensureFailed, setEnsureFailed] = useState<string | null>(null);
@@ -725,33 +725,10 @@ function ReportBody({
       .catch(fail);
   }, [openSection, drafts, report.id, qc, draftFailed, draftBlocked, cachedSection]);
 
-  // Report-details writes go out one at a time, in order; only the last one's reply reaches the cache, so a slower
-  // earlier reply never overwrites a later change.
-  const reportWrites = useRef<{ chain: Promise<unknown>; last: number }>({ chain: Promise.resolve(), last: 0 });
-  const saveReport = useCallback(
-    (patch: ReportPatch) => {
-      const key = reportKey(report.engagementId);
-      const before = qc.getQueryData<Report>(key);
-      const merged: ReportPatch = patch.meta && before ? { ...patch, meta: { ...before.meta, ...patch.meta } } : patch;
-      if (before) qc.setQueryData<Report>(key, { ...before, ...merged } as Report);
-      const writes = reportWrites.current;
-      const n = ++writes.last;
-      writes.chain = writes.chain
-        .then(() => api.reportUpdate(report.id, merged))
-        .then((saved) => {
-          if (n === writes.last) qc.setQueryData(key, saved);
-        })
-        .catch((e: unknown) => {
-          reportError(e);
-          void qc.invalidateQueries({ queryKey: key });
-        });
-      // A lock waits for it, as it does for the pages.
-      trackReportWrite(writes.chain);
-    },
-    [qc, report.engagementId, report.id],
-  );
+  // Report-details writes go out one at a time, in order.
+  const { saveReport, cachedMeta } = useReportWriter(report);
   const setFlags = (hostId: string, flags: FlagKind[]) => {
-    const cached = qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta;
+    const cached = cachedMeta();
     saveReport({ meta: { expectedFlags: { ...(cached.expectedFlags ?? {}), [hostId]: flags } } });
   };
 
@@ -768,14 +745,7 @@ function ReportBody({
       // Every section gets a position: the outline order with the moved ones swapped, then the hidden ones as they were.
       const shown = entries.map((e) => (inGroup(e) ? movable.shift()! : e.section.id));
       const hidden = [...sections].sort((a, b) => a.position - b.position).map((s) => s.id).filter((s) => !shown.includes(s));
-      const ids = [...shown, ...hidden];
-      qc.setQueryData<ReportSection[]>(reportSectionsKey(report.id), (list = []) =>
-        list.map((s) => ({ ...s, position: ids.indexOf(s.id) })).sort((a, b) => a.position - b.position),
-      );
-      api.reportSectionsReorder(report.id, ids).catch((e: unknown) => {
-        reportError(e);
-        void qc.invalidateQueries({ queryKey: reportSectionsKey(report.id) });
-      });
+      reorderSections(qc, report.id, [...shown, ...hidden]);
     },
     [entries, sections, qc, report.id],
   );
@@ -783,8 +753,7 @@ function ReportBody({
   // + Page (§10.4): a new page goes after every section (last among its kind) and opens.
   const addPage = (placement: PageMeta["placement"]) => {
     const cached = qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id)) ?? sections;
-    const position = cached.length === 0 ? 0 : Math.max(...cached.map((s) => s.position)) + 1;
-    createPage(report, placement, position)
+    createPage(report, placement, nextPosition(cached))
       .then((created) => {
         qc.setQueryData<ReportSection[]>(reportSectionsKey(report.id), (list = []) => [...list.filter((s) => s.id !== created.id), created]);
         openItem(created.id);
@@ -970,7 +939,7 @@ function ReportBody({
     const next = (was: string[] = []) => (on ? [...new Set([...was, ...ids])] : was.filter((id) => !ids.includes(id)));
     if (open?.target && openSection) patchMeta({ dismissedChecks: next(metaOf(openSection).dismissedChecks) });
     else if (open?.item.group === "front") {
-      const cached = qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta;
+      const cached = cachedMeta();
       saveReport({ meta: { dismissedChecks: next(cached.dismissedChecks) } });
     }
   };
