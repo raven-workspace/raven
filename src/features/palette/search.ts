@@ -7,6 +7,7 @@ import type { ManualNote } from "../../engines/manual";
 import { plain, type LookupRow } from "../../engines/manual/lookup";
 import { searchLookups, searchManual } from "../../engines/manual/search";
 import type { EngagementKind } from "../../types/engagement";
+import { escapeRegExp } from "../../engines/regex";
 
 /** Something in the open engagement the palette can jump to. Credential items carry a label only, never a secret. */
 export interface EngagementItem {
@@ -50,7 +51,6 @@ export type PaletteResult =
   /** The matches the dialog's height cap left out: opens the same search in the full Arsenal. */
   | { type: "more"; id: string; title: string; count: number };
 
-const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * `text` with every known credential secret cut out, so engagement search never matches on one. Each secret is
@@ -66,7 +66,7 @@ export function withoutSecrets(text: string, secrets: string[]): string {
   }
   if (pieces.size === 0 || !text) return text;
   // Longest first, so a whole pair goes before its halves.
-  const re = new RegExp([...pieces].sort((a, b) => b.length - a.length).map(escapeRe).join("|"), "gi");
+  const re = new RegExp([...pieces].sort((a, b) => b.length - a.length).map(escapeRegExp).join("|"), "gi");
   return text.replace(re, " ");
 }
 

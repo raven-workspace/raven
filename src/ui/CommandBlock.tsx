@@ -4,6 +4,7 @@ import { copyPlain, copySecret } from "../lib/clipboard";
 import { reportError } from "../lib/lockSignal";
 import { highlight as highlightText, rangesOf } from "./highlight";
 import { IconButton } from "./IconButton";
+import { escapeRegExp } from "../engines/regex";
 
 export interface CommandBlockProps {
   text: string;
@@ -37,7 +38,6 @@ export interface CommandBlockProps {
   attached?: boolean;
 }
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Splits one whitespace-free token into plain and warn parts (the capture group puts matches at odd indexes). */
 function marks(token: string, re: RegExp | null): { text: string; warn: boolean }[] {
@@ -53,7 +53,7 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
-  const pattern = [...(placeholders ? ["\\{[A-Za-z0-9_]+\\}"] : []), ...[...(tokens ?? [])].sort((a, b) => b.length - a.length).map(escapeRe)];
+  const pattern = [...(placeholders ? ["\\{[A-Za-z0-9_]+\\}"] : []), ...[...(tokens ?? [])].sort((a, b) => b.length - a.length).map(escapeRegExp)];
   const re = pattern.length > 0 ? new RegExp(`(${pattern.join("|")})`) : null;
   const found = rangesOf(text, highlight);
   const pieces = text.split(/(\s+)/);

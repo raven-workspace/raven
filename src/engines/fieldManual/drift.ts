@@ -5,6 +5,7 @@ import type { LibraryCommand } from '../library/types';
 import type { ParsedCard } from './parseCard';
 import type { PlaybookItem } from './parsePlaybook';
 import type { ToolkitEntry } from './parseToolkit';
+import { escapeRegExp } from '../regex';
 
 export interface Drift {
   /** Playbook items no Raven step mirrors. */
@@ -42,7 +43,7 @@ const UPPER_SNAKE = /^[A-Z][A-Z0-9_]*$/;
 
 /** True when `file` appears in `text` as a whole name, not as part of a longer one (GodPotato-NET4.exe vs -NET40.exe). */
 const mentions = (text: string, file: string): boolean =>
-  new RegExp(`(?<![\\w.-])${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-]|\\.\\w)`).test(text);
+  new RegExp(`(?<![\\w.-])${escapeRegExp(file)}(?![\\w-]|\\.\\w)`).test(text);
 
 /** `{TOKEN}`s in a template the fill engine neither knows nor computes. */
 function unfilledTokens(template: string): Set<string> {
