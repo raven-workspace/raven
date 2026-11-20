@@ -1,17 +1,16 @@
 @use "@/styles/abstracts" as *;
 
-// (Block `.fillbar`, not `.fill-bar`: the convention tests read a `fill-` class as a colour utility.)
 // The fill fields of a command or card, as many 15rem columns as fit. An unfilled field and its label are amber; an
 // auto-filled value is fg-2 and a typed one fg. The field rules sit on the Input primitive, so they win in any state.
 @layer features {
-  .fillbar {
+  .fill-bar {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
     column-gap: var(--space-lg);
     row-gap: var(--space-sm);
   }
 
-  .fillbar__field {
+  .fill-bar__field {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
@@ -20,30 +19,30 @@
     color: var(--muted-2);
   }
 
-  .fillbar__field--unfilled {
+  .fill-bar__field--unfilled {
     color: var(--warn);
   }
 
-  .fillbar__by-name {
+  .fill-bar__by-name {
     margin-left: var(--space-xs);
     @include type(meta);
     color: var(--muted-2);
   }
 
-  .fillbar__input {
+  .fill-bar__input {
     width: 100%;
     min-width: 0;
   }
 
-  .fillbar__input--unfilled {
+  .fill-bar__input--unfilled {
     border-color: var(--warn);
   }
 
-  .fillbar__input--typed {
+  .fill-bar__input--typed {
     color: var(--fg);
   }
 
-  .fillbar__input--auto {
+  .fill-bar__input--auto {
     color: var(--fg-2);
   }
 }

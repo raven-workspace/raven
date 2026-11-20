@@ -151,14 +151,14 @@ describe("labels", () => {
 });
 
 describe("Input width", () => {
-  it("fills its track by default (.input); an explicit width class rides on top and wins (utilities layer)", () => {
+  it("fills its track by default (.input); an explicit width class rides on top", () => {
     render(
       <>
         <ui.Input aria-label="Full" />
-        <ui.Input aria-label="Port" width="w-20" />
+        <ui.Input aria-label="Port" width="port-input" />
       </>,
     );
     expect(screen.getByLabelText("Full").className).toBe("control input");
-    expect(screen.getByLabelText("Port")).toHaveClass("input", "w-20");
+    expect(screen.getByLabelText("Port")).toHaveClass("input", "port-input");
   });
 });

@@ -29,8 +29,7 @@ $weighted-roles: (title, heading, read-title, label);
   }
 }
 
-// At most $lines lines, the last ellipsized (Tailwind's line-clamp-<n>). It sets display, so a later display in the
-// same rule overrides it, as a display utility did.
+// At most $lines lines, the last ellipsized. It sets display, so a later display in the same rule overrides it.
 @mixin line-clamp($lines) {
   overflow: hidden;
   display: -webkit-box;

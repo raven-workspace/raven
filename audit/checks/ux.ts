@@ -175,11 +175,11 @@ export function collectUxIssues(): RawIssue[] {
     add("off-scale-spacing", null, `${offScale.size} off-scale values; most frequent: ${top.map(([k, n]) => `${k} x${n}`).join(", ")}`, "(page)");
   }
 
-  // tiny-text: nothing under 12px; only the label role (labels and chips, `.text-label`) and key caps may be 12px.
+  // tiny-text: nothing under 12px; only the label role (section labels and chips, `.section-label`) and key caps may be 12px.
   for (const el of all) {
     if (ownText(el) === "" || allowed(el, "tiny-text")) continue;
     const fs = parseFloat(style(el).fontSize);
-    const twelveOk = el.closest("kbd, .text-label, .section-label, .chip, .report-tab__state, .engagement-sidebar__heading, .sidebar-group-label, .data-table__head") !== null;
+    const twelveOk = el.closest("kbd, .section-label, .chip, .report-tab__state, .engagement-sidebar__heading, .sidebar-group-label, .data-table__head") !== null;
     const floor = twelveOk ? 12 : 13;
     if (fs < floor - 0.01) {
       add("tiny-text", el, `font-size ${fs}px < ${floor}px${twelveOk ? "" : " (12px is only for labels, chips and key caps)"}: "${ownText(el).slice(0, 40)}"`);

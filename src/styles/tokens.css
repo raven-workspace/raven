@@ -1,5 +1,5 @@
 /*
- * Raven "Ink" tokens (spec §8). The only source of colour, radius and type.
+ * Raven "Ink" tokens (spec §8). The only source of colour, spacing, radius, type and motion.
  * Flat true black, hairlines, one accent (#c6ff00) used only for meaning:
  * selection marker, held access, confirmed facts, focus.
  */
@@ -29,7 +29,7 @@
   --space-xl: 1.5rem;
   --space-2xl: 2rem;
 
-  /* Motion for small state changes (hover, press): Tailwind's standard ease at 100ms. Larger motion is in global.css. */
+  /* Motion for small state changes (hover, press): the standard ease at 100ms. Larger motion is in global.css. */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --duration-fast: 100ms;
   /* A caret turning (150ms) and a selection marker gliding (180ms). */
@@ -46,50 +46,16 @@
   color-scheme: dark;
 }
 
-/*
- * Tailwind v4 theme. Every stock palette, radius, font and shadow scale is
- * reset to `initial` first, so `bg-blue-500`, `shadow-lg` and friends don't
- * exist and can't be used by accident.
- */
-@theme inline {
-  --color-*: initial;
-  --color-bg: var(--bg);
-  --color-fg: var(--fg);
-  --color-fg-2: var(--fg-2);
-  --color-muted: var(--muted);
-  --color-muted-2: var(--muted-2);
-  --color-faint: var(--faint);
-  --color-line: var(--line);
-  --color-line-2: var(--line-2);
-  --color-line-strong: var(--line-strong);
-  --color-surface: var(--surface);
-  --color-surface-hi: var(--surface-hi);
-  --color-accent: var(--accent);
-  --color-warn: var(--warn);
-
-  --shadow-*: initial;
-  --inset-shadow-*: initial;
-  --drop-shadow-*: initial;
-  --text-shadow-*: initial;
-  --blur-*: initial;
-}
-
-/* Emitted to :root as-is, so `--radius`, `--radius-sm`, `--font-ui` and `--font-mono` are real variables. */
-@theme static {
-  --radius-*: initial;
+/* Radii, fonts and the type roles (DESIGN.md Typography): `@include type(<role>)` reads --text-<role> and its
+ * --line-height and --font-weight. */
+:root {
   --radius: 8px;
   --radius-sm: 6px;
   --radius-full: 9999px;
 
-  --font-*: initial;
   --font-ui: "Instrument Sans Variable", "Instrument Sans Fallback", -apple-system, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
-  --tracking-label: 0.12em;
-}
-
-/* Type roles (DESIGN.md Typography). Stock sizes stay; these are the sizes new code uses. */
-@theme static {
   --text-title: 20px;
   --text-title--line-height: 28px;
   --text-title--font-weight: 600;

@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
+import { cx } from "../lib/cx";
 import { Button, Chip, Dialog, EmptyState, Field, Input, Kbd, labelClass, Panel, Select, Textarea } from "../ui";
+import "./UiGallery.scss";
 
 /** Dev-only (`/__ui`): every Ink component, plus the mockup-A host screen rebuilt from them. */
 export default function UiGallery() {
@@ -7,13 +9,13 @@ export default function UiGallery() {
   const [kind, setKind] = useState("exam-sim");
 
   return (
-    <div data-testid="ui-gallery" className="h-full overflow-auto px-6 py-5">
-      <h1 className="m-0 mb-1 text-xl font-semibold tracking-[-0.01em] text-fg">Ink components</h1>
-      <p className="m-0 mb-6 text-muted">Debug builds only. Compare with direction A in docs/design/visual-directions.html.</p>
+    <div data-testid="ui-gallery" className="ui-gallery">
+      <h1 className="ui-gallery__title">Ink components</h1>
+      <p className="ui-gallery__lede">Debug builds only. Compare with direction A in docs/design/visual-directions.html.</p>
 
-      <div className="grid max-w-[980px] grid-cols-2 gap-3">
+      <div className="ui-gallery__grid">
         <Section title="Button">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="ui-gallery__run">
             <Button variant="primary">Create engagement</Button>
             <Button>Cancel</Button>
             <Button variant="danger">Delete</Button>
@@ -21,7 +23,7 @@ export default function UiGallery() {
               Disabled
             </Button>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="ui-gallery__run ui-gallery__run--next">
             <Button variant="primary" size="sm">
               Save
             </Button>
@@ -33,7 +35,7 @@ export default function UiGallery() {
         </Section>
 
         <Section title="Chip">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="ui-gallery__run">
             <Chip>Linux</Chip>
             <Chip variant="accent">user · srv11</Chip>
             <Chip>Privesc</Chip>
@@ -43,7 +45,7 @@ export default function UiGallery() {
         </Section>
 
         <Section title="Field · Input · Select">
-          <div className="flex flex-col gap-3">
+          <div className="ui-gallery__stack">
             <Field label="Name" hint="Shown on the dashboard.">
               <Input placeholder="Mock exam A" />
             </Field>
@@ -68,12 +70,12 @@ export default function UiGallery() {
         </Section>
 
         <Section title="Textarea · Label · Kbd">
-          <div className="flex flex-col gap-3">
+          <div className="ui-gallery__stack">
             <Field label="Output">
               <Textarea mono defaultValue={"find / -perm -4000 2>/dev/null\n/usr/bin/backupd"} />
             </Field>
             <span className={labelClass}>A section label</span>
-            <p className="m-0 text-[13px] text-muted-2">
+            <p className="ui-gallery__keys">
               Quick capture <Kbd>⌘</Kbd> <Kbd>K</Kbd> · close <Kbd>esc</Kbd>
             </p>
           </div>
@@ -112,7 +114,7 @@ export default function UiGallery() {
         </Section>
       </div>
 
-      <h2 className={`${labelClass} mt-8 mb-2`}>Mockup A, rebuilt from tokens</h2>
+      <h2 className={cx(labelClass, "ui-gallery__mockup-label")}>Mockup A, rebuilt from tokens</h2>
       <MockupA />
     </div>
   );
@@ -129,32 +131,28 @@ function MockupA() {
   const sec = (label: string, on: boolean) => (
     <div
       key={label}
-      className={
-        on
-          ? "mb-px rounded-sm bg-surface-hi px-2 py-[5px] text-fg shadow-[inset_2px_0_0_var(--accent)]"
-          : "mb-px rounded-sm px-2 py-[5px] text-muted-2"
-      }
+      className={cx("mockup__nav-item", on && "mockup__nav-item--on")}
     >
       {label}
     </div>
   );
   return (
-    <div className="grid h-[430px] max-w-[980px] grid-cols-[190px_1fr] overflow-hidden rounded border border-line-2 text-[13px]">
-      <div className="border-r border-line px-3 py-3.5">
+    <div className="mockup">
+      <div className="mockup__side">
         {side.map((s) => sec(s, s === "Board"))}
-        <div className={`${labelClass} mx-2 mt-4 mb-1.5 text-faint`}>Hosts</div>
+        <div className={cx(labelClass, "mockup__hosts-label")}>Hosts</div>
         {hosts.map((h) => sec(h, h === "srv11"))}
       </div>
-      <div className="grid min-h-0 grid-rows-[auto_1fr] gap-3 px-[18px] py-3.5">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-xl font-semibold tracking-[-0.01em] text-fg">srv11</span>
-          <span className="font-mono text-xs text-muted">10.10.61.143</span>
+      <div className="mockup__main">
+        <div className="mockup__header">
+          <span className="mockup__name">srv11</span>
+          <span className="mockup__ip">10.10.61.143</span>
           <Chip>Linux</Chip>
           <Chip variant="accent">user · srv11</Chip>
           <Chip>Privesc</Chip>
           <Chip>1 open thread</Chip>
         </div>
-        <div className="grid min-h-0 grid-cols-[240px_1fr] gap-3">
+        <div className="mockup__panes">
           <Panel title="Services">
             {[
               ["22", "OpenSSH 8.2p1"],
@@ -162,29 +160,29 @@ function MockupA() {
               ["3003", "CouchDB 3.1.1 ✓"],
               ["5432", "PostgreSQL 12"],
             ].map(([p, s]) => (
-              <div key={p} className="grid grid-cols-[42px_1fr] gap-1.5 py-[3px] font-mono text-[12.5px]">
+              <div key={p} className="mockup__service">
                 <span>{p}</span>
-                <span className={p === "3003" ? "text-accent" : undefined}>{s}</span>
+                <span className={p === "3003" ? "mockup__accent" : undefined}>{s}</span>
               </div>
             ))}
           </Panel>
           <Panel>
-            <div className="mb-2.5 flex gap-[18px]">
-              <span className="border-b border-accent pb-1 text-fg">Log</span>
-              <span className="text-muted">Checklist</span>
-              <span className="text-muted">Credentials</span>
-              <span className="text-muted">Findings</span>
+            <div className="mockup__tabs">
+              <span className="mockup__tab mockup__tab--on">Log</span>
+              <span className="mockup__tab">Checklist</span>
+              <span className="mockup__tab">Credentials</span>
+              <span className="mockup__tab">Findings</span>
             </div>
             {[
               ["21:42", "Talk to 3003 directly", "nc -nv 10.10.61.143 3003", "The service answers without auth."],
               ["22:31", "SUID binaries", "find / -perm -4000 2>/dev/null", "backupd looks non-standard — investigate."],
             ].map(([t, title, cmd, obs]) => (
-              <div key={t} className="grid grid-cols-[58px_1fr] gap-2.5 border-b border-line py-2">
-                <span className="font-mono text-[11px] text-faint">{t}</span>
+              <div key={t} className="mockup__entry">
+                <span className="mockup__time">{t}</span>
                 <div>
                   {title}
-                  <div className="mt-[3px] font-mono text-xs text-muted-2">{cmd}</div>
-                  <div className="mt-[3px] text-[12.5px] text-muted">{obs}</div>
+                  <div className="mockup__cmd">{cmd}</div>
+                  <div className="mockup__obs">{obs}</div>
                 </div>
               </div>
             ))}

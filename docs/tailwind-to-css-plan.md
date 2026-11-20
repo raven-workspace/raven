@@ -8,8 +8,8 @@ with every screen pixel-identical. Inventory: [tailwind-to-css-inventory.md](tai
 
 1. **SCSS**, not plain CSS: partials, mixins for the type roles and repeated patterns, and build-time values for media
    and container queries (CSS variables can't be used there).
-2. **shadcn components are converted** (`src/ui/shadcn` becomes Raven code; re-adding a component from the shadcn CLI
-   means converting it too).
+2. **shadcn components are converted** (`src/ui/shadcn` becomes Raven code). The shadcn CLI and its `components.json`
+   went with Tailwind: a component taken from shadcn later is copied in and converted by hand.
 3. **Primitives keep `className`.** It is what React developers expect; callers pass semantic classes instead of
    utilities once their own unit is migrated.
 4. **DESIGN.md's grid and spacing rules and the four Tailwind convention tests are rewritten for SCSS**, keeping what
@@ -65,7 +65,7 @@ with every screen pixel-identical. Inventory: [tailwind-to-css-inventory.md](tai
 | 21–23 | payloads, credentials (TestGrid: sticky cells, snapping), findings | High | + manual QA of sticky/scroll | Done |
 | 24 | report (TodoPanel, EvidenceRail, ReportTabs) | High | + page.css interplay | Done |
 | 25 | src/ui/shadcn (sidebar, button, toggle, tabs, sheet, scroll-area, …) | High | + tw-animate replacements | Done |
-| 26 | Remove Tailwind: preflight → `base.scss`, `@theme` → `:root`, drop packages, `cn`, `cva`, convention tests rewritten, DESIGN.md | Med | full suite, build, audit, pixel, manual QA | |
+| 26 | Remove Tailwind: preflight → `base.scss`, `@theme` → `:root`, drop packages, `cn`, `cva`, convention tests rewritten, DESIGN.md | Med | full suite, build, audit, pixel, manual QA | Done |
 
 ## Feature conventions
 
@@ -101,7 +101,8 @@ with every screen pixel-identical. Inventory: [tailwind-to-css-inventory.md](tai
 
 ## Temporary Tailwind retention
 
-Tailwind stays installed until unit 26 so migrated and unmigrated code coexist on the same tokens.
+Tailwind stayed installed until unit 26 so migrated and unmigrated code coexisted on the same tokens. It is gone: the
+layers are now `base, components, features`, and nothing emits utilities.
 
 ## Rollback
 

@@ -1,11 +1,8 @@
-/* Cascade layers, lowest to highest: src/ui primitives in `components`, feature styles in `features` (so a feature's class
- * on a primitive beats the primitive's own), Tailwind utilities last until the SCSS migration removes them. Declared
- * before Tailwind's import so this order is the one the browser uses. */
-@layer theme, base, components, features, utilities;
-@import "tailwindcss";
+/* Cascade layers, lowest to highest: the reset and element defaults in `base` (base.scss), src/ui primitives in
+ * `components`, feature styles in `features` (so a feature's class on a primitive beats the primitive's own). Unlayered
+ * rules, such as the motion below, beat all three. */
+@layer base, components, features;
 @import "./tokens.css";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
 /*
  * JetBrains Mono's own arrows, box drawing, blocks and geometric shapes (U+2190–21FF, U+2500–25FF). The @fontsource
@@ -22,86 +19,6 @@
   unicode-range: U+2190-21FF, U+2500-25FF;
 }
 
-/* Raven is dark-only, so shadcn's `dark:` styles always apply. */
-@custom-variant dark (&:is(:root *));
-
-@layer base {
-  html,
-  body,
-  #root {
-    height: 100%;
-  }
-
-  /* Desktop app: the window itself never scrolls; every screen scrolls inside its own pane. */
-  html,
-  body {
-    overflow: hidden;
-  }
-
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--fg-2);
-    font: 14px/1.45 var(--font-ui);
-    -webkit-font-smoothing: antialiased;
-    /* Desktop app, not a page: no rubber-band, no accidental text selection of chrome. */
-    overscroll-behavior: none;
-  }
-
-  code,
-  kbd,
-  samp,
-  pre {
-    font-family: var(--font-mono);
-  }
-
-  /* No ligatures in code: JetBrains Mono draws `!=` as one glyph, which misleads anyone retyping a command. */
-  code,
-  kbd,
-  samp,
-  pre,
-  .font-mono,
-  .text-code {
-    font-variant-ligatures: none;
-    font-feature-settings: "liga" 0, "calt" 0;
-  }
-
-  /* The one focus style: a 2px accent ring. On accent-bordered elements it flips to white. */
-  :focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  [data-accent-border]:focus-visible {
-    outline-color: var(--fg);
-  }
-
-  ::selection {
-    background: var(--line-strong);
-    color: var(--fg);
-  }
-
-  ::placeholder {
-    color: var(--faint);
-    opacity: 1;
-  }
-
-  /* Number fields are typed, or stepped with ↑ ↓: the browser's spin buttons are chrome Ink doesn't draw. */
-  input[type="number"] {
-    appearance: textfield;
-  }
-  input[type="number"]::-webkit-inner-spin-button,
-  input[type="number"]::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--line-2) transparent;
-  }
-}
-
 /* Ink theme for highlight.js: muted greys, the accent only for keywords. */
 .hljs { color: var(--muted-2); background: transparent; }
 .hljs-keyword, .hljs-selector-tag { color: var(--accent); }
@@ -111,13 +28,6 @@
 .hljs-title, .hljs-function .hljs-title, .hljs-class .hljs-title { color: var(--fg); }
 .hljs-variable, .hljs-attr, .hljs-attribute, .hljs-params, .hljs-property { color: var(--muted-2); }
 .hljs-meta, .hljs-doctag, .hljs-subst { color: var(--muted); }
-
-/* The code type role is JetBrains Mono: `text-code` sets the family as well as 13/20 (the size comes from the token). */
-@layer utilities {
-  .text-code {
-    font-family: var(--font-mono);
-  }
-}
 
 /*
  * Motion (DESIGN.md Motion; JS timings in src/ui/motion.ts). A full page fades in under the title bar when you arrive;
@@ -147,68 +57,4 @@
 [data-flash] { animation: raven-flash 600ms ease-out; }
 @media (prefers-reduced-motion: reduce) {
   [data-flash] { animation: none; }
-}
-
-/*
- * shadcn aliases: the variables shadcn components (src/ui/shadcn) read, each pointing at an
- * Ink token in tokens.css, which stays the only source of colour. No new colours, no red.
- * `--accent` and `--muted` are Ink's own (lime, grey text) and are not redefined: in shadcn
- * components, shadcn's `bg-accent` / `bg-muted` surfaces are written as `bg-surface-hi` / `bg-surface`.
- */
-:root {
-  --background: var(--bg);
-  --foreground: var(--fg-2);
-  --card: var(--surface);
-  --card-foreground: var(--fg-2);
-  --popover: var(--surface);
-  --popover-foreground: var(--fg-2);
-  --primary: var(--accent);
-  --primary-foreground: var(--bg);
-  --secondary: var(--surface-hi);
-  --secondary-foreground: var(--fg);
-  --muted-foreground: var(--muted);
-  --accent-foreground: var(--fg);
-  --destructive: var(--warn);
-  --border: var(--line-2);
-  --input: var(--line-2);
-  --ring: var(--accent);
-  --sidebar: var(--bg);
-  --sidebar-foreground: var(--muted-2);
-  --sidebar-primary: var(--accent);
-  --sidebar-primary-foreground: var(--bg);
-  --sidebar-accent: var(--surface-hi);
-  --sidebar-accent-foreground: var(--fg);
-  --sidebar-border: var(--line);
-  --sidebar-ring: var(--accent);
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-
-  /* shadcn's radius steps, on Ink's two radii. */
-  --radius-md: var(--radius-sm);
-  --radius-lg: var(--radius);
 }

@@ -1,7 +1,7 @@
 @use "@/styles/abstracts" as *;
 
 // A 28px square icon button. `active` sets aria-pressed only: its intended highlight never rendered (it lost to the
-// transparent background in Tailwind's order), and the migration keeps the look as it was.
+// transparent background in the order Tailwind emitted them), and the migration keeps the look as it was.
 @layer components {
   .icon-button {
     display: inline-grid;

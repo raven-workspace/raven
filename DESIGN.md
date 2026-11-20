@@ -137,7 +137,7 @@ The Manual is the one reading surface, and it adds two reading roles that nothin
 ### Named Rules
 
 - **The floor.** Nothing is below 12px. Only `text-label`, `Chip` and `Kbd` use 12px. Anything read as a sentence, a value or a warning is at least 13px.
-- **No arbitrary sizes.** No `text-xs`, and no `text-[Npx]`, in `src/features/**` or `src/ui/**`.
+- **No arbitrary sizes.** In `src/features/**` and `src/ui/**` a font size comes only from a type role (`@include type(<role>)`, or `var(--text-<role>)`): no literal `font-size`, and no `font` shorthand.
 - **Warnings are never smaller than what they warn about.** Guard and warning lines are `text-meta` in `--warn`.
 - **Uppercase is for sections, not fields.** A form field's label is `text-meta` in sentence case ("Timebox start"), in `--muted-2`. Uppercase `text-label` is only for section headings, so a field label and a section heading never look alike.
 - **Data is never a label.** Column values, log kinds and service names use body, code or meta, never uppercase.
@@ -146,18 +146,18 @@ The Manual is the one reading surface, and it adds two reading roles that nothin
 
 ### The grid rule
 
-1. **Every row with two or more items, where any item varies in width, is a CSS grid with explicit tracks.** The pattern is `grid-cols-[<fixed or max-content tracks>_minmax(0,1fr)_<fixed or max-content tracks>]`. Exactly one `minmax(0,1fr)` track absorbs the slack, and it is the only one that truncates or wraps.
+1. **Every row with two or more items, where any item varies in width, is a CSS grid with explicit tracks.** The pattern is `grid-template-columns: <fixed or max-content tracks> minmax(0, 1fr) <fixed or max-content tracks>`, in the component's own sheet. Exactly one `minmax(0,1fr)` track absorbs the slack, and it is the only one that truncates or wraps.
 2. **Flexbox is allowed only for a single-line run of peers that must not wrap:** icon + label inside a button, a button group, a segmented control, the key and label of one hint. It lives inside the `src/ui` primitives (`Toolbar`, `ChipSet`), not in feature code.
-   - `flex-col`, `flex-1`, `flex-wrap`, `justify-between` and `grow` are not allowed in `src/features/**`.
+   - Feature sheets (`src/features/**/*.scss`) don't use `display: flex` or `inline-flex`, `flex-direction`, `flex-wrap`, `flex-grow` (or a growing `flex`), or `justify-content: space-between`.
    - Use `grid` with `gap` for stacks, `minmax(0,1fr)` for the stretchy pane, and `ChipSet` for a wrapping set of independent chips.
-3. **Rows align to the start.** Rows whose cells can grow use `items-start`; `items-center` is only for rows where every cell is guaranteed to be one line. A row's control stays on its title's line when the row opens.
-4. **Glyph and icon tracks are fixed width** (`grid-cols-[16px_minmax(0,1fr)_auto]`), never `auto` around an icon.
+3. **Rows align to the start.** Rows whose cells can grow use `align-items: start`; `align-items: center` is only for rows where every cell is guaranteed to be one line. A row's control stays on its title's line when the row opens.
+4. **Glyph and icon tracks are fixed width** (`grid-template-columns: 16px minmax(0, 1fr) auto`), never `auto` around an icon.
 5. **Siblings that sit side by side share their rows.** Kanban lanes, parallel columns and card grids use subgrid (or one shared header row), so every header has the same height whether its title wraps or not, and every lane's first card starts on the same line.
 6. **Narrow behaviour is declared, not emergent.** Every view states what happens under 1000px: what stacks, drops or collapses. Use container queries on the pane when the pane is narrower than the window (drawers, split views).
 
 ### Spacing
 
-The spacing scale has a 4px base, with steps of 4, 8, 12, 16, 24 and 32. Nothing else: no `gap-0.5`, `gap-2.5` or `gap-5`.
+The spacing scale has a 4px base, with steps of 4, 8, 12, 16, 24 and 32: `--space-xs`, `--space-sm`, `--space-md`, `--space-lg`, `--space-xl` and `--space-2xl` in tokens.css. Padding, margin and gap use only these (or their negatives, `calc(var(--space-sm) * -1)`), `0`, `auto` or a 1px hairline offset. Nothing else: no 2px, 6px, 10px or 20px. The few documented exceptions (the title bar's 94px traffic-light inset, the 6px hint gap) are listed in the convention test.
 
 | Between | Gap |
 |---|---|
@@ -227,7 +227,7 @@ All shared pieces live in `src/ui`. Feature code composes them and doesn't hand-
 
 ### Buttons and icon buttons
 
-- **Tooltips.** One `Tooltip` (`src/ui`), on hover and on keyboard focus, under the app's single `TooltipProvider`, so moving along a toolbar opens the next tooltip at once. Feature code never imports shadcn's tooltip (lint enforces it). A native `title` doesn't show on keyboard focus, so it never carries the only statement of an action or shortcut.
+- **Tooltips.** One `Tooltip` (`src/ui`), on hover and on keyboard focus, under the app's single `TooltipProvider`, so moving along a toolbar opens the next tooltip at once. It is the only tooltip: shadcn's was removed, and lint keeps it from being re-added. A native `title` doesn't show on keyboard focus, so it never carries the only statement of an action or shortcut.
 - **IconButton.** A 28×28 box with a 16px Phosphor icon (regular weight). It has no border at rest, `--surface-hi` on hover, and the focus ring on focus. An `aria-label` and a tooltip are required; the tooltip names the action and its shortcut ("Copy · ⌘C").
 - **Icon or text.**
   - Universal verbs are icons:
@@ -338,7 +338,7 @@ Each table declares its column policy; automatic layout never decides.
 - Cells come in a fixed order of importance: timebox, rooted, flags, Metasploit lock, threads, cleanup, LHOST.
 - When space runs out, secondary parts drop first ("of 23h 45m", then the progress bar), then whole cells in this order: Cleanup, Threads, the engagement name (host pages), Metasploit lock, LHOST. LHOST is copied often during an exam, so it outlasts the cells shown before it. Nothing wraps or ellipsizes mid-value.
 - The strip carries no hint line.
-- **Headers** (engagement, host, drawer): row 1 is the title and its actions; row 2 is the metadata line. On the engagement and host headers the actions are icon buttons right after the title (Edit `PencilSimple`; Archive `Archive`), never out at the pane's far edge where they lose what they act on; the title truncates first. Drawer headers keep `grid-cols-[minmax(0,1fr)_auto]` with the close button at the end.
+- **Headers** (engagement, host, drawer): row 1 is the title and its actions; row 2 is the metadata line. On the engagement and host headers the actions are icon buttons right after the title (Edit `PencilSimple`; Archive `Archive`), never out at the pane's far edge where they lose what they act on; the title truncates first. Drawer headers keep `grid-template-columns: minmax(0, 1fr) auto` with the close button at the end.
 - **A host page has no engagement header.** The status strip leads with the engagement's name (`body` 600, `--fg-2`, a link back to the board, truncated at 28ch); its details and actions stay on the engagement's own sections. The host's name is the page's only `title`, and the host header carries no rule of its own. Its Edit host pencil sits right after the name, not at the pane's far edge. Stuck? ends the work column's tab row on every tab, after that tab's own control.
 - **Title bar:** its controls are chrome, not page buttons: borderless, with the `--surface-hi` background only on hover. The control for the page on screen (Manual, Settings) or an open drawer (Arsenal, Payloads) sits on `--surface` in accent. The controls sit on the right, with their right edge on the main content column's right edge (the same x where the page header's actions end below), in three runs set apart by 16px of space, never a divider:
   - references: Arsenal, Manual, Payloads (icon, word, inline key);
@@ -395,8 +395,8 @@ One `CommandBlock` everywhere a command appears:
 - **Do** keep each hint's key and label together, with 24px between hints.
 
 ### Don't:
-- **Don't** use `flex-col`, `flex-1`, `flex-wrap`, `justify-between` or `grow` in feature code.
-- **Don't** use `text-xs` or arbitrary `text-[Npx]` sizes, or anything under 12px.
+- **Don't** lay out feature code with flex (`display: flex`, `flex-direction`, `flex-wrap`, growth, `space-between`).
+- **Don't** set a font size that isn't a type role, or anything under 12px.
 - **Don't** join structured values with " · ", " — " or " → ", in the UI or in titles Raven generates. They're for prose only.
 - **Don't** make an action a grey text link.
 - **Don't** use amber at rest for an action, or more than one amber control at rest per screen.

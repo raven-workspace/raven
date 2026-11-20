@@ -5,7 +5,7 @@ import "./controls.scss";
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "width"> {
   /** Monospace text, for IPs, CIDRs, commands, hashes. */
   mono?: boolean;
-  /** A width class in place of the default full width (a Tailwind `w-*` while callers still use them). */
+  /** A class that sets the width, in place of the default full width. */
   width?: string;
   ref?: Ref<HTMLInputElement>;
 }

@@ -561,3 +561,44 @@
       rail animated, because the shared reduced-motion `transition-property: none` came before the gap's and
       container's own `transition-property` at equal specificity. The reduced-motion rule now comes last; 24/24 on
       repeat.
+
+## Unit: remove Tailwind (26)
+
+### Changes
+- **Packages removed:** `tailwindcss`, `@tailwindcss/vite`, `tw-animate-css`, `class-variance-authority`, `cn` (shadcn's
+  Tailwind-aware joiner, `src/lib/utils.ts`) and `shadcn` (the CLI, which also shipped `shadcn/tailwind.css`), with
+  `components.json`. The Vite plugin is gone from `vite.config.ts`.
+- **Preflight** is `src/styles/base.scss` (`@layer base`), copied from what Tailwind compiled for Raven's theme (the
+  `--theme()` font defaults resolved), followed by Raven's own element defaults that were in global.css. Two preflight
+  rules were folded into Raven's, which already overrode them: the placeholder colour and opacity.
+- **Theme:** the `@theme static` values (radii, `--font-ui`, `--font-mono`, the type roles) are plain `:root` variables
+  in tokens.css. Not carried over, being unused: the `--color-*` palette mapping, the stock-scale resets,
+  `--tracking-label`, the shadcn colour aliases and their `@theme inline` block (no stylesheet reads them since unit 25),
+  the `dark` custom variant, and the `.text-code` / `.font-mono` helpers (no markup used them).
+- **Layers:** `@layer base, components, features;` (global.css and `abstracts/_layers`); `theme` and `utilities` went.
+- **Dev gallery** (`src/dev/UiGallery.tsx`, `/__ui`, outside the plan's src/ui + src/features scope, but it would have
+  lost its layout) converted to `UiGallery.scss`.
+- **Convention tests:** the four Tailwind-shaped rules now read the `.scss` under src/features and src/ui, declaration
+  by declaration: `tiny-type` (a font size is a type role or `inherit`/`1em`), `feature-flex` (no flex container,
+  direction, wrapping, growth or space-between in feature sheets), `unknown-color` (no raw colour anywhere, except black
+  as a shadow's or a mask's darkness; every `var()` declared in the token sheets, set by the code itself, or Radix's),
+  `off-scale-spacing` (padding, margin and gap are `--space-*` or its negative, 0, auto or 1px; the three documented
+  exceptions moved to their sheets). The markup rules (joined-strings, hand-hint, esc-close) read only markup. The
+  shadcn theme test went with the aliases; its ligature check lives on in `src/test/ui/baseStyles.test.ts`, with the
+  reset.
+- **DESIGN.md** states the grid, flex, spacing and type rules in CSS terms (`grid-template-columns: …`,
+  `--space-*`, type roles) instead of utility names. PRODUCT.md's stack line says SCSS.
+- FillBar's block is `.fill-bar` again: `.fillbar` existed only because the old colour rule read `fill-*` as a colour.
+- The audit's tiny-text exemption names `.section-label` instead of `.text-label`, which nothing renders any more (its
+  self-test fixture moved to `.section-label`).
+- `scripts/tailwind-migration` is deleted.
+
+### Verification
+- [x] Unit tests: 3401 (14 fewer: the 7 shadcn theme tests, and the matcher tests regrouped from 39 to 32 for SCSS; 2
+      added for the base styles)
+- [x] Type check, lint, production build (no Tailwind in the output; the long-standing chunk-size note remains)
+- [x] Pixel diff: 297/297
+- [x] Audit gate: 660/660; audit self-test 15/15
+- [x] Dev gallery (`/__ui`, not in the pixel set): screenshot byte-identical to the Tailwind build's
+- [ ] Manual QA in the Tauri app (not run here): window drag regions, a dialog's open and close motion, the sidebar
+      collapse animation, the report page's print preview
