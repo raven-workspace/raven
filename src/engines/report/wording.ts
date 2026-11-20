@@ -26,3 +26,6 @@ export function splitAffected(description: string): { affected: string | null; e
   if (!m) return { affected: null, explanation: description.trim() };
   return { affected: m[1].trim() || null, explanation: description.slice(m[0].length).trim() };
 }
+
+/** The first letter upper-cased, the rest as written. */
+export const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

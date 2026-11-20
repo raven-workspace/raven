@@ -1,15 +1,13 @@
 import type { Finding } from "../../types/findings";
 import type { LogEntry } from "../../types/log";
 import { proofCompanions } from "./proof";
-import { isDeadEnd, placingEntries } from "./prove";
+import { byTime, hostName, isDeadEnd, isFlag, placingEntries } from "./prove";
 import { isPortScan } from "./tools";
 import type { Phase, ReportData, ReportTarget } from "./types";
 
 /** How a screenshot taken after a kept entry still comes along with it. */
 const SCREENSHOT_WINDOW_MS = 5 * 60_000;
 export type HostEntry = "foothold" | "hop";
-
-export const byTime = (a: LogEntry, b: LogEntry) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id);
 
 /** The host's entries that land on the page, in time order: placing ones (notes and port scans aside: the ports table
  *  covers a scan, §10.2; `placingEntries`), and
@@ -113,8 +111,6 @@ export function phaseSplit(entries: LogEntry[], data: ReportData, hostId: string
   });
   return out;
 }
-
-const isFlag = (e: LogEntry | undefined) => e?.content.kind === "flag";
 
 /** Entries in time order as steps: each placed entry with the screenshots that came along after it. */
 export function stepsOf(entries: LogEntry[], placing: ReadonlySet<string>): LogEntry[][] {
@@ -225,7 +221,6 @@ export function hostPlan(data: ReportData, hostId: string, entry: HostEntry, enu
   return { kept, companions, split, placing: placingEntries(data, hostId), findings, phases, time };
 }
 
-const hostName = (data: ReportData, id: string) => data.hosts.find((h) => h.id === id)?.name ?? id;
 /**
  * An AD set's machines in attack-path order: by when each was first reached (its first hop in or access grant, as the
  * attack chain orders them), so the entry machine comes first; the domain controller last; name breaks ties and

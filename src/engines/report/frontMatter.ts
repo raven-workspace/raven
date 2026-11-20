@@ -1,5 +1,6 @@
 import type { SectionKind } from "../../types/report";
 import type { Settings } from "../../types/settings";
+import { doc, heading, listItem, para, text as textNode } from "./nodes";
 import { hintPara, msfLine, plainTable, type PlainTableKind } from "./plainTables";
 import type { ReportData, ReportMeta, ReportNode } from "./types";
 
@@ -22,31 +23,23 @@ const STAGES: [string, "msf" | "cleanup" | null][] = [
   ["House Cleaning", "cleanup"],
 ];
 
-const heading = (text: string): ReportNode => ({
-  type: "heading",
-  attrs: { level: 2 },
-  content: [{ type: "text", text }],
-});
-const paragraph = (text: string): ReportNode => ({ type: "paragraph", content: [{ type: "text", text }] });
-const doc = (content: ReportNode[]): ReportNode => ({ type: "doc", content });
-
 const BULLET = /^\s*[-*•·]\s+/;
 
 /**
  * Text as page blocks: paragraphs split on blank lines, with a run of hard-wrapped lines (a paste from a PDF) joined
  * into one paragraph, and lines starting with a bullet (-, *, •, ·) as a bulleted list. None when blank.
  */
-function textBlocks(text: string): ReportNode[] {
+function settingsBlocks(text: string): ReportNode[] {
   const out: ReportNode[] = [];
-  let para: string[] = [];
+  let lines: string[] = [];
   let items: string[] = [];
   const flushPara = () => {
-    if (para.length > 0) out.push(paragraph(para.join(" ")));
-    para = [];
+    if (lines.length > 0) out.push(para([textNode(lines.join(" "))]));
+    lines = [];
   };
   const flushList = () => {
     if (items.length > 0) {
-      for (const t of items) out.push({ type: "list", attrs: { kind: "bullet" }, content: [paragraph(t)] });
+      for (const t of items) out.push(listItem("bullet", [para([textNode(t)])]));
     }
     items = [];
   };
@@ -58,12 +51,12 @@ function textBlocks(text: string): ReportNode[] {
     } else if (BULLET.test(raw)) {
       flushPara();
       items.push(line.replace(BULLET, ""));
-    } else if (items.length > 0 && para.length === 0) {
+    } else if (items.length > 0 && lines.length === 0) {
       // A wrapped bullet (a paste from a PDF) continues on the next line; a blank line ends the list.
       items[items.length - 1] += ` ${line}`;
     } else {
       flushList();
-      para.push(line);
+      lines.push(line);
     }
   }
   flushPara();
@@ -98,10 +91,10 @@ export function buildSectionDraft(kind: SectionKind, data: ReportData, settings:
       const parts = introductionParts(settings.reportIntroduction ?? "");
       return doc([
         ...INTRO_PARTS.flatMap(([name, hint]) => {
-          const blocks = textBlocks(parts[name]);
-          return [heading(name), ...(blocks.length > 0 ? blocks : [hintPara(hint)])];
+          const blocks = settingsBlocks(parts[name]);
+          return [heading(2, name), ...(blocks.length > 0 ? blocks : [hintPara(hint)])];
         }),
-        heading("Scope"),
+        heading(2, "Scope"),
         ...copy("scope-table"),
       ]);
     }
@@ -112,16 +105,16 @@ export function buildSectionDraft(kind: SectionKind, data: ReportData, settings:
         hintPara("Vulnerabilities and trends"),
         hintPara("Wrap-up"),
         ...copy("findings"),
-        heading("Recommendations"),
+        heading(2, "Recommendations"),
         hintPara("Recommendations"),
       ]);
     case "considerations":
       return doc([hintPara(CONSIDERATIONS_HINT)]);
     case "methodology":
       return doc([
-        ...textBlocks(settings.reportMethodology ?? ""),
+        ...settingsBlocks(settings.reportMethodology ?? ""),
         ...STAGES.flatMap(([stage, fact]) => [
-          heading(stage),
+          heading(2, stage),
           hintPara(`How ${stage.toLowerCase()} was done`),
           ...(fact === "msf" ? [msfLine(data)] : fact === "cleanup" ? copy("cleanup") : []),
         ]),

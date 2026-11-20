@@ -1,6 +1,14 @@
 import type { LogEntry } from "../../types/log";
 import type { ReportData } from "./types";
 
+/** Log entries in time order: by time, then by creation, then by id. */
+export const byTime = (a: LogEntry, b: LogEntry) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id);
+
+export const isFlag = (e: LogEntry | undefined) => e?.content.kind === "flag";
+
+/** A host's name, its id when the host is gone; "" for none. */
+export const hostName = (data: ReportData, id: string | null) => (id ? (data.hosts.find((h) => h.id === id)?.name ?? id) : "");
+
 export type ProofReason = "goal" | "service" | "access" | "hop" | "flag" | "finding-step";
 
 /** Linked from a failed attempt, or logged as returning nothing. */

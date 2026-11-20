@@ -1,6 +1,9 @@
 /** Lines of an output as kept ranges index them: "" has none, a trailing newline ends an empty last line. */
 export const lineCount = (text: string) => (text === "" ? 0 : text.split(/\r?\n/).length);
 
+/** The line that stands for `count` lines cut from an output. */
+export const omitted = (count: number) => `[… ${count} ${count === 1 ? "line" : "lines"} omitted …]`;
+
 export type KeptItem = { kind: "line"; n: number; text: string } | { kind: "omitted"; count: number };
 
 /** The lines of an output with only the kept ranges as lines; each gap (leading, between, trailing) is one `omitted` item. Ranges are inclusive, merged and clamped. */

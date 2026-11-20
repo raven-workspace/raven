@@ -6,7 +6,7 @@ import { serviceCoverage } from "./coverage";
 import { isWeakCaption } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
-import { byTime } from "./draft";
+import { byTime } from "./prove";
 import { entryIdsIn } from "./plain";
 import { proofCompanions, proofFacts } from "./proof";
 import { sourceOf } from "./stamp";

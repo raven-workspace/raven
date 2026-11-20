@@ -1,6 +1,6 @@
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { provingEntries } from "./prove";
+import { byTime, provingEntries } from "./prove";
 import type { ReportData } from "./types";
 
 export interface ProofFacts {
@@ -15,7 +15,8 @@ export interface ProofFacts {
   hasScreenshot: boolean;
 }
 
-const IP_COMMAND = /\b(?:ipconfig|ifconfig)\b|\bip\s+(?:-\S+\s+)*a(?:ddr(?:ess)?)?\b/i;
+/** A command that prints the machine's addresses: `ip a`, `ip addr`, `ifconfig`, `ipconfig`. */
+export const ADDRESS_COMMAND = /\bip\s+(?:-\S+\s+)*a(?:ddr(?:ess)?)?\b|\bifconfig\b|\bipconfig\b/i;
 const WHOAMI = /\bwhoami\b/i;
 /** `id` as a command: at a line start or right after a prompt or separator. */
 const ID_COMMAND = /(?:^|[;&|$#>]\s*)id(?:\s|$)/m;
@@ -79,7 +80,7 @@ export function textFacts(text: string, host: Host): Omit<ProofFacts, "hasScreen
   const dir = readsFromDir(text);
   const usualRead = reads.some((arg) => USUAL_PATHS.some((re) => re.test(arg)));
   return {
-    showsIp: host.ip != null && host.ip !== "" && IP_COMMAND.test(text) && hasIp(text, host.ip),
+    showsIp: host.ip != null && host.ip !== "" && ADDRESS_COMMAND.test(text) && hasIp(text, host.ip),
     showsIdentity: WHOAMI.test(text) || ID_COMMAND.test(text),
     showsHostname: HOSTNAME.test(text),
     usualPath: usualRead || dir.usual,
@@ -136,7 +137,6 @@ export function proofCompanions(data: ReportData, hostId: string, flagEntry: Log
     if (NAMES_FLAG.test(text)) return nearest(e, flags);
     return Math.abs(e.at - flagEntry.at) <= COMPANION_WINDOW_MS && nearest(e, steps);
   });
-  const byTime = (a: LogEntry, b: LogEntry) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id);
   return [...commands.sort(byTime), ...shots.sort(byTime)];
 }
 

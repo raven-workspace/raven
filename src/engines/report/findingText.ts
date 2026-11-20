@@ -1,27 +1,9 @@
 import { cells, parseInlineWith, TABLE_SEPARATOR, type Inline } from "../manual/markdown";
 import { terminalBlocks } from "./terminal";
+import { bold, codeBlock, joinText, listItem, para, table, text as textNode, type Mark } from "./nodes";
 import type { ReportNode } from "./types";
 
 /** Finding text and its inline Markdown as page blocks: the plain draft writes a finding's description and remediation with these. */
-
-type Mark = { type: string; attrs?: Record<string, unknown> };
-
-const textNode = (text: string, marks: Mark[] = []): ReportNode => (marks.length > 0 ? { type: "text", text, marks } : { type: "text", text });
-const bold = (text: string) => textNode(text, [{ type: "bold" }]);
-const para = (content: ReportNode[]): ReportNode => (content.length > 0 ? { type: "paragraph", content } : { type: "paragraph" });
-
-/** Text nodes in order, a neighbour with the same marks joined (as ProseMirror stores them) and empty ones dropped. */
-function joinText(nodes: ReportNode[]): ReportNode[] {
-  const out: ReportNode[] = [];
-  for (const n of nodes) {
-    if (n.type === "text" && !n.text) continue;
-    const last = out[out.length - 1];
-    if (n.type === "text" && last?.type === "text" && JSON.stringify(last.marks ?? []) === JSON.stringify(n.marks ?? [])) {
-      out[out.length - 1] = { ...last, text: (last.text ?? "") + n.text };
-    } else out.push(n);
-  }
-  return out;
-}
 
 /** Inline Markdown as text nodes: code, bold and italic as marks; a link reads as its label (with its URL when
  *  external), as the printed page has always shown it. */
@@ -38,20 +20,6 @@ function inlineNodes(parts: Inline[], marks: Mark[] = []): ReportNode[] {
 /** One line of finding text with its inline Markdown. */
 export const inlineMarkdown = (text: string): ReportNode[] => joinText(inlineNodes(parseInlineWith(text, { urls: true })));
 const inline = inlineMarkdown;
-
-const codeBlock = (text: string): ReportNode =>
-  text === "" ? { type: "codeBlock", attrs: { language: "" } } : { type: "codeBlock", attrs: { language: "" }, content: [{ type: "text", text }] };
-
-const listItem = (kind: "bullet" | "ordered", content: ReportNode[]): ReportNode => ({ type: "list", attrs: { kind }, content: [para(content)] });
-
-/** A table: a header row, then body rows; each cell one paragraph. */
-function table(head: ReportNode[][], rows: ReportNode[][][]): ReportNode {
-  const row = (cellType: string, cs: ReportNode[][]): ReportNode => ({
-    type: "tableRow",
-    content: cs.map((c) => ({ type: cellType, content: [para(joinText(c))] })),
-  });
-  return { type: "table", content: [row("tableHeaderCell", head), ...rows.map((r) => row("tableCell", r))] };
-}
 
 const BULLET_ITEM = /^\s*[-*]\s(?=\S)(.*)$/;
 const ORDERED_ITEM = /^\s*\d+[.)]\s(?=\S)(.*)$/;
@@ -96,7 +64,7 @@ function proseBlocks(text: string): ReportNode[] {
         rows.push(cells(lines[i]).map(inline));
         i++;
       }
-      out.push(table(head, rows));
+      out.push(table(head.map(joinText), rows.map((r) => r.map(joinText))));
       continue;
     }
     const kind = BULLET_ITEM.test(line) ? "bullet" : ORDERED_ITEM.test(line) ? "ordered" : null;
@@ -104,7 +72,7 @@ function proseBlocks(text: string): ReportNode[] {
     if (kind && i + 1 < lines.length && itemRe.test(lines[i + 1])) {
       flush();
       while (i < lines.length && itemRe.test(lines[i])) {
-        out.push(listItem(kind, inline(itemRe.exec(lines[i])![1].trim())));
+        out.push(listItem(kind, [para(inline(itemRe.exec(lines[i])![1].trim()))]));
         i++;
       }
       continue;
@@ -124,7 +92,7 @@ function proseBlocks(text: string): ReportNode[] {
 
 /** Finding text as page blocks: pasted terminal text as code blocks (`terminalBlocks`), the rest as prose. */
 export function findingBlocks(text: string): ReportNode[] {
-  return terminalBlocks(text).flatMap((run) => (run.kind === "code" ? [codeBlock(run.text)] : proseBlocks(run.text)));
+  return terminalBlocks(text).flatMap((run) => (run.kind === "code" ? [codeBlock(run.text, { bareWhenEmpty: true })] : proseBlocks(run.text)));
 }
 
 /** A labelled part: the bold label leads the first paragraph; before a list, code or table it is a line of its own. */

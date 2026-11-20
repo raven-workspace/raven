@@ -2,6 +2,9 @@ import { inlineMarkdown } from "./findingText";
 import { testedLine, testedNotExploited } from "./coverage";
 import { stamp } from "./stamp";
 import { findingRows, scopeRows } from "./tables";
+import { para, text, textTable } from "./nodes";
+import { hostName } from "./prove";
+import { capitalize } from "./wording";
 import { reportTargets } from "./targets";
 import { msfHosts, msfModules } from "./tools";
 import type { ReportData, ReportMeta, ReportNode } from "./types";
@@ -11,19 +14,8 @@ import type { ReportData, ReportMeta, ReportNode } from "./types";
 export const PLAIN_TABLE_KINDS = ["findings", "scope-table", "tested", "cleanup", "references"] as const;
 export type PlainTableKind = (typeof PLAIN_TABLE_KINDS)[number];
 
-const text = (value: string): ReportNode => ({ type: "text", text: value });
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-const hostName = (data: ReportData, id: string | null) => (id ? (data.hosts.find((h) => h.id === id)?.name ?? id) : "");
-
 /** An empty paragraph that shows `hint` in the editor only; it prints nothing. */
 export const hintPara = (hint: string, source?: string): ReportNode => ({ type: "paragraph", attrs: { hint, ...(source ? { source } : {}) } });
-
-/** A table: a header row, then body rows; each cell one paragraph. */
-function table(head: string[], rows: string[][], source: string): ReportNode {
-  const cell = (type: string, value: string): ReportNode => ({ type, content: [value ? { type: "paragraph", content: [text(value)] } : { type: "paragraph" }] });
-  const row = (type: string, values: string[]): ReportNode => ({ type: "tableRow", content: values.map((v) => cell(type, v)) });
-  return { type: "table", attrs: { source }, content: [row("tableHeaderCell", head), ...rows.map((r) => row("tableCell", r))] };
-}
 
 /** One report-level table's blocks. With no rows, only a hint paragraph that prints nothing. */
 export function plainTable(kind: PlainTableKind, data: ReportData, meta: ReportMeta): ReportNode[] {
@@ -34,22 +26,22 @@ export function plainTable(kind: PlainTableKind, data: ReportData, meta: ReportM
       case "findings": {
         const rows = findingRows(data, targets());
         if (rows.length === 0) return "No findings recorded yet";
-        return [table(["#", "Host", "Finding", "Severity", "Result"], rows.map((r) => [String(r.n), r.host, r.title, r.severity ? capitalize(r.severity) : "Not set", r.result]), source)];
+        return [textTable(["#", "Host", "Finding", "Severity", "Result"], rows.map((r) => [String(r.n), r.host, r.title, r.severity ? capitalize(r.severity) : "Not set", r.result]), source)];
       }
       case "scope-table": {
         const rows = scopeRows(data, targets());
         if (rows.length === 0) return "No targets in the report yet";
-        return [table(["Host", "IP address", "OS", "Set"], rows.map((r) => [r.host, r.ip, r.os, r.set]), source)];
+        return [textTable(["Host", "IP address", "OS", "Set"], rows.map((r) => [r.host, r.ip, r.os, r.set]), source)];
       }
       case "tested": {
         const rows = testedNotExploited(data, null);
         if (rows.length === 0) return "Services you tested that led nowhere appear here as you log them";
-        return [table(["Tested", "Why it went nowhere"], rows.map((r) => [testedLine({ ...r, reason: "" }), r.reason]), source)];
+        return [textTable(["Tested", "Why it went nowhere"], rows.map((r) => [testedLine({ ...r, reason: "" }), r.reason]), source)];
       }
       case "cleanup": {
         const rows = data.cleanup.filter((c) => c.status !== "dismissed");
         if (rows.length === 0) return "No clean-up items recorded";
-        return [table(["Item", "Host", "Kind", "Status"], rows.map((c) => [c.target, hostName(data, c.hostId), c.kind, c.status === "removed" ? "Removed" : "Still to remove"]), source)];
+        return [textTable(["Item", "Host", "Kind", "Status"], rows.map((c) => [c.target, hostName(data, c.hostId), c.kind, c.status === "removed" ? "Removed" : "Still to remove"]), source)];
       }
       case "references": {
         // Only findings on the report's targets: a host or a service of one.
@@ -81,5 +73,5 @@ export function msfLine(data: ReportData): ReportNode {
     const modules = [...new Set(rows.map((r) => r.module))];
     line = `Metasploit was used on ${named.join(" and ")}${modules.length > 0 ? `: ${modules.join(", ")}.` : "."}`;
   }
-  return stamp([{ type: "paragraph", attrs: { source: "msf" }, content: [text(line)] }])[0];
+  return stamp([para([text(line)], "msf")])[0];
 }

@@ -4,13 +4,16 @@ import { findingBlocks, inlineMarkdown, labelled } from "./findingText";
 import { testedLine, testedNotExploited } from "./coverage";
 import { entryPhase, findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
 import { msfLine, PLAIN_TABLE_KINDS, plainTable } from "./plainTables";
-import { placingEntries } from "./prove";
+import { bold, code, codeBlock, figure, heading, listItem, para, sourced, table, text, textTable } from "./nodes";
+import { ADDRESS_COMMAND } from "./proof";
+import { isFlag, placingEntries } from "./prove";
 import { attackPathRows, portRows, resultLine } from "./tables";
 import { blockHash, sourceOf, stamp } from "./stamp";
 import { reportTargets } from "./targets";
 import { isPortScan } from "./tools";
 import type { Phase, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
-import { splitAffected } from "./wording";
+import { omitted } from "./trim";
+import { capitalize, splitAffected } from "./wording";
 
 /**
  * A target written as a plain document (the owner's sample report, §4.1 Quartz): only ordinary editable nodes
@@ -50,34 +53,9 @@ export const ADDITIONAL_HEADING = "Additional findings (not on the path to root)
 export const TESTED_HEADING = "Also tested";
 export const ENUM_HEADING = "Service enumeration";
 
-type Mark = { type: string };
-const text = (value: string, marks: Mark[] = []): ReportNode => (marks.length > 0 ? { type: "text", text: value, marks } : { type: "text", text: value });
-const bold = (value: string) => text(value, [{ type: "bold" }]);
-const code = (value: string) => text(value, [{ type: "code" }]);
-const para = (content: ReportNode[], source?: string): ReportNode => ({
-  type: "paragraph",
-  ...(source ? { attrs: { source } } : {}),
-  ...(content.length > 0 ? { content } : {}),
-});
-const heading = (level: number, value: string, source: string): ReportNode => ({ type: "heading", attrs: { level, source }, content: [text(value)] });
-const codeBlock = (value: string, language: string, source: string): ReportNode => ({
-  type: "codeBlock",
-  attrs: { language, source },
-  content: [text(value)],
-});
-const listItem = (kind: "ordered" | "bullet", content: ReportNode[], source?: string): ReportNode => ({
-  type: "list",
-  attrs: { kind, ...(source ? { source } : {}) },
-  content,
-});
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/** Top-level blocks with their source set (inner paragraphs of a list keep none). */
-const sourced = (blocks: ReportNode[], source: string): ReportNode[] => blocks.map((b) => ({ ...b, attrs: { ...(b.attrs ?? {}), source } }));
-
 /** Finding or observation text as blocks (`findingBlocks`: pasted terminal text as code), each code block without the
  *  indent all its lines share (text pasted as an indented block). */
-function textBlocks(value: string): ReportNode[] {
+function writtenBlocks(value: string): ReportNode[] {
   return findingBlocks(value).map((b) => {
     if (b.type !== "codeBlock" || !b.content?.[0]?.text) return b;
     const lines = b.content[0].text.split("\n");
@@ -101,10 +79,7 @@ const PROVING_LINE = [
   // A diff's added or removed line (not its ---/+++ file headers).
   /^[+-](?![+-]{2}\s)\s*\S/,
 ];
-const omitted = (count: number) => `[… ${count} ${count === 1 ? "line" : "lines"} omitted …]`;
 
-/** A command that prints the machine's addresses: `ip a`, `ip addr`, `ifconfig`, `ipconfig`. */
-const ADDRESS_COMMAND = /\bip\s+(?:-\S+\s+)*a(?:ddr(?:ess)?)?\b|\bifconfig\b|\bipconfig\b/i;
 /** An `ip a` interface line ("2: ens3: <…>") or an ipconfig adapter line ("Ethernet adapter Ethernet0:"). */
 const INTERFACE_LINE = /^\d+:\s+\S+:\s|^\S.*adapter .*:\s*$/;
 /** A line of `ip a` / ifconfig / ipconfig detail under an interface. */
@@ -204,14 +179,14 @@ export function titleSentence(title: string): string {
 
 /** A step's sentence: the owner's observations when written (as written), else the title as a sentence. Never empty. */
 function sentenceOf(entry: LogEntry): ReportNode[] {
-  const said = entry.observations?.trim() ? textBlocks(entry.observations.trim()) : [];
+  const said = entry.observations?.trim() ? writtenBlocks(entry.observations.trim()) : [];
   if (said.length > 0 && said[0].type === "paragraph") return sourced(said, `entry:${entry.id}:observations`);
   return [para(inlineMarkdown(titleSentence(entry.title)), `entry:${entry.id}:title`), ...sourced(said, `entry:${entry.id}:observations`)];
 }
 
 /** A flag's sentence: the owner's observations when written, else "Read local.txt:". */
 function flagSentence(flag: LogEntry): ReportNode[] {
-  if (flag.observations?.trim()) return sourced(textBlocks(flag.observations.trim()), `entry:${flag.id}:observations`);
+  if (flag.observations?.trim()) return sourced(writtenBlocks(flag.observations.trim()), `entry:${flag.id}:observations`);
   return [para([text(`Read ${flag.content.kind === "flag" ? flag.content.flagKind : "the"}.txt:`)], `entry:${flag.id}:title`)];
 }
 
@@ -234,33 +209,27 @@ function evidence(data: ReportData, entry: LogEntry, step: Step) {
       if (command !== "") pending.push({ command, at: i });
       if (output === "" && i < c.blocks.length - 1) return;
       if (pending.length > 0) {
-        step.blocks.push(codeBlock(pending.map((p) => p.command).join("\n"), "", `entry:${entry.id}:${pending[0].at}:command`));
+        step.blocks.push(codeBlock(pending.map((p) => p.command).join("\n"), { source: `entry:${entry.id}:${pending[0].at}:command` }));
       }
       pending = [];
       if (output !== "") {
-        step.blocks.push(codeBlock(output, "", `entry:${entry.id}:${i}:output`));
+        step.blocks.push(codeBlock(output, { source: `entry:${entry.id}:${i}:output` }));
         step.shown.push(b.output ?? "");
       }
     });
   } else if (c.kind === "http") {
-    if (c.request.trim()) step.blocks.push(codeBlock(c.request.trim(), "", `entry:${entry.id}:request`));
+    if (c.request.trim()) step.blocks.push(codeBlock(c.request.trim(), { source: `entry:${entry.id}:request` }));
     const response = trimmedOutput(c.response ?? "");
     if (response) {
-      step.blocks.push(codeBlock(response, "", `entry:${entry.id}:response`));
+      step.blocks.push(codeBlock(response, { source: `entry:${entry.id}:response` }));
       step.shown.push(c.response ?? "");
     }
   } else if (c.kind === "screenshot") {
     step.blocks.push(figure(c.attachmentId, c.caption.trim() || entry.title, entry.id));
   } else if (c.kind === "note") {
-    step.blocks.push(...sourced(textBlocks(c.text), `entry:${entry.id}:note`));
+    step.blocks.push(...sourced(writtenBlocks(c.text), `entry:${entry.id}:note`));
   }
 }
-
-const figure = (attachmentId: string, caption: string, entryId: string): ReportNode => ({
-  type: "figure",
-  attrs: { attachmentId, entryId, source: `entry:${entryId}` },
-  ...(caption.trim() ? { content: [text(caption.trim())] } : {}),
-});
 
 /** A pasted prompt line (`ronan@garnet:~$ id`, `root@x:/tmp# id`, `PS C:\x> whoami`): the command, already shown. */
 const PROMPT_LINE = /^(?:\S+@\S+?:\S*\s*[$#]|PS [A-Za-z]:\\[^>]*>|\*Evil-WinRM\* PS [^>]*>)\s/;
@@ -287,10 +256,10 @@ function flagEvidence(data: ReportData, entry: LogEntry, step: Step) {
   if (proof !== "" && !printed(proof, step.shown)) {
     const ip = data.hosts.find((h) => entry.hostIds.includes(h.id))?.ip ?? null;
     // A pasted proof holds its own commands: `ip a` in it cuts the addresses to the machine's own.
-    step.blocks.push(codeBlock(trimmedOutput(proof, proof, ip), "", `entry:${entry.id}:proof`));
+    step.blocks.push(codeBlock(trimmedOutput(proof, proof, ip), { source: `entry:${entry.id}:proof` }));
     step.shown.push(proof);
   } else if (proof === "" && c.value.trim() !== "" && !shown.includes(c.value.trim())) {
-    step.blocks.push(codeBlock(c.value.trim(), "", `entry:${entry.id}:value`));
+    step.blocks.push(codeBlock(c.value.trim(), { source: `entry:${entry.id}:value` }));
     step.shown.push(c.value);
   }
   if (c.attachmentId) step.blocks.push(figure(c.attachmentId, `${c.flagKind}.txt`, entry.id));
@@ -318,7 +287,6 @@ function absorb(step: Step, entryId: string, value: string) {
   if (!also.includes(entryId)) step.blocks[at] = { ...b, attrs: { ...b.attrs, also: [...also, entryId] } };
 }
 
-const isFlag = (e: LogEntry | undefined) => e?.content.kind === "flag";
 const flagValue = (e: LogEntry) => (e.content.kind === "flag" ? e.content.value.trim() : "");
 
 /** A walk step: the lead entry's sentence, then every entry's evidence (screenshots that came along included). */
@@ -340,9 +308,9 @@ interface Section {
 function findingHeader(f: Finding, files: FindingFile[]): ReportNode[] {
   const out: ReportNode[] = [];
   const { affected, explanation } = splitAffected(f.description ?? "");
-  const expl = textBlocks(explanation);
+  const expl = writtenBlocks(explanation);
   if (expl.length > 0) out.push(...sourced(labelled("Vulnerability explanation:", expl), `finding:${f.id}:explanation`));
-  const fix = textBlocks((f.remediation ?? "").trim());
+  const fix = writtenBlocks((f.remediation ?? "").trim());
   if (fix.length > 0) out.push(...sourced(labelled("Vulnerability fix:", fix), `finding:${f.id}:fix`));
   if (f.severity) out.push(para([bold("Severity:"), text(` ${capitalize(f.severity)}`)], `finding:${f.id}:severity`));
   if (affected) out.push(...sourced(labelled("Affected:", [para(inlineMarkdown(affected))]), `finding:${f.id}:affected`));
@@ -353,7 +321,7 @@ function findingHeader(f: Finding, files: FindingFile[]): ReportNode[] {
 /** "Exploit code:": the public exploit's URL when used unmodified, the code when modified; the finding's exploit notes
  *  carry on after it. */
 function exploitLines(f: Finding, files: FindingFile[]): ReportNode[] {
-  const notes = textBlocks((f.exploitNotes ?? "").trim());
+  const notes = writtenBlocks((f.exploitNotes ?? "").trim());
   const out: ReportNode[] = [];
   const lead = (intro: ReportNode[], blocks: ReportNode[]): ReportNode[] => {
     const [first, ...rest] = blocks;
@@ -368,7 +336,7 @@ function exploitLines(f: Finding, files: FindingFile[]): ReportNode[] {
       out.push(...sourced(labelled("Exploit code:", lead(intro, tail)), source));
     } else {
       const intro = file.originalUrl ? [text(`Modified from ${file.originalUrl}:`)] : [code(file.name), text(":")];
-      const body = file.content.trim() ? [codeBlock(file.content.replace(/\s+$/, ""), file.language ?? "", source)] : [];
+      const body = file.content.trim() ? [codeBlock(file.content.replace(/\s+$/, ""), { language: file.language ?? "", source })] : [];
       out.push(...sourced(labelled("Exploit code:", [para(intro), ...body, ...tail]), source));
     }
   });
@@ -401,17 +369,12 @@ const serviceName = (name: string, fromNmap: boolean) => (fromNmap && /^[a-z0-9]
 function portTable(data: ReportData, hostId: string): ReportNode | null {
   const rows = portRows(data, hostId);
   if (rows.length === 0) return null;
-  const cell = (type: string, value: string): ReportNode => ({ type, content: [para(value ? [text(value)] : [])] });
-  const row = (type: string, values: string[]): ReportNode => ({ type: "tableRow", content: values.map((v) => cell(type, v)) });
   const nmapNamed = (serviceId: string) => data.services.find((s) => s.id === serviceId)?.confirmedProduct == null;
-  return {
-    type: "table",
-    attrs: { source: `ports:${hostId}` },
-    content: [
-      row("tableHeaderCell", ["Port", "Service", "Version", "Notes"]),
-      ...rows.map((r) => row("tableCell", [r.port, serviceName(r.service, nmapNamed(r.serviceId)), r.version, ""])),
-    ],
-  };
+  return textTable(
+    ["Port", "Service", "Version", "Notes"],
+    rows.map((r) => [r.port, serviceName(r.service, nmapNamed(r.serviceId)), r.version, ""]),
+    `ports:${hostId}`,
+  );
 }
 
 /** The host's first port scan: the one Service enumeration prints. */
@@ -432,9 +395,9 @@ function portScan(data: ReportData, hostId: string): ReportNode[] {
   const out: ReportNode[] = [];
   scan.content.blocks.forEach((b, i) => {
     if ((b.command ?? "").trim() === "") return;
-    out.push(codeBlock(b.command.trim(), "", `entry:${scan.id}:${i}:command`));
+    out.push(codeBlock(b.command.trim(), { source: `entry:${scan.id}:${i}:command` }));
     const output = openPortLines(b.output ?? "", scripted) || trimmedOutput(b.output ?? "");
-    if (output) out.push(codeBlock(output, "", `entry:${scan.id}:${i}:output`));
+    if (output) out.push(codeBlock(output, { source: `entry:${scan.id}:${i}:output` }));
   });
   return out;
 }
@@ -442,7 +405,7 @@ function portScan(data: ReportData, hostId: string): ReportNode[] {
 /** A finding as one Additional findings bullet: "**<title>** (<Severity>): <description>", code runs as code blocks. */
 function additionalItem(f: Finding): ReportNode {
   const lead = [bold(f.title), text(f.severity ? ` (${capitalize(f.severity)})` : "")];
-  const blocks = textBlocks(splitAffected(f.description ?? "").explanation);
+  const blocks = writtenBlocks(splitAffected(f.description ?? "").explanation);
   const [first, ...rest] = blocks;
   const content =
     first?.type === "paragraph"
@@ -466,18 +429,13 @@ function attackPathBlocks(data: ReportData, hostIds: string[]): ReportNode[] {
   const rows = attackPathRows(data, hostIds);
   if (rows.length === 0) return [];
   const ticked = (value: string) => value.split(/`([^`]*)`/).flatMap((t, i) => (t === "" ? [] : [i % 2 === 1 ? code(t) : text(t)]));
-  const cell = (type: string, content: ReportNode[]): ReportNode => ({ type, content: [para(content)] });
-  const row = (type: string, cells: ReportNode[][]): ReportNode => ({ type: "tableRow", content: cells.map((c) => cell(type, c)) });
   return [
     para([bold("Attack path")], "attack-path"),
-    {
-      type: "table",
-      attrs: { source: "attack-path" },
-      content: [
-        row("tableHeaderCell", ["Step", "From", "Technique", "To", "Access gained"].map((h) => [text(h)])),
-        ...rows.map((r) => row("tableCell", [[text(String(r.step))], [text(r.from)], [text(r.technique)], [text(r.to)], ticked(r.access)])),
-      ],
-    },
+    table(
+      ["Step", "From", "Technique", "To", "Access gained"].map((h) => [text(h)]),
+      rows.map((r) => [[text(String(r.step))], [text(r.from)], [text(r.technique)], [text(r.to)], ticked(r.access)]),
+      "attack-path",
+    ),
   ];
 }
 
