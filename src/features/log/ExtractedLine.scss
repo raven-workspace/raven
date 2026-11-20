@@ -1,0 +1,55 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // What an entry's save filed: one collapsed line with Undo, or every line when opened.
+  .extracted-line {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--line);
+    @include type(meta);
+  }
+
+  .extracted-line__undone {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .extracted-line__lines {
+    display: grid;
+    gap: var(--space-xs);
+    min-width: 0;
+  }
+
+  // The line that opens and closes the list.
+  .extracted-line__toggle {
+    min-width: 0;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    text-align: left;
+    cursor: default;
+    @include truncate;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+  }
+
+  .extracted-line__list {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .extracted-line__item {
+    color: var(--muted);
+  }
+
+  // A win (hashes dumped, access gained): accent, collapsed or listed.
+  .extracted-line__win {
+    color: var(--accent);
+  }
+}

@@ -123,7 +123,7 @@ describe("ExtractedLine", () => {
     vi.useRealTimers();
     m.extractionsList.mockResolvedValue([extraction()]);
     wrap(<ExtractedLine entry={entry} />);
-    expect(await screen.findByText("2 hashes dumped")).toHaveClass("text-accent");
+    expect(await screen.findByText("2 hashes dumped")).toHaveClass("extracted-line__win");
     expect(screen.getByText(", +2 more", { exact: false })).toBeInTheDocument();
     const toggle = screen.getByRole("button", { expanded: false });
     fireEvent.click(toggle);
@@ -140,7 +140,7 @@ describe("ExtractedLine", () => {
     vi.useRealTimers();
     m.extractionsList.mockResolvedValue([extraction({ undoneAt: 5 })]);
     wrap(<ExtractedLine entry={entry} />);
-    expect(await screen.findByText("Extracted (undone)")).toHaveClass("text-muted");
+    expect(await screen.findByText("Extracted (undone)")).toHaveClass("extracted-line__undone");
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,8 +23,12 @@ describe("AttachmentImage", () => {
       </QueryClientProvider>,
     );
     const img = await screen.findByRole("img", { name: "shot" });
-    for (const cls of ["self-start", "h-auto", "w-auto", "max-h-[420px]", "max-w-full"]) {
-      expect(img).toHaveClass(cls);
+    expect(img).toHaveClass("attachment-image");
+    // jsdom applies no stylesheets: the rule itself keeps the natural size, capped to the column and 420px tall.
+    const scss = readFileSync("src/features/log/AttachmentImage.scss", "utf8");
+    const rule = scss.slice(scss.indexOf(".attachment-image {"), scss.indexOf("}", scss.indexOf(".attachment-image {")));
+    for (const decl of ["align-self: start;", "width: auto;", "max-width: 100%;", "height: auto;", "max-height: 420px;"]) {
+      expect(rule).toContain(decl);
     }
   });
 });

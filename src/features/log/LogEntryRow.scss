@@ -1,0 +1,180 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // One log entry: its row (time, kind, title, extras), then its body when opened.
+  .log-entry-row {
+    border-bottom: 1px solid var(--line);
+  }
+
+  // The highlight is the whole row's, so it runs under an open entry's Edit and Delete too.
+  .log-entry-row__line {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface);
+      }
+    }
+
+    &:has(:is(:focus-visible)) {
+      background-color: var(--surface);
+    }
+  }
+
+  // Pick mode: the caret that opens the body, then the row.
+  .log-entry-row__pick {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .log-entry-row__row {
+    display: grid;
+    grid-template-columns: 2.75rem 6rem minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-md);
+    width: 100%;
+    padding: var(--space-sm) var(--space-xs);
+    text-align: left;
+    cursor: default;
+  }
+
+  .log-entry-row__row--extras {
+    grid-template-columns: 2.75rem 6rem minmax(0, 1fr) auto;
+  }
+
+  // In the finding split's narrow pane the title keeps priority: at least 7rem, the kind only from 30rem of pane (the
+  // `ctx` container), and the extras shrink and clip instead of squeezing the title out.
+  .log-entry-row__row--pick {
+    grid-template-columns: 2.75rem minmax(7rem, 1fr) minmax(0, auto);
+
+    @container ctx (width >= 30rem) {
+      grid-template-columns: 2.75rem 6rem minmax(7rem, 1fr) minmax(0, auto);
+    }
+  }
+
+  .log-entry-row__time {
+    @include type(code);
+    color: var(--muted);
+  }
+
+  .log-entry-row__kind {
+    @include truncate;
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .log-entry-row__kind--pick {
+    display: none;
+
+    @container ctx (width >= 30rem) {
+      display: block;
+    }
+  }
+
+  .log-entry-row__title {
+    @include truncate;
+    @include type(body);
+    color: var(--fg);
+  }
+
+  // The unknown target, host names, private, returned nothing, the step.
+  .log-entry-row__extras {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .log-entry-row__extras--pick {
+    justify-content: end;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .log-entry-row__target {
+    @include type(code);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .log-entry-row__host {
+    max-width: 16ch;
+    @include truncate;
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .log-entry-row__host--pick {
+    max-width: 10ch;
+  }
+
+  .log-entry-row__more {
+    position: relative;
+    @include type(meta);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .log-entry-row__sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  // Returned nothing: ∅ in pick mode, the words otherwise.
+  .log-entry-row__nothing {
+    @include type(code);
+    color: var(--faint);
+  }
+
+  .log-entry-row__nothing-words {
+    @include type(meta);
+    color: var(--faint);
+    white-space: nowrap;
+  }
+
+  .log-entry-row__step {
+    @include type(meta);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .log-entry-row__step--added {
+    @include type(code);
+    color: var(--accent);
+  }
+
+  // An open entry's Edit and Delete, at the end of its own row.
+  .log-entry-row__actions {
+    padding-left: var(--space-sm);
+  }
+
+  // The body, under the title's column.
+  .log-entry-row__body {
+    display: grid;
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+    gap: var(--space-md);
+    padding: 0 var(--space-xs) var(--space-md);
+  }
+
+  .log-entry-row__body-content {
+    grid-column-start: 2;
+    display: grid;
+    gap: var(--space-md);
+    min-width: 0;
+  }
+
+  .log-entry-row__delete-error {
+    color: var(--warn);
+  }
+}

@@ -1,0 +1,45 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // The engagement log: the filters, then the rows by day.
+  .log-section {
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  // Host, Kind and Ran on, then the order button at the far end.
+  .log-section__filters {
+    display: grid;
+    grid-template-columns: repeat(3, auto) minmax(0, 1fr);
+    align-items: center;
+    justify-content: start;
+    gap: var(--space-md);
+  }
+
+  .log-section__filter {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .log-section__filter-label {
+    @include type(meta);
+    color: var(--muted-2);
+    white-space: nowrap;
+  }
+
+  // A filter's picker sizes to its value.
+  .log-section__select {
+    width: auto;
+  }
+
+  .log-section__order {
+    justify-self: end;
+  }
+
+  .log-section__none {
+    @include type(meta);
+    color: var(--muted);
+  }
+}

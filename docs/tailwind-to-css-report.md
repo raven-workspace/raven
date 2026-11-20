@@ -137,3 +137,28 @@
   other layers empty); those elements carry no other shadow.
 - The visually-hidden rule is written out in EvidenceRail.scss and LogEntryRow.scss; a shared mixin in abstracts would
   serve every feature (left out to avoid clashing with the parallel units).
+
+## Unit: log
+
+### Changes
+- AttachmentImage.scss, LogDays.scss, LogSection.scss, LogEntryRow.scss, LogEntryBody.scss, ExtractedLine.scss,
+  EditEntryDialog.scss, all in `@layer features`. OrderButton has no styles of its own (LogSection passes
+  `log-section__order`, which doesn't clash with `.icon-button`).
+- LogEntryRow's pick mode keeps the findings split's `ctx` container: `@container ctx (width >= 30rem)` widens the tracks
+  and shows the kind, as Tailwind emitted. Track lists are copied from the arbitrary values.
+- `has-[:focus-visible]:bg-surface` → `&:has(:is(:focus-visible))`.
+
+### Dead or no-op classes removed
+- `m-0`, `p-0`, `list-none` on p/ul/ol/pre/h3. No caller passes a class that lost to a log component's own.
+
+### Verification
+- [x] Unit tests (attachment-image asserts `.attachment-image` and its rule in AttachmentImage.scss; saveSummary's
+  ExtractedLine cases assert `extracted-line__win` / `extracted-line__undone`)
+- [x] Type check and lint
+- [x] Pixel diff: 297/297 (one run over both units: 293 passed, 3 flaky, `findings@900` failed all three attempts on a
+  diff inside the finding editor's focused title input, outside these units; it passed on rerun with the rest)
+- [x] Audit gate: 660/660, 0 failing checks (15 load timeouts passed on rerun with `--retries=1`). The drawer regression
+  and the `report-dock` screen selected the drawer by Tailwind's `fixed`; they now use `.evidence-drawer`
+
+### Differences and risks
+- The finding split's pick-mode row below 30rem of pane is not in every pixel screen; its rules are Tailwind's output.

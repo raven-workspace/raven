@@ -6,6 +6,7 @@ import { Button, Dialog, Field, Input, Select, Textarea, Toggle, Toolbar } from 
 import { HostChips } from "../capture/HostChips";
 import { useLog, useLogMutations } from "./queries";
 import { useSettings } from "../settings/queries";
+import "./EditEntryDialog.scss";
 
 const NONE = "__none";
 const NO_MACHINES: string[] = [];
@@ -109,12 +110,12 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
+      <form id={formId} onSubmit={submit} noValidate className="edit-entry">
         <Field label="Title" error={titleError}>
           <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
-        <div className="grid gap-2">
-          <span className="text-meta text-muted-2">Hosts</span>
+        <div className="edit-entry__hosts">
+          <span className="edit-entry__label">Hosts</span>
           <HostChips hosts={hosts} linked={hostIds} onLinked={setHostIds} />
         </div>
         <Field label="Ran on">
@@ -159,7 +160,7 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
             </Toggle>
           )}
         </Toolbar>
-        {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
+        {error && <p role="alert" className="edit-entry__error">{error}</p>}
       </form>
     </Dialog>
   );

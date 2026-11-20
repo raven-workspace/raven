@@ -9,12 +9,13 @@ import { KIND_LABELS } from "./kindLabels";
 import { LogDays } from "./LogDays";
 import { LogEntryRow } from "./LogEntryRow";
 import { useLog } from "./queries";
+import "./LogSection.scss";
 
 const KINDS: LogKind[] = ["command", "screenshot", "http", "note", "flag"];
 
-const sel = "w-auto";
-const filter = "grid grid-cols-[auto_auto] items-center gap-2";
-const filterLabel = "whitespace-nowrap text-meta text-muted-2";
+const sel = "log-section__select";
+const filter = "log-section__filter";
+const filterLabel = "log-section__filter-label";
 
 export function LogSection() {
   const { id = "" } = useParams();
@@ -42,8 +43,8 @@ export function LogSection() {
     .sort(byOrder(order));
 
   return (
-    <section aria-label="Log" className="grid gap-3">
-      <div className="grid grid-cols-[repeat(3,auto)_minmax(0,1fr)] items-center justify-start gap-3">
+    <section aria-label="Log" className="log-section">
+      <div className="log-section__filters">
         <div className={filter}>
           <span className={filterLabel}>Host</span>
           <Select aria-label="Host" className={sel} value={hostSel} onValueChange={setHost} options={[{ value: "all", label: "All" }, ...hosts.map((h) => ({ value: h.id, label: h.name })), { value: "none", label: "No host" }]} />
@@ -56,10 +57,10 @@ export function LogSection() {
           <span className={filterLabel}>Ran on</span>
           <Select aria-label="Ran on" className={sel} value={ranOnSel} onValueChange={setRanOn} options={[{ value: "all", label: "All" }, ...ranOns.map((r) => ({ value: r, label: r }))]} />
         </div>
-        <OrderButton className="justify-self-end" order={order} onChange={setOrder} />
+        <OrderButton className="log-section__order" order={order} onChange={setOrder} />
       </div>
       <LogDays entries={shown} row={(e) => <LogEntryRow key={e.id} entry={e} hosts={hosts} />} />
-      {shown.length === 0 && log.isSuccess && <p className="m-0 text-meta text-muted">No entries match these filters.</p>}
+      {shown.length === 0 && log.isSuccess && <p className="log-section__none">No entries match these filters.</p>}
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { LogEntry } from "../../types/log";
 import { labelClass } from "../../ui";
+import "./LogDays.scss";
 
 const DAY = 86_400_000;
 const dayKey = (ms: number) => {
@@ -41,9 +42,9 @@ export function LogDays({ entries, row }: { entries: LogEntry[]; row: (e: LogEnt
   return (
     <>
       {byDay(entries).map((day) => (
-        <section key={day.key} aria-label={day.label} className="grid gap-1">
-          <h3 className={`${labelClass} m-0 pt-2`}>{day.label}</h3>
-          <ul className="m-0 list-none p-0 border-t border-line">{day.entries.map(row)}</ul>
+        <section key={day.key} aria-label={day.label} className="log-day">
+          <h3 className={`${labelClass} log-day__heading`}>{day.label}</h3>
+          <ul className="log-day__list">{day.entries.map(row)}</ul>
         </section>
       ))}
     </>

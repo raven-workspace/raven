@@ -11,6 +11,7 @@ import { KIND_LABELS } from "./kindLabels";
 import { LogEntryBody } from "./LogEntryBody";
 import { useLogMutations } from "./queries";
 import { clockTime } from "../engagements/format";
+import "./LogEntryRow.scss";
 
 
 /**
@@ -60,11 +61,7 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
   const hasExtras = target !== null || names.length > 0 || entry.private || entry.returnedNothing || picking;
   // In the finding split's narrow pane the title keeps priority: at least 7rem, the kind label only from 30rem of
   // pane (the `ctx` container), and the extras shrink and clip instead of squeezing the title out.
-  const cols = picking
-    ? "grid-cols-[2.75rem_minmax(7rem,1fr)_minmax(0,auto)] @min-[30rem]/ctx:grid-cols-[2.75rem_6rem_minmax(7rem,1fr)_minmax(0,auto)]"
-    : hasExtras
-      ? "grid-cols-[2.75rem_6rem_minmax(0,1fr)_auto]"
-      : "grid-cols-[2.75rem_6rem_minmax(0,1fr)]";
+  const cols = picking ? "log-entry-row__row--pick" : hasExtras ? "log-entry-row__row--extras" : undefined;
 
   const row = (
     <button
@@ -76,40 +73,40 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
         if (!picking) setOpen((o) => !o);
         else if (!stepNumber) onPick(entry.id);
       }}
-      className={`grid w-full items-center gap-3 px-1 py-2 text-left cursor-default ${cols}`}
+      className={cx("log-entry-row__row", cols)}
     >
-      <time dateTime={d.toISOString()} title={d.toLocaleString()} className="text-code text-muted">
+      <time dateTime={d.toISOString()} title={d.toLocaleString()} className="log-entry-row__time">
         {clockTime(entry.at)}
       </time>
-      <span className={`truncate text-meta text-muted ${picking ? "hidden @min-[30rem]/ctx:block" : ""}`}>{KIND_LABELS[entry.kind]}</span>
-      <span data-testid="entry-title" className="truncate text-body text-fg">{entry.title}</span>
+      <span className={cx("log-entry-row__kind", picking && "log-entry-row__kind--pick")}>{KIND_LABELS[entry.kind]}</span>
+      <span data-testid="entry-title" className="log-entry-row__title">{entry.title}</span>
       {hasExtras && (
-        <span className={`grid grid-flow-col auto-cols-max items-center gap-2 ${picking ? "min-w-0 justify-end overflow-hidden" : ""}`}>
-          {target && <span className="whitespace-nowrap font-mono text-code text-muted">{target}</span>}
+        <span className={cx("log-entry-row__extras", picking && "log-entry-row__extras--pick")}>
+          {target && <span className="log-entry-row__target">{target}</span>}
           {/* Host names are metadata, so plain text; chips are for state, like "private" (DESIGN.md Chips). */}
           {names.slice(0, MAX_HOSTS).map((n) => (
-            <span key={n} title={n} className={cx("truncate text-meta text-muted-2", picking ? "max-w-[10ch]" : "max-w-[16ch]")}>
+            <span key={n} title={n} className={cx("log-entry-row__host", picking && "log-entry-row__host--pick")}>
               {n}
             </span>
           ))}
           {names.length > MAX_HOSTS && (
-            <span title={names.slice(MAX_HOSTS).join(", ")} className="relative whitespace-nowrap text-meta text-muted">
+            <span title={names.slice(MAX_HOSTS).join(", ")} className="log-entry-row__more">
               +{names.length - MAX_HOSTS}
-              <span className="sr-only">, also {names.slice(MAX_HOSTS).join(", ")}</span>
+              <span className="log-entry-row__sr">, also {names.slice(MAX_HOSTS).join(", ")}</span>
             </span>
           )}
           {entry.private && <Chip>private</Chip>}
           {entry.returnedNothing &&
             (picking ? (
-              <span title="Returned nothing" className="text-code text-faint">∅</span>
+              <span title="Returned nothing" className="log-entry-row__nothing">∅</span>
             ) : (
-              <span className="whitespace-nowrap text-meta text-faint">returned nothing</span>
+              <span className="log-entry-row__nothing-words">returned nothing</span>
             ))}
           {picking &&
             (stepNumber ? (
-              <span className="whitespace-nowrap text-code text-accent">step {stepNumber}</span>
+              <span className="log-entry-row__step log-entry-row__step--added">step {stepNumber}</span>
             ) : (
-              <span className="whitespace-nowrap text-meta text-muted">+ step</span>
+              <span className="log-entry-row__step">+ step</span>
             ))}
         </span>
       )}
@@ -117,12 +114,12 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
   );
 
   return (
-    <li className="border-b border-line">
+    <li className="log-entry-row">
       {/* An open entry's Edit and Delete end its own row, beside the title, however long the entry below runs. */}
       {/* The highlight is the whole row's, so it runs under an open entry's Edit and Delete too. */}
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center hover:bg-surface has-[:focus-visible]:bg-surface">
+      <div className="log-entry-row__line">
         {picking ? (
-          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center">
+          <div className="log-entry-row__pick">
             <IconButton
               icon={CaretRightIcon}
               label={open ? "Hide the entry" : "Show the entry"}
@@ -137,14 +134,14 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
           row
         )}
         {open && (
-          <Toolbar className="pl-2">
+          <Toolbar className="log-entry-row__actions">
             <IconButton icon={PencilSimpleIcon} label="Edit" onClick={() => setEditing(true)} />
             <IconButton icon={TrashIcon} label="Delete" tone="destructive" onClick={() => setDeleting(true)} />
           </Toolbar>
         )}
       </div>
-      <Collapse open={open} contentClassName="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3 px-1 pb-3">
-        <div className="col-start-2 grid min-w-0 gap-3">
+      <Collapse open={open} contentClassName="log-entry-row__body">
+        <div className="log-entry-row__body-content">
           <LogEntryBody entry={entry} />
         </div>
       </Collapse>
@@ -156,7 +153,7 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
           if (!o) setDeleteError(undefined);
         }}
         title="Delete this entry? Its screenshot goes with it."
-        description={deleteError ? <span role="alert" className="text-warn">{deleteError}</span> : undefined}
+        description={deleteError ? <span role="alert" className="log-entry-row__delete-error">{deleteError}</span> : undefined}
         footer={
           <>
             <Button onClick={() => setDeleting(false)}>Cancel</Button>
