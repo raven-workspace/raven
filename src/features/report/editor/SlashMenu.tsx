@@ -28,6 +28,7 @@ import { inPageHeading, insertTable, setBlockKind, type PageEditor } from "./com
 import type { EditingExtension } from "./extension";
 import { insertEntry, usePageActions } from "./pageActions";
 import { usePageContext } from "./ReportDataContext";
+import { clockTime } from "../../engagements/format";
 
 interface BlockItem {
   id: string;
@@ -86,8 +87,6 @@ function candidates(log: LogEntry[], hostIds: string[], doc: ReportNode): LogEnt
 const searchText = (e: LogEntry) =>
   `${e.title} ${e.content.kind === "command" ? e.content.blocks.map((b) => b.command).join(" ") : e.content.kind === "note" ? e.content.text : ""}`;
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const clock = (at: number) => `${pad(new Date(at).getHours())}:${pad(new Date(at).getMinutes())}`;
 
 /** What opening the evidence picker from the toolbar put on the page: where its `/` is and whether it added a
  *  paragraph for it, so closing without a pick takes them away again. */
@@ -304,7 +303,7 @@ export function SlashMenu() {
                   if (target) insertEntry(editor, data, target, e, true, reportMeta);
                 }}
               >
-                <span className="font-mono text-code text-muted tabular-nums">{clock(e.at)}</span>
+                <span className="font-mono text-code text-muted tabular-nums">{clockTime(e.at)}</span>
                 <span className="grid min-w-0 gap-1">
                   <span className="truncate text-body text-fg" title={e.title}>
                     {e.title}

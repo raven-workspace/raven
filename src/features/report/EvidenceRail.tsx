@@ -24,14 +24,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import { KIND_LABELS } from "../log/kindLabels";
 import { insertEntry } from "./editor/pageActions";
 import { hasPageCursor } from "./editor/ReportEditor";
+import { clockTime } from "../engagements/format";
 
 type RailTab = "unused" | "notes" | "creds";
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const clock = (at: number) => {
-  const d = new Date(at);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
 
 /** An entry the report keeps to the operator: a failed attempt logged with an operator-only reason (or kept private). */
 const operatorOnly = (data: ReportData, e: LogEntry) => data.attempts.some((a) => a.logEntryId === e.id && (a.private || a.reasonKind === "operator"));
@@ -156,14 +152,14 @@ function RailItem({ row, onAct }: { row: RailRow; onAct(row: RailRow, from: HTML
     <li
       tabIndex={0}
       data-rail-row=""
-      aria-label={`${entry.title}, ${KIND_LABELS[entry.kind]} at ${clock(entry.at)}`}
+      aria-label={`${entry.title}, ${KIND_LABELS[entry.kind]} at ${clockTime(entry.at)}`}
       onKeyDown={onKey}
       className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-sm border-l-2 border-line-2 py-1 pr-1 pl-3 outline-none hover:bg-surface-hi focus-visible:bg-surface-hi focus-visible:ring-1 focus-visible:ring-accent"
     >
       <span className="grid min-w-0 gap-1">
         <span className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 text-code text-muted" title={lead}>
           <time dateTime={new Date(entry.at).toISOString()} className="tabular-nums">
-            {clock(entry.at)}
+            {clockTime(entry.at)}
           </time>{" "}
           <span className="truncate">{lead}</span>
         </span>

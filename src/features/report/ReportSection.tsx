@@ -75,6 +75,7 @@ import {
   useReportSections,
   useSectionSaver,
   wantedSections,
+  pageTitle,
 } from "./queries";
 import { flushReports, forgetReportSave, isReportSaveQueued, queueReportSave, settleReportSave, trackReportWrite, useReportSaveStore } from "./saveQueue";
 import { useSettings } from "../settings/queries";
@@ -382,7 +383,7 @@ function ReportBody({
     const pages = sections.filter((s) => s.kind === "page").sort((a, b) => a.position - b.position);
     const pageEntry = (s: ReportSection, group: EntryGroup): Entry => ({
       section: s,
-      item: { id: s.id, group, label: (s.meta as Partial<PageMeta>).title || (isAppendixPage(s) ? "Untitled appendix" : "Untitled page"), reorderable: true },
+      item: { id: s.id, group, label: (s.meta as Partial<PageMeta>).title || pageTitle(isAppendixPage(s) ? "appendix" : "body"), reorderable: true },
     });
     for (const s of pages) if (!isAppendixPage(s)) out.push(pageEntry(s, "pages"));
     const tested = byKey.get(sectionKey("engagement-tested", null));
@@ -498,7 +499,7 @@ function ReportBody({
   const started = (t: ReportTarget) => data.log.some((l) => !l.private && l.hostIds.some((h) => t.hostIds.includes(h)));
 
   // A page's title as it is now (a rename of the open page is in its live meta before it is saved).
-  const pageTitleOf = (s: ReportSection) => (metaOf(s) as Partial<PageMeta>).title || (isAppendixPage(s) ? "Untitled appendix" : "Untitled page");
+  const pageTitleOf = (s: ReportSection) => (metaOf(s) as Partial<PageMeta>).title || pageTitle(isAppendixPage(s) ? "appendix" : "body");
   // Page numbers and titles from the outline order (OffSec's sample: 1, 2, 3, then 4.N per target), never stored.
   const numbers = useMemo(
     () =>

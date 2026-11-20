@@ -6,12 +6,8 @@ import { SCROLL_PANE } from "../../ui/controlStyles";
 import { KIND_LABELS } from "../log/kindLabels";
 import { LogEntryBody } from "../log/LogEntryBody";
 import { useLog } from "../log/queries";
+import { clockTime } from "../engagements/format";
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const clock = (at: number) => {
-  const d = new Date(at);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
 
 /** The ids that still name a log entry; with no log loaded yet, all of them. */
 export function liveSteps(ids: string[], entries: LogEntry[] | undefined): string[] {
@@ -126,7 +122,7 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
                   dateTime={new Date(s.at).toISOString()}
                   className="col-start-3 row-start-1 mt-1 font-mono text-code text-muted @min-[480px]/steps:col-start-4"
                 >
-                  {clock(s.at)}
+                  {clockTime(s.at)}
                 </time>
                 <div className="col-start-4 row-start-1 @min-[480px]/steps:col-start-5">
                   <ActionCell>
@@ -162,7 +158,7 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
                     onClick={() => onChange([...ids, e.id])}
                     className="grid w-full cursor-default grid-cols-[48px_88px_minmax(0,1fr)] items-center gap-2 px-1 py-1 text-left hover:bg-surface"
                   >
-                    <span className="font-mono text-code text-muted">{clock(e.at)}</span>
+                    <span className="font-mono text-code text-muted">{clockTime(e.at)}</span>
                     <span className="truncate text-meta text-muted">{KIND_LABELS[e.kind]}</span>
                     <span className="truncate text-body text-fg-2" title={e.title}>{e.title}</span>
                   </button>

@@ -51,7 +51,8 @@ function ipsOf(text: string): string[] {
 
 /** Parser placeholders for "no version seen"; stored as blank so they never overwrite a real guess. */
 const VERSION_PLACEHOLDERS = new Set(['unknown version', 'unknown', 'raw port intake']);
-const OPEN_STATES = new Set(['open', 'open|filtered']);
+/** Port states a capture keeps from a scan. */
+export const OPEN_STATES = new Set(['open', 'open|filtered']);
 
 /**
  * Rustscan's bare `Open ip:port` path names no service and fills in `unknown` / `Unknown`. That pair is a

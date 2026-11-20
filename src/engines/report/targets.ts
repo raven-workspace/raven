@@ -1,18 +1,10 @@
-import type { BoardColumn, Host } from "../../types/host";
+import { BOARD_COLUMNS, type Host } from "../../types/host";
 import type { ReportData, ReportMeta, ReportTarget } from "./types";
 
-const BOARD_ORDER: BoardColumn[] = [
-  "information-gathering",
-  "vulnerability-detection",
-  "initial-foothold",
-  "privilege-escalation",
-  "post-exploitation",
-  "reporting",
-];
 
 const byName = (a: Host, b: Host) => a.name.localeCompare(b.name);
 const byBoardThenName = (a: Host, b: Host) =>
-  BOARD_ORDER.indexOf(a.boardColumn) - BOARD_ORDER.indexOf(b.boardColumn) || byName(a, b);
+  BOARD_COLUMNS.indexOf(a.boardColumn) - BOARD_COLUMNS.indexOf(b.boardColumn) || byName(a, b);
 
 /** The targets a report has sections for: standalone hosts, then one AD set. */
 export function reportTargets(data: ReportData, meta: ReportMeta): ReportTarget[] {

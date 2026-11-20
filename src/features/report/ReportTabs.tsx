@@ -5,6 +5,7 @@ import { cx } from "../../lib/cx";
 import { TAB_MARK } from "../../ui/shadcn/tabs";
 import { IconButton } from "../../ui/IconButton";
 import { TabMarker } from "../../ui/TabMarker";
+import { MENU_ITEM, walkMenuItems } from "./menuItems";
 
 /** One tab of the report's tab row (§10.1): Front matter, a target, Closing, an appendix or an owner-written page. */
 export interface TabItem {
@@ -58,18 +59,6 @@ function walkTabs(e: KeyboardEvent<HTMLElement>, onOpen: (id: string) => void): 
 
 const STATE_TEXT: Record<Exclude<TabItem["state"], "none">, string> = { ready: "ready", todo: "to do", "not-started": "not started" };
 
-const ITEM =
-  "grid h-7 items-center rounded-sm border-0 bg-transparent px-2 text-left text-body text-fg-2 outline-none hover:bg-surface-hi hover:text-fg focus-visible:bg-surface-hi focus-visible:text-fg";
-
-/** ↑↓ walk a menu's items, wrapping. */
-function walkItems(e: KeyboardEvent<HTMLDivElement>) {
-  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  e.preventDefault();
-  const items = [...e.currentTarget.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
-  const at = items.indexOf(document.activeElement as HTMLButtonElement);
-  items[(at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
-}
-
 /** A menu item; `movesFocus` items put focus somewhere themselves (an input, a dialog), so it doesn't go back to the trigger. */
 type MenuItem = { label: string; run(): void; destructive?: boolean; movesFocus?: boolean };
 
@@ -87,7 +76,7 @@ function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: str
           sideOffset={4}
           role="menu"
           aria-label={label}
-          onKeyDown={walkItems}
+          onKeyDown={walkMenuItems}
           onCloseAutoFocus={(e) => {
             if (focusMoved.current) e.preventDefault();
             focusMoved.current = false;
@@ -99,7 +88,7 @@ function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: str
               key={it.label}
               type="button"
               role="menuitem"
-              className={cx(ITEM, it.destructive && "hover:text-warn focus-visible:text-warn")}
+              className={cx(MENU_ITEM, it.destructive && "hover:text-warn focus-visible:text-warn")}
               onClick={() => {
                 focusMoved.current = !!it.movesFocus;
                 setOpen(false);

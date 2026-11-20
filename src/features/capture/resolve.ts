@@ -1,4 +1,4 @@
-import { buildDraft, credentialsInPaste, type PastedCredential, detectKind, findFlagInPaste, flagTitle, noteTitle, proofShotFlag, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
+import { buildDraft, credentialsInPaste, type PastedCredential, detectKind, findFlagInPaste, flagTitle, noteTitle, proofShotFlag, screenshotFileName, type CaptureDraft, type DraftInput, OPEN_STATES } from "../../engines/capture";
 import { OS_LABELS } from "../hosts/columns";
 import { KIND_LABELS } from "../log/kindLabels";
 import { BOARD_COLUMNS, type Host, type HostOs } from "../../types/host";
@@ -152,7 +152,6 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   };
 }
 
-const OPEN_STATES = new Set(["open", "open|filtered"]);
 
 /**
  * The scans of a command's IPs that aren't hosts yet and show an open port (which proves the host; it is made on

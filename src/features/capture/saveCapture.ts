@@ -1,5 +1,5 @@
 import { identityBlocksOf, isIdentityBlockFor, mergeIdentity, usableIdentity, vectorsFromIdentity, type IdentityFields } from "../../engines/facts";
-import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
+import { buildDraft, type CaptureDraft, type DraftInput, OPEN_STATES } from "../../engines/capture";
 import { api } from "../../lib/api";
 import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError } from "../checklist/ticks";
 import type { Host } from "../../types/host";
@@ -11,7 +11,6 @@ import { applyInterpretation, ExtractionError, interpretEntry, type Applied, typ
 import { newHostScans } from "./resolve";
 import { RavenError } from "../../types/errors";
 
-const OPEN_STATES = new Set(["open", "open|filtered"]);
 
 /** The user-edited final fields of a capture; the draft supplies `scan` and `unknownScopeIps`. */
 export interface CaptureEdits {
