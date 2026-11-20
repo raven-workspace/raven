@@ -251,11 +251,7 @@ pub fn interface_dismissals_list(conn: &Connection, engagement_id: &str) -> AppR
 
 /// Remember that the user declined a tunnel nudge for this host and subnet. Dismissing twice is a no-op.
 pub fn interface_dismiss(conn: &Connection, engagement_id: &str, host_id: &str, subnet: &str) -> AppResult<()> {
-    check_scope(conn, engagement_id, None)?;
-    match check_scope(conn, engagement_id, Some(host_id)) {
-        Err(AppError::NotFound) => return Err(AppError::validation("hostId", "host is not in this engagement")),
-        r => r?,
-    }
+    check_scope(conn, engagement_id, Some(host_id))?;
     let subnet = subnet.trim();
     if !valid_cidr(subnet) {
         return Err(AppError::validation("subnet", format!("invalid IPv4 CIDR: {subnet}")));
@@ -417,8 +413,8 @@ mod tests {
         let a = host(c, &e, "10.0.0.5");
         let e2 = eng(c);
         let foreign = host(c, &e2, "10.0.0.5");
-        assert_eq!(field(interface_dismiss(c, &e, &foreign, "10.10.0.0/24")), "hostId");
-        assert_eq!(field(interface_dismiss(c, &e, "missing", "10.10.0.0/24")), "hostId");
+        assert_eq!(interface_dismiss(c, &e, &foreign, "10.10.0.0/24"), Err(AppError::NotFound));
+        assert_eq!(interface_dismiss(c, &e, "missing", "10.10.0.0/24"), Err(AppError::NotFound));
         assert_eq!(field(interface_dismiss(c, &e, &a, "nope")), "subnet");
         assert!(interface_dismissals_list(c, &e).unwrap().is_empty());
         assert!(interface_dismissals_list(c, &e2).unwrap().is_empty());

@@ -96,9 +96,7 @@ pub fn put(conn: &Connection, engagement_id: &str, items: &[ChecklistItemInput])
             && !matches!(a.as_str(), "na" | "in_progress") {
                 return Err(AppError::validation("autoFrom", "autoFrom must be na or in_progress"));
             }
-        if !owned(&tx, engagement_id, &it.owner_id)? {
-            return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
-        }
+        check_owned(&tx, engagement_id, &it.owner_id)?;
         let evidence = serde_json::to_string(&it.evidence)?;
         tx.execute(
             "INSERT INTO checklist_items \
@@ -125,20 +123,25 @@ pub struct GoalRef {
     pub goal_id: String,
 }
 
-/// Whether the owner is the engagement itself or one of its hosts.
-fn owned(conn: &Connection, engagement_id: &str, owner_id: &str) -> AppResult<bool> {
-    Ok(owner_id == engagement_id || in_engagement(conn, "hosts", engagement_id, owner_id)?)
+/// The owner must be the engagement itself or one of its hosts; otherwise `NotFound`.
+fn check_owned(conn: &Connection, engagement_id: &str, owner_id: &str) -> AppResult<()> {
+    if owner_id == engagement_id || in_engagement(conn, "hosts", engagement_id, owner_id)? {
+        Ok(())
+    } else {
+        Err(AppError::NotFound)
+    }
 }
 
 /// The checks `apply_cover` and `apply_facts` share: at most `MAX_ITEMS * 4` refs (else a `field` error), the
-/// engagement exists (else `NotFound`), and every ref names a goal of an owner in the engagement.
+/// engagement exists and every ref's owner is in it (else `NotFound`), and every ref names a goal.
 fn check_goal_refs(conn: &Connection, engagement_id: &str, field: &str, set: &[GoalRef], revert: &[GoalRef]) -> AppResult<()> {
     if set.len() + revert.len() > MAX_ITEMS * 4 {
         return Err(AppError::validation(field, "too many items"));
     }
     check_scope(conn, engagement_id, None)?;
     for g in set.iter().chain(revert) {
-        if !owned(conn, engagement_id, &g.owner_id)? || g.goal_id.trim().is_empty() {
+        check_owned(conn, engagement_id, &g.owner_id)?;
+        if g.goal_id.trim().is_empty() {
             return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
         }
     }
@@ -477,9 +480,11 @@ mod tests {
         let e1 = eng(c);
         let e2 = eng(c);
         let h2 = host(c, &e2, "10.0.0.9");
-        assert!(matches!(put(c, &e1, &[item(&h2, "g", "todo")]), Err(AppError::Validation { .. })));
-        assert!(matches!(put(c, &e1, &[item(&e2, "g", "todo")]), Err(AppError::Validation { .. })));
-        assert!(matches!(put(c, &e1, &[item("nope", "g", "todo")]), Err(AppError::Validation { .. })));
+        assert_eq!(put(c, &e1, &[item(&h2, "g", "todo")]), Err(AppError::NotFound));
+        assert_eq!(put(c, &e1, &[item(&e2, "g", "todo")]), Err(AppError::NotFound));
+        assert_eq!(put(c, &e1, &[item("nope", "g", "todo")]), Err(AppError::NotFound));
+        assert_eq!(apply_cover(c, &e1, &[gref(&h2, "g")], &[]).map(|_| ()), Err(AppError::NotFound));
+        assert_eq!(apply_facts(c, &e1, &[], &[gref(&h2, "g")]).map(|_| ()), Err(AppError::NotFound));
         assert!(list(c, &e1).unwrap().is_empty());
     }
 

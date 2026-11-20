@@ -214,7 +214,7 @@ pub fn confirm(conn: &Connection, id: &str, input: ConfirmInput) -> AppResult<Se
             |r| r.get(0),
         )?;
         if !ok {
-            return Err(AppError::validation("entryId", "entry must belong to this engagement"));
+            return Err(AppError::NotFound);
         }
     }
     conn.execute(
@@ -422,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn confirm_validates_entry_belongs_to_engagement() {
+    fn confirm_rejects_entry_from_another_engagement() {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let e1 = eng(c);
@@ -433,9 +433,9 @@ mod tests {
         let s = create(c, &h, sin(80)).unwrap();
         let mut ci = cin("nginx");
         ci.entry_id = Some("theirs".into());
-        assert_eq!(field(confirm(c, &s.id, ci.clone())).0, "entryId");
+        assert_eq!(confirm(c, &s.id, ci.clone()), Err(AppError::NotFound));
         ci.entry_id = Some("missing".into());
-        assert_eq!(field(confirm(c, &s.id, ci.clone())).0, "entryId");
+        assert_eq!(confirm(c, &s.id, ci.clone()), Err(AppError::NotFound));
         ci.entry_id = Some("mine".into());
         let ok = confirm(c, &s.id, ci).unwrap();
         assert_eq!(ok.confirmed_entry_id.as_deref(), Some("mine"));

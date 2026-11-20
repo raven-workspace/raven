@@ -1,6 +1,6 @@
 //! Engagement log: typed entries, host links, screenshot/flag attachments.
 
-use crate::db::{blank_to_none, check_scope, delete_by_id, in_engagement, now_ms};
+use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
 use crate::error::{AppError, AppResult};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
@@ -203,9 +203,7 @@ pub(crate) fn check_content(c: &LogContent) -> AppResult<()> {
 fn check_hosts(conn: &Connection, engagement_id: &str, ids: &[String]) -> AppResult<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
     for id in ids {
-        if !in_engagement(conn, "hosts", engagement_id, id)? {
-            return Err(AppError::validation("hostIds", "host does not belong to this engagement"));
-        }
+        check_in_engagement(conn, "hosts", engagement_id, id)?;
         if !out.contains(id) {
             out.push(id.clone());
         }
@@ -562,7 +560,7 @@ mod tests {
         let hb = host(c, &b, "10.0.0.9");
         let mut i = input(cmd());
         i.host_ids = vec![hb];
-        assert_eq!(field(create(c, &a, i)), "hostIds");
+        assert_eq!(create(c, &a, i), Err(AppError::NotFound));
         assert!(list(c, &a).unwrap().is_empty());
     }
 

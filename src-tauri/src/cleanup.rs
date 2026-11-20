@@ -3,7 +3,7 @@
 //! `dismissed` rows exist only to hide a suggestion (`suggestion_key`); they are never edited,
 //! removed or deleted through the item commands.
 
-use crate::db::{blank_to_none, check_scope, in_engagement, now_ms};
+use crate::db::{blank_to_none, check_in_engagement, check_scope, now_ms};
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
@@ -103,15 +103,13 @@ fn clean(conn: &Connection, engagement_id: &str, i: &CleanupInput) -> AppResult<
         return Err(AppError::validation("notes", "notes must be at most 2000 characters"));
     }
     let host_id = blank_to_none(i.host_id.as_deref());
-    if let Some(h) = &host_id
-        && !in_engagement(conn, "hosts", engagement_id, h)? {
-            return Err(AppError::validation("hostId", "host is not part of this engagement"));
-        }
+    if let Some(h) = &host_id {
+        check_in_engagement(conn, "hosts", engagement_id, h)?;
+    }
     let source_entry_id = blank_to_none(i.source_entry_id.as_deref());
-    if let Some(s) = &source_entry_id
-        && !in_engagement(conn, "log_entries", engagement_id, s)? {
-            return Err(AppError::validation("sourceEntryId", "log entry is not part of this engagement"));
-        }
+    if let Some(s) = &source_entry_id {
+        check_in_engagement(conn, "log_entries", engagement_id, s)?;
+    }
     Ok(Clean { host_id, kind: i.kind.clone(), target, notes, source_entry_id })
 }
 
@@ -315,8 +313,8 @@ mod tests {
         assert_eq!(field(update(c, &first.id, CleanupInput { kind: "zzz".into(), ..inp("x") }).unwrap_err()), "kind");
         let other = eng(c, "B");
         assert_eq!(
-            field(update(c, &first.id, CleanupInput { source_entry_id: Some(log_entry(c, &other)), ..inp("x") }).unwrap_err()),
-            "sourceEntryId"
+            update(c, &first.id, CleanupInput { source_entry_id: Some(log_entry(c, &other)), ..inp("x") }).unwrap_err(),
+            AppError::NotFound
         );
     }
 
@@ -375,9 +373,9 @@ mod tests {
         let b = eng(c, "B");
         let hb = host(c, &b, "10.0.0.9");
         let err = create(c, &a, CleanupInput { host_id: Some(hb.clone()), ..inp("x") }).unwrap_err();
-        assert_eq!(field(err), "hostId");
+        assert_eq!(err, AppError::NotFound);
         let it = create(c, &a, inp("x")).unwrap();
-        assert_eq!(field(update(c, &it.id, CleanupInput { host_id: Some(hb), ..inp("x") }).unwrap_err()), "hostId");
+        assert_eq!(update(c, &it.id, CleanupInput { host_id: Some(hb), ..inp("x") }).unwrap_err(), AppError::NotFound);
         assert_eq!(create(c, "nope", inp("x")).unwrap_err(), AppError::NotFound);
     }
 

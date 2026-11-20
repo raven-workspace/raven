@@ -1,7 +1,7 @@
 //! Host facts the user or a parser records: who the user is on the host (`host_identity`) and
 //! the privilege-escalation vectors worth trying (`privesc_vectors`).
 
-use crate::db::{blank_to_none, in_engagement, now_ms};
+use crate::db::{blank_to_none, check_in_engagement, now_ms};
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
@@ -81,10 +81,9 @@ pub fn identity_set(conn: &Connection, input: HostIdentity) -> AppResult<HostIde
     }
     let engagement_id = host_engagement(conn, &input.host_id)?;
     let entry_id = blank_to_none(input.entry_id.as_deref());
-    if let Some(e) = &entry_id
-        && !in_engagement(conn, "log_entries", &engagement_id, e)? {
-            return Err(AppError::validation("entryId", "entry must belong to this engagement"));
-        }
+    if let Some(e) = &entry_id {
+        check_in_engagement(conn, "log_entries", &engagement_id, e)?;
+    }
     let privileges = serde_json::to_string(&clean_list(&input.privileges))?;
     let groups = serde_json::to_string(&clean_list(&input.groups))?;
     conn.execute(
@@ -312,7 +311,7 @@ mod tests {
         assert_eq!(identity_set(c, ident("nope", "u", &[])), Err(AppError::NotFound));
         let mut bad = ident(&h, "u", &[]);
         bad.entry_id = Some("missing".into());
-        assert!(matches!(identity_set(c, bad), Err(AppError::Validation { field, .. }) if field == "entryId"));
+        assert_eq!(identity_set(c, bad), Err(AppError::NotFound));
     }
 
     #[test]
