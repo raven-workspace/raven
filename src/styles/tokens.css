@@ -29,6 +29,10 @@
   --space-xl: 1.5rem;
   --space-2xl: 2rem;
 
+  /* Motion for small state changes (hover, press): Tailwind's standard ease at 100ms. Larger motion is in global.css. */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 100ms;
+
   color-scheme: dark;
 }
 

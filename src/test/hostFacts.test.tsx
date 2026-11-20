@@ -526,7 +526,7 @@ describe("who am I and privesc vectors", () => {
     const del = await (await group("Privesc vectors")).findByRole("button", { name: "Delete SeImpersonatePrivilege abuse" });
     expect(del).toHaveAccessibleName("Delete SeImpersonatePrivilege abuse");
     // Destructive tone: muted at rest, amber only on hover or focus.
-    expect(del).toHaveClass("text-muted");
+    expect(del).toHaveClass("icon-button--destructive");
     await user.click(del);
     expect(m.vectorDelete).not.toHaveBeenCalled();
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete vector" }));

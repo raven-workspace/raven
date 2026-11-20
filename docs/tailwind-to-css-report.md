@@ -39,8 +39,8 @@
 - `Input`'s `width` prop no longer defaults to `w-full`: `.input` is full width and a `width` class rides on top.
   `Select` no longer sniffs `className` for `w-*`.
 - Cascade: a `features` layer between `components` and `utilities`, declared first in global.css.
-- Dead caller classes removed (they lost to the primitive in Tailwind's order and would now win): `h-7` on 8 Inputs,
-  Selects and FilePicker/TokenInput uses (FindBar ×2, FormatToolbar ×2, CodeBlockView, PortChip, FileChip, FillBar,
+- Dead caller classes removed (they lost to the primitive in Tailwind's order and would now win): `h-7` at 12 call sites of Input,
+  Select and FilePicker/TokenInput (FindBar ×2, FormatToolbar ×2, CodeBlockView, PortChip, FileChip, FillBar,
   LogSection, HostChips, VectorsFacts, ServicesFacts), `w-64` on TransferGenerator's file picker (lost to `w-full`), and
   `resize-none` on the notes Textarea (lost to `resize-y`). These controls render 32px high and the notes field stays
   resizable, exactly as before; if 28px was the intent, that is a separate, visible change.
@@ -52,5 +52,29 @@
 - [x] Audit gate: 660/660; the state runs' 2s navigation cap is fixed separately
 - [ ] Hover, disabled and invalid states are not in the pixel screens; they follow Tailwind's emitted CSS rule for rule
 
+## Unit 3: controls
+
+### Changes
+- `Button` → `.button`, `.button--{primary|ghost|danger|quiet-danger}`, `.button--{sm|md}` (Button.scss); hover and
+  focus rules keep `:enabled`, as Tailwind's `enabled:` variants did.
+- `IconButton` → `.icon-button`, `.icon-button--destructive`, `.icon-button__shortcut` (IconButton.scss).
+- `Chip`, `ChipSet` → `.chip`, `.chip--accent|warn|mono`, `.chip-set`, `.chip-set--wide` (Chip.scss).
+- `Toolbar`, `Row`, `ActionCell` → `.toolbar`, `.toolbar--loose`, `.row`, `.row--top`, `.action-cell` (layout.scss).
+- New shared SCSS: `mono` mixin (family + ligatures off, as the global `.font-mono` rule did), `transition-colors`
+  mixin; tokens `--ease-standard`, `--duration-fast`.
+- Audit: tiny-text accepts `.chip` as a 12px label role.
+- Callers checked with a dead-class script (Tailwind's emitted order, shorthand-aware): none dead in this unit.
+
+### Differences and risks
+- **Existing bug kept as is:** `IconButton`'s `active` look never rendered: `bg-surface-hi` lost to the base
+  `bg-transparent` and `text-fg` to `text-fg-2`/`text-muted` in Tailwind's order. The migration keeps it invisible
+  (`aria-pressed` only). Making active visible is a deliberate design change for later.
+
+### Verification
+- [x] Unit tests (8 assertions moved from utility names to the BEM classes)
+- [x] Type check and lint
+- [x] Pixel diff: 297/297 identical
+- [x] Audit gate: 660/660
+
 ### Follow-up
-- Unit 3: Button, IconButton, Chip, ChipSet, Toolbar, Row, ActionCell.
+- Unit 4: the rest of src/ui (Panel, Dialog, Collapse, Disclosure, TitleBar, Tooltip, CommandBlock, HintLine, …).

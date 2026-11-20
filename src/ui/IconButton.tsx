@@ -2,6 +2,7 @@ import type { Icon } from "@phosphor-icons/react";
 import type { ButtonHTMLAttributes } from "react";
 import { cx } from "../lib/cx";
 import { Tooltip } from "./Tooltip";
+import "./IconButton.scss";
 
 export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
   icon: Icon;
@@ -26,7 +27,7 @@ export function IconButton({
       content={
         <>
           <span>{label}</span>
-          {shortcut && <span className="ml-2 font-mono text-muted">{shortcut}</span>}
+          {shortcut && <span className="icon-button__shortcut">{shortcut}</span>}
         </>
       }
     >
@@ -34,13 +35,7 @@ export function IconButton({
         type={type}
         aria-label={label}
         aria-pressed={active}
-        className={cx(
-          "inline-grid size-7 shrink-0 place-items-center rounded-sm border-0 bg-transparent select-none cursor-default",
-          "transition-colors duration-100 hover:bg-surface-hi disabled:text-faint disabled:cursor-not-allowed",
-          tone === "destructive" ? "text-muted hover:text-warn focus-visible:text-warn" : "text-fg-2 hover:text-fg",
-          active && "bg-surface-hi text-fg",
-          className,
-        )}
+        className={cx("icon-button", tone === "destructive" && "icon-button--destructive", className)}
         {...rest}
       >
         <Glyph size={16} weight="regular" aria-hidden />

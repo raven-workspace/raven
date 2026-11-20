@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
+import "./Chip.scss";
 
 /** The one wrapping flex: a set of chips (or legend units) that may flow onto several lines. */
 export function ChipSet({
@@ -16,7 +17,7 @@ export function ChipSet({
   children: ReactNode;
 } & Omit<React.HTMLAttributes<HTMLElement>, "className" | "children">) {
   return (
-    <Tag className={cx("flex flex-wrap", gap === 6 ? "gap-x-6 gap-y-2" : "gap-2", className)} {...rest}>
+    <Tag className={cx("chip-set", gap === 6 && "chip-set--wide", className)} {...rest}>
       {children}
     </Tag>
   );

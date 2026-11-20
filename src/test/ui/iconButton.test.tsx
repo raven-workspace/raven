@@ -24,8 +24,7 @@ describe("IconButton", () => {
   it("destructive tone is muted at rest", () => {
     renderBtn(<IconButton icon={Trash} label="Delete" tone="destructive" />);
     const b = screen.getByRole("button", { name: "Delete" });
-    expect(b).toHaveClass("text-muted");
-    expect(b).not.toHaveClass("text-warn");
+    expect(b).toHaveClass("icon-button", "icon-button--destructive");
   });
 });
 
@@ -34,6 +33,6 @@ describe("Row", () => {
     const { container } = render(<Row tracks="auto minmax(0,1fr) 96px">x</Row>);
     const el = container.firstElementChild as HTMLElement;
     expect(el.style.gridTemplateColumns).toBe("auto minmax(0,1fr) 96px");
-    expect(el.className).toMatch(/\bgrid\b/);
+    expect(el).toHaveClass("row");
   });
 });

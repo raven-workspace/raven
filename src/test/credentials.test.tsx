@@ -229,8 +229,8 @@ describe("credentials section", () => {
   it("delete is muted at rest", async () => {
     mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
     const del = await within(await findDock()).findByRole("button", { name: "Delete CORP\\jsmith" });
-    expect(del.className).toMatch(/text-muted/);
-    expect(del.className).not.toMatch(/(^|\s)text-warn/);
+    // Muted at rest, amber only on hover or keyboard focus (IconButton.scss).
+    expect(del).toHaveClass("icon-button--destructive");
   });
 
   it("a 60-character credential name truncates and the actions stay visible", async () => {

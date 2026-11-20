@@ -282,7 +282,7 @@ describe("log row chip", () => {
     renderRow(<LogEntryRow entry={e} hosts={hosts} onPick={() => {}} />);
     const caret = screen.getByRole("button", { name: "Show t" });
     expect(caret).not.toHaveAttribute("title");
-    expect(caret).toHaveClass("size-7");
+    expect(caret).toHaveClass("icon-button");
     expect(caret.querySelector("svg")).toHaveAttribute("width", "16");
     caret.focus();
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Show the entry");

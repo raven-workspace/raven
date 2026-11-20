@@ -108,8 +108,9 @@ describe("metasploit lock", () => {
     await user.click(await screen.findByRole("button", { name: /Metasploit SRV11/ }));
     const release = await screen.findByRole("button", { name: "Release lock" });
     // Neutral at rest (the locked host's name is the screen's amber); amber only on hover, focus and in the confirm.
-    expect(release).not.toHaveClass("text-warn");
-    expect(release).toHaveClass("enabled:hover:text-warn");
+    // Neutral at rest, amber on hover and focus: the quiet-danger button, not the amber danger one.
+    expect(release).toHaveClass("button--quiet-danger");
+    expect(release).not.toHaveClass("button--danger");
     await user.click(release);
     expect(m.engagementSetMsfHost).not.toHaveBeenCalled();
     const confirm = await screen.findByRole("dialog", { name: /Release the Metasploit lock/ });

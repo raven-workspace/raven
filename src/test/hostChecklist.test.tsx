@@ -203,7 +203,7 @@ describe("host checklist tab", () => {
     mount();
     await openChecklist(user);
     const notes = await screen.findAllByText(/via tunnel on web07/);
-    expect(notes[0]).toHaveClass("text-warn");
+    expect(notes[0]).toHaveClass("chip--warn");
     expect(notes[0]).toHaveTextContent("(down)");
   });
 
