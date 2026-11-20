@@ -1,7 +1,7 @@
 //! Pivot network: tunnels (how traffic reaches a subnet) and hops (who we moved from and to).
 
 use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
-use crate::engagements::valid_cidr;
+use crate::engagements::{valid_cidr, valid_ipv4};
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
@@ -87,7 +87,7 @@ fn clean_tunnel(conn: &Connection, engagement_id: &str, i: TunnelInput) -> AppRe
         return Err(AppError::validation("subnets", format!("invalid IPv4 CIDR: {bad}")));
     }
     let callback_ip = i.callback_ip.trim().to_string();
-    if !callback_ip.is_empty() && (callback_ip.contains('/') || !valid_cidr(&callback_ip)) {
+    if !callback_ip.is_empty() && !valid_ipv4(&callback_ip) {
         return Err(AppError::validation("callbackIp", "must be a single IPv4 address"));
     }
     check_scope(conn, engagement_id, Some(&i.via_host_id))?;

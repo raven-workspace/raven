@@ -73,6 +73,11 @@ pub(crate) fn valid_cidr(s: &str) -> bool {
         && parts.iter().all(|o| !o.is_empty() && o.len() <= 3 && !(o.len() > 1 && o.starts_with('0')) && o.bytes().all(|b| b.is_ascii_digit()) && o.parse::<u16>().is_ok_and(|n| n <= 255))
 }
 
+/// A single IPv4 address with no prefix.
+pub(crate) fn valid_ipv4(s: &str) -> bool {
+    !s.contains('/') && valid_cidr(s)
+}
+
 /// Validated, normalised input ready to store.
 fn normalise(mut i: EngagementInput) -> AppResult<EngagementInput> {
     i.name = i.name.trim().to_string();

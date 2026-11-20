@@ -96,9 +96,7 @@ pub fn put(conn: &Connection, engagement_id: &str, items: &[ChecklistItemInput])
             && !matches!(a.as_str(), "na" | "in_progress") {
                 return Err(AppError::validation("autoFrom", "autoFrom must be na or in_progress"));
             }
-        let owned: bool = it.owner_id == engagement_id
-            || in_engagement(&tx, "hosts", engagement_id, &it.owner_id)?;
-        if !owned {
+        if !owned(&tx, engagement_id, &it.owner_id)? {
             return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
         }
         let evidence = serde_json::to_string(&it.evidence)?;
@@ -127,6 +125,26 @@ pub struct GoalRef {
     pub goal_id: String,
 }
 
+/// Whether the owner is the engagement itself or one of its hosts.
+fn owned(conn: &Connection, engagement_id: &str, owner_id: &str) -> AppResult<bool> {
+    Ok(owner_id == engagement_id || in_engagement(conn, "hosts", engagement_id, owner_id)?)
+}
+
+/// The checks `apply_cover` and `apply_facts` share: at most `MAX_ITEMS * 4` refs (else a `field` error), the
+/// engagement exists (else `NotFound`), and every ref names a goal of an owner in the engagement.
+fn check_goal_refs(conn: &Connection, engagement_id: &str, field: &str, set: &[GoalRef], revert: &[GoalRef]) -> AppResult<()> {
+    if set.len() + revert.len() > MAX_ITEMS * 4 {
+        return Err(AppError::validation(field, "too many items"));
+    }
+    check_scope(conn, engagement_id, None)?;
+    for g in set.iter().chain(revert) {
+        if !owned(conn, engagement_id, &g.owner_id)? || g.goal_id.trim().is_empty() {
+            return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
+        }
+    }
+    Ok(())
+}
+
 /// The domain admin cover, as conditional writes so a status set by hand is never overwritten (F-R1). `cover` goals
 /// become `na` with `auto` set, only where there is no row or the row is an untouched `todo` (not auto, not set by
 /// hand); notes and evidence stay. `revert` goals go back to `todo`, only where the row is cover-marked (`na`, auto,
@@ -137,19 +155,9 @@ pub fn apply_cover(
     cover: &[GoalRef],
     revert: &[GoalRef],
 ) -> AppResult<Vec<ChecklistItem>> {
-    if cover.len() + revert.len() > MAX_ITEMS * 4 {
-        return Err(AppError::validation("cover", "too many items"));
-    }
-    check_scope(conn, engagement_id, None)?;
+    check_goal_refs(conn, engagement_id, "cover", cover, revert)?;
     let tx = conn.unchecked_transaction()?;
     let now = now_ms();
-    for g in cover.iter().chain(revert.iter()) {
-        let owned: bool = g.owner_id == engagement_id
-            || in_engagement(&tx, "hosts", engagement_id, &g.owner_id)?;
-        if !owned || g.goal_id.trim().is_empty() {
-            return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
-        }
-    }
     for g in revert {
         tx.execute(
             "UPDATE checklist_items SET status='todo', auto=0, auto_from=NULL, completed_at=NULL, updated_at=?3 \
@@ -181,19 +189,9 @@ pub fn apply_facts(
     done: &[GoalRef],
     revert: &[GoalRef],
 ) -> AppResult<Vec<ChecklistItem>> {
-    if done.len() + revert.len() > MAX_ITEMS * 4 {
-        return Err(AppError::validation("facts", "too many items"));
-    }
-    check_scope(conn, engagement_id, None)?;
+    check_goal_refs(conn, engagement_id, "facts", done, revert)?;
     let tx = conn.unchecked_transaction()?;
     let now = now_ms();
-    for g in done.iter().chain(revert.iter()) {
-        let owned: bool = g.owner_id == engagement_id
-            || in_engagement(&tx, "hosts", engagement_id, &g.owner_id)?;
-        if !owned || g.goal_id.trim().is_empty() {
-            return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
-        }
-    }
     for g in revert {
         tx.execute(
             "UPDATE checklist_items SET status='todo', auto=0, auto_from=NULL, completed_at=NULL, updated_at=?3 \

@@ -2,6 +2,7 @@
 
 use crate::backup::{read_retention, RETENTION_KEY};
 use crate::error::{AppError, AppResult};
+use crate::reports::MAX_REPORT_FIELD_LEN;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
@@ -34,7 +35,6 @@ const REPORT_INTRODUCTION_KEY: &str = "report_introduction";
 const REPORT_GUIDES_HIDDEN_KEY: &str = "report_guides_hidden";
 const MAX_GUIDE_ID_LEN: usize = 64;
 const MAX_GUIDES_HIDDEN: usize = 200;
-const MAX_REPORT_FIELD_LEN: usize = 2000;
 const MAX_REPORT_METHODOLOGY_LEN: usize = 20000;
 const RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=200;
 
@@ -201,7 +201,7 @@ fn clean_machines(list: Vec<String>) -> AppResult<Vec<String>> {
 /// Blank, or a single IPv4 address (no prefix).
 fn clean_ip(s: &str) -> AppResult<String> {
     let s = s.trim();
-    if s.is_empty() || (!s.contains('/') && crate::engagements::valid_cidr(s)) {
+    if s.is_empty() || crate::engagements::valid_ipv4(s) {
         Ok(s.to_string())
     } else {
         Err(AppError::validation("attackerIp", "must be blank or a single IPv4 address"))

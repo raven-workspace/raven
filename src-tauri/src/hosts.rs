@@ -1,7 +1,7 @@
 //! Host repository. A host belongs to one engagement; deleting the engagement deletes its hosts.
 
 use crate::db::{blank_to_none, check_scope, now_ms};
-use crate::engagements::valid_cidr;
+use crate::engagements::valid_ipv4;
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
@@ -77,7 +77,7 @@ fn present_or_null<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Opti
 /// A single IPv4 address (no prefix, or `/32`), returned without the `/32`.
 pub(crate) fn single_ip(s: &str) -> Option<String> {
     let bare = s.strip_suffix("/32").unwrap_or(s);
-    (!bare.contains('/') && valid_cidr(bare)).then(|| bare.to_string())
+    valid_ipv4(bare).then(|| bare.to_string())
 }
 
 struct Clean {
@@ -195,9 +195,13 @@ pub fn update(conn: &Connection, id: &str, input: HostInput) -> AppResult<Host> 
     get(conn, id)
 }
 
+/// The six PEN-200 stages, in board order.
+const BOARD_COLUMNS: [&str; 6] =
+    ["information-gathering", "vulnerability-detection", "initial-foothold", "privilege-escalation", "post-exploitation", "reporting"];
+
 /// Moves a host to a board column by hand; this pins it there (`board_manual`).
 pub fn move_to(conn: &Connection, id: &str, column: &str) -> AppResult<Host> {
-    if !matches!(column, "information-gathering" | "vulnerability-detection" | "initial-foothold" | "privilege-escalation" | "post-exploitation" | "reporting") {
+    if !BOARD_COLUMNS.contains(&column) {
         return Err(AppError::validation("column", "column must be one of the six PEN-200 stages"));
     }
     let n = conn.execute(
@@ -223,7 +227,7 @@ pub fn mark_access_reviewed(conn: &Connection, id: &str) -> AppResult<Host> {
 /// Applies the board column the checklist derived. Only when `derived` differs from the last
 /// derived value does the host move (and unpin), so a hand placement holds until the next stage completes.
 pub fn sync_board(conn: &Connection, id: &str, derived: &str) -> AppResult<Host> {
-    if !matches!(derived, "information-gathering" | "vulnerability-detection" | "initial-foothold" | "privilege-escalation" | "post-exploitation" | "reporting") {
+    if !BOARD_COLUMNS.contains(&derived) {
         return Err(AppError::validation("derived", "column must be one of the six PEN-200 stages"));
     }
     let current = get(conn, id)?;

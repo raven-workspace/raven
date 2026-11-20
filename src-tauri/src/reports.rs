@@ -152,7 +152,7 @@ pub fn get_or_create(conn: &Connection, engagement_id: &str, defaults: &ReportDe
 }
 
 /// Name, email, OSID and title: at most 2000 characters each, like the report defaults in Settings.
-const MAX_REPORT_FIELD_LEN: usize = 2000;
+pub(crate) const MAX_REPORT_FIELD_LEN: usize = 2000;
 
 pub fn update(conn: &Connection, id: &str, patch: ReportPatch) -> AppResult<Report> {
     for (field, value) in [("candidateName", &patch.candidate_name), ("email", &patch.email), ("osid", &patch.osid), ("title", &patch.title)] {

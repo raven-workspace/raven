@@ -512,7 +512,7 @@ impl Ctx<'_> {
             return Err(AppError::validation("name", format!("host {}: name must be 1-80 characters", h.id)));
         }
         if let Some(ip) = &h.ip
-            && crate::hosts::single_ip(ip).as_deref() != Some(ip.as_str())
+            && !crate::engagements::valid_ipv4(ip)
         {
             return Err(AppError::validation("ip", format!("host {}: {ip} is not a single IPv4 address", h.id)));
         }
@@ -716,7 +716,7 @@ impl Ctx<'_> {
             return Err(AppError::validation("subnets", format!("tunnel {}: invalid IPv4 CIDR: {bad}", t.id)));
         }
         let cb = t.callback_ip.trim();
-        if !cb.is_empty() && (cb.contains('/') || !crate::engagements::valid_cidr(cb)) {
+        if !cb.is_empty() && !crate::engagements::valid_ipv4(cb) {
             return Err(AppError::validation("callbackIp", format!("tunnel {}: callback must be a single IPv4 address", t.id)));
         }
         if self.exists("tunnels", &t.id)? {
