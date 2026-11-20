@@ -16,6 +16,7 @@ import {
 } from "./format";
 import { engagementKey, engagementsKey } from "./queries";
 import { hostsKey } from "../hosts/queries";
+import { RavenError } from "../../types/errors";
 
 const KINDS: { value: EngagementKind; label: string }[] = [
   { value: "exam-sim", label: "Exam sim" },
@@ -205,7 +206,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
       onClose();
     },
     onError: (err) => {
-      const field = (err as { field?: string }).field;
+      const field = RavenError.from(err).field;
       const msg = sentence(err.message);
       setErrors(field ? { [field === "scope" ? "scopeCidrs" : field]: msg } : { form: msg });
     },

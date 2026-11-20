@@ -8,6 +8,7 @@ import { Button, Chip, Dialog, EmptyState, Field, Input, Panel, SETTINGS_COLUMN,
 import { FieldManualSection } from "./FieldManualSection";
 import { ImportSection } from "./ImportSection";
 import { settingsKey, useSettings } from "./queries";
+import { RavenError } from "../../types/errors";
 
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -244,7 +245,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
       void qc.invalidateQueries({ queryKey: ["backups"] }); // retention may prune
     },
     onError: (e) => {
-      const field = (e as { field?: string }).field;
+      const field = RavenError.from(e).field;
       if (field) setFieldError({ field, msg: e.message });
       else setError(e.message);
     },

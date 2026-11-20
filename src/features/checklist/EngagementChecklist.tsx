@@ -36,6 +36,7 @@ import { useEngagementServices } from "../services/queries";
 import { loadTickContext, tickFromLog } from "./ticks";
 import { useSettings } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
+import { RavenError } from "../../types/errors";
 
 /** Sub-heading above the first row of each group. */
 const GroupHeading = ({ children }: { children: ReactNode }) => (
@@ -136,7 +137,7 @@ export function EngagementChecklist() {
       void qc.invalidateQueries({ queryKey: hostsKey(id) });
       void qc.invalidateQueries({ queryKey: ["progress"] });
     } catch (e) {
-      setTick({ ticking: false, error: e instanceof Error ? e.message : String(e) });
+      setTick({ ticking: false, error: RavenError.from(e).message });
     }
   };
 

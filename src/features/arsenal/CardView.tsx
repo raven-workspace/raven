@@ -17,6 +17,7 @@ import { shortHostName } from "../../lib/hostName";
 import { WikiText } from "./WikiText";
 import { FillBar } from "./FillBar";
 import { autoFill, tokensOf } from "./fillTokens";
+import { RavenError } from "../../types/errors";
 
 const COPY_BUTTON = 'button[aria-label^="Copy command"]';
 const CRED_CHIP = '[aria-label^="Fill with credential"]';
@@ -311,7 +312,7 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
     setObsidianError(undefined);
     api.openObsidian(card.file).catch((e: unknown) => {
       reportError(e);
-      setObsidianError(e instanceof Error ? e.message : String(e));
+      setObsidianError(RavenError.from(e).message);
     });
   };
   return (

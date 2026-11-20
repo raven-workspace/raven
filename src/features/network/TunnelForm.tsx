@@ -5,6 +5,7 @@ import type { Tunnel, TunnelInput, TunnelKind, TunnelStatus } from "../../types/
 import { Button, Dialog, Field, Input, Select, Toggle, fieldLabelClass } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useTunnelMutations } from "./queries";
+import { RavenError } from "../../types/errors";
 
 const KINDS: { value: TunnelKind; label: string }[] = [
   { value: "ligolo", label: "Ligolo" },
@@ -54,7 +55,7 @@ export function TunnelForm({ engagementId, hosts, tunnel, initial, onClose }: {
     const opts = {
       onSuccess: onClose,
       onError: (err: Error) => {
-        const field = (err as { field?: string }).field;
+        const field = RavenError.from(err).field;
         setErrors(field === "subnets" || field === "callbackIp" || field === "viaHostId" ? { [field]: err.message } : { form: err.message });
       },
     };

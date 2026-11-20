@@ -17,6 +17,7 @@ import { useHopMutations, useTunnels } from "../network/queries";
 import { useEngagementServices } from "../services/queries";
 import { useSettings } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
+import { RavenError } from "../../types/errors";
 
 const KALI = "kali";
 const EXAM_EMPTY = "Nothing allowed in an exam sim; do it by hand";
@@ -34,7 +35,7 @@ function ArrivedFrom({ host, hosts, onSave }: { host: Host; hosts: Host[]; onSav
       await onSave(from === KALI ? null : from, via.trim());
       setVia("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(RavenError.from(e).message);
     } finally {
       setSaving(false);
     }

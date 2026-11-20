@@ -5,6 +5,7 @@ import { Button, ChipSet, Dialog, Field, Input, Select, Toggle } from "../../ui"
 import { useHostMutations } from "./queries";
 import { useEngagement } from "../engagements/queries";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
+import { RavenError } from "../../types/errors";
 
 /** What a host delete takes with it (FK cascades) and what stays. */
 const HOST_DELETE_DETAIL =
@@ -81,7 +82,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
     const opts = {
       onSuccess: onClose,
       onError: (err: Error) => {
-        const field = (err as { field?: string }).field;
+        const field = RavenError.from(err).field;
         setErrors(field === "name" || field === "ip" ? { [field]: err.message } : { form: err.message });
       },
     };

@@ -80,6 +80,7 @@ import {
 import { flushReports, forgetReportSave, isReportSaveQueued, queueReportSave, settleReportSave, trackReportWrite, useReportSaveStore } from "./saveQueue";
 import { useSettings } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
+import { RavenError } from "../../types/errors";
 
 const HINTS: Hint[] = [
   { keys: "← →", label: "move along the tabs (J K from anywhere)", priority: 1 },
@@ -349,7 +350,7 @@ function ReportBody({
         reportError(e);
         // Sections created before the failure are stored: reload the list so the outline shows them.
         void qc.invalidateQueries({ queryKey: reportSectionsKey(report.id) });
-        setEnsureFailed(e instanceof Error ? e.message : String(e));
+        setEnsureFailed(RavenError.from(e).message);
       })
       .finally(() => {
         ensuring.current = false;
@@ -592,7 +593,7 @@ function ReportBody({
       reportSchema().nodeFromJSON(doc).check();
       return { id: s.id, original, doc, error: null };
     } catch (e) {
-      return { id: s.id, original, doc, error: e instanceof Error ? e.message : String(e) };
+      return { id: s.id, original, doc, error: RavenError.from(e).message };
     }
   }, [openSection, cachedSection, plainOf, targetOf]);
   const flattenFailed = openFlatten?.error ?? null;
@@ -627,7 +628,7 @@ function ReportBody({
     try {
       editor.schema.nodeFromJSON(plain).check();
     } catch (e) {
-      setSwapFailed(e instanceof Error ? e.message : String(e));
+      setSwapFailed(RavenError.from(e).message);
       return;
     }
     setSwapFailed(null);
@@ -672,7 +673,7 @@ function ReportBody({
     const fail = (e: unknown) => {
       building.current.delete(s.id);
       reportError(e);
-      setDraftFailed(e instanceof Error ? e.message : String(e));
+      setDraftFailed(RavenError.from(e).message);
     };
     // Rebuild anyway: once a write of it already on its way has settled (so it can't land after the rebuild), the
     // unsaved change is dropped from the queue (it is never tried again) and lives on in the archived old page below
@@ -823,7 +824,7 @@ function ReportBody({
       })
       .catch((e: unknown) => {
         reportError(e);
-        setDeleteError(e instanceof Error ? e.message : String(e));
+        setDeleteError(RavenError.from(e).message);
       })
       .finally(() => setDeleteBusy(false));
   };

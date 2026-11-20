@@ -6,6 +6,7 @@ import { api } from "../../lib/api";
 import type { ImportRecordType, ImportSummary } from "../../types/import";
 import { cx } from "../../lib/cx";
 import { Button, Chip, Panel, Toggle, labelClass } from "../../ui";
+import { RavenError } from "../../types/errors";
 
 const TYPE_LABELS: Record<ImportRecordType, string> = {
   engagements: "Engagements",
@@ -197,7 +198,7 @@ export function ImportSection() {
       else setReadError(res.error);
     } catch (e) {
       if (token !== readToken.current) return;
-      setReadError(`Could not read ${file.name}: ${e instanceof Error ? e.message : String(e)}`);
+      setReadError(`Could not read ${file.name}: ${RavenError.from(e).message}`);
     }
   }
 

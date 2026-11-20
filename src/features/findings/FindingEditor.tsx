@@ -286,7 +286,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
       onError: (e: Error) => {
         // Shown here, so the store's after-close record is not needed.
         if (draftKey) useFindingDraftStore.getState().takeSaveError(draftKey);
-        const field = (e as { field?: string }).field;
+        const field = RavenError.from(e).field;
         if (field === "title") setTitleError(e.message);
         else setFormError(e.message);
       },

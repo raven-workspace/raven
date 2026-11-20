@@ -35,6 +35,7 @@ import type { Service } from "../../types/service";
 import { byOwnerOf } from "../checklist/state";
 import { loadTickContext, outputTicksOf } from "../checklist/ticks";
 import { applyIntake } from "../credentials/applyIntake";
+import { RavenError } from "../../types/errors";
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 /** An impacket target (`corp.lan/jay:pw@10.10.1.5`): the host the dump came from, whatever the shell. */
@@ -157,7 +158,7 @@ export class ExtractionError extends Error {
   readonly reason: unknown;
   readonly applied: Applied;
   constructor(reason: unknown, applied: Applied) {
-    super(reason instanceof Error ? reason.message : String(reason));
+    super(RavenError.from(reason).message);
     this.name = "ExtractionError";
     this.reason = reason;
     this.applied = applied;

@@ -21,6 +21,7 @@ import { PartialSaveError, saveCapture } from "./saveCapture";
 import { reportError } from "../../lib/lockSignal";
 import { EMPTY_DRAFT, useCaptureStore, type PanelDraft } from "./useCaptureStore";
 import { useSettings } from "../settings/queries";
+import { RavenError } from "../../types/errors";
 
 const NO_HOSTS: Host[] = [];
 const NO_MACHINES: string[] = [];
@@ -114,7 +115,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         useSaveSummaryStore.getState().show(e.entry.id, e.summary);
       } else {
         void qc.invalidateQueries({ queryKey: hostsKey(id) });
-        setError(e instanceof Error ? e.message : String(e));
+        setError(RavenError.from(e).message);
       }
     } finally {
       setSaving(false);

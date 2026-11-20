@@ -20,6 +20,7 @@ import { useNotesStore } from "../notes/useNotesStore";
 import { payloadBuildsKey } from "./queries";
 import { contextLabel, hasToggles, isRanked, OS_LABEL, showsFilter, usePayloadFit } from "./usePayloadFit";
 import { usePayloadsStore } from "./usePayloadsStore";
+import { RavenError } from "../../types/errors";
 
 /** In ⌥1–⌥6 order. */
 export const GENERATORS: { id: GeneratorId; label: string }[] = [
@@ -184,7 +185,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       await recordBuild(qc, { engagementId, hostId: host.id, payloadId: d.id, lhost, lport });
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
     }
   };
 
@@ -208,7 +209,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       if (r !== "copied") return "guarded";
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
       return "guarded";
     }
     await record(b.def);
@@ -227,7 +228,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       if (r !== "copied") return "guarded";
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
       return "guarded";
     }
     if (mayRecord) await record(b.def);
@@ -264,7 +265,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       return "copied";
     } catch (e) {
       reportError(e);
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(RavenError.from(e).message);
       return "guarded";
     }
   };

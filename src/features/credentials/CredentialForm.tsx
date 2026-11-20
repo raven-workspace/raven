@@ -13,6 +13,7 @@ import { Button, ChipSet, Dialog, Field, Input, Select, Textarea, Toggle, labelC
 import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./AccessGrants";
 import { useAccessGrantMutations, useCredentialMutations, useUsernameMutations, useUsernames } from "./queries";
 import { parseUsername } from "./UsernamesList";
+import { RavenError } from "../../types/errors";
 
 type Mode = "credential" | "secret" | "username";
 const MODES: { id: Mode; label: string }[] = [
@@ -124,8 +125,8 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
       onSaved?.(created);
       onClose();
     } catch (err) {
-      const field = (err as { field?: string }).field;
-      const message = err instanceof Error ? err.message : String(err);
+      const field = RavenError.from(err).field;
+      const message = RavenError.from(err).message;
       setErrors(field === "username" || field === "secret" || field === "via" ? { [field]: message } : { form: message });
     } finally {
       setBusy(false);
