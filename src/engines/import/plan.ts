@@ -459,7 +459,8 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
           continue;
         }
         const title = hasText(s.title) ? oneLine(s.title) : "Screenshot";
-        const fileName = screenshotFileName({ ip: host?.ip ?? null, hostName: host?.name ?? null, column: host?.boardColumn ?? null, caption: title, mime });
+        const taken = new Set(plan.logEntries.flatMap((e) => (e.content.kind === "screenshot" ? [e.content.fileName] : [])));
+        const fileName = screenshotFileName({ ip: host?.ip ?? null, hostName: host?.name ?? null, column: host?.boardColumn ?? null, caption: title, mime, taken });
         pushLog({
           ...base(`${m.id}:shot:${s.id}`, title, hostFor(m), toMs(s.createdAt, now)),
           kind: "screenshot",

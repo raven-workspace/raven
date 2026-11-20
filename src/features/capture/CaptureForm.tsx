@@ -10,6 +10,7 @@ import { KeyIcon, XIcon } from "@phosphor-icons/react";
 import { Button, Chip, Field, IconButton, Input, Kbd, Select, Textarea, Toggle, Toolbar } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { invalidateAfterSave } from "../log/extractions";
+import { useLog } from "../log/queries";
 import { HostChips } from "./HostChips";
 import { clipboardImage, readImage, releaseImage } from "./imagePaste";
 import { KindChips } from "./KindChips";
@@ -36,6 +37,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     [listed, pd.created],
   );
   const presetHostId = useCaptureStore((s) => s.hostId);
+  const log = useLog(id).data;
   const notice = useCaptureStore((s) => s.notice);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,8 +53,9 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         machines,
         lastRanOn: engagement.lastRanOn,
         presetHostId,
+        log,
       }),
-    [pd, hosts, machines, engagement, presetHostId],
+    [pd, hosts, machines, engagement, presetHostId, log],
   );
   const kind = r.edits.kind;
   // Exam sims: warn (without blocking) when this entry uses Metasploit off the locked host.

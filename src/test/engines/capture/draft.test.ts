@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDraft, detectKind, httpParts, httpTitle, noteTitle, screenshotFileName, commandTitle, flagTitle } from '../../../engines/capture';
+import { buildDraft, detectKind, httpParts, httpTitle, noteTitle, proofShotFlag, screenshotFileName, commandTitle, flagTitle } from '../../../engines/capture';
 
 const srv11 = { id: 'h1', name: 'Srv11', ip: '10.10.61.143', column: 'information-gathering' as const };
 const base = {
@@ -92,6 +92,35 @@ describe('capture draft', () => {
     expect(screenshotFileName({ ...args, caption: 'web on :81' })).toBe('10.10.61.143_info_port81.png');
     expect(screenshotFileName({ ...args, caption: 'Login Page Admin Panel Extra', column: null })).toBe('10.10.61.143_info_login-page-admin.png');
     expect(screenshotFileName({ ...args, ip: null, hostName: null, caption: '', mime: 'image/jpeg', column: 'post-exploitation' })).toBe('engagement_post-ex_shot.jpg');
+  });
+
+  it('a proof shot is named for its flag, not the board column', () => {
+    const args = { ip: '172.31.148.151', hostName: 'ms01', column: 'privilege-escalation' as const, mime: 'image/png' };
+    expect(screenshotFileName({ ...args, caption: '', flag: 'local' })).toBe('172.31.148.151_local-txt.png');
+    expect(screenshotFileName({ ...args, caption: 'proof.txt as SYSTEM' })).toBe('172.31.148.151_proof-txt.png');
+    expect(screenshotFileName({ ...args, caption: 'Local.txt', flag: null })).toBe('172.31.148.151_local-txt.png');
+  });
+
+  it('no two screenshots share a name', () => {
+    const args = { ip: '172.31.148.151', hostName: 'ms01', column: 'privilege-escalation' as const, mime: 'image/png', caption: '' };
+    const taken = new Set(['172.31.148.151_privesc_shot.png', '172.31.148.151_privesc_shot_2.png', '172.31.148.151_local-txt.png']);
+    expect(screenshotFileName({ ...args, taken })).toBe('172.31.148.151_privesc_shot_3.png');
+    expect(screenshotFileName({ ...args, flag: 'local', taken })).toBe('172.31.148.151_local-txt_2.png');
+  });
+
+  it('proofShotFlag: the host\'s last non-screenshot entry is a recent flag', () => {
+    const min = 60_000;
+    const flag = (at: number, flagKind: 'local' | 'proof', hostIds = ['h']) => ({ kind: 'flag', hostIds, at, content: { kind: 'flag', flagKind } });
+    const cmd = (at: number) => ({ kind: 'command', hostIds: ['h'], at, content: { kind: 'command' } });
+    const shot = (at: number) => ({ kind: 'screenshot', hostIds: ['h'], at, content: { kind: 'screenshot' } });
+    const now = 100 * min;
+    expect(proofShotFlag([cmd(now - 10 * min), flag(now - 2 * min, 'local')], 'h', now)).toBe('local');
+    // A second shot of the same proof still counts.
+    expect(proofShotFlag([flag(now - 2 * min, 'proof'), shot(now - min)], 'h', now)).toBe('proof');
+    expect(proofShotFlag([flag(now - 6 * min, 'local')], 'h', now)).toBeNull();
+    expect(proofShotFlag([flag(now - 3 * min, 'local'), cmd(now - min)], 'h', now)).toBeNull();
+    expect(proofShotFlag([flag(now - min, 'local', ['other'])], 'h', now)).toBeNull();
+    expect(proofShotFlag([flag(now - min, 'local')], null, now)).toBeNull();
   });
 
   it('32-hex paste is a flag', () => {
