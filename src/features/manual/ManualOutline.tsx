@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefO
 import type { OutlineEntry } from "../../engines/manual";
 import { parseInline, type Inline } from "../../engines/manual/markdown";
 import { cx } from "../../lib/cx";
+import { prefersReducedMotion } from "../../ui/motion";
 
 /** Within this many px of the pane's top the first entry is current; within this many of its end, the last. */
 const EDGE = 48;
@@ -17,7 +18,7 @@ const SETTLE_MS = 150;
 
 /** How a jump scrolls: smooth, or at once ("auto", which WKWebView takes) when the owner asks for reduced motion. */
 export const jumpBehavior = (): ScrollBehavior =>
-  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  prefersReducedMotion() ? "auto" : "smooth";
 
 const entryEl = (pane: HTMLElement, id: string) => pane.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`);
 

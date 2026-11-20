@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import raw from "../../assets/raven-wordmark.svg?raw";
+import { prefersReducedMotion } from "../../ui/motion";
 
 /** The wordmark's own art: one source of truth for the letter shapes. */
 const VIEWBOX = /viewBox="([^"]+)"/.exec(raw)?.[1] ?? "0 0 1 1";
@@ -26,7 +27,7 @@ export function DecodingWordmark({ className }: { className?: string }) {
   const glyphs = useRef<(SVGTextElement | null)[]>([]);
 
   useLayoutEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (prefersReducedMotion()) return;
     const show = (i: number, letter: boolean) => {
       const p = paths.current[i];
       const g = glyphs.current[i];

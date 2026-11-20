@@ -12,6 +12,7 @@ import { HopForm } from "./HopForm";
 import { CONNECTOR_PX, HostNode, NODE_MAX_PX, NODE_PX, PathTree, type NodeContext } from "./PathTree";
 import { TunnelForm } from "./TunnelForm";
 import { useSettings } from "../settings/queries";
+import { prefersReducedMotion } from "../../ui/motion";
 
 /** How long an arrival's node keeps its accent outline. */
 const FOCUS_MS = 2000;
@@ -82,7 +83,7 @@ export function NetworkSection() {
   useEffect(() => {
     if (!focus || !loaded) return;
     const el = rootRef.current?.querySelector<HTMLElement>(`[data-host-node="${CSS.escape(focus.hostId)}"]`);
-    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const still = prefersReducedMotion();
     el?.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
     const t = setTimeout(() => setFocus(undefined), FOCUS_MS);
     return () => clearTimeout(t);

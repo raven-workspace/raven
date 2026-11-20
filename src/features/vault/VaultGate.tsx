@@ -31,6 +31,7 @@ import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { Palette } from "../palette/Palette";
 import { usePaletteStore } from "../palette/usePaletteStore";
 import { useSettings } from "../settings/queries";
+import { prefersReducedMotion } from "../../ui/motion";
 
 interface VaultContextValue {
   /** Locks the vault now (same path as ⌘L and the idle timer). */
@@ -52,9 +53,6 @@ const LOCK_RETRY_MS = 2000;
 /** The lock's reverse sweep takes about half a second; past this the frozen copy goes regardless. */
 const CLOSE_MAX_MS = 1500;
 
-function reducedMotion(): boolean {
-  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-}
 /** How long the unlock notice (e.g. "backup saved") stays before it clears itself. A failure stays until dismissed. */
 const NOTICE_MS = 8000;
 
@@ -212,7 +210,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
     // sweep to close over, auto-lock included (owner call: macOS locks with the display, so after wake the Mac's
     // own password comes first). Never while hidden (it would wait there) or mid-unlock-sweep.
     const body = bodyRef.current;
-    const animate = !sweeping && !document.hidden && !reducedMotion();
+    const animate = !sweeping && !document.hidden && !prefersReducedMotion();
     const copy = body && animate ? freezeCopy(body) : null;
     // Start saving notes first: markLocked clears them from the store.
     // Report writes too (the Report view's unmount flush would run after the backend locked).
