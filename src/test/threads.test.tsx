@@ -14,7 +14,7 @@ import { RavenError } from "../types/errors";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
-import type { Note } from "../types/notes";
+import type { Note, RuledOut } from "../types/notes";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
@@ -37,6 +37,7 @@ function setStored(hostId: string | null, body: string, priv = false) {
 const all = () => Object.values(stored);
 
 let qc: QueryClient;
+let ruled: RuledOut[] = [];
 function mount(path: string) {
   qc = makeQueryClient();
   return render(
@@ -73,10 +74,24 @@ beforeEach(() => {
     setStored(hostId, body, isPrivate);
     return stored[k(hostId)]!;
   });
-  m.ruledOutCreate.mockImplementation(async (input) => ({
-    id: "r1", engagementId: input.engagementId, hostId: input.hostId ?? null, text: input.text, reason: input.reason,
-    private: input.private ?? false, sourceKind: null, sourceId: null, createdAt: 1,
-  }));
+  ruled = [];
+  m.ruledOutList.mockImplementation(async () => [...ruled]);
+  m.ruledOutCreate.mockImplementation(async (input) => {
+    const r: RuledOut = {
+      id: `r${ruled.length + 1}`, engagementId: input.engagementId, hostId: input.hostId ?? null, text: input.text, reason: input.reason,
+      private: input.private ?? false, sourceKind: null, sourceId: null, createdAt: 1,
+    };
+    ruled.push(r);
+    return r;
+  });
+  m.ruledOutDelete.mockImplementation(async (id) => {
+    ruled = ruled.filter((r) => r.id !== id);
+    return null;
+  });
+});
+
+const ruledOut = (o: Partial<RuledOut>): RuledOut => ({
+  id: "rx", engagementId: "e1", hostId: "h1", text: "x", reason: "", private: false, sourceKind: null, sourceId: null, createdAt: 1, ...o,
 });
 
 async function openPanel(user: ReturnType<typeof userEvent.setup>, path: string) {
@@ -159,6 +174,43 @@ describe("open threads", () => {
     expect(m.noteSave).toHaveBeenCalledWith("e1", "h1", "keep\n✗ try the upload form", true);
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(within(p).getByLabelText("Notes")).toHaveValue("keep\n✗ try the upload form");
+  });
+
+  it("a thread closed as a dead end shows under Ruled out in the panel, private marked", async () => {
+    setStored("h1", "? try the upload form", true);
+    const user = userEvent.setup();
+    const { p } = await openPanel(user, "/e/e1/h/h1");
+    await user.click(await within(p).findByRole("button", { name: "Close thread: try the upload form" }));
+    const d = await screen.findByRole("dialog");
+    await user.click(within(d).getByRole("button", { name: "Dead end" }));
+    await user.type(within(d).getByLabelText("Reason"), "filter blocks php");
+    await user.click(within(d).getByRole("button", { name: "Close thread" }));
+    const list = await within(p).findByRole("region", { name: "Ruled out" });
+    expect(within(list).getByText("try the upload form")).toBeInTheDocument();
+    expect(within(list).getByText("filter blocks php")).toBeInTheDocument();
+    expect(within(list).getByText("Private")).toBeInTheDocument();
+  });
+
+  it("a hand-written ruled-out item can be deleted; a verdict's own item can't, and each scope lists its own", async () => {
+    ruled = [
+      ruledOut({ id: "r1", text: "upload form", reason: "filter blocks php" }),
+      ruledOut({ id: "r2", text: "8080/tcp http", reason: "default page", sourceKind: "service", sourceId: "s1" }),
+      ruledOut({ id: "r3", hostId: null, text: "AS-REP roasting", reason: "no users without preauth" }),
+    ];
+    const user = userEvent.setup();
+    const { p } = await openPanel(user, "/e/e1/h/h1");
+    const list = await within(p).findByRole("region", { name: "Ruled out" });
+    expect(within(list).queryByText("AS-REP roasting")).toBeNull();
+    expect(within(list).getByText("From a service's dead-end verdict")).toBeInTheDocument();
+    expect(within(list).queryByRole("button", { name: "Delete ruled-out item: 8080/tcp http" })).toBeNull();
+    await user.click(within(list).getByRole("button", { name: "Delete ruled-out item: upload form" }));
+    const d = await screen.findByRole("dialog", { name: 'Delete "upload form" from ruled out?' });
+    await user.click(within(d).getByRole("button", { name: "Delete" }));
+    await vi.waitFor(() => expect(within(p).queryByText("upload form")).toBeNull());
+    expect(m.ruledOutDelete).toHaveBeenCalledWith("r1");
+    // The engagement's note lists the engagement-level item.
+    await user.click(within(p).getByRole("button", { name: "Engagement" }));
+    expect(await within(p).findByText("AS-REP roasting")).toBeInTheDocument();
   });
 
   it("panned out rewrites the line and creates no ruled-out item", async () => {

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 
 /** Every note of an engagement (engagement note plus one per host), for thread counts. */
@@ -11,5 +11,21 @@ export function useNote(engagementId: string, hostId: string | null) {
   return useQuery({
     queryKey: ["note", engagementId, hostId],
     queryFn: () => api.notesGet(engagementId, hostId),
+  });
+}
+
+export const ruledOutKey = (engagementId: string) => ["ruledOut", engagementId] as const;
+
+/** The engagement's ruled-out items, oldest first. */
+export function useRuledOut(engagementId: string) {
+  return useQuery({ queryKey: ruledOutKey(engagementId), queryFn: () => api.ruledOutList(engagementId) });
+}
+
+/** Deletes a hand-written ruled-out item (a verdict's own item goes when the verdict is undone). */
+export function useRuledOutDelete(engagementId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.ruledOutDelete(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ruledOutKey(engagementId) }),
   });
 }

@@ -24,6 +24,7 @@ import { useLog } from "../log/queries";
 import { useNotes } from "../notes/queries";
 import { flushReports, forgetReportSave, patchCachedSection, pruneRemoved, queueReportSave, trackReportWrite } from "./saveQueue";
 import { useEngagement } from "../engagements/queries";
+import { useRuledOut } from "../notes/queries";
 
 export const reportKey = (eid: string) => ["report", eid] as const;
 export const reportSectionsKey = (reportId: string) => ["reportSections", reportId] as const;
@@ -60,7 +61,7 @@ export function useReportData(eid: string): { data: ReportData | undefined; isLo
   const checklist = useChecklist(eid).query;
   const findings = useFindings(eid);
   const attempts = useFailedAttempts(eid);
-  const ruledOut = useQuery({ queryKey: ["ruledOut", eid], queryFn: () => api.ruledOutList(eid) });
+  const ruledOut = useRuledOut(eid);
   const grants = useAccessGrants(eid);
   const usernames = useUsernames(eid);
   const hops = useHops(eid).query;

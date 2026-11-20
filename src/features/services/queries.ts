@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { useMemo } from "react";
 import { api } from "../../lib/api";
 import { resyncAndRefresh } from "../checklist/resync";
+import { ruledOutKey } from "../notes/queries";
 import { servicesByHostOf } from "../checklist/state";
 import type { ServiceVerdict } from "../../types/hostFacts";
 import type { ConfirmInput, Service, ServiceInput } from "../../types/service";
@@ -12,7 +13,7 @@ export const engagementServicesKey = (engagementId: string) => ["services", "eng
 
 /** Ruled-out items and the notes that list them; a dead-end verdict or a ruled-out vector writes one. */
 export function invalidateRuledOut(qc: QueryClient, engagementId: string) {
-  void qc.invalidateQueries({ queryKey: ["ruledOut", engagementId] });
+  void qc.invalidateQueries({ queryKey: ruledOutKey(engagementId) });
   void qc.invalidateQueries({ queryKey: ["notes", engagementId] });
   void qc.invalidateQueries({ queryKey: ["note", engagementId] });
 }

@@ -1,9 +1,11 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { closeThread, openThreads } from "../../engines/notes/threads";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import { RavenError } from "../../types/errors";
 import { Button, Dialog, Field, Input, Toggle } from "../../ui";
+import { ruledOutKey } from "./queries";
 import { flushNotes, noteKey, sessionGeneration, useNotesStore, type NoteTarget } from "./useNotesStore";
 
 export interface ClosingThread {
@@ -40,6 +42,7 @@ function Body({ thread, target, saved, onClose }: { thread: ClosingThread; targe
   const [reason, setReason] = useState("");
   const [isPrivate, setIsPrivate] = useState(useNotesStore.getState().pending[noteKey(target)]?.private ?? saved.private);
   const [busy, setBusy] = useState(false);
+  const qc = useQueryClient();
   const [error, setError] = useState<string>();
   // Set once the closed line is in the pending text (before its save), so a retry skips the rewrite: it re-flushes,
   // then repeats the ruled-out create.
@@ -83,6 +86,7 @@ function Body({ thread, target, saved, onClose }: { thread: ClosingThread; targe
             reason: reason.trim(),
             private: isPrivate,
           });
+          void qc.invalidateQueries({ queryKey: ruledOutKey(target.engagementId) });
         } catch (e) {
           setError(`The line is already marked ✗ in your notes, but the ruled-out item wasn't created: ${RavenError.from(e).message}`);
           return;
