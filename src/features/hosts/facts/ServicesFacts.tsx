@@ -190,7 +190,6 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
               e.preventDefault();
               setAsking(undefined);
             }}
-            className="h-7"
           />
         </form>
       )}

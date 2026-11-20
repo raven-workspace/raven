@@ -36,7 +36,7 @@ export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverr
           name: t,
           value: typed || a.text,
           onChange: set,
-          className: `h-7 w-full min-w-0 ${unfilled ? "border-warn!" : typed ? "text-fg!" : "text-fg-2!"}`,
+          className: `w-full min-w-0 ${unfilled ? "border-warn!" : typed ? "text-fg!" : "text-fg-2!"}`,
           autoValue: !typed && !a.unresolved,
           ref: fieldRef ? (el: HTMLInputElement | null) => fieldRef(t, el) : undefined,
         };

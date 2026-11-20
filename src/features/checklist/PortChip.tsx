@@ -12,7 +12,7 @@ export function PortChip({ commands }: { commands: FilledCommand[] }) {
       Port
       <Select
         aria-label="Port"
-        className="h-7 w-full"
+        className="w-full"
         value={String(picked)}
         onValueChange={(v) => usePortPickStore.getState().set(key, Number(v))}
         options={choices.map((p) => ({ value: String(p), label: String(p) }))}

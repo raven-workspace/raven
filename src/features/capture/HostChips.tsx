@@ -35,7 +35,7 @@ export function HostChips({ hosts, linked, onLinked }: HostChipsProps) {
           value=""
           onValueChange={(id) => id && onLinked([...linked, id])}
           options={free.map((h) => ({ value: h.id, label: h.ip ? `${h.name} (${h.ip})` : h.name }))}
-          className="h-7 w-auto"
+          className="w-auto"
         />
       )}
       {linked.length === 0 && (

@@ -11,7 +11,7 @@ export function FileChip({ commands }: { commands: FilledCommand[] }) {
   return (
     <label className="grid grid-cols-[max-content_176px] items-center justify-start gap-2 text-meta text-muted-2">
       {token}
-      <FilePicker name={token} os={os} className="h-7 w-full" value={filePickFor(hostId)} onChange={(v) => useFilePickStore.getState().set(hostId, v)} />
+      <FilePicker name={token} os={os} className="w-full" value={filePickFor(hostId)} onChange={(v) => useFilePickStore.getState().set(hostId, v)} />
     </label>
   );
 }

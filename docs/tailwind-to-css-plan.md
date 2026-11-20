@@ -29,8 +29,10 @@ with every screen pixel-identical. Inventory: [tailwind-to-css-inventory.md](tai
   inside `@layer components`. A family of small components may share one sheet (`states.scss` for Empty/Error/Loading).
 - **Layout:** each grid's tracks live in its component's sheet (DESIGN.md's explicit-tracks rule). Shared layout helpers
   only where a pattern repeats across features, added and documented in `abstracts`.
-- **Cascade during the migration:** Tailwind's layer order is `theme, base, components, utilities`. Component SCSS is in
-  `components`, so a Tailwind utility a not-yet-migrated caller passes through `className` still wins, as before.
+- **Cascade:** `@layer theme, base, components, features, utilities;` is declared first in `global.css`. `src/ui`
+  primitives are in `components`, feature sheets in `features` (a feature's class on a primitive beats the primitive's
+  own rules, whatever order the sheets load in), and Tailwind's `utilities` stay last while the migration runs, so a
+  utility a not-yet-migrated caller passes through `className` still wins, as before.
 
 ## Naming conventions
 
@@ -56,7 +58,7 @@ with every screen pixel-identical. Inventory: [tailwind-to-css-inventory.md](tai
 |---:|---|---|---|---|
 | 0 | Pixel baseline + SCSS foundation | Med | baseline stable over repeated runs | Done |
 | 1 | Text primitives: Kbd, labels, Empty/Loading/ErrorState | Low | tests, pixel diff, audit gate | Done |
-| 2 | Form primitives: Input, Textarea, Field, Select, Toggle | Med | + focus/disabled/invalid states | |
+| 2 | Form primitives: Input, Textarea, Field, Select, Toggle | Med | + focus/disabled/invalid states | Done |
 | 3 | Controls: Button, IconButton, Chip, ChipSet, Toolbar, Row, ActionCell | Med | + callers' `className` | |
 | 4 | Shell: Panel, Dialog, Collapse, Disclosure, TitleBar, Tooltip, CommandBlock, HintLine, the rest of src/ui | Med–High | + dialog motion, reduced motion | |
 | 5–20 | Features, smallest first: palette, generators, board, cleanup, settings, capture, stuck, notes, vault, log, checklist, network, arsenal, manual, engagements, hosts | Med | tests, pixel diff at all widths | |
@@ -69,11 +71,11 @@ with every screen pixel-identical. Inventory: [tailwind-to-css-inventory.md](tai
 
 1. Resolve the unit's classes to the CSS Tailwind actually emits (variants, `--tw-*` interplay such as `leading-none`
    overriding a type role's line height).
-2. Check every caller that passes `className` for utilities that used to lose to the component's own classes; those
-   now win (utilities layer). Drop such dead classes.
+2. Check every caller that passes `className` (or `width`) for utilities that used to lose to the component's own
+   classes in Tailwind's emitted order; those now win. Drop such dead classes. Scan with a brace-aware parser: a
+   `className` after a prop containing `{...}` is easy to miss.
 3. Write the SCSS, switch the markup, drop no-op classes (`m-0`, `p-0` under preflight).
-4. `npx tsc -b`, `npx eslint src`, `npx vitest run src`, `npm run audit:pixel`, and `npm run audit:visual -- --retries=1`
-   (the audit's state runs time out on a cold dev server; that predates the migration).
+4. `npx tsc -b`, `npx eslint src`, `npx vitest run src`, `npm run audit:pixel` and `npm run audit:visual`.
 5. Update the report.
 
 ## Known risks

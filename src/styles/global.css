@@ -1,3 +1,7 @@
+/* Cascade layers, lowest to highest: src/ui primitives in `components`, feature styles in `features` (so a feature's class
+ * on a primitive beats the primitive's own), Tailwind utilities last until the SCSS migration removes them. Declared
+ * before Tailwind's import so this order is the one the browser uses. */
+@layer theme, base, components, features, utilities;
 @import "tailwindcss";
 @import "./tokens.css";
 @import "tw-animate-css";

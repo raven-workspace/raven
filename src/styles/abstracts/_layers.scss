@@ -1,4 +1,5 @@
-// Cascade layers, lowest to highest. Component styles sit in `components`; while Tailwind remains, utilities a caller
-// passes through `className` live in `utilities` and still win, as they did before migration. Stating the order in
-// every component stylesheet keeps it right whichever stylesheet the browser sees first.
-@layer theme, base, components, utilities;
+// Cascade layers, lowest to highest (declared first in src/styles/global.css; repeated here so a component sheet is
+// right whichever stylesheet loads first). src/ui primitives go in `components`, feature styles in `features` (a
+// feature's class on a primitive beats the primitive's own rules), and Tailwind's `utilities` stay last while the
+// migration runs, so a utility a caller still passes through `className` wins as it did before.
+@layer theme, base, components, features, utilities;

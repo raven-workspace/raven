@@ -22,7 +22,7 @@ describe("layout (U5–U7)", () => {
     expect(label.parentElement!.className).toMatch(/\bgrid\b/);
     expect(picker.className).toMatch(/w-full/);
     expect(picker.getAttribute("title")).toContain("ted_admin");
-    expect(picker.querySelector(".truncate")).not.toBeNull();
+    expect(picker.querySelector(".select-trigger__value")).not.toBeNull();
   });
 
   it("U6: a command block wraps at whitespace, keeps each word whole, and its text stays selectable and copyable as written", () => {

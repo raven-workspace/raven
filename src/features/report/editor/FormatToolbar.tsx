@@ -183,7 +183,7 @@ export function FormatToolbar({
         <Fragment key="block">
           <Select
             aria-label="Block type"
-            className="h-7 w-32"
+            className="w-32"
             disabled={!ready || kind === null}
             // Where the cursor isn't in a block it sets (a selected block, a numbered page heading), the select names
             // what is there and stays off.
@@ -197,7 +197,7 @@ export function FormatToolbar({
           {inCode && (
             <Select
               aria-label="Code language"
-              className="h-7 w-32"
+              className="w-32"
               options={LANGUAGE_OPTIONS}
               value={toPicker((editor.state.selection.$from.parent.attrs.language as string) ?? "")}
               onValueChange={(v) => {

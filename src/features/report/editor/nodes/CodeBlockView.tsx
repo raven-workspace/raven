@@ -21,7 +21,7 @@ export function CodeBlockView({ node, contentRef, setAttrs }: ReactNodeViewProps
       <div contentEditable={false} className="report-codeblock-lang">
         <Select
           aria-label="Code language"
-          className="h-7 w-36"
+          className="w-36"
           options={LANGUAGE_OPTIONS}
           value={toPicker(language)}
           onValueChange={(v) => setAttrs({ language: fromPicker(v) })}

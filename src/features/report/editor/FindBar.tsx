@@ -118,7 +118,6 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
             ref={findRef}
             aria-label="Find"
             placeholder="Find"
-            className="h-7"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -145,7 +144,6 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
           <Input
             aria-label="Replace with"
             placeholder="Replace with"
-            className="h-7"
             value={replace}
             onChange={(e) => {
               setReplace(e.target.value);

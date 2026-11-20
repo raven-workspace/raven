@@ -2,7 +2,8 @@ import * as RS from "@radix-ui/react-select";
 import { CaretDown } from "@phosphor-icons/react";
 import type { Ref } from "react";
 import { cx } from "../lib/cx";
-import { controlBase } from "./controlStyles";
+import "./controls.scss";
+import "./Select.scss";
 
 export interface SelectOption {
   value: string;
@@ -59,21 +60,14 @@ export function Select({
     >
       <RS.Trigger
         ref={ref}
-        className={cx(
-          controlBase,
-          // Full width unless the caller sets one: cx does not merge, so w-full would fight a `w-*` class.
-          !/(?:^|\s)w-/.test(className ?? "") && "w-full",
-          "h-8 px-3 inline-flex items-center justify-between gap-2 text-left cursor-default",
-          "data-placeholder:text-faint",
-          className,
-        )}
+        className={cx("control select-trigger", className)}
         {...triggerProps}
       >
         {/* A long value ellipsizes instead of wrapping the trigger. */}
-        <span className="min-w-0 truncate">
+        <span className="select-trigger__value">
           <RS.Value placeholder={placeholder} />
         </span>
-        <RS.Icon className="text-muted" aria-hidden>
+        <RS.Icon className="select-trigger__icon" aria-hidden>
           <CaretDown size={12} />
         </RS.Icon>
       </RS.Trigger>
@@ -81,24 +75,15 @@ export function Select({
         <RS.Content
           position="popper"
           sideOffset={4}
-          className="z-50 min-w-(--radix-select-trigger-width) max-h-(--radix-select-content-available-height) overflow-hidden rounded-sm border border-line-2 bg-surface"
+          className="select-menu"
         >
-          <RS.Viewport className="p-1">
+          <RS.Viewport className="select-menu__viewport">
             {options.map((o) => (
               <RS.Item
                 key={o.value}
                 value={o.value}
                 disabled={o.disabled}
-                className={cx(
-                  "relative flex h-7 items-center rounded-[4px] pl-3 pr-2 text-body text-fg-2 select-none cursor-default",
-                  // Radix moves real focus onto the highlighted item, so that item carries the
-                  // Ink focus ring: 1px accent outline drawn inside the item's edge.
-                  "data-highlighted:bg-surface-hi data-highlighted:text-fg",
-                  "data-highlighted:outline-solid data-highlighted:outline-1 data-highlighted:outline-accent -outline-offset-1",
-                  // Selected item gets the Ink selection marker: a 2px accent bar on the left.
-                  "data-[state=checked]:text-fg data-[state=checked]:shadow-[inset_2px_0_0_var(--accent)]",
-                  "data-disabled:text-faint",
-                )}
+                className="select-item"
               >
                 <RS.ItemText>{o.label}</RS.ItemText>
               </RS.Item>

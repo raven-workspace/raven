@@ -102,7 +102,7 @@ export function NoteEditor({ target, textRef, className }: {
         {...NO_TEXT_SERVICES}
         onChange={(e) => edit(target, e.target.value, isPrivate)}
         onKeyDown={onKeyDown}
-        className="h-full min-h-0 resize-none"
+        className="h-full min-h-0"
       />
       <div className="grid gap-2">
         {note.isError && !pending && (

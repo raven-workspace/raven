@@ -12,7 +12,7 @@ import { useLog } from "./queries";
 
 const KINDS: LogKind[] = ["command", "screenshot", "http", "note", "flag"];
 
-const sel = "h-7 w-auto";
+const sel = "w-auto";
 const filter = "grid grid-cols-[auto_auto] items-center gap-2";
 const filterLabel = "whitespace-nowrap text-meta text-muted-2";
 

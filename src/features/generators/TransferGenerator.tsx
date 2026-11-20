@@ -164,7 +164,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
       <div className={cx("grid items-start gap-x-4 gap-y-3", FIELD_COLS[2 + Number(!contextOs) + Number(usesPort)])}>
         <label className="grid gap-2 text-meta text-muted-2">
           <span>File</span>
-          <FilePicker ref={fileRef} name="FILE" os={os} className="h-8 w-64 max-w-full" value={file} onChange={setFile} />
+          <FilePicker ref={fileRef} name="FILE" os={os} className="max-w-full" value={file} onChange={setFile} />
         </label>
         {!contextOs && (
           <div className="grid gap-2 text-meta text-muted-2">

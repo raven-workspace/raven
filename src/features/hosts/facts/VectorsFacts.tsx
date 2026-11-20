@@ -40,7 +40,6 @@ function LineInput({ label, placeholder, pending, onSave, onCancel }: {
           e.preventDefault();
           onCancel();
         }}
-        className="h-7"
       />
     </form>
   );
