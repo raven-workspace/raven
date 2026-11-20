@@ -157,6 +157,21 @@ function usePageEdits(
 ) {
   // The latest page and meta of the open section, read by handlers that fire between renders.
   const current = useRef<{ id: string; doc: ReportNode; meta: SectionMeta } | null>(null);
+  /** Section `s`'s page and meta as they are now: the latest change if it is this section's, else as stored. */
+  const snapshot = useCallback(
+    (s: ReportSection) => (current.current?.id === s.id ? current.current : { id: s.id, doc: docOf(s), meta: s.meta as SectionMeta }),
+    [docOf],
+  );
+  /** Section `s` becomes `doc` with `meta`: kept as the latest, shown live (the page only if `docChanged`) and saved. */
+  const commit = useCallback(
+    (s: ReportSection, doc: ReportNode, meta: SectionMeta, docChanged: boolean) => {
+      current.current = { id: s.id, doc, meta };
+      if (docChanged) setLive({ id: s.id, doc });
+      setLiveMeta({ id: s.id, meta });
+      saver.save(doc, meta);
+    },
+    [saver, setLive, setLiveMeta],
+  );
   const onChange = useCallback(
     (doc: ReportNode) => {
       if (!openSection) return;
@@ -170,27 +185,21 @@ function usePageEdits(
   const onRemoveEvidence = useCallback(
     (entryId: string) => {
       if (!openSection) return;
-      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+      const cur = snapshot(openSection);
       const removed = cur.meta.removedEntryIds ?? [];
-      const meta: SectionMeta = { ...cur.meta, removedEntryIds: removed.includes(entryId) ? removed : [...removed, entryId] };
-      current.current = { ...cur, meta };
-      setLiveMeta({ id: openSection.id, meta });
-      saver.save(cur.doc, meta);
+      commit(openSection, cur.doc, { ...cur.meta, removedEntryIds: removed.includes(entryId) ? removed : [...removed, entryId] }, false);
     },
-    [openSection, docOf, saver, setLiveMeta],
+    [openSection, snapshot, commit],
   );
   /** An entry went back onto the page: it is no longer "removed". */
   const onRestoreEvidence = useCallback(
     (entryId: string) => {
       if (!openSection) return;
-      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+      const cur = snapshot(openSection);
       if (!cur.meta.removedEntryIds?.includes(entryId)) return;
-      const meta: SectionMeta = { ...cur.meta, removedEntryIds: cur.meta.removedEntryIds.filter((id) => id !== entryId) };
-      current.current = { ...cur, meta };
-      setLiveMeta({ id: openSection.id, meta });
-      saver.save(cur.doc, meta);
+      commit(openSection, cur.doc, { ...cur.meta, removedEntryIds: cur.meta.removedEntryIds.filter((id) => id !== entryId) }, false);
     },
-    [openSection, docOf, saver, setLiveMeta],
+    [openSection, snapshot, commit],
   );
   /**
    * Swaps the page with the one kept in the meta (`previousDoc`), given as `doc` in the plain schema: the page written
@@ -201,7 +210,7 @@ function usePageEdits(
   const swapPrevious = useCallback(
     (doc: ReportNode): { doc: ReportNode; meta: SectionMeta } | null => {
       if (!openSection) return null;
-      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+      const cur = snapshot(openSection);
       if (!cur.meta.previousDoc) return null;
       // The page swapped out stays in the archive as it was, whatever later swaps do to `previousDoc`.
       const meta: SectionMeta = {
@@ -211,36 +220,27 @@ function usePageEdits(
         restored: !cur.meta.restored,
         originals: archivePage(cur.meta, cur.doc, "restore"),
       };
-      current.current = { id: openSection.id, doc, meta };
-      setLive({ id: openSection.id, doc });
-      setLiveMeta({ id: openSection.id, meta });
-      saver.save(doc, meta);
+      commit(openSection, doc, meta, true);
       return { doc, meta };
     },
-    [openSection, docOf, saver, setLive, setLiveMeta],
+    [openSection, snapshot, commit],
   );
   /** The open page becomes `doc` with `meta` (an old page flattened as it opens), saved like any change. */
   const replacePage = useCallback(
     (doc: ReportNode, meta: SectionMeta) => {
       if (!openSection) return;
-      current.current = { id: openSection.id, doc, meta };
-      setLive({ id: openSection.id, doc });
-      setLiveMeta({ id: openSection.id, meta });
-      saver.save(doc, meta);
+      commit(openSection, doc, meta, true);
     },
-    [openSection, saver, setLive, setLiveMeta],
+    [openSection, commit],
   );
   /** Merges `patch` into the open page's meta (a page's title) and saves it with the page as it is now. */
   const patchMeta = useCallback(
     (patch: Partial<SectionMeta> & Record<string, unknown>) => {
       if (!openSection) return;
-      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
-      const meta: SectionMeta = { ...cur.meta, ...patch };
-      current.current = { ...cur, meta };
-      setLiveMeta({ id: openSection.id, meta });
-      saver.save(cur.doc, meta);
+      const cur = snapshot(openSection);
+      commit(openSection, cur.doc, { ...cur.meta, ...patch }, false);
     },
-    [openSection, docOf, saver, setLiveMeta],
+    [openSection, snapshot, commit],
   );
   return { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious, replacePage, patchMeta };
 }
