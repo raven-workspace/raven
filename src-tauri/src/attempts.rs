@@ -2,9 +2,8 @@
 //!
 //! Upserts never downgrade a recorded result: see `merge`.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
 use crate::error::{AppError, AppResult};
-use crate::notes::check_scope;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
@@ -49,10 +48,6 @@ pub struct CredAttemptInput {
     pub at: Option<i64>,
 }
 
-fn blank_to_none(s: Option<&str>) -> Option<String> {
-    s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
-}
-
 const COLS: &str = "id, engagement_id, cred_id, username_id, host_id, service, port, result, auth_mode, detail, log_entry_id, at";
 
 const SERVICES: [&str; 13] =
@@ -92,15 +87,6 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<CredAttempt
     Ok(st.query_map([engagement_id], row)?.collect::<Result<Vec<_>, _>>()?)
 }
 
-fn in_scope(conn: &Connection, table: &str, engagement_id: &str, id: &str) -> AppResult<()> {
-    let ok: bool = conn.query_row(
-        &format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id = ?1 AND engagement_id = ?2)"),
-        params![id, engagement_id],
-        |r| r.get(0),
-    )?;
-    if ok { Ok(()) } else { Err(AppError::NotFound) }
-}
-
 /// A validated, normalised input.
 struct Clean {
     cred_id: String,
@@ -129,15 +115,15 @@ fn clean(conn: &Connection, engagement_id: &str, i: &CredAttemptInput, now: i64)
     if i.port.is_some_and(|p| !(1..=65535).contains(&p)) {
         return Err(AppError::validation("port", "port must be 1-65535"));
     }
-    in_scope(conn, "credentials", engagement_id, &i.cred_id)?;
+    check_in_engagement(conn, "credentials", engagement_id, &i.cred_id)?;
     check_scope(conn, engagement_id, Some(&i.host_id))?;
     let username_id = blank_to_none(i.username_id.as_deref());
     if let Some(u) = &username_id {
-        in_scope(conn, "usernames", engagement_id, u)?;
+        check_in_engagement(conn, "usernames", engagement_id, u)?;
     }
     let log_entry_id = blank_to_none(i.log_entry_id.as_deref());
     if let Some(l) = &log_entry_id {
-        in_scope(conn, "log_entries", engagement_id, l)?;
+        check_in_engagement(conn, "log_entries", engagement_id, l)?;
     }
     Ok(Clean {
         cred_id: i.cred_id.clone(),
@@ -228,7 +214,7 @@ fn upsert_clean(conn: &Connection, engagement_id: &str, c: &Clean, id: Option<&s
 /// Upserts a batch in one transaction (all or nothing). Returns the resulting row for each input, in order.
 pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[CredAttemptInput]) -> AppResult<Vec<CredAttempt>> {
     check_scope(conn, engagement_id, None)?;
-    let now = system_now_ms();
+    let now = now_ms();
     let tx = conn.unchecked_transaction()?;
     let mut out = Vec::with_capacity(inputs.len());
     for i in inputs {
@@ -240,10 +226,7 @@ pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[CredAttemptInput
 }
 
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM cred_attempts WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "cred_attempts", id)
 }
 
 /// Moves the bare-username attempts of `username_id` made with any of `secret_cred_ids` onto credential
@@ -262,9 +245,9 @@ pub fn rekey_username_attempts(
         [username_id],
         |r| r.get(0),
     ).optional()?.ok_or(AppError::NotFound)?;
-    in_scope(conn, "credentials", &engagement_id, cred_id)?;
+    check_in_engagement(conn, "credentials", &engagement_id, cred_id)?;
     for s in secret_cred_ids {
-        in_scope(conn, "credentials", &engagement_id, s)?;
+        check_in_engagement(conn, "credentials", &engagement_id, s)?;
     }
     let tx = conn.unchecked_transaction()?;
     let moving: Vec<CredAttempt> = {

@@ -6,6 +6,7 @@
 //! leaves a half-written file under a real backup name and two backups in the same second
 //! never overwrite each other (the second gets a `-2` suffix, and so on).
 
+use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::paths::DataPaths;
 use crate::vault::{is_unreadable, normalize_password, open_keyed, pragma_for, write_private_file, BackupHook, Vault, VaultMeta};
@@ -25,13 +26,6 @@ pub struct BackupInfo {
     pub reason: String,
     pub created_at: i64,
     pub size_bytes: u64,
-}
-
-pub fn system_now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }
 
 /// `backup_retention` from the `settings` table (integer text); default 14, minimum 1.
@@ -260,7 +254,7 @@ fn open_with_pragma(path: &Path, pragma: &str) -> Result<Connection, rusqlite::E
 
 /// Encrypted copy of the live database (same key). Prunes to the retention count afterwards.
 pub fn take(vault: &Vault, reason: &str) -> AppResult<BackupInfo> {
-    take_at(vault, reason, system_now_ms())
+    take_at(vault, reason, now_ms())
 }
 
 pub fn take_at(vault: &Vault, reason: &str, now_ms: i64) -> AppResult<BackupInfo> {
@@ -315,12 +309,12 @@ pub fn take_file_level(paths: &DataPaths, reason: &str, now_ms: i64) -> AppResul
 
 /// The Vault's default pre-migration hook: file-level copy with reason `pre-migration`.
 pub fn pre_migration_hook(paths: DataPaths) -> BackupHook {
-    Box::new(move |_from, _to| take_file_level(&paths, "pre-migration", system_now_ms()).map(|_| ()))
+    Box::new(move |_from, _to| take_file_level(&paths, "pre-migration", now_ms()).map(|_| ()))
 }
 
 /// Take a `daily` backup if the newest backup (any reason) is older than 24h, or none exists.
 pub fn take_daily_if_due(vault: &Vault) -> AppResult<Option<BackupInfo>> {
-    take_daily_if_due_at(vault, system_now_ms())
+    take_daily_if_due_at(vault, now_ms())
 }
 
 pub fn take_daily_if_due_at(vault: &Vault, now_ms: i64) -> AppResult<Option<BackupInfo>> {
@@ -335,7 +329,7 @@ pub fn take_daily_if_due_at(vault: &Vault, now_ms: i64) -> AppResult<Option<Back
 // ---- restore ----
 
 pub fn restore(vault: &mut Vault, file: &str) -> AppResult<()> {
-    restore_at(vault, file, system_now_ms())
+    restore_at(vault, file, now_ms())
 }
 
 fn validate_backup_name(file: &str) -> AppResult<()> {
@@ -396,7 +390,7 @@ pub fn restore_at(vault: &mut Vault, file: &str, now_ms: i64) -> AppResult<()> {
 /// `raven.db.damaged-<ms>` and kept; no pre-restore backup is taken because it can't be
 /// read. The companion meta then replaces `vault.json`. The vault is left locked.
 pub fn restore_locked(vault: &mut Vault, file: &str, password: &str) -> AppResult<()> {
-    restore_locked_at(vault, file, password, system_now_ms())
+    restore_locked_at(vault, file, password, now_ms())
 }
 
 pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: i64) -> AppResult<()> {

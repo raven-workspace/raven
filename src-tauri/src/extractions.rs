@@ -3,11 +3,10 @@
 //! entry drops the record (FK cascade) but keeps the filed data.
 
 use crate::attempts::CredAttempt;
-use crate::backup::system_now_ms;
 use crate::credentials::Credential;
+use crate::db::{check_in_engagement, check_scope, now_ms};
 use crate::error::{AppError, AppResult};
 use crate::host_facts::HostIdentity;
-use crate::notes::check_scope;
 use crate::services::Service;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
@@ -122,20 +121,13 @@ pub fn save(
     summary: &ExtractionSummary,
     record: &ExtractionRecord,
 ) -> AppResult<Extraction> {
-    let ok: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM log_entries WHERE id = ?1 AND engagement_id = ?2)",
-        params![log_entry_id, engagement_id],
-        |r| r.get(0),
-    )?;
-    if !ok {
-        return Err(AppError::NotFound);
-    }
+    check_in_engagement(conn, "log_entries", engagement_id, log_entry_id)?;
     let summary = serde_json::to_string(summary)?;
     let record = serde_json::to_string(record)?;
     let inserted = conn.execute(
         "INSERT INTO extractions (log_entry_id, engagement_id, summary, record, created_at, undone_at) \
          VALUES (?1,?2,?3,?4,?5,NULL) ON CONFLICT (log_entry_id) DO NOTHING",
-        params![log_entry_id, engagement_id, summary, record, system_now_ms()],
+        params![log_entry_id, engagement_id, summary, record, now_ms()],
     )?;
     if inserted == 0 {
         return Err(AppError::Conflict("this entry's extraction is already recorded".into()));
@@ -205,7 +197,7 @@ pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
     for h in &r.host_os_before {
         tx.execute(
             "UPDATE hosts SET os=?2, updated_at=?3 WHERE id=?1 AND updated_at <= ?4",
-            params![h.host_id, h.os, system_now_ms(), at],
+            params![h.host_id, h.os, now_ms(), at],
         )?;
     }
     for i in &r.identity_before {
@@ -303,7 +295,7 @@ pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
         }
     }
 
-    tx.execute("UPDATE extractions SET undone_at=?2 WHERE log_entry_id=?1", params![log_entry_id, system_now_ms()])?;
+    tx.execute("UPDATE extractions SET undone_at=?2 WHERE log_entry_id=?1", params![log_entry_id, now_ms()])?;
     tx.commit()?;
     get(conn, log_entry_id)?.ok_or(AppError::NotFound)
 }

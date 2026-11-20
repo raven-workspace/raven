@@ -1,9 +1,8 @@
 //! Pivot network: tunnels (how traffic reaches a subnet) and hops (who we moved from and to).
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
 use crate::engagements::valid_cidr;
 use crate::error::{AppError, AppResult};
-use crate::notes::check_scope;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
@@ -92,7 +91,7 @@ fn clean_tunnel(conn: &Connection, engagement_id: &str, i: TunnelInput) -> AppRe
         return Err(AppError::validation("callbackIp", "must be a single IPv4 address"));
     }
     check_scope(conn, engagement_id, Some(&i.via_host_id))?;
-    let notes = i.notes.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let notes = blank_to_none(i.notes.as_deref());
     Ok(CleanTunnel { kind: i.kind, via: i.via_host_id, subnets, callback_ip, status: i.status, notes })
 }
 
@@ -128,7 +127,7 @@ pub fn tunnel_create(conn: &Connection, engagement_id: &str, input: TunnelInput)
     check_scope(conn, engagement_id, None)?;
     let c = clean_tunnel(conn, engagement_id, input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO tunnels (id, engagement_id, kind, via_host_id, subnets, callback_ip, status, notes, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)",
@@ -142,16 +141,13 @@ pub fn tunnel_update(conn: &Connection, id: &str, input: TunnelInput) -> AppResu
     let c = clean_tunnel(conn, &current.engagement_id, input)?;
     conn.execute(
         "UPDATE tunnels SET kind=?2, via_host_id=?3, subnets=?4, callback_ip=?5, status=?6, notes=?7, updated_at=?8 WHERE id=?1",
-        params![id, c.kind, c.via, serde_json::to_string(&c.subnets)?, c.callback_ip, c.status, c.notes, system_now_ms()],
+        params![id, c.kind, c.via, serde_json::to_string(&c.subnets)?, c.callback_ip, c.status, c.notes, now_ms()],
     )?;
     tunnel_get(conn, id)
 }
 
 pub fn tunnel_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM tunnels WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "tunnels", id)
 }
 
 struct CleanHop {
@@ -175,14 +171,7 @@ fn clean_hop(conn: &Connection, engagement_id: &str, i: HopInput) -> AppResult<C
         check_scope(conn, engagement_id, Some(f))?;
     }
     if let Some(l) = &i.log_entry_id {
-        let ok: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM log_entries WHERE id = ?1 AND engagement_id = ?2)",
-            params![l, engagement_id],
-            |r| r.get(0),
-        )?;
-        if !ok {
-            return Err(AppError::NotFound);
-        }
+        check_in_engagement(conn, "log_entries", engagement_id, l)?;
     }
     Ok(CleanHop { from: i.from_host_id, to: i.to_host_id, via, log_entry_id: i.log_entry_id, at: i.at })
 }
@@ -216,7 +205,7 @@ pub fn hop_create(conn: &Connection, engagement_id: &str, input: HopInput) -> Ap
     check_scope(conn, engagement_id, None)?;
     let c = clean_hop(conn, engagement_id, input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO hops (id, engagement_id, from_host_id, to_host_id, via, log_entry_id, at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
         params![id, engagement_id, c.from, c.to, c.via, c.log_entry_id, c.at.unwrap_or(now), now],
@@ -229,16 +218,13 @@ pub fn hop_update(conn: &Connection, id: &str, input: HopInput) -> AppResult<Hop
     let c = clean_hop(conn, &current.engagement_id, input)?;
     conn.execute(
         "UPDATE hops SET from_host_id=?2, to_host_id=?3, via=?4, log_entry_id=?5, at=?6, updated_at=?7 WHERE id=?1",
-        params![id, c.from, c.to, c.via, c.log_entry_id, c.at.unwrap_or(current.at), system_now_ms()],
+        params![id, c.from, c.to, c.via, c.log_entry_id, c.at.unwrap_or(current.at), now_ms()],
     )?;
     hop_get(conn, id)
 }
 
 pub fn hop_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM hops WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "hops", id)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -276,7 +262,7 @@ pub fn interface_dismiss(conn: &Connection, engagement_id: &str, host_id: &str, 
     }
     conn.execute(
         "INSERT OR IGNORE INTO interface_dismissals (engagement_id, host_id, subnet, created_at) VALUES (?1,?2,?3,?4)",
-        params![engagement_id, host_id, subnet, system_now_ms()],
+        params![engagement_id, host_id, subnet, now_ms()],
     )?;
     Ok(())
 }

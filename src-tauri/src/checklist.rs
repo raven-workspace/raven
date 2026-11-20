@@ -1,7 +1,7 @@
 //! Checklist item storage. The engine (TS) decides what the items mean; this module only
 //! persists them, keyed by (owner_id, goal_id) where owner_id is a host id or the engagement id.
 
-use crate::backup::system_now_ms;
+use crate::db::{check_scope, in_engagement, now_ms};
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -82,13 +82,9 @@ pub fn put(conn: &Connection, engagement_id: &str, items: &[ChecklistItemInput])
     if items.len() > MAX_ITEMS {
         return Err(AppError::validation("items", "too many items (max 500)"));
     }
-    let exists: bool =
-        conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
-    if !exists {
-        return Err(AppError::NotFound);
-    }
+    check_scope(conn, engagement_id, None)?;
     let tx = conn.unchecked_transaction()?;
-    let now = system_now_ms();
+    let now = now_ms();
     for it in items {
         if it.goal_id.trim().is_empty() {
             return Err(AppError::validation("goalId", "goal id is required"));
@@ -101,11 +97,7 @@ pub fn put(conn: &Connection, engagement_id: &str, items: &[ChecklistItemInput])
                 return Err(AppError::validation("autoFrom", "autoFrom must be na or in_progress"));
             }
         let owned: bool = it.owner_id == engagement_id
-            || tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
-                params![it.owner_id, engagement_id],
-                |r| r.get(0),
-            )?;
+            || in_engagement(&tx, "hosts", engagement_id, &it.owner_id)?;
         if !owned {
             return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
         }
@@ -148,20 +140,12 @@ pub fn apply_cover(
     if cover.len() + revert.len() > MAX_ITEMS * 4 {
         return Err(AppError::validation("cover", "too many items"));
     }
-    let exists: bool =
-        conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
-    if !exists {
-        return Err(AppError::NotFound);
-    }
+    check_scope(conn, engagement_id, None)?;
     let tx = conn.unchecked_transaction()?;
-    let now = system_now_ms();
+    let now = now_ms();
     for g in cover.iter().chain(revert.iter()) {
         let owned: bool = g.owner_id == engagement_id
-            || tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
-                params![g.owner_id, engagement_id],
-                |r| r.get(0),
-            )?;
+            || in_engagement(&tx, "hosts", engagement_id, &g.owner_id)?;
         if !owned || g.goal_id.trim().is_empty() {
             return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
         }
@@ -200,20 +184,12 @@ pub fn apply_facts(
     if done.len() + revert.len() > MAX_ITEMS * 4 {
         return Err(AppError::validation("facts", "too many items"));
     }
-    let exists: bool =
-        conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
-    if !exists {
-        return Err(AppError::NotFound);
-    }
+    check_scope(conn, engagement_id, None)?;
     let tx = conn.unchecked_transaction()?;
-    let now = system_now_ms();
+    let now = now_ms();
     for g in done.iter().chain(revert.iter()) {
         let owned: bool = g.owner_id == engagement_id
-            || tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
-                params![g.owner_id, engagement_id],
-                |r| r.get(0),
-            )?;
+            || in_engagement(&tx, "hosts", engagement_id, &g.owner_id)?;
         if !owned || g.goal_id.trim().is_empty() {
             return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
         }

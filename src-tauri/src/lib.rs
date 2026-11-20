@@ -5,6 +5,7 @@ pub mod backup;
 pub mod checklist;
 pub mod commands;
 pub mod credentials;
+mod db;
 pub mod engagements;
 pub mod error;
 pub mod extractions;

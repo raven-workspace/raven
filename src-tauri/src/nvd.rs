@@ -5,7 +5,7 @@
 //! The request runs here in Rust, never in the webview (its CSP stays closed). Each successful
 //! answer is cached raw in `nvd_cache`, so a repeat lookup and later offline use cost nothing.
 
-use crate::backup::system_now_ms;
+use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
@@ -137,7 +137,7 @@ pub fn store(conn: &Connection, cve: &str, raw: &str) -> AppResult<()> {
     conn.execute(
         "INSERT INTO nvd_cache(cve_id, fetched_at, json) VALUES(?1, ?2, ?3) \
          ON CONFLICT(cve_id) DO UPDATE SET fetched_at = excluded.fetched_at, json = excluded.json",
-        params![cve, system_now_ms(), raw],
+        params![cve, now_ms(), raw],
     )?;
     Ok(())
 }

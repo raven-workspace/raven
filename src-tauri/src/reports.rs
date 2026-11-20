@@ -1,7 +1,7 @@
 //! Report storage: one report per engagement, made of sections. Each section holds a ProseMirror JSON
 //! document (stored as text) that references evidence by id. No generated prose lives here.
 
-use crate::backup::system_now_ms;
+use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
@@ -134,7 +134,7 @@ pub fn get_or_create(conn: &Connection, engagement_id: &str, defaults: &ReportDe
     if exists == 0 {
         return Err(AppError::NotFound);
     }
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO reports (id, engagement_id, candidate_name, email, osid, title, meta, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,'{}',?7,?7)",
@@ -173,7 +173,7 @@ pub fn update(conn: &Connection, id: &str, patch: ReportPatch) -> AppResult<Repo
             patch.osid.unwrap_or(cur.osid),
             title,
             to_text(&patch.meta.unwrap_or(cur.meta)),
-            system_now_ms(),
+            now_ms(),
             id
         ],
     )?;
@@ -258,7 +258,7 @@ pub fn section_upsert(conn: &Connection, report_id: &str, input: SectionInput) -
         params![report_id, input.kind, input.target_key],
         |r| r.get(0),
     ).optional()?;
-    let now = system_now_ms();
+    let now = now_ms();
     let id = match existing {
         Some(id) => {
             conn.execute(
@@ -283,7 +283,7 @@ pub fn section_save(conn: &Connection, id: &str, doc: Value, meta: Value) -> App
     let (doc, meta) = section_texts(Some(&doc), &meta)?;
     let n = conn.execute(
         "UPDATE report_sections SET doc=?1, meta=?2, updated_at=?3 WHERE id=?4",
-        params![doc, meta, system_now_ms(), id],
+        params![doc, meta, now_ms(), id],
     )?;
     if n == 0 {
         return Err(AppError::NotFound);

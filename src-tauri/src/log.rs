@@ -1,6 +1,6 @@
 //! Engagement log: typed entries, host links, screenshot/flag attachments.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_scope, delete_by_id, in_engagement, now_ms};
 use crate::error::{AppError, AppResult};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
@@ -121,10 +121,6 @@ const COLS: &str = "id, engagement_id, kind, title, title_edited, ran_on, observ
     returned_nothing, private, content, at, created_at, updated_at, payload_id, payload_values";
 const MAX_ATTACHMENT: usize = 25 * 1024 * 1024;
 
-fn opt_trim(v: &Option<String>) -> Option<String> {
-    v.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
-}
-
 fn from_row(r: &Row) -> rusqlite::Result<LogEntry> {
     let json: String = r.get(9)?;
     let content = serde_json::from_str(&json)
@@ -207,12 +203,7 @@ pub(crate) fn check_content(c: &LogContent) -> AppResult<()> {
 fn check_hosts(conn: &Connection, engagement_id: &str, ids: &[String]) -> AppResult<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
     for id in ids {
-        let ok: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
-            params![id, engagement_id],
-            |r| r.get(0),
-        )?;
-        if !ok {
+        if !in_engagement(conn, "hosts", engagement_id, id)? {
             return Err(AppError::validation("hostIds", "host does not belong to this engagement"));
         }
         if !out.contains(id) {
@@ -247,11 +238,7 @@ fn write_hosts(conn: &Connection, entry_id: &str, host_ids: &[String]) -> AppRes
 }
 
 pub fn create(conn: &Connection, engagement_id: &str, input: LogEntryInput) -> AppResult<LogEntry> {
-    let exists: bool =
-        conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
-    if !exists {
-        return Err(AppError::NotFound);
-    }
+    check_scope(conn, engagement_id, None)?;
     let title = check_title(&input.title)?;
     check_content(&input.content)?;
     let host_ids = check_hosts(conn, engagement_id, &input.host_ids)?;
@@ -264,7 +251,7 @@ pub fn create(conn: &Connection, engagement_id: &str, input: LogEntryInput) -> A
         _ => None,
     };
 
-    let now = system_now_ms();
+    let now = now_ms();
     let at = input.at.unwrap_or(now);
     let id = uuid::Uuid::new_v4().to_string();
     let tx = conn.unchecked_transaction()?;
@@ -290,7 +277,7 @@ pub fn create(conn: &Connection, engagement_id: &str, input: LogEntryInput) -> A
     }
     write_hosts(&tx, &id, &host_ids)?;
     tx.execute("UPDATE engagements SET last_activity_at = ?2 WHERE id = ?1", params![engagement_id, at])?;
-    if let Some(r) = opt_trim(&input.ran_on) {
+    if let Some(r) = blank_to_none(input.ran_on.as_deref()) {
         crate::engagements::set_last_ran_on(&tx, engagement_id, Some(&r))?;
     }
     tx.commit()?;
@@ -319,14 +306,14 @@ fn insert_entry(
             content.kind(),
             title,
             input.title_edited,
-            opt_trim(&input.ran_on),
-            opt_trim(&input.observations),
+            blank_to_none(input.ran_on.as_deref()),
+            blank_to_none(input.observations.as_deref()),
             input.returned_nothing,
             input.private,
             json,
             at,
             now,
-            opt_trim(&input.payload_id),
+            blank_to_none(input.payload_id.as_deref()),
             values_json(&input.payload_values)?
         ],
     )?;
@@ -359,7 +346,7 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
     // None keeps the stored payload; a blank string clears it, and the values it was built with go with it.
     let payload_id = match input.payload_id.as_deref() {
         None => old.payload_id.clone(),
-        Some(_) => opt_trim(&input.payload_id),
+        Some(_) => blank_to_none(input.payload_id.as_deref()),
     };
     let tx = conn.unchecked_transaction()?;
     tx.execute(
@@ -369,13 +356,13 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
             id,
             title,
             input.title_edited,
-            opt_trim(&input.ran_on),
-            opt_trim(&input.observations),
+            blank_to_none(input.ran_on.as_deref()),
+            blank_to_none(input.observations.as_deref()),
             input.returned_nothing,
             input.private,
             json,
             input.at.unwrap_or(old.at),
-            system_now_ms(),
+            now_ms(),
             payload_id,
             match (&payload_id, &input.payload_values) {
                 (None, _) => None,
@@ -391,10 +378,7 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
 }
 
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM log_entries WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "log_entries", id)
 }
 
 pub fn attachment_get(conn: &Connection, id: &str) -> AppResult<Attachment> {

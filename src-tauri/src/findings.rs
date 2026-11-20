@@ -1,8 +1,7 @@
 //! Findings (with linked hosts, services and ordered reproduction steps), finding files and failed attempts.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
 use crate::error::{AppError, AppResult};
-use crate::notes::check_scope;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -133,22 +132,9 @@ pub struct FailedAttemptInput {
     pub log_entry_id: Option<String>,
 }
 
-fn blank_to_none(s: Option<&str>) -> Option<String> {
-    s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
-}
-
 fn dedupe(ids: &[String]) -> Vec<String> {
     let mut seen = HashSet::new();
     ids.iter().filter(|i| seen.insert(i.as_str())).cloned().collect()
-}
-
-fn in_scope(conn: &Connection, table: &str, engagement_id: &str, id: &str) -> AppResult<()> {
-    let ok: bool = conn.query_row(
-        &format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id = ?1 AND engagement_id = ?2)"),
-        params![id, engagement_id],
-        |r| r.get(0),
-    )?;
-    if ok { Ok(()) } else { Err(AppError::NotFound) }
 }
 
 fn finding_engagement(conn: &Connection, id: &str) -> AppResult<String> {
@@ -282,7 +268,7 @@ fn clean_finding(conn: &Connection, engagement_id: &str, i: &FindingInput) -> Ap
     }
     let step_entry_ids = dedupe(&i.step_entry_ids);
     for e in &step_entry_ids {
-        in_scope(conn, "log_entries", engagement_id, e)?;
+        check_in_engagement(conn, "log_entries", engagement_id, e)?;
     }
     Ok(CleanFinding {
         title,
@@ -320,7 +306,7 @@ pub fn finding_create(conn: &Connection, engagement_id: &str, input: FindingInpu
     check_scope(conn, engagement_id, None)?;
     let c = clean_finding(conn, engagement_id, &input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     let tx = conn.unchecked_transaction()?;
     tx.execute(
         "INSERT INTO findings (id, engagement_id, title, severity, cvss_vector, cvss_score, status, description, impact, \
@@ -345,7 +331,7 @@ pub fn finding_update(conn: &Connection, id: &str, input: FindingInput) -> AppRe
          remediation=?9, exploit_notes=?10, lessons=?11, refs=?12, updated_at=?13 WHERE id=?1",
         params![
             id, c.title, c.severity, c.cvss_vector, c.cvss_score, c.status, input.description, input.impact,
-            input.remediation, input.exploit_notes, input.lessons, c.refs_json, system_now_ms()
+            input.remediation, input.exploit_notes, input.lessons, c.refs_json, now_ms()
         ],
     )?;
     replace_links(&tx, id, &c)?;
@@ -354,10 +340,7 @@ pub fn finding_update(conn: &Connection, id: &str, input: FindingInput) -> AppRe
 }
 
 pub fn finding_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM findings WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "findings", id)
 }
 
 // ---- finding files ----
@@ -409,7 +392,7 @@ pub fn file_create(conn: &Connection, finding_id: &str, input: FindingFileInput)
     finding_engagement(conn, finding_id)?;
     let (name, language) = clean_file(&input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO finding_files (id, finding_id, name, language, content, modified, original_url, original_content, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)",
@@ -437,16 +420,13 @@ pub fn file_update(conn: &Connection, id: &str, input: FindingFileInput) -> AppR
          original_url=CASE WHEN ?6 IS NULL THEN original_url ELSE NULLIF(trim(?6), '') END, \
          original_content=CASE WHEN ?7 IS NULL THEN original_content ELSE NULLIF(?7, '') END, \
          updated_at=?8 WHERE id=?1",
-        params![id, name, language, input.content, input.modified, input.original_url, input.original_content, system_now_ms()],
+        params![id, name, language, input.content, input.modified, input.original_url, input.original_content, now_ms()],
     )?;
     file_get(conn, id)
 }
 
 pub fn file_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM finding_files WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "finding_files", id)
 }
 
 // ---- failed attempts ----
@@ -505,11 +485,11 @@ fn clean_attempt(conn: &Connection, engagement_id: &str, i: &FailedAttemptInput)
     }
     let finding_id = blank_to_none(i.finding_id.as_deref());
     if let Some(f) = &finding_id {
-        in_scope(conn, "findings", engagement_id, f)?;
+        check_in_engagement(conn, "findings", engagement_id, f)?;
     }
     let log_entry_id = blank_to_none(i.log_entry_id.as_deref());
     if let Some(l) = &log_entry_id {
-        in_scope(conn, "log_entries", engagement_id, l)?;
+        check_in_engagement(conn, "log_entries", engagement_id, l)?;
     }
     let private = reason_kind.as_deref() == Some("operator");
     Ok(CleanAttempt { host_id, finding_id, title, reason_kind, reason, private, log_entry_id })
@@ -531,7 +511,7 @@ pub fn attempt_create(conn: &Connection, engagement_id: &str, input: FailedAttem
     check_scope(conn, engagement_id, None)?;
     let c = clean_attempt(conn, engagement_id, &input)?;
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         &format!("INSERT INTO failed_attempts ({A_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10)"),
         params![id, engagement_id, c.host_id, c.finding_id, c.title, c.reason_kind, c.reason, c.private, c.log_entry_id, now],
@@ -545,16 +525,13 @@ pub fn attempt_update(conn: &Connection, id: &str, input: FailedAttemptInput) ->
     conn.execute(
         "UPDATE failed_attempts SET host_id=?2, finding_id=?3, title=?4, reason_kind=?5, reason=?6, private=?7, \
          log_entry_id=?8, updated_at=?9 WHERE id=?1",
-        params![id, c.host_id, c.finding_id, c.title, c.reason_kind, c.reason, c.private, c.log_entry_id, system_now_ms()],
+        params![id, c.host_id, c.finding_id, c.title, c.reason_kind, c.reason, c.private, c.log_entry_id, now_ms()],
     )?;
     attempt_get(conn, id)
 }
 
 pub fn attempt_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM failed_attempts WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "failed_attempts", id)
 }
 
 #[cfg(test)]

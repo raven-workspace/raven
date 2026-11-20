@@ -1,8 +1,8 @@
 //! Payload build memory: which baked payload was last built for a host, and with what LHOST/LPORT. No payload text.
 //! One row per (host, payload); recording again replaces it.
 
+use crate::db::check_scope;
 use crate::error::{AppError, AppResult};
-use crate::notes::check_scope;
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 

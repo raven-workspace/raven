@@ -1,9 +1,8 @@
 //! Tried pairs: username + secret combinations that failed on a host/service. Kept so a spray is not
 //! repeated, but never credentials. `promote` removes them once the pair becomes a real credential.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
 use crate::error::{AppError, AppResult};
-use crate::notes::check_scope;
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
@@ -45,10 +44,6 @@ pub struct TriedPairInput {
 
 const COLS: &str = "id, engagement_id, username, domain, secret, secret_kind, host_id, service, auth_mode, log_entry_id, at";
 
-fn blank_to_none(s: Option<&str>) -> Option<String> {
-    s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
-}
-
 fn row(r: &Row) -> rusqlite::Result<TriedPair> {
     Ok(TriedPair {
         id: r.get(0)?,
@@ -75,7 +70,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<TriedPair>>
 /// each input, in order, existing ones included. All or nothing.
 pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[TriedPairInput]) -> AppResult<Vec<TriedPair>> {
     check_scope(conn, engagement_id, None)?;
-    let now = system_now_ms();
+    let now = now_ms();
     let tx = conn.unchecked_transaction()?;
     let mut out = Vec::with_capacity(inputs.len());
     for i in inputs {
@@ -100,14 +95,7 @@ pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[TriedPairInput])
         let domain = blank_to_none(i.domain.as_deref());
         let log_entry_id = blank_to_none(i.log_entry_id.as_deref());
         if let Some(l) = &log_entry_id {
-            let ok: bool = tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM log_entries WHERE id = ?1 AND engagement_id = ?2)",
-                params![l, engagement_id],
-                |r| r.get(0),
-            )?;
-            if !ok {
-                return Err(AppError::NotFound);
-            }
+            check_in_engagement(&tx, "log_entries", engagement_id, l)?;
         }
         tx.prepare_cached(&format!(
             "INSERT OR IGNORE INTO tried_pairs ({COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)"
@@ -139,10 +127,7 @@ pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[TriedPairInput])
 }
 
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM tried_pairs WHERE id = ?1", [id])? == 0 {
-        return Err(AppError::NotFound);
-    }
-    Ok(())
+    delete_by_id(conn, "tried_pairs", id)
 }
 
 /// Whether two domain spellings name the same domain (R16): equal ignoring case, or a NetBIOS name (`CORP`) and an

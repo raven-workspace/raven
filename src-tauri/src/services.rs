@@ -1,6 +1,6 @@
 //! Service repository. Nmap supplies guesses (`nmap_*`); only the user sets the confirmed identity.
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, now_ms};
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
@@ -78,10 +78,6 @@ fn from_row(r: &Row) -> rusqlite::Result<Service> {
 }
 
 /// Trims; empty becomes `None`.
-fn blank_to_none(s: Option<&str>) -> Option<String> {
-    s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
-}
-
 fn check_port(port: i64) -> AppResult<()> {
     if (1..=65535).contains(&port) {
         Ok(())
@@ -138,7 +134,7 @@ pub fn upsert_scan(conn: &Connection, host_id: &str, ports: &[ScanPort]) -> AppR
         clean.push((p.port, check_protocol(&p.protocol)?, state, blank_to_none(Some(&p.service)), blank_to_none(Some(&p.version))));
     }
     let tx = conn.unchecked_transaction()?;
-    let now = system_now_ms();
+    let now = now_ms();
     for (port, protocol, state, svc, ver) in clean {
         tx.execute(
             "INSERT INTO services (id, host_id, port, protocol, state, nmap_service, nmap_version, created_at, updated_at) \
@@ -178,7 +174,7 @@ pub fn create(conn: &Connection, host_id: &str, input: ServiceInput) -> AppResul
         return Err(AppError::validation("port", DUP_PORT));
     }
     let id = uuid::Uuid::new_v4().to_string();
-    let now = system_now_ms();
+    let now = now_ms();
     conn.execute(
         "INSERT INTO services (id, host_id, port, protocol, nmap_service, nmap_version, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?7)",
@@ -195,7 +191,7 @@ pub fn update(conn: &Connection, id: &str, input: ServiceInput) -> AppResult<Ser
     }
     conn.execute(
         "UPDATE services SET port=?2, protocol=?3, nmap_service=?4, nmap_version=?5, updated_at=?6 WHERE id=?1",
-        params![id, port, protocol, svc, ver, system_now_ms()],
+        params![id, port, protocol, svc, ver, now_ms()],
     )?;
     get(conn, id)
 }
@@ -223,7 +219,7 @@ pub fn confirm(conn: &Connection, id: &str, input: ConfirmInput) -> AppResult<Se
     }
     conn.execute(
         "UPDATE services SET confirmed_product=?2, confirmed_version=?3, confirmed_entry_id=?4, updated_at=?5 WHERE id=?1",
-        params![id, product, version, entry_id, system_now_ms()],
+        params![id, product, version, entry_id, now_ms()],
     )?;
     get(conn, id)
 }
@@ -231,7 +227,7 @@ pub fn confirm(conn: &Connection, id: &str, input: ConfirmInput) -> AppResult<Se
 pub fn unconfirm(conn: &Connection, id: &str) -> AppResult<Service> {
     let n = conn.execute(
         "UPDATE services SET confirmed_product=NULL, confirmed_version=NULL, confirmed_entry_id=NULL, updated_at=?2 WHERE id=?1",
-        params![id, system_now_ms()],
+        params![id, now_ms()],
     )?;
     if n == 0 {
         return Err(AppError::NotFound);
@@ -272,7 +268,7 @@ pub fn set_verdict(conn: &Connection, id: &str, verdict: Option<&str>, reason: O
             tx.query_row("SELECT engagement_id FROM hosts WHERE id = ?1", [&svc.host_id], |r| r.get(0))?;
         crate::notes::link_ruled_out(&tx, &engagement_id, &svc.host_id, "service", id, &service_label(&svc), reason)?;
     }
-    tx.execute("UPDATE services SET verdict = ?2, updated_at = ?3 WHERE id = ?1", params![id, verdict, system_now_ms()])?;
+    tx.execute("UPDATE services SET verdict = ?2, updated_at = ?3 WHERE id = ?1", params![id, verdict, now_ms()])?;
     tx.commit()?;
     get(conn, id)
 }

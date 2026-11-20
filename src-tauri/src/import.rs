@@ -9,8 +9,9 @@
 //! - a record that collides on a secondary unique key (a host's IP, a service's port, a username) under a
 //!   different id is counted as present, and the plan's references to it are remapped to the existing row.
 
-use crate::backup::{self, system_now_ms};
+use crate::backup;
 use crate::checklist::Evidence;
+use crate::db::{blank_to_none, now_ms};
 use crate::error::{AppError, AppResult};
 use crate::log::{LogContent, NewAttachment};
 use crate::vault::Vault;
@@ -310,7 +311,7 @@ pub struct ImportSummary {
 pub fn apply(vault: &Vault, plan: &ImportPlanInput) -> AppResult<ImportSummary> {
     let conn = vault.conn()?;
     backup::take(vault, "pre-import")?;
-    apply_plan(conn, plan, system_now_ms())
+    apply_plan(conn, plan, now_ms())
 }
 
 /// The transaction part of `apply` (no backup). All or nothing: the transaction rolls back on any error.
@@ -607,7 +608,7 @@ impl Ctx<'_> {
             _ => {}
         }
         let json = serde_json::to_string(&content)?;
-        let trim = |v: &Option<String>| v.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+        let trim = |v: &Option<String>| blank_to_none(v.as_deref());
         self.tx.execute(
             "INSERT INTO log_entries (id, engagement_id, kind, title, title_edited, ran_on, observations, \
              returned_nothing, private, content, at, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?12)",

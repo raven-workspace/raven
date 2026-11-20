@@ -1,7 +1,7 @@
 //! Host facts the user or a parser records: who the user is on the host (`host_identity`) and
 //! the privilege-escalation vectors worth trying (`privesc_vectors`).
 
-use crate::backup::system_now_ms;
+use crate::db::{blank_to_none, in_engagement, now_ms};
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
@@ -80,24 +80,18 @@ pub fn identity_set(conn: &Connection, input: HostIdentity) -> AppResult<HostIde
         return Err(AppError::validation("username", "username must be 1-200 characters"));
     }
     let engagement_id = host_engagement(conn, &input.host_id)?;
-    let entry_id = input.entry_id.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
-    if let Some(e) = &entry_id {
-        let ok: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM log_entries WHERE id = ?1 AND engagement_id = ?2)",
-            params![e, engagement_id],
-            |r| r.get(0),
-        )?;
-        if !ok {
+    let entry_id = blank_to_none(input.entry_id.as_deref());
+    if let Some(e) = &entry_id
+        && !in_engagement(conn, "log_entries", &engagement_id, e)? {
             return Err(AppError::validation("entryId", "entry must belong to this engagement"));
         }
-    }
     let privileges = serde_json::to_string(&clean_list(&input.privileges))?;
     let groups = serde_json::to_string(&clean_list(&input.groups))?;
     conn.execute(
         "INSERT INTO host_identity (host_id, username, privileges, groups, entry_id, updated_at) VALUES (?1,?2,?3,?4,?5,?6) \
          ON CONFLICT (host_id) DO UPDATE SET username = excluded.username, privileges = excluded.privileges, \
            groups = excluded.groups, entry_id = excluded.entry_id, updated_at = excluded.updated_at",
-        params![input.host_id, username, privileges, groups, entry_id, system_now_ms()],
+        params![input.host_id, username, privileges, groups, entry_id, now_ms()],
     )?;
     identity_get(conn, &input.host_id)?.ok_or(AppError::NotFound)
 }
@@ -151,7 +145,7 @@ pub fn vector_upsert(conn: &Connection, host_id: &str, input: VectorInput) -> Ap
         return Err(AppError::validation("status", "rule a vector out with a reason"));
     }
     host_engagement(conn, host_id)?;
-    let now = system_now_ms();
+    let now = now_ms();
     let existing: Option<PrivescVector> = vectors_list(conn, host_id)?.into_iter().find(|v| v.title == title);
     match existing {
         None => {
@@ -202,7 +196,7 @@ pub fn vector_set_status(conn: &Connection, id: &str, status: &str, reason: Opti
     // Hand-set status marks the row manual, so a later parser run cannot undo it.
     tx.execute(
         "UPDATE privesc_vectors SET status = ?2, source = 'manual', updated_at = ?3 WHERE id = ?1",
-        params![id, status, system_now_ms()],
+        params![id, status, now_ms()],
     )?;
     tx.commit()?;
     vector_get(conn, id)
