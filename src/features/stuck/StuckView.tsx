@@ -22,6 +22,7 @@ import { useNote } from "../notes/queries";
 import { noteKey, useNotesStore } from "../notes/useNotesStore";
 import { useSettings, settingsFill } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
+import "./StuckView.scss";
 
 const WIDTH = 440;
 const HINTS: Hint[] = [
@@ -32,8 +33,8 @@ const PIVOT_IDS = new Set(PIVOT_GOALS.map((g) => g.id));
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section aria-label={title} className="grid gap-2 border-t border-line-2 pt-4 first:border-t-0 first:pt-0">
-      <h3 className={cx(labelClass, "m-0")}>{title}</h3>
+    <section aria-label={title} className="stuck-view__section">
+      <h3 className={labelClass}>{title}</h3>
       {children}
     </section>
   );
@@ -157,15 +158,15 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
         : s.skipped.length + s.unidentified.length + s.untouched.length === 0);
     content = (
       <>
-        <p className="m-0 text-meta text-fg-2">{s.phase === "after-foothold" ? "After a foothold" : "Before a foothold"}</p>
+        <p className="stuck-view__text">{s.phase === "after-foothold" ? "After a foothold" : "Before a foothold"}</p>
         {s.phase === "before-foothold" ? (
           <>
             {s.skipped.length > 0 && (
               <Section title="Skipped steps">
-                <ul className="m-0 grid list-none gap-1 p-0">
+                <ul className="stuck-view__list">
                   {s.skipped.map((g) => (
                     <li key={g.goalId}>
-                      <button type="button" onClick={() => onOpenGoal(g.goalId)} className="cursor-default text-left text-meta text-fg-2 underline-offset-2 hover:text-fg hover:underline focus-visible:outline-1 focus-visible:outline-accent">
+                      <button type="button" onClick={() => onOpenGoal(g.goalId)} className="stuck-view__goal">
                         {g.title}
                       </button>
                     </li>
@@ -176,11 +177,11 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
             {s.unidentified.length > 0 && (
               <Section title="Unidentified services">
                 {s.unidentified.map((u) => (
-                  <div key={u.service.id} className="grid gap-2">
-                    <p className="m-0 grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-2 text-meta">
-                      <span className="font-mono text-code text-fg">{u.service.port}/{u.service.protocol}</span>
-                      <span className="truncate font-mono text-code text-fg" title={u.service.nmapService ?? undefined}>{u.service.nmapService ?? ""}</span>
-                      <span className="text-muted">{u.reason === "guess" ? "nmap is guessing" : "no version"}</span>
+                  <div key={u.service.id} className="stuck-view__group">
+                    <p className="stuck-view__service">
+                      <span className="stuck-view__code">{u.service.port}/{u.service.protocol}</span>
+                      <span className="stuck-view__code stuck-view__code--truncate" title={u.service.nmapService ?? undefined}>{u.service.nmapService ?? ""}</span>
+                      <span className="stuck-view__reason">{u.reason === "guess" ? "nmap is guessing" : "no version"}</span>
                     </p>
                     <CommandList commands={nudgeCommands(u.service.id, u.nudges)} hostName={shortHostName(host.name)} />
                   </div>
@@ -189,11 +190,11 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
             )}
             {s.untouched.length > 0 && (
               <Section title="Never touched">
-                <ul className="m-0 grid list-none gap-1 p-0">
+                <ul className="stuck-view__list">
                   {s.untouched.map((v) => (
-                    <li key={v.id} className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2 text-meta">
-                      <span className="font-mono text-code text-fg-2">{v.port}/{v.protocol}</span>
-                      <span className="truncate text-muted" title={v.confirmedProduct ?? v.nmapService ?? undefined}>{v.confirmedProduct ?? v.nmapService ?? ""}</span>
+                    <li key={v.id} className="stuck-view__untouched">
+                      <span className="stuck-view__code stuck-view__code--soft">{v.port}/{v.protocol}</span>
+                      <span className="stuck-view__product" title={v.confirmedProduct ?? v.nmapService ?? undefined}>{v.confirmedProduct ?? v.nmapService ?? ""}</span>
                     </li>
                   ))}
                 </ul>
@@ -205,8 +206,8 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
             {filled.length > 0 && (
               <Section title="Commands to try">
                 {filled.map((c) => (
-                  <div key={c.goalId} className="grid gap-2">
-                    <p className="m-0 text-meta text-fg">{c.title}</p>
+                  <div key={c.goalId} className="stuck-view__group">
+                    <p className="stuck-view__text stuck-view__text--strong">{c.title}</p>
                     <CommandList commands={c.commands} hostName={shortHostName(host.name)} />
                   </div>
                 ))}
@@ -214,20 +215,20 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
             )}
             {s.notes.trim() !== "" && (
               <Section title="Notes">
-                <pre className="m-0 whitespace-pre-wrap font-mono text-code text-fg-2">{s.notes}</pre>
+                <pre className="stuck-view__notes">{s.notes}</pre>
               </Section>
             )}
           </>
         )}
         {s.threads.length > 0 && (
           <Section title="Open threads">
-            <ul className="m-0 grid list-none gap-1 p-0">
-              {s.threads.map((t) => <li key={t.line} className="text-meta text-fg-2">{t.text}</li>)}
+            <ul className="stuck-view__list">
+              {s.threads.map((t) => <li key={t.line} className="stuck-view__text">{t.text}</li>)}
             </ul>
           </Section>
         )}
-        {empty && <p className="m-0 text-meta text-muted">Nothing obvious left on this host</p>}
-        {s.hints.map((h) => <p key={h} className="m-0 text-meta text-muted">{h}</p>)}
+        {empty && <p className="stuck-view__text stuck-view__text--muted">Nothing obvious left on this host</p>}
+        {s.hints.map((h) => <p key={h} className="stuck-view__text stuck-view__text--muted">{h}</p>)}
       </>
     );
   }
@@ -239,14 +240,14 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
       data-hint-surface
       aria-label={title}
       style={{ width: WIDTH }}
-      className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid max-w-[70vw] grid-rows-[auto_minmax(0,1fr)_auto] border-l border-line-2 bg-surface text-fg-2 outline-none`}
+      className={cx("stuck-view", BELOW_TITLE_BAR)}
     >
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-4 py-2">
-        <h2 className="m-0 truncate text-heading text-fg" title={title}>{title}</h2>
+      <header className="stuck-view__header">
+        <h2 className="stuck-view__title" title={title}>{title}</h2>
         <IconButton icon={XIcon} label="Close" shortcut="Esc" onClick={onClose} />
       </header>
-      <div className="grid min-h-0 content-start gap-4 overflow-y-auto px-4 py-3">{content}</div>
-      <footer className="border-t border-line px-4 py-2">
+      <div className="stuck-view__body">{content}</div>
+      <footer className="stuck-view__footer">
         <HintLine hints={HINTS} ariaLabel="Stuck view shortcuts" />
       </footer>
     </aside>
@@ -302,37 +303,37 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   };
 
   return (
-    <div className="grid gap-2">
+    <div className="stuck-check">
       <Disclosure label="Stuck check" count={lines.length} open={open} onOpenChange={setOpen}>
         {lines.length === 0 ? (
-          <p className="m-0 px-1 py-2 text-meta text-muted">No leads: nothing obvious left.</p>
+          <p className="stuck-check__empty">No leads: nothing obvious left.</p>
         ) : (
-          <div className="grid gap-3 px-1 py-2">
+          <div className="stuck-check__areas">
             {AREAS.map(({ id, label }) => {
               const group = lines.filter((l) => l.area === id);
               if (group.length === 0) return null;
               return (
-                <section key={id} aria-label={label} className="grid gap-1">
-                  <h4 className="m-0 px-1 text-meta text-fg-2">{label} <span className="font-mono text-code text-faint">{group.length}</span></h4>
-                  <ul className="m-0 grid list-none p-0">
+                <section key={id} aria-label={label} className="stuck-check__area">
+                  <h4 className="stuck-check__area-title">{label} <span className="stuck-check__count">{group.length}</span></h4>
+                  <ul className="stuck-check__list">
                     {group.map((l, i) => {
                       // The subject (host or credential) and its state are two elements, never one dashed string.
                       const parts = (
                         <>
                           {l.subject !== null && (
                             <>
-                              <span className="max-w-[24ch] truncate text-fg" title={l.subject}>{l.subject}</span>{" "}
+                              <span className="stuck-check__subject" title={l.subject}>{l.subject}</span>{" "}
                             </>
                           )}
-                          <span className={l.subject !== null ? undefined : "col-span-2"}>{l.text}</span>
+                          <span className={l.subject !== null ? undefined : "stuck-check__text--wide"}>{l.text}</span>
                         </>
                       );
                       // A selectable list row (DESIGN.md: no grey text links for actions), at least 28px tall.
-                      const cols = "grid min-h-7 w-full grid-cols-[auto_minmax(0,1fr)] content-center items-baseline gap-2 rounded-sm px-1 py-1 text-left text-meta text-fg-2";
+                      const cols = "stuck-check__line";
                       return (
                         <li key={i}>
                           {l.hostId || l.goalId ? (
-                            <button type="button" onClick={() => go(l)} className={`${cols} cursor-default hover:bg-surface-hi hover:text-fg`}>
+                            <button type="button" onClick={() => go(l)} className={`${cols} stuck-check__line--action`}>
                               {parts}
                             </button>
                           ) : (

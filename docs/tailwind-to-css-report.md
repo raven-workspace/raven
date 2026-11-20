@@ -317,3 +317,16 @@
 - [x] Type check, lint, unit tests
 - [x] Pixel diff 297/297 (findings@900 flaky on one attempt)
 - [x] Audit gate
+
+## Unit: stuck
+
+### Changes
+- StuckView.scss: `.stuck-view` (the `H` slide-over, docked with `below-title-bar`, `--z-drawer`) with its header, body,
+  footer, sections (hairline between, none above the first) and rows; `.stuck-check` for the engagement-wide check and
+  its selectable 28px lines (`.stuck-check__line--action` for the ones that open a host or goal).
+- Dropped preflight no-ops (`m-0` on the section headings, `m-0 p-0` on the lists).
+
+### Verification
+- [x] Unit tests (no utility assertions in this area)
+- [x] Type check and lint
+- [x] Pixel diff and audit gate: see the hosts unit (one run over stuck, notes, checklist, network and hosts)
