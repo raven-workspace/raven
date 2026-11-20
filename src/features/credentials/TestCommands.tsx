@@ -1,6 +1,7 @@
 import type { CommandSet } from "../../engines/credentials";
 import { Button, CommandBlock, useFlash } from "../../ui";
 import { copySecret } from "../../lib/clipboard";
+import "./TestCommands.scss";
 
 const NOTICE: Record<NonNullable<CommandSet["notice"]>, string> = {
   "no-services": "No host has the needed service open.",
@@ -20,10 +21,10 @@ function CopyUsersButton({ text }: { text: string }) {
 /** Commands for one routine step. `shown` is the same build with the secret masked; Copy uses the real one. */
 export function TestCommands({ set, shown }: { set: CommandSet & { usersFile?: string }; shown: CommandSet }) {
   if (set.commands.length === 0) {
-    return <p className="m-0 text-meta text-muted">{set.notice ? NOTICE[set.notice] : "Nothing to run."}</p>;
+    return <p className="test-commands__notice">{set.notice ? NOTICE[set.notice] : "Nothing to run."}</p>;
   }
   return (
-    <div className="grid gap-1">
+    <div className="test-commands">
       {set.commands.map((c, i) => (
         <CommandBlock
           key={i}
@@ -33,7 +34,7 @@ export function TestCommands({ set, shown }: { set: CommandSet & { usersFile?: s
         />
       ))}
       {set.usersFile && (
-        <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-2 text-meta text-muted">
+        <div className="test-commands__users">
           <span>users.txt ({set.usersFile.split("\n").length} usernames)</span>
           <CopyUsersButton text={set.usersFile} />
         </div>

@@ -4,6 +4,7 @@ import type { AccessGrant, CredAttempt, Credential, Username } from "../../types
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import { Chip, labelClass } from "../../ui";
+import { cx } from "../../lib/cx";
 import { revealRow } from "../../lib/revealRow";
 import { ScrollArea } from "../../ui/shadcn/scroll-area";
 import { ToggleGroup, ToggleGroupItem } from "../../ui/shadcn/toggle-group";
@@ -11,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { UsernamesList } from "./UsernamesList";
 import { useInventoryKind, type InventoryKind } from "./useCredentialSelection";
 import { hostLabel } from "../../lib/hostName";
+import "./InventoryList.scss";
 
 const STATE_LABEL: Record<OverallState, string> = {
   admin: "admin",
@@ -29,27 +31,8 @@ export function StateChip({ state }: { state: OverallState }) {
 /*
  * Column policy (DESIGN.md Tables and lists): credential, type, scope, source, state, and for hashes crack status.
  * The pane decides, not the window: under 900px of pane Source drops, under 700px Scope too. Rows are subgrids.
- * Hidden columns are display:none, so each template lists exactly the visible tracks.
+ * The tracks for each shape are in InventoryList.scss.
  */
-const TABLE = "grid gap-x-3";
-// Four shapes: with or without a type column (the group already says "password"), with or without crack status.
-// Wide, Source (free text) takes the slack and Credential is content-sized up to 40ch; narrower, Credential takes it.
-const TRACKS_PLAIN =
-  "grid-cols-[minmax(20ch,1fr)_max-content] " +
-  "@[700px]:grid-cols-[minmax(20ch,1fr)_max-content_max-content] " +
-  "@[900px]:grid-cols-[fit-content(40ch)_max-content_minmax(10ch,1fr)_max-content]";
-const TRACKS_TYPED =
-  "grid-cols-[minmax(20ch,1fr)_max-content_max-content] " +
-  "@[700px]:grid-cols-[minmax(20ch,1fr)_max-content_max-content_max-content] " +
-  "@[900px]:grid-cols-[fit-content(40ch)_max-content_max-content_minmax(10ch,1fr)_max-content]";
-const TRACKS_CRACK =
-  "grid-cols-[minmax(20ch,1fr)_max-content_max-content_max-content] " +
-  "@[700px]:grid-cols-[minmax(20ch,1fr)_max-content_max-content_max-content_max-content] " +
-  "@[900px]:grid-cols-[fit-content(40ch)_max-content_max-content_minmax(10ch,1fr)_max-content_max-content]";
-const ROW = "col-span-full grid grid-cols-subgrid items-start";
-const SHOW_SCOPE = "hidden @[700px]:block";
-const SHOW_SOURCE = "hidden @[900px]:block";
-const BAR = "shadow-[inset_2px_0_0_var(--accent)]";
 
 /** ArrowUp/Down move focus between rows of the whole list; they never select. */
 function moveRowFocus(e: KeyboardEvent<HTMLElement>, root: HTMLElement | null) {
@@ -78,21 +61,21 @@ function Group({ label, creds, crack, typed, ...ctx }: {
   if (creds.length === 0) return null;
   const hostName = (hid: string | null) => (hid ? hostLabel(ctx.hosts.find((h) => h.id === hid)) : "");
   return (
-    <section aria-label={label} className="grid grid-cols-[minmax(0,1fr)] gap-2">
-      <h3 className={`m-0 ${labelClass}`}>{label} <span className="tabular-nums">{creds.length}</span></h3>
-      <Table className={`${TABLE} ${crack ? TRACKS_CRACK : typed ? TRACKS_TYPED : TRACKS_PLAIN}`}>
-        <TableHeader className="contents">
-          <TableRow className={ROW}>
+    <section aria-label={label} className="inventory-list__group">
+      <h3 className={labelClass}>{label} <span className="inventory-list__count">{creds.length}</span></h3>
+      <Table className={cx("inventory-list__table", crack ? "inventory-list__table--crack" : typed && "inventory-list__table--typed")}>
+        <TableHeader className="inventory-list__rows">
+          <TableRow className="inventory-list__row">
             <TableHead scope="col">Credential</TableHead>
             {crack && <TableHead scope="col">Hash type</TableHead>}
             {typed && <TableHead scope="col">Type</TableHead>}
-            <TableHead scope="col" className={SHOW_SCOPE}>Scope</TableHead>
-            <TableHead scope="col" className={SHOW_SOURCE}>Source</TableHead>
+            <TableHead scope="col" className="inventory-list__scope">Scope</TableHead>
+            <TableHead scope="col" className="inventory-list__source">Source</TableHead>
             <TableHead scope="col">State</TableHead>
             {crack && <TableHead scope="col">Crack status</TableHead>}
           </TableRow>
         </TableHeader>
-        <TableBody className="contents">
+        <TableBody className="inventory-list__rows">
           {creds.map((c) => {
             const selected = c.id === ctx.selectedId;
             const name = credName(c);
@@ -105,7 +88,7 @@ function Group({ label, creds, crack, typed, ...ctx }: {
                 tabIndex={0}
                 aria-selected={selected}
                 data-state={selected ? "selected" : undefined}
-                className={`${ROW} cursor-pointer ${selected ? BAR : ""}`}
+                className="inventory-list__row inventory-list__item"
                 onClick={() => ctx.onSelect(c.id)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -114,26 +97,26 @@ function Group({ label, creds, crack, typed, ...ctx }: {
                   } else moveRowFocus(e, ctx.root.current);
                 }}
               >
-                <TableCell className="min-w-0">
+                <TableCell className="inventory-list__cell">
                   {isOwnerless(c) ? (
-                    <span className="grid justify-items-start gap-1">
+                    <span className="inventory-list__ownerless">
                       <Chip>owner unknown</Chip>
-                      <span className="text-meta text-muted">
+                      <span className="inventory-list__matched">
                         {matched.length > 0 ? `matched: ${matched.map((x) => usernameLabel(x)).join(", ")}` : "no user matched yet"}
                       </span>
                     </span>
                   ) : (
-                    <span className="block truncate font-mono text-code text-fg" title={name}>{name}</span>
+                    <span className="inventory-list__name" title={name}>{name}</span>
                   )}
                 </TableCell>
-                {crack && <TableCell className="text-fg-2">{c.hashType ?? identifyHash(c.secret, "windows")[0]?.name ?? "unknown"}</TableCell>}
-                {typed && <TableCell className="text-fg-2">{c.type}</TableCell>}
-                <TableCell className={`${SHOW_SCOPE} min-w-0 text-fg-2`}>
-                  <span className="whitespace-nowrap">{c.scope}</span>
-                  {scopeHost && <span className="block max-w-[24ch] truncate text-meta text-muted" title={scopeHost}>{scopeHost}</span>}
+                {crack && <TableCell className="inventory-list__value">{c.hashType ?? identifyHash(c.secret, "windows")[0]?.name ?? "unknown"}</TableCell>}
+                {typed && <TableCell className="inventory-list__value">{c.type}</TableCell>}
+                <TableCell className="inventory-list__scope inventory-list__cell inventory-list__value">
+                  <span className="inventory-list__scope-value">{c.scope}</span>
+                  {scopeHost && <span className="inventory-list__scope-host" title={scopeHost}>{scopeHost}</span>}
                 </TableCell>
-                <TableCell className={`min-w-0 ${SHOW_SOURCE} text-fg-2`}>
-                  {c.source ? <span className="block truncate" title={c.source}>{c.source}</span> : <span className="text-muted">unknown</span>}
+                <TableCell className="inventory-list__source inventory-list__cell inventory-list__value">
+                  {c.source ? <span className="inventory-list__source-text" title={c.source}>{c.source}</span> : <span className="inventory-list__unknown">unknown</span>}
                 </TableCell>
                 <TableCell><StateChip state={overallState(c, ctx.hosts, ctx.servicesByHost, ctx.attempts)} /></TableCell>
                 {crack && <TableCell><Chip variant={c.crackStatus === "uncrackable" ? "warn" : "default"}>{c.crackStatus ?? "uncracked"}</Chip></TableCell>}
@@ -183,20 +166,21 @@ export function InventoryList({ eid, creds, all, hosts, servicesByHost, attempts
   const kind = present.some((k) => k.kind === requested) ? requested : "all";
   const show = (k: InventoryKind) => kind === "all" || kind === k;
   return (
-    <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-3">
-      <div className="grid grid-cols-[minmax(0,1fr)] overflow-x-auto">
-        <ToggleGroup type="single" size="sm" aria-label="Show kind" value={kind} onValueChange={(v) => v && setKind(v as InventoryKind | "all")} className="justify-self-start">
+    <div className="inventory-list">
+      <div className="inventory-list__filter">
+        <ToggleGroup type="single" size="sm" aria-label="Show kind" value={kind} onValueChange={(v) => v && setKind(v as InventoryKind | "all")} className="inventory-list__kinds">
+          {/* Utilities until src/ui/shadcn is converted: cn() swaps the item's own text-meta and gap-1 only for utilities. */}
           <ToggleGroupItem value="all" className="text-body">All</ToggleGroupItem>
           {present.map((k) => (
             <ToggleGroupItem key={k.kind} value={k.kind} className="gap-2 whitespace-nowrap text-body">
               {k.label}
-              <span className="tabular-nums text-muted">{k.count}</span>
+              <span className="inventory-list__kind-count">{k.count}</span>
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
       </div>
-      <ScrollArea className="h-full min-h-0 [&_[data-slot=scroll-area-viewport]>div]:block!">
-        <div ref={root} className="@container grid grid-cols-[minmax(0,1fr)] gap-6 pr-3">
+      <ScrollArea className="inventory-list__scroll">
+        <div ref={root} className="inventory-list__groups">
           {groups.filter((g) => show(g.kind)).map(({ kind: k, ...g }) => <Group key={k} {...g} {...ctx} />)}
           {show("usernames") && <UsernamesList eid={eid} usernames={usernames} grants={grants} hosts={hosts} />}
         </div>

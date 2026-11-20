@@ -23,6 +23,7 @@ import { useCredentialMutations } from "./queries";
 import type { DockTab } from "./selection";
 import { TestCommands } from "./TestCommands";
 import { useEngagement } from "../engagements/queries";
+import "./DockWork.scss";
 
 /** Plaintext for a hash. The server records a linked password; the hash then folds into it. */
 export function CrackDialog({ eid, hash, onClose, onCracked }: {
@@ -111,19 +112,19 @@ function CrackPane({ eid, cred, onCracked }: { eid: string; cred: Credential; on
   const shown = getCrackingCommands(MASK, cand);
   const dead = cred.crackStatus === "uncrackable";
   return (
-    <div className="grid gap-3">
-      <div className="grid grid-cols-[max-content_max-content_minmax(0,1fr)] items-center justify-start gap-2">
+    <div className="dock-work__crack">
+      <div className="dock-work__crack-actions">
         <Button variant="primary" onClick={() => setCracking(true)}>Record plaintext</Button>
         {dead ? (
           <Button onClick={() => setCrackStatus.mutate({ id: cred.id, status: "uncracked" })}>Reset</Button>
         ) : (
           <Button onClick={() => setCrackStatus.mutate({ id: cred.id, status: "uncrackable" })}>Mark uncrackable</Button>
         )}
-        <span className="text-meta text-muted">{cred.hashType ?? cand?.name ?? "unknown type"}</span>
+        <span className="dock-work__hash-type">{cred.hashType ?? cand?.name ?? "unknown type"}</span>
       </div>
-      {setCrackStatus.error && <p role="alert" className="m-0 text-meta text-warn">{setCrackStatus.error.message}</p>}
+      {setCrackStatus.error && <p role="alert" className="dock-work__error">{setCrackStatus.error.message}</p>}
       {(cmds.hashcat || cmds.john) && (
-        <div className="grid gap-1">
+        <div className="dock-work__commands">
           {cmds.hashcat && <CommandBlock text={shown.hashcat ?? ""} copyText={cmds.hashcat} copyLabel="Copy hashcat command" />}
           {cmds.john && <CommandBlock text={cmds.john} copyText={cmds.john} copyLabel="Copy john command" />}
         </div>
@@ -158,17 +159,17 @@ export function DockWork({ eid, cred, tabs, hosts, servicesByHost, attempts, use
   };
 
   const steps = (t: Exclude<DockTab, "crack">) => (
-    <ul className="m-0 list-none p-0">
+    <ul>
       {TAB_STEPS[t].map((id) => {
         const step = ROUTINE_STEPS.find((s) => s.id === id)!;
         const applies = routineStepApplies(step.id, cred, hosts, servicesByHost, usernames);
         const done = state[step.itemId]?.status === "done";
         return (
-          <li key={step.id} aria-label={step.title} className={`grid gap-1 border-b border-line py-2 ${applies ? "" : "opacity-50"}`}>
-            <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3">
-              <span className="text-body text-fg">
+          <li key={step.id} aria-label={step.title} className={applies ? "dock-work__step" : "dock-work__step dock-work__step--idle"}>
+            <div className="dock-work__step-head">
+              <span className="dock-work__step-title">
                 {step.title}
-                {!applies && <span className="ml-2 text-meta text-muted">Doesn't apply</span>}
+                {!applies && <span className="dock-work__step-note">Doesn't apply</span>}
               </span>
               <Button
                 size="sm"
@@ -188,14 +189,14 @@ export function DockWork({ eid, cred, tabs, hosts, servicesByHost, attempts, use
   );
 
   return (
-    <Tabs value={active} onValueChange={(v) => setTab(v as DockTab)} className="min-w-0 grid-cols-[minmax(0,1fr)] content-start">
+    <Tabs value={active} onValueChange={(v) => setTab(v as DockTab)} className="dock-work">
       <TabsList aria-label="Credential work">
         {tabs.map((t) => (
           <TabsTrigger key={t} value={t}>{TAB_LABEL[t]}</TabsTrigger>
         ))}
       </TabsList>
-      {setStatus.error && <p role="alert" className="m-0 text-meta text-warn">{setStatus.error.message}</p>}
-      <TabsContent value={active} aria-label={TAB_LABEL[active]} className="min-w-0">
+      {setStatus.error && <p role="alert" className="dock-work__error">{setStatus.error.message}</p>}
+      <TabsContent value={active} aria-label={TAB_LABEL[active]} className="dock-work__panel">
         {active === "crack" ? <CrackPane eid={eid} cred={cred} onCracked={onCracked} /> : steps(active)}
       </TabsContent>
     </Tabs>

@@ -69,7 +69,7 @@ describe("TestGrid selection", () => {
     const row = document.querySelector('[data-cred-id="c2"]')!;
     expect(row).toHaveAttribute("aria-selected", "true");
     expect(row).toHaveAttribute("data-state", "selected");
-    expect(row.querySelector("th")!.className).toContain("shadow-[inset_2px_0_0_var(--accent)]");
+    expect(row.querySelector("th")).toHaveClass("test-grid__row-head--selected"); // the inset accent bar
     expect(document.querySelector('[data-cred-id="c1"]')).not.toHaveAttribute("aria-selected");
   });
 

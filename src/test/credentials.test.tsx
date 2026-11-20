@@ -217,7 +217,9 @@ describe("credentials section", () => {
     const row = await findDockHeader();
     const mask = within(row).getByTestId("secret-text");
     expect(mask.textContent).toBe("••••••••");
-    expect(mask.className).toMatch(/whitespace-nowrap/);
+    // .masked-secret__text is white-space: nowrap; only the revealed modifier lets it wrap.
+    expect(mask).toHaveClass("masked-secret__text");
+    expect(mask).not.toHaveClass("masked-secret__text--shown");
     expect(mask.className).not.toMatch(/break-all/);
     const reveal = within(row).getByRole("button", { name: /^Reveal secret/ });
     expect(within(row).queryByText("Reveal")).not.toBeInTheDocument();
@@ -239,7 +241,7 @@ describe("credentials section", () => {
     const dock = await findDock();
     const name = within(dock).getByTitle(long);
     expect(name).toHaveTextContent(long);
-    expect(name.className).toMatch(/truncate/);
+    expect(name).toHaveClass("credential-dock__name"); // truncates (CredentialDock.scss)
     expect(within(dock).getByRole("button", { name: `Delete ${long}` })).toBeVisible();
   });
 
@@ -733,8 +735,9 @@ describe("credentials dock page", () => {
       ancestorsStill(viewport);
       // The selection bar is on the row box, so it spans a row whose other cells wrap to two lines.
       const selectedRow = document.querySelector("tr[data-cred-row][aria-selected='true']")!;
-      expect(selectedRow.className).toContain("shadow-[inset_2px_0_0_var(--accent)]");
-      expect(selectedRow.firstElementChild!.className).not.toContain("inset_2px");
+      // .inventory-list__item[aria-selected="true"] draws the bar (InventoryList.scss).
+      expect(selectedRow).toHaveClass("inventory-list__item");
+      expect(selectedRow.firstElementChild).not.toHaveClass("inventory-list__item");
       expect(into).not.toHaveBeenCalled();
     } finally {
       into.mockRestore();

@@ -16,6 +16,7 @@ import { useAccessGrantMutations, useCredentialMutations, useUsernameMutations, 
 import { parseUsername } from "./UsernamesList";
 import { RavenError } from "../../types/errors";
 import { hostLabel } from "../../lib/hostName";
+import "./CredentialForm.scss";
 
 type Mode = "credential" | "secret" | "username";
 const MODES: { id: Mode; label: string }[] = [
@@ -145,9 +146,9 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
         </>
       }
     >
-      <form id={formId} onSubmit={(e) => void submit(e)} noValidate className="grid gap-4">
+      <form id={formId} onSubmit={(e) => void submit(e)} noValidate className="credential-form">
         {!edit && (
-          <div role="group" aria-label="What you have" className="grid gap-2">
+          <div role="group" aria-label="What you have" className="credential-form__modes">
             <span className={labelClass}>What you have</span>
             <ChipSet>
               {MODES.map((m) => (
@@ -160,7 +161,7 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
         )}
 
         {!ownerless && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="credential-form__pair">
             <Field label="Username" error={errors.username}>
               <Input
                 autoFocus
@@ -190,7 +191,7 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
           <AccessFields value={access} onChange={setAccess} hosts={hosts} errors={errors} />
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="credential-form__pair">
               <Field label="Type">
                 <Select options={TYPES.map((t) => ({ value: t, label: t }))} value={type} onValueChange={(t) => setType(t as CredentialType)} />
               </Field>
@@ -216,7 +217,7 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
                 label="Hash type"
                 hint={
                   candidates.length > 0 ? (
-                    <ChipSet className="items-center">
+                    <ChipSet className="credential-form__guesses">
                       <span>Looks like:</span>
                       {candidates.map((c) => (
                         <Button key={c.name} size="sm" onClick={() => setHashType(c.name)}>{c.name}</Button>
@@ -238,12 +239,12 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
         )}
 
         {duplicate && (
-          <div role="alert" className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3 rounded-sm border border-warn px-3 py-2 text-meta text-warn">
+          <div role="alert" className="credential-form__duplicate">
             <span>Already recorded: {credLabel(duplicate)}</span>
             <Button size="sm" onClick={onClose}>Use existing</Button>
           </div>
         )}
-        {errors.form && <p role="alert" className="m-0 text-meta text-warn">{errors.form}</p>}
+        {errors.form && <p role="alert" className="credential-form__error">{errors.form}</p>}
       </form>
     </Dialog>
   );

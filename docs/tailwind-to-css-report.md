@@ -187,3 +187,36 @@
 - [x] Type check and lint
 - [x] Pixel diff: findings, findings-list, host-findings identical at every width
 - [x] Audit gate
+
+## Unit: credentials
+
+### Changes
+- One sheet per component in `@layer features`: CredentialsSection, InventoryList, UsernamesList, AccessGrants,
+  CredentialForm, CredentialDock, DockWork, TestCommands, MaskedSecret, CellPopover, TestGrid.
+- TestGrid: the sticky header (`top: 0`, z 30), sticky credential column (`left: 0`, z 20 in the header, z 10 in the
+  body), `scroll-snap-type: y proximity` with `scroll-padding-top: var(--head-h, 0px)` and the right-edge fade are
+  reproduced rule for rule. Cell states are `.test-grid__glyph--<state>`; the selected row's header and cells take
+  `--selected` modifiers.
+- InventoryList's column policy is three track sets (`.inventory-list__table`, `--typed`, `--crack`) under
+  `@container (min-width: 700px | 900px)`; the selected row's accent bar keys on `aria-selected`.
+- CredentialDock keys its facts layout on its existing `data-layout`; `MaskedSecret`'s `hideMaskBelow` now takes
+  `credential-dock__mask` (a container-query class in CredentialDock.scss) instead of utilities.
+- Classes on shadcn components were converted only where the component's own classes set none of the same properties
+  (Table, TableHeader/Body/Row/Head/Cell, ScrollArea, ToggleGroup, DockWork's Tabs, TabsContent, ResizablePanel and
+  PanelGroup). The ScrollArea viewport override keeps its `!important`.
+- Dead classes dropped: TestGrid's legend swatches had `h-5 w-5 text-label`, which lost to the box's `h-7 w-7
+  text-meta` (only the label role's weight applied); the swatches stay the cells' 28px boxes in the label weight.
+
+### Left on Tailwind
+- `gap-4` on the credentials section: shadcn's Tabs (asChild) puts its own `gap-3` utility on the same element, which a
+  feature class can't beat.
+- The dock's three `Separator`s (`bg-line-2`, container-query display) and the inventory's `ToggleGroupItem`s
+  (`text-body`, `gap-2 whitespace-nowrap`): `cn()` drops the component's own `bg-border`, `text-meta` and `gap-1` only
+  for utilities. All go with unit 25.
+
+### Verification
+- [x] Unit tests (8 assertions moved from utility names to the BEM classes that carry the same rules; the audit's
+  tried-pairs regression now asserts `.test-grid__row--tried`)
+- [x] Type check and lint
+- [x] Pixel diff: 297/297 (credentials, the dock, inventory and matrix screens identical at every width)
+- [x] Audit gate

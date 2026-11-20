@@ -24,6 +24,7 @@ import { MaskedSecret } from "./MaskedSecret";
 import { useCredentialMutations } from "./queries";
 import { dockTabs } from "./selection";
 import { hostLabel } from "../../lib/hostName";
+import "./CredentialDock.scss";
 
 interface Props {
   eid: string;
@@ -63,9 +64,9 @@ function worksOn(
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid gap-1">
-      <dt className="text-meta text-muted-2">{label}</dt>
-      <dd className="m-0 min-w-0 text-body text-fg-2">{children}</dd>
+    <div className="credential-dock__fact">
+      <dt className="credential-dock__fact-label">{label}</dt>
+      <dd className="credential-dock__fact-value">{children}</dd>
     </div>
   );
 }
@@ -94,33 +95,29 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
     <dl
       data-testid="dock-facts"
       data-layout={tabs.length > 0 ? "column" : "row"}
-      className={`m-0 grid content-start gap-3 p-3 ${
-        tabs.length > 0
-          ? "grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] @[700px]:min-h-0 @[700px]:grid-cols-1 @[700px]:overflow-y-auto"
-          : "grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
-      }`}
+      className="credential-dock__facts"
     >
-      <Fact label="Source">{cred.source || <span className="text-muted">unknown</span>}</Fact>
+      <Fact label="Source">{cred.source || <span className="credential-dock__muted">unknown</span>}</Fact>
       <Fact label="Scope">
         {cred.scope}
-        {scopeHost && <span className="block truncate text-meta text-muted" title={scopeHost}>{scopeHost}</span>}
+        {scopeHost && <span className="credential-dock__scope-host" title={scopeHost}>{scopeHost}</span>}
       </Fact>
       <Fact label="Works on">
         {works.length === 0 ? (
-          <span className="text-muted">nothing yet</span>
+          <span className="credential-dock__muted">nothing yet</span>
         ) : (
-          <ul className="m-0 grid list-none gap-1 p-0">
-            {works.map((w) => <li key={w.where} className="truncate" title={w.where}>{w.where}</li>)}
+          <ul className="credential-dock__works">
+            {works.map((w) => <li key={w.where} className="credential-dock__work-cell" title={w.where}>{w.where}</li>)}
           </ul>
         )}
       </Fact>
       {ownerless && (
         <Fact label="Matched users">
-          {matched.length > 0 ? matched.map((c) => usernameLabel(c)).join(", ") : <span className="text-muted">no user matched yet</span>}
+          {matched.length > 0 ? matched.map((c) => usernameLabel(c)).join(", ") : <span className="credential-dock__muted">no user matched yet</span>}
         </Fact>
       )}
       {placeholder && !ownerless && (
-        <Button className="col-span-full justify-self-start" onClick={() => setConverting(true)}>Convert to access-only</Button>
+        <Button className="credential-dock__convert" onClick={() => setConverting(true)}>Convert to access-only</Button>
       )}
     </dl>
   );
@@ -129,26 +126,26 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
     <section
       aria-label="Credential"
       onKeyDown={onKeyDown}
-      className={`@container grid h-full min-h-0 grid-cols-[minmax(0,1fr)] rounded-lg border border-line-2 bg-surface ${folded ? "grid-rows-[auto]" : "grid-rows-[auto_auto_minmax(0,1fr)]"}`}
+      className={folded ? "credential-dock credential-dock--folded" : "credential-dock"}
     >
       {/* Folded, the dock is this row alone: its height (44px + border) is DOCK_FOLDED_PX in CredentialsSection. Keep them in step. */}
-      <header ref={header} data-testid="dock-header" className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2">
-        <div className="grid grid-cols-[minmax(0,max-content)_max-content_minmax(0,max-content)] items-center @[700px]:grid-cols-[minmax(0,max-content)_max-content_max-content_minmax(0,max-content)] justify-start gap-3">
-          <span className="truncate font-mono text-heading text-fg" title={name}>{name}</span>
-          <span className="text-meta text-muted">{cred.type}</span>
-          <span className="hidden text-meta text-muted @[700px]:inline">{cred.scope}</span>
+      <header ref={header} data-testid="dock-header" className="credential-dock__header">
+        <div className="credential-dock__title">
+          <span className="credential-dock__name" title={name}>{name}</span>
+          <span className="credential-dock__type">{cred.type}</span>
+          <span className="credential-dock__scope">{cred.scope}</span>
           {works.length > 0 ? (
             // Only the best level: where it works is listed once, under Works on.
-            <Chip variant="accent" className="justify-self-start">{works[0].level}</Chip>
+            <Chip variant="accent" className="credential-dock__level">{works[0].level}</Chip>
           ) : (
             <StateChip state={overallState(cred, hosts, servicesByHost, attempts)} />
           )}
         </div>
-        <div className="grid grid-flow-col items-center gap-2">
+        <div className="credential-dock__actions">
           {placeholder ? (
-            <span className="text-muted">no secret</span>
+            <span className="credential-dock__muted">no secret</span>
           ) : (
-            <MaskedSecret secret={cred.secret} label={`secret for ${label}`} hideMaskBelow="hidden @[700px]:inline" />
+            <MaskedSecret secret={cred.secret} label={`secret for ${label}`} hideMaskBelow="credential-dock__mask" />
           )}
           <IconButton icon={PencilSimple} label={`Edit ${label}`} onClick={onEdit} />
           <IconButton icon={Trash} tone="destructive" label={`Delete ${label}`} onClick={onDelete} />
@@ -160,17 +157,19 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
           />
         </div>
       </header>
+      {/* The separators keep their utilities until src/ui/shadcn is converted: cn() drops Separator's own bg-border only
+          for a bg-* utility. */}
       {!folded && (
         <>
           <Separator className="bg-line-2" />
-          <div className={`grid min-h-0 grid-cols-[minmax(0,1fr)] content-start overflow-y-auto @[700px]:overflow-visible ${tabs.length > 0 ? "grid-rows-[auto_auto_auto] @[700px]:grid-rows-none @[700px]:grid-cols-[260px_auto_minmax(0,1fr)]" : ""}`}>
+          <div className={tabs.length > 0 ? "credential-dock__body credential-dock__body--tabs" : "credential-dock__body"}>
             {facts}
             {tabs.length > 0 && (
               <>
                 <Separator className="bg-line-2 @[700px]:hidden" />
                 <Separator orientation="vertical" className="hidden bg-line-2 @[700px]:block" />
-                <ScrollArea className="h-auto min-h-0 @[700px]:h-full [&_[data-slot=scroll-area-viewport]>div]:block!">
-                  <div className="p-3">
+                <ScrollArea className="credential-dock__work">
+                  <div className="credential-dock__work-inner">
                     <DockWork
                       key={cred.id}
                       eid={eid}

@@ -65,7 +65,7 @@ describe("InventoryList", () => {
     const items = bar().getAllByRole("radio");
     expect(items.map((i) => i.firstChild?.textContent)).toEqual(["All", "Passwords", "Hashes", "Machine accounts", "Usernames"]);
     expect(bar().getByRole("radio", { name: "All" })).toBeChecked();
-    expect(within(bar().getByRole("radio", { name: /^Passwords/ })).getByText("2")).toHaveClass("tabular-nums");
+    expect(within(bar().getByRole("radio", { name: /^Passwords/ })).getByText("2")).toHaveClass("inventory-list__kind-count"); // tabular-nums
     expect(bar().queryByRole("radio", { name: /Tickets/ })).toBeNull();
   });
 
@@ -179,13 +179,13 @@ describe("InventoryList", () => {
     const host = within(row).getByText("dc01");
     expect(scope).not.toBe(host);
     expect(host.parentElement).toBe(scope.parentElement);
-    expect(host.className).toMatch(/(^|\s)block(\s|$)/);
+    expect(host).toHaveClass("inventory-list__scope-host"); // display: block
   });
 
   it("a 60-character name truncates with a title", () => {
     const long = "a".repeat(60);
     mount({ creds: [cred({ id: "p9", username: long, secret: "x" })] });
     const el = screen.getByTitle(long);
-    expect(el).toHaveClass("truncate");
+    expect(el).toHaveClass("inventory-list__name"); // truncates
   });
 });

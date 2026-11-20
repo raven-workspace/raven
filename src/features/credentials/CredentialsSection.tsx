@@ -26,6 +26,7 @@ import {
 } from "./queries";
 import { TestGrid } from "./TestGrid";
 import { useCredentialSelection } from "./useCredentialSelection";
+import "./CredentialsSection.scss";
 
 const NO_HOSTS: Host[] = [];
 const NO_CREDS: Credential[] = [];
@@ -103,7 +104,7 @@ export function CredentialsSection() {
 
   const panes = (
     <>
-      <TabsContent value="matrix" className="h-full min-h-0">
+      <TabsContent value="matrix" className="credentials-section__pane">
         <TestGrid
           eid={id}
           hosts={hosts}
@@ -115,14 +116,14 @@ export function CredentialsSection() {
           onSelect={choose}
           fill
           note={hidden > 0 ? (
-            <p className="m-0 grid grid-cols-[max-content_max-content] items-center justify-start gap-2 text-meta text-muted">
+            <p className="credentials-section__note">
               {`${hidden} not sprayable`}
               <Button size="sm" onClick={() => setTab("inventory")}>see Inventory</Button>
             </p>
           ) : undefined}
         />
       </TabsContent>
-      <TabsContent value="inventory" className="h-full min-h-0">
+      <TabsContent value="inventory" className="credentials-section__pane">
         <InventoryList
           eid={id}
           creds={shown.creds}
@@ -141,17 +142,21 @@ export function CredentialsSection() {
 
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} asChild>
-      <section aria-label="Credentials" className="@container grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-4">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <section
+        aria-label="Credentials"
+        // gap-4 stays a utility: Tabs puts its own gap-3 utility on this element, which a feature class can't beat.
+        className="credentials-section gap-4"
+      >
+        <div className="credentials-section__bar">
           <TabsList aria-label="Credentials view">
             <TabsTrigger value="matrix">Matrix</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
           </TabsList>
           {/* One of the two shows: the cells own the display, since Button's own inline-flex outranks `hidden`. */}
-          <div className="hidden @[560px]:grid">
+          <div className="credentials-section__add-wide">
             <Button variant="primary" onClick={() => setForm({})}>Add credential</Button>
           </div>
-          <div className="grid @[560px]:hidden">
+          <div className="credentials-section__add-narrow">
             <IconButton icon={Plus} label="Add credential" onClick={() => setForm({})} />
           </div>
         </div>
@@ -165,9 +170,9 @@ export function CredentialsSection() {
               layout.onLayoutChanged(next, meta);
               setFolded(dockRef.current?.isCollapsed() ?? false);
             }}
-            className="min-h-0"
+            className="credentials-section__split"
           >
-            <ResizablePanel id="list" minSize="30%" className="pb-3">{panes}</ResizablePanel>
+            <ResizablePanel id="list" minSize="30%" className="credentials-section__list-panel">{panes}</ResizablePanel>
             <ResizableHandle aria-label="Resize credential dock" />
             <ResizablePanel
               id="dock"
@@ -177,7 +182,7 @@ export function CredentialsSection() {
               minSize={DOCK_MIN_PX}
               maxSize="70%"
               defaultSize="38%"
-              className="pt-3"
+              className="credentials-section__dock-panel"
             >
               <CredentialDock
                 eid={id}
@@ -197,7 +202,7 @@ export function CredentialsSection() {
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
-          <div className="min-h-0">{panes}</div>
+          <div className="credentials-section__panes">{panes}</div>
         )}
 
         {form && <CredentialForm eid={id} hosts={hosts} credentials={creds} edit={form.edit} onClose={() => setForm(null)} onSaved={form.edit ? undefined : (c) => follow(selected?.id ?? "", c)} />}

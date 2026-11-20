@@ -7,6 +7,7 @@ import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { usernameLabel } from "../../engines/credentials";
 import { useAccessGrantMutations } from "./queries";
 import { hostLabel } from "../../lib/hostName";
+import "./AccessGrants.scss";
 
 export const LEVEL_LABEL: Record<AccessLevel, string> = { user: "user", admin: "admin", system: "SYSTEM / root" };
 export const LEVEL_OPTIONS = (Object.keys(LEVEL_LABEL) as AccessLevel[]).map((value) => ({ value, label: LEVEL_LABEL[value] }));
@@ -27,7 +28,7 @@ export function AccessFields({ value, onChange, hosts, errors = {} }: {
   errors?: Partial<Record<"hostId" | "via", string>>;
 }) {
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="access-fields">
       <Field label="Access on host" error={errors.hostId}>
         <Select
           placeholder="Pick a host"
@@ -64,9 +65,9 @@ export function AccessGrantTags({ eid, username, grants, hosts }: {
           {grants.map((g) => {
             const host = hostLabel(hosts.find((h) => h.id === g.hostId));
             return (
-              <div key={g.id} className="grid grid-cols-[max-content_max-content_28px] items-center gap-2">
+              <div key={g.id} className="access-grant-tag">
                 <Chip variant="accent">{LEVEL_LABEL[g.level]} on {host}</Chip>
-                {g.via ? <span className="text-meta text-fg-2">via {g.via}</span> : <span aria-hidden />}
+                {g.via ? <span className="access-grant-tag__via">via {g.via}</span> : <span aria-hidden />}
                 <IconButton icon={X} label={`Remove access as ${name} on ${host}`} onClick={() => setRemoving(g)} />
               </div>
             );
@@ -126,7 +127,7 @@ export function AccessGrantDialog({ title, description, action, hosts, pending, 
       }
     >
       <AccessFields value={draft} onChange={setDraft} hosts={hosts} errors={errors} />
-      {errors.form && <p role="alert" className="m-0 mt-2 text-meta text-warn">{errors.form}</p>}
+      {errors.form && <p role="alert" className="access-grant-dialog__error">{errors.form}</p>}
     </Dialog>
   );
 }

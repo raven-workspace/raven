@@ -8,6 +8,7 @@ import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { AccessGrantDialog, AccessGrantTags } from "./AccessGrants";
 import { useAccessGrantMutations, useUsernameMutations } from "./queries";
 import { copyPlain } from "../../lib/clipboard";
+import "./UsernamesList.scss";
 
 /** `DOMAIN\user` splits at the first backslash; a bare name has no domain. */
 export function parseUsername(raw: string): { username: string; domain: string | null } {
@@ -50,21 +51,21 @@ export function UsernamesList({ eid, usernames, grants, hosts }: {
   };
 
   return (
-    <section aria-label="Usernames" className="grid grid-cols-[minmax(0,1fr)] gap-2">
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-        <h3 className={`m-0 ${labelClass}`}>Usernames <span className="tabular-nums">{usernames.length}</span></h3>
+    <section aria-label="Usernames" className="usernames-list">
+      <header className="usernames-list__header">
+        <h3 className={labelClass}>Usernames <span className="usernames-list__count">{usernames.length}</span></h3>
         {usernames.length > 0 && <Button size="sm" onClick={copyAll}>{copied ? "Copied" : "Copy all"}</Button>}
       </header>
-      <form onSubmit={add} noValidate className="grid grid-cols-[minmax(0,20rem)_max-content_minmax(0,1fr)] items-start gap-2">
+      <form onSubmit={add} noValidate className="usernames-list__form">
         <Input mono aria-label="New username" aria-invalid={error ? true : undefined} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="DOMAIN\user" />
         <Button type="submit" disabled={um.create.isPending}>Add username</Button>
-        {error && <p role="alert" className="m-0 self-center text-meta text-warn">{error}</p>}
+        {error && <p role="alert" className="usernames-list__error">{error}</p>}
       </form>
-      <ul className="m-0 grid list-none grid-cols-[minmax(16ch,max-content)_minmax(0,1fr)_max-content] gap-x-3 border-t border-line p-0">
+      <ul className="usernames-list__list">
         {usernames.map((u) => (
-          <li key={u.id} className="col-span-full grid grid-cols-subgrid items-center border-b border-line py-2">
-            <span className="truncate font-mono text-code text-fg" title={usernameLabel(u)}>{usernameLabel(u)}</span>
-            <div className="min-w-0"><AccessGrantTags eid={eid} username={u} grants={grants.filter((g) => g.usernameId === u.id)} hosts={hosts} /></div>
+          <li key={u.id} className="usernames-list__row">
+            <span className="usernames-list__name" title={usernameLabel(u)}>{usernameLabel(u)}</span>
+            <div className="usernames-list__grants"><AccessGrantTags eid={eid} username={u} grants={grants.filter((g) => g.usernameId === u.id)} hosts={hosts} /></div>
             <ActionCell>
               <Button size="sm" aria-label={`Add access for ${usernameLabel(u)}`} onClick={() => setGranting(u)}>Add access</Button>
               <IconButton icon={Trash} tone="destructive" label={`Delete username ${usernameLabel(u)}`} onClick={() => setDeleting(u)} />

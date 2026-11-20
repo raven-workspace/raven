@@ -649,7 +649,7 @@ test("tried pairs render muted in the test matrix with no sideways scroll", asyn
     await tried.first().waitFor();
     await expect(tried.first()).toContainText("drew");
     await expect(tried.first()).toContainText("tried");
-    await expect(tried.first()).toHaveClass(/text-muted/);
+    await expect(tried.first()).toHaveClass(/test-grid__row--tried/); // muted (TestGrid.scss)
     await expect(tried.first().getByRole("img", { name: /failed \(tried\)/ }).first()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `the page scrolls sideways at ${width}`).toBe(true);
   }
