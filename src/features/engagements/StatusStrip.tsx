@@ -25,6 +25,7 @@ import {
 } from "./format";
 import { Listener } from "./Listener";
 import { MsfLock } from "./MsfLock";
+import { engagementKey, engagementsKey } from "./queries";
 
 /**
  * Drop steps, in order: each step hides one part when the strip has run out of room (see useFitStrip).
@@ -141,8 +142,8 @@ function TimeboxStatus({ engagement: e, now }: { engagement: Engagement & { time
   const toggle = useMutation({
     mutationFn: (paused: boolean) => api.engagementSetTimeboxPaused(e.id, paused),
     onSuccess: (saved) => {
-      qc.setQueryData(["engagement", e.id], saved);
-      void qc.invalidateQueries({ queryKey: ["engagements"] });
+      qc.setQueryData(engagementKey(e.id), saved);
+      void qc.invalidateQueries({ queryKey: engagementsKey });
     },
     onError: reportError,
   });

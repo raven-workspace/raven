@@ -1,14 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
-import { api } from "../../lib/api";
 import { isDialogOpen, isTypingTarget, useKeydown, useNow } from "../../lib/keys";
 import { Button, DASHBOARD_COLUMN, EmptyState, Input, Kbd, labelClass, queryState } from "../../ui";
 import { ActiveCard } from "./ActiveCard";
 import { EngagementDialog } from "./EngagementDialog";
 import { PastTable, matchesSearch } from "./PastTable";
+import { useEngagements } from "./queries";
 
 export function Dashboard() {
-  const list = useQuery({ queryKey: ["engagements"], queryFn: api.engagementsList });
+  const list = useEngagements();
   const [creating, setCreating] = useState(false);
   const [q, setQ] = useState("");
   const now = useNow();

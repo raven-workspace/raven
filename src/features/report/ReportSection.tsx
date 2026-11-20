@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -78,6 +78,8 @@ import {
   wantedSections,
 } from "./queries";
 import { flushReports, forgetReportSave, isReportSaveQueued, queueReportSave, settleReportSave, trackReportWrite, useReportSaveStore } from "./saveQueue";
+import { useSettings } from "../settings/queries";
+import { useEngagement } from "../engagements/queries";
 
 const HINTS: Hint[] = [
   { keys: "← →", label: "move along the tabs (J K from anywhere)", priority: 1 },
@@ -245,7 +247,7 @@ function usePageEdits(
 /** The engagement's Report section: client engagements get a placeholder this round. */
 export function ReportSectionView() {
   const { id = "" } = useParams();
-  const engagement = useQuery({ queryKey: ["engagement", id], queryFn: () => api.engagementGet(id) });
+  const engagement = useEngagement(id);
   if (!engagement.data) return <Padded>{queryState([engagement], "the report")}</Padded>;
   if (engagement.data.kind === "client") {
     return (
@@ -274,7 +276,7 @@ function ReportWorkspace({ eid }: { eid: string }) {
   const qc = useQueryClient();
   const reportQ = useReport(eid);
   const dataQ = useReportData(eid);
-  const settingsQ = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
+  const settingsQ = useSettings();
   const sectionsQ = useReportSections(reportQ.data?.id);
 
   const failed = reportQ.error ?? dataQ.error ?? settingsQ.error ?? sectionsQ.error;

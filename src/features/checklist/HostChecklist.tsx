@@ -1,7 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
 import { Fragment, useMemo, useRef, useState } from "react";
 import { applicableGoals, currentStage, hostViewStages, loggedListenerPorts, type FillInput } from "../../engines/checklist";
-import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
 import { Button, Input, Select, fieldLabelClass, labelClass, queryState } from "../../ui";
 import { COLUMN_LABELS } from "../hosts/columns";
@@ -15,6 +13,8 @@ import { goalCommands } from "./goalCommands";
 import { shortHostName } from "../../lib/hostName";
 import { GoalRow } from "./GoalRow";
 import { useChecklist, useChecklistMutations, useEngagementServices, useHopMutations, useTunnels } from "./queries";
+import { useSettings } from "../settings/queries";
+import { useEngagement } from "../engagements/queries";
 
 const KALI = "kali";
 const EXAM_EMPTY = "Nothing allowed in an exam sim; do it by hand";
@@ -73,8 +73,8 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   useFilePickStore((s) => s.file); // a chip pick refills the rows' commands
   usePortPickStore((s) => s.picks); // a port pick refills them too
   const hostsQ = useHosts(engagementId);
-  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
+  const engagement = useEngagement(engagementId);
+  const settings = useSettings();
   const log = useLog(engagementId);
   const { byOwner } = useChecklist(engagementId);
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);

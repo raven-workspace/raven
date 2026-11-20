@@ -6,6 +6,7 @@ import type { Engagement, EngagementStatus } from "../../types/engagement";
 import { Chip, ChipSet, IconButton } from "../../ui";
 import { EngagementDialog } from "./EngagementDialog";
 import { KIND_LABEL, scopeSummary } from "./format";
+import { engagementKey, engagementsKey } from "./queries";
 
 export function EngagementHeader({ engagement: e }: { engagement: Engagement }) {
   const qc = useQueryClient();
@@ -19,8 +20,8 @@ export function EngagementHeader({ engagement: e }: { engagement: Engagement }) 
     mutationFn: (status: EngagementStatus) => api.engagementSetStatus(e.id, status),
     onSuccess: (saved) => {
       setError(null);
-      qc.setQueryData(["engagement", saved.id], saved);
-      void qc.invalidateQueries({ queryKey: ["engagements"] });
+      qc.setQueryData(engagementKey(saved.id), saved);
+      void qc.invalidateQueries({ queryKey: engagementsKey });
     },
     onError: (err) => setError(err.message),
   });

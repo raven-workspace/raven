@@ -10,6 +10,7 @@ import type { ManualNote } from "../../engines/manual";
 import { BUILTIN_LIBRARY } from "../../engines/library/data";
 import { setImported } from "../../engines/library/store";
 import { api } from "../../lib/api";
+import { useSettings } from "../settings/queries";
 
 export const FIELD_MANUAL_KEY = ["fieldManual"] as const;
 
@@ -90,7 +91,7 @@ export function useImportFieldManual() {
 
 /** True when a vault file changed after the last import. Re-checked on window focus. */
 export function useVaultNewer(enabled: boolean): boolean {
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled });
+  const settings = useSettings(enabled);
   const snap = useFieldManual(enabled);
   const path = settings.data?.fieldManualPath;
   const mtime = useQuery({

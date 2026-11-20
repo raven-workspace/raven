@@ -7,6 +7,7 @@ import { isValidOsid } from "../../engines/report/meta";
 import { Button, Chip, Dialog, EmptyState, Field, Input, Panel, SETTINGS_COLUMN, Textarea, queryState } from "../../ui";
 import { FieldManualSection } from "./FieldManualSection";
 import { ImportSection } from "./ImportSection";
+import { settingsKey, useSettings } from "./queries";
 
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -227,7 +228,7 @@ function ReportDetails({
 /** `onRestored` runs whenever the backend ends up locked (after a restore, or a failed one). */
 export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   const qc = useQueryClient();
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
+  const settings = useSettings();
   const backups = useQuery({ queryKey: ["backups"], queryFn: api.backupsList });
   const [restoreTarget, setRestoreTarget] = useState<BackupInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -239,7 +240,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
       return api.settingsUpdate(patch);
     },
     onSuccess: (s) => {
-      qc.setQueryData(["settings"], s);
+      qc.setQueryData(settingsKey, s);
       void qc.invalidateQueries({ queryKey: ["backups"] }); // retention may prune
     },
     onError: (e) => {

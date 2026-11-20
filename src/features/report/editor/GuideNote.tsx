@@ -1,11 +1,12 @@
 import { X } from "@phosphor-icons/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { ALL_GUIDES, GUIDES, type GuideId } from "../../../engines/report";
 import { api } from "../../../lib/api";
 import { reportError } from "../../../lib/lockSignal";
 import type { Settings } from "../../../types/settings";
 import { IconButton } from "../../../ui";
+import { settingsKey, useSettings } from "../../settings/queries";
 
 /**
  * One guide note (spec §10.5): editor chrome in the app's own dark style, so it never reads as report text. It is
@@ -31,18 +32,18 @@ export function GuideNote({ id, onHide }: { id: GuideId; onHide(): void }) {
  *  hide one or all. Hiding takes effect at once; a failed save brings the notes back. */
 export function useGuideSettings() {
   const qc = useQueryClient();
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
+  const settings = useSettings();
   const hidden = settings.data ? (settings.data.reportGuidesHidden ?? []) : null;
   const save = useCallback(
     (next: (now: string[]) => string[]) => {
-      const before = qc.getQueryData<Settings>(["settings"]);
+      const before = qc.getQueryData<Settings>(settingsKey);
       const list = next(before?.reportGuidesHidden ?? []);
-      if (before) qc.setQueryData<Settings>(["settings"], { ...before, reportGuidesHidden: list });
+      if (before) qc.setQueryData<Settings>(settingsKey, { ...before, reportGuidesHidden: list });
       api
         .settingsUpdate({ reportGuidesHidden: list })
-        .then((s) => qc.setQueryData(["settings"], s))
+        .then((s) => qc.setQueryData(settingsKey, s))
         .catch((e: unknown) => {
-          qc.setQueryData<Settings>(["settings"], (now) => (now && before ? { ...now, reportGuidesHidden: before.reportGuidesHidden } : now));
+          qc.setQueryData<Settings>(settingsKey, (now) => (now && before ? { ...now, reportGuidesHidden: before.reportGuidesHidden } : now));
           reportError(e);
         });
     },

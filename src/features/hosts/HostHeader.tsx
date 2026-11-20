@@ -1,12 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
 import { PencilSimple } from "@phosphor-icons/react";
 import { useState } from "react";
-import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
 import { BrandIcon, Chip, ChipSet, IconButton } from "../../ui";
 import { threadsLabel, useThreadCounts } from "../notes/useThreadCounts";
 import { HostDialog } from "./HostDialog";
 import { COLUMN_LABELS, OS_LABELS } from "./columns";
+import { useEngagement } from "../engagements/queries";
 
 /**
  * The host's name with its Edit pencil right beside it, so it reads as "edit this host". Stuck? lives at the end of the
@@ -16,7 +15,7 @@ export function HostHeader({ host }: { host: Host }) {
   const [editing, setEditing] = useState(false);
   const threads = useThreadCounts(host.engagementId).byHost.get(host.id) ?? 0;
   // The AD set only means something in an exam sim (it counts as one target there).
-  const engagement = useQuery({ queryKey: ["engagement", host.engagementId], queryFn: () => api.engagementGet(host.engagementId) });
+  const engagement = useEngagement(host.engagementId);
   const examSim = engagement.data?.kind === "exam-sim";
   return (
     <section aria-label="Host" className="grid gap-y-1">

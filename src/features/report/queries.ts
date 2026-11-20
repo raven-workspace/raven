@@ -20,6 +20,7 @@ import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { useNotes } from "../notes/queries";
 import { flushReports, forgetReportSave, patchCachedSection, pruneRemoved, queueReportSave } from "./saveQueue";
+import { useEngagement } from "../engagements/queries";
 
 export const reportKey = (eid: string) => ["report", eid] as const;
 export const reportSectionsKey = (reportId: string) => ["reportSections", reportId] as const;
@@ -49,7 +50,7 @@ function combineFiles(results: UseQueryResult<FindingFile[]>[]) {
 
 /** Everything the report engine reads for one engagement, from the queries the rest of the app already keeps fresh. */
 export function useReportData(eid: string): { data: ReportData | undefined; isLoading: boolean; error: Error | null; refetch(): void } {
-  const engagement = useQuery({ queryKey: ["engagement", eid], queryFn: () => api.engagementGet(eid) });
+  const engagement = useEngagement(eid);
   const hosts = useHosts(eid);
   const services = useEngagementServices(eid).query;
   const log = useLog(eid);

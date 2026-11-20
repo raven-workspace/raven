@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { BookOpenText, Gear, Lock, MagnifyingGlass, Package, Stack, X } from "@phosphor-icons/react";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -30,6 +30,7 @@ import { PayloadsDrawer } from "../payloads/PayloadsDrawer";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { Palette } from "../palette/Palette";
 import { usePaletteStore } from "../palette/usePaletteStore";
+import { useSettings } from "../settings/queries";
 
 interface VaultContextValue {
   /** Locks the vault now (same path as ⌘L and the idle timer). */
@@ -226,7 +227,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
     }
   }, [markLocked, lockBackend, sweeping]);
 
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled: unlocked });
+  const settings = useSettings(unlocked);
   useAutoLock(settings.data?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES, { enabled: unlocked, onLock: lock });
 
   // ⌘K: the palette, from anywhere while unlocked (capture phase, like ⌘L). Never over another dialog.

@@ -3,12 +3,15 @@ import { api } from "../../lib/api";
 import { credAttemptsKey, credentialsKey, triedPairsKey, usernamesKey } from "../credentials/queries";
 import { afterEntrySaved } from "../checklist/ticks";
 import type { LogEntry } from "../../types/log";
+import { engagementKey, engagementsKey } from "../engagements/queries";
+import { hostsKey } from "../hosts/queries";
+import { logKey } from "./queries";
 
 export const extractionsKey = (engagementId: string) => ["extractions", engagementId] as const;
 
 /** Everything a save (or an undo of one) can change: refetch it all, including what each entry filed. */
 export function invalidateAfterSave(qc: QueryClient, id: string): void {
-  for (const key of [["log", id], ["hosts", id], ["services"], ["services", "engagement", id], ["checklist", id], ["progress"], ["engagement", id], ["engagements"], credentialsKey(id), usernamesKey(id), credAttemptsKey(id), triedPairsKey(id), ["hostIdentity"], ["vectors"], extractionsKey(id)]) {
+  for (const key of [logKey(id), hostsKey(id), ["services"], ["services", "engagement", id], ["checklist", id], ["progress"], engagementKey(id), engagementsKey, credentialsKey(id), usernamesKey(id), credAttemptsKey(id), triedPairsKey(id), ["hostIdentity"], ["vectors"], extractionsKey(id)]) {
     void qc.invalidateQueries({ queryKey: key });
   }
 }
@@ -28,7 +31,7 @@ export function useExtractions(engagementId: string) {
 export async function undoExtraction(qc: QueryClient, entryId: string): Promise<void> {
   const { engagementId: id } = await api.extractionUndo(entryId);
   try {
-    const entry = qc.getQueryData<LogEntry[]>(["log", id])?.find((e) => e.id === entryId) ?? null;
+    const entry = qc.getQueryData<LogEntry[]>(logKey(id))?.find((e) => e.id === entryId) ?? null;
     await afterEntrySaved(id, entry, entryId);
   } finally {
     invalidateAfterSave(qc, id);

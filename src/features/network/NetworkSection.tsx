@@ -1,8 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { buildPath, type NetworkPath } from "../../engines/network/path";
-import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import { useWidth } from "../../lib/useWidth";
 import type { Host } from "../../types/host";
@@ -13,6 +11,7 @@ import { useHosts } from "../hosts/queries";
 import { HopForm } from "./HopForm";
 import { CONNECTOR_PX, HostNode, NODE_MAX_PX, NODE_PX, PathTree, type NodeContext } from "./PathTree";
 import { TunnelForm } from "./TunnelForm";
+import { useSettings } from "../settings/queries";
 
 /** How long an arrival's node keeps its accent outline. */
 const FOCUS_MS = 2000;
@@ -40,7 +39,7 @@ export function NetworkSection() {
   const hostsQ = useHosts(id);
   const { tunnels, query: tunnelsQ } = useTunnels(id);
   const { hops, query: hopsQ } = useHops(id);
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
+  const settings = useSettings();
   const [dialog, setDialog] = useState<Dialog>();
   const [sectionRef, width] = useWidth();
   const rootRef = useRef<HTMLElement | null>(null);

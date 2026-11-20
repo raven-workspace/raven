@@ -9,6 +9,10 @@ import { useCredPickStore } from "../checklist/credPick";
 import { engagementServicesKey, tunnelsKey } from "../checklist/queries";
 import { credAttemptsKey, credentialsKey } from "../credentials/queries";
 import { useFillScope } from "../arsenal/useFillScope";
+import { useSettings } from "../settings/queries";
+import { useEngagement } from "../engagements/queries";
+import { useHosts } from "../hosts/queries";
+import { useLog } from "../log/queries";
 
 const NO_HOSTS: Host[] = [];
 const DASHBOARD_ENGAGEMENT: Engagement = {
@@ -22,14 +26,14 @@ const noHost = (engagementId: string): Host => ({
 
 export function useEngagementFillData(engagementId: string) {
   const enabled = engagementId !== "";
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
-  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId), enabled });
-  const hosts = useQuery({ queryKey: ["hosts", engagementId], queryFn: () => api.hostsList(engagementId), enabled });
+  const settings = useSettings();
+  const engagement = useEngagement(engagementId, enabled);
+  const hosts = useHosts(engagementId, enabled);
   const services = useQuery({ queryKey: engagementServicesKey(engagementId), queryFn: () => api.servicesListEngagement(engagementId), enabled });
   const tunnels = useQuery({ queryKey: tunnelsKey(engagementId), queryFn: () => api.tunnelsList(engagementId), enabled });
   const credentials = useQuery({ queryKey: credentialsKey(engagementId), queryFn: () => api.credentialsList(engagementId), enabled });
   const attempts = useQuery({ queryKey: credAttemptsKey(engagementId), queryFn: () => api.credAttemptsList(engagementId), enabled });
-  const log = useQuery({ queryKey: ["log", engagementId], queryFn: () => api.logList(engagementId), enabled });
+  const log = useLog(engagementId, enabled);
   return { settings: settings.data, engagement: engagement.data, hosts: hosts.data ?? NO_HOSTS, services: services.data, tunnels: tunnels.data, credentials: credentials.data, attempts: attempts.data, log: log.data };
 }
 

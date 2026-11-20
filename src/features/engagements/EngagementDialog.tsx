@@ -14,6 +14,8 @@ import {
   toDateInput,
   toDateTimeInput,
 } from "./format";
+import { engagementKey, engagementsKey } from "./queries";
+import { hostsKey } from "../hosts/queries";
 
 const KINDS: { value: EngagementKind; label: string }[] = [
   { value: "exam-sim", label: "Exam sim" },
@@ -194,11 +196,11 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
     mutationFn: (input: EngagementInput) =>
       engagement ? api.engagementUpdate(engagement.id, input) : api.engagementCreate(input),
     onSuccess: (saved) => {
-      qc.setQueryData(["engagement", saved.id], saved);
-      void qc.invalidateQueries({ queryKey: ["engagements"] });
-      void qc.invalidateQueries({ queryKey: ["engagement", saved.id] });
+      qc.setQueryData(engagementKey(saved.id), saved);
+      void qc.invalidateQueries({ queryKey: engagementsKey });
+      void qc.invalidateQueries({ queryKey: engagementKey(saved.id) });
       // The scope may add hosts.
-      void qc.invalidateQueries({ queryKey: ["hosts", saved.id] });
+      void qc.invalidateQueries({ queryKey: hostsKey(saved.id) });
       void qc.invalidateQueries({ queryKey: ["progress"] });
       onClose();
     },
@@ -366,8 +368,8 @@ function DeleteDialog({ engagement: e, onClose }: { engagement: Engagement; onCl
     onSuccess: () => {
       // Its notes are gone: unsaved text for them can never be saved.
       dropPendingNotes(e.id);
-      qc.removeQueries({ queryKey: ["engagement", e.id] });
-      void qc.invalidateQueries({ queryKey: ["engagements"] });
+      qc.removeQueries({ queryKey: engagementKey(e.id) });
+      void qc.invalidateQueries({ queryKey: engagementsKey });
       void navigate("/");
     },
   });

@@ -1,9 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { PIVOT_GOALS, type FillInput } from "../../engines/checklist";
 import { engagementStuck, hostStuck, type StuckLine } from "../../engines/stuck";
-import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import { isDialogOpen } from "../../lib/keys";
 import type { Host } from "../../types/host";
@@ -20,6 +18,8 @@ import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { useNote } from "../notes/queries";
 import { noteKey, useNotesStore } from "../notes/useNotesStore";
+import { useSettings } from "../settings/queries";
+import { useEngagement } from "../engagements/queries";
 
 const WIDTH = 440;
 const HINTS: Hint[] = [
@@ -96,8 +96,8 @@ export function StuckView({
 
 function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }: { root: React.RefObject<HTMLElement | null>; engagementId: string; host: Host; onClose: () => void; onOpenGoal: (goalId: string) => void; skipRestoreRef: React.RefObject<boolean> }) {
   const hostsQ = useHosts(engagementId);
-  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
+  const engagement = useEngagement(engagementId);
+  const settings = useSettings();
   const log = useLog(engagementId);
   const { byOwner, query: checklistQ } = useChecklist(engagementId);
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
@@ -263,7 +263,7 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const hostsQ = useHosts(engagementId);
-  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
+  const engagement = useEngagement(engagementId);
   const { byOwner, query: checklistQ } = useChecklist(engagementId);
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
   const { tunnels, query: tunnelsQ } = useTunnels(engagementId);

@@ -23,6 +23,7 @@ import {
 import { api } from "../../../lib/api";
 import type { LogEntry } from "../../../types/log";
 import { readImage, releaseImage } from "../../capture/imagePaste";
+import { logKey } from "../../log/queries";
 
 /** What the page's menus and toolbar ask the page to do beyond ProseKit's own commands. */
 export interface PageActions {
@@ -80,8 +81,8 @@ export async function saveScreenshot(qc: QueryClient, engagementId: string, host
     content: { kind: "screenshot", attachmentId: "", caption: "", fileName: fileNameOf(file) },
     attachment: { mime: image.mime, dataBase64: image.dataBase64 },
   });
-  qc.setQueryData<LogEntry[]>(["log", engagementId], (list) => (list ? [...list, entry] : list));
-  void qc.invalidateQueries({ queryKey: ["log", engagementId] });
+  qc.setQueryData<LogEntry[]>(logKey(engagementId), (list) => (list ? [...list, entry] : list));
+  void qc.invalidateQueries({ queryKey: logKey(engagementId) });
   return entry;
 }
 

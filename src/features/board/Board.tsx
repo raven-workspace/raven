@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router";
-import { api } from "../../lib/api";
 import type { BoardColumn, Host } from "../../types/host";
 import { Button, EmptyState, labelClass, queryState } from "../../ui";
 import { cx } from "../../lib/cx";
@@ -9,6 +7,7 @@ import { COLUMN_LABELS } from "../hosts/columns";
 import { HostDialog } from "../hosts/HostDialog";
 import { useHostMutations, useHosts } from "../hosts/queries";
 import { BoardCard } from "./BoardCard";
+import { useEngagement } from "../engagements/queries";
 
 const ORDER: BoardColumn[] = [
   "information-gathering",
@@ -31,7 +30,7 @@ function softHyphenate(label: string): string {
 export function Board() {
   const { id = "" } = useParams();
   const hosts = useHosts(id);
-  const msfHostId = useQuery({ queryKey: ["engagement", id], queryFn: () => api.engagementGet(id) }).data?.msfHostId ?? null;
+  const msfHostId = useEngagement(id).data?.msfHostId ?? null;
   const { move } = useHostMutations(id);
   const [over, setOver] = useState<BoardColumn | null>(null);
   const [adding, setAdding] = useState(false);

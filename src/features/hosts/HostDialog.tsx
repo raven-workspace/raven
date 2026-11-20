@@ -1,10 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import { api } from "../../lib/api";
 import type { Host, HostAccess, HostInput, HostOs } from "../../types/host";
 import { Button, ChipSet, Dialog, Field, Input, Select, Toggle } from "../../ui";
 import { useHostMutations } from "./queries";
+import { useEngagement } from "../engagements/queries";
 
 /** What a host delete takes with it (FK cascades) and what stays. */
 const HOST_DELETE_DETAIL =
@@ -54,7 +53,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
   const [os, setOs] = useState(host?.os ?? "unknown");
   const [access, setAccess] = useState<HostAccess>(host?.access ?? "none");
   const [dualHomed, setDualHomed] = useState(host?.dualHomed ?? false);
-  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
+  const engagement = useEngagement(engagementId);
   const examSim = engagement.data?.kind === "exam-sim";
   const [adChoice, setAdChoice] = useState<AdChoice>(host?.adSet == null ? "auto" : host.adSet ? "on" : "off");
   const [errors, setErrors] = useState<Partial<Record<"name" | "ip" | "form", string>>>({});
