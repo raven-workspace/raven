@@ -560,15 +560,10 @@ function ReportBody({
   const saveFailed = useReportSaveStore((s) => s.unsaved);
   const saveRefused = useReportSaveStore((s) => s.refused);
   const saver = useSectionSaver(openSection?.id ?? "");
-  const editorRef = useRef<{ id: string; editor: Editor } | null>(null);
-  // The same editor as state too, so the evidence rail re-renders once the page has mounted.
+  // The editor of the page last mounted, as state, so the evidence rail re-renders once the page has mounted.
   const [readyEditor, setReadyEditor] = useState<{ id: string; editor: Editor } | null>(null);
   /** The open page's editor; null on Report details or before the page mounts. */
-  const openId_ = openSection?.id;
-  const openEditor = useCallback(
-    () => (editorRef.current && editorRef.current.id === openId_ ? editorRef.current.editor : null),
-    [openId_],
-  );
+  const pageEditor = readyEditor && readyEditor.id === openSection?.id ? readyEditor.editor : null;
 
   const { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious, replacePage, patchMeta } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
   // Each swap with the previous page remounts the editor on the page swapped in (it reads its document once).
@@ -621,12 +616,11 @@ function ReportBody({
   const swapPage = () => {
     const s = openSection;
     const prev = (s && metaOf(s).previousDoc) || null;
-    const editor = openEditor();
-    if (!s || !prev || !editor) return;
+    if (!s || !prev || !pageEditor) return;
     // The page swapped in is written in the plain schema; should it still not fit the page, say so rather than break it.
     const plain = flattenToPlain(prev, data, open?.target ?? null, reportMeta);
     try {
-      editor.schema.nodeFromJSON(plain).check();
+      pageEditor.schema.nodeFromJSON(plain).check();
     } catch (e) {
       setSwapFailed(RavenError.from(e).message);
       return;
@@ -651,10 +645,7 @@ function ReportBody({
       openItem(parts.some((p) => p.section.id === last) ? last! : parts[0].section.id);
     } else openItem(id);
   };
-  const onEditorReady = (id: string, editor: Editor) => {
-    editorRef.current = { id, editor };
-    setReadyEditor({ id, editor });
-  };
+  const onEditorReady = (id: string, editor: Editor) => setReadyEditor({ id, editor });
 
   // A section opened with no page yet, or one under another layout, gets its plain draft, built and stored once
   // (draftBuiltAt marks it).
@@ -889,10 +880,9 @@ function ReportBody({
   // ⌘F: the page's find bar, while focus is anywhere in the Report view (⌘K stays the app's search).
   useKeydown((e) => {
     if (!e.metaKey || e.altKey || e.ctrlKey || e.shiftKey || e.key.toLowerCase() !== "f" || e.defaultPrevented || isDialogOpen()) return;
-    const editor = openEditor();
-    if (!editor || !sectionRef.current?.contains(document.activeElement)) return;
+    if (!pageEditor || !sectionRef.current?.contains(document.activeElement)) return;
     e.preventDefault();
-    openFindBar(editor);
+    openFindBar(pageEditor);
   });
   useKeydown((e) => {
     if (!e.altKey || e.metaKey || e.ctrlKey || e.defaultPrevented || isDialogOpen()) return;
@@ -906,7 +896,7 @@ function ReportBody({
         setRailFocus((n) => n + 1);
       } else railRef.current?.focus();
     }
-    else if (openEditor()) openEditor()!.focus();
+    else if (pageEditor) pageEditor.focus();
     else pageRef.current?.querySelector<HTMLElement>("input, textarea, button")?.focus();
   });
 
@@ -919,7 +909,7 @@ function ReportBody({
       openItem(partSection.section.id);
       return;
     }
-    const editor = openEditor();
+    const editor = pageEditor;
     if (!editor) return;
     const doc = editor.state.doc;
     // A suggested move names its block by index path (`move:0.3`).
@@ -949,8 +939,7 @@ function ReportBody({
       return {
         label: "Keep the text",
         run: () => {
-          const editor = openEditor();
-          if (editor) keepCopiedText(editor, copied[1]);
+          if (pageEditor) keepCopiedText(pageEditor, copied[1]);
         },
       };
     }
@@ -1051,7 +1040,7 @@ function ReportBody({
         target={open?.target}
         data={data}
         doc={railDoc}
-        editor={readyEditor && readyEditor.id === openSection?.id ? readyEditor.editor : null}
+        editor={pageEditor}
         didWell={openSection?.kind === "summary"}
         meta={reportMeta}
         onInserted={onRestoreEvidence}
@@ -1189,7 +1178,7 @@ function ReportBody({
                       open?.target && (
                         <AddEvidenceButton
                           key={openSection.id}
-                          editor={readyEditor && readyEditor.id === openSection.id ? readyEditor.editor : null}
+                          editor={pageEditor}
                           data={data}
                           target={open.target}
                           meta={reportMeta}
