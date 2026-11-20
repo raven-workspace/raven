@@ -142,7 +142,7 @@ fn check_goal_refs(conn: &Connection, engagement_id: &str, field: &str, set: &[G
     for g in set.iter().chain(revert) {
         check_owned(conn, engagement_id, &g.owner_id)?;
         if g.goal_id.trim().is_empty() {
-            return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
+            return Err(AppError::validation("goalId", "goal id is required"));
         }
     }
     Ok(())
@@ -486,6 +486,16 @@ mod tests {
         assert_eq!(apply_cover(c, &e1, &[gref(&h2, "g")], &[]).map(|_| ()), Err(AppError::NotFound));
         assert_eq!(apply_facts(c, &e1, &[], &[gref(&h2, "g")]).map(|_| ()), Err(AppError::NotFound));
         assert!(list(c, &e1).unwrap().is_empty());
+    }
+
+    #[test]
+    fn cover_and_facts_reject_a_blank_goal_id_as_goal_id() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let want = Err(AppError::validation("goalId", "goal id is required"));
+        assert_eq!(apply_cover(c, &e, &[gref(&e, " ")], &[]).map(|_| ()), want);
+        assert_eq!(apply_facts(c, &e, &[], &[gref(&e, "")]).map(|_| ()), want);
     }
 
     #[test]
