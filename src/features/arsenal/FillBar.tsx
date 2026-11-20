@@ -21,7 +21,7 @@ export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverr
   const tokens = hasCred ? all.filter((t) => !((t === "USER" || t === "DOMAIN") && auto[t] && !auto[t].unresolved)) : all;
   if (tokens.length === 0) return null;
   return (
-    <div className="fill-bar" aria-label="Fill values">
+    <div className="fillbar" aria-label="Fill values">
       {tokens.map((t) => {
         const a = auto[t] ?? { text: "", unresolved: true };
         const typed = overrides[t] ?? "";
@@ -38,7 +38,7 @@ export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverr
           name: t,
           value: typed || a.text,
           onChange: set,
-          className: cx("fill-bar__input", unfilled ? "fill-bar__input--unfilled" : typed ? "fill-bar__input--typed" : "fill-bar__input--auto"),
+          className: cx("fillbar__input", unfilled ? "fillbar__input--unfilled" : typed ? "fillbar__input--typed" : "fillbar__input--auto"),
           autoValue: !typed && !a.unresolved,
           ref: fieldRef ? (el: HTMLInputElement | null) => fieldRef(t, el) : undefined,
         };
@@ -46,11 +46,11 @@ export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverr
           <label
             key={t}
             {...(t === "DC_IP" && a.dcByName && !typed ? { title: "DC (by name): no Kerberos/LDAP seen, picked by its host name" } : {})}
-            className={cx("fill-bar__field", unfilled && "fill-bar__field--unfilled")}
+            className={cx("fillbar__field", unfilled && "fillbar__field--unfilled")}
           >
             <span>
               {t}
-              {t === "DC_IP" && a.dcByName && !typed && <span className="fill-bar__by-name">(by name)</span>}
+              {t === "DC_IP" && a.dcByName && !typed && <span className="fillbar__by-name">(by name)</span>}
             </span>
             {isFileToken(t) ? (
               <FilePicker {...shared} os={os} />
