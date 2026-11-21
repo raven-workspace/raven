@@ -11,7 +11,7 @@ export interface HostIdentity {
   updatedAt: number;
 }
 
-export type VectorStatus = "try" | "untested" | "ruled_out";
+export type VectorStatus = "try" | "untested" | "ruled_out" | "exploited";
 export type VectorSource = "auto" | "manual";
 
 /** Mirrors the Rust `PrivescVector`. */
