@@ -48,6 +48,11 @@ describe("serviceCoverage", () => {
     expect(rows.find((r) => r.port === 445)?.result).toBe("tested");
     expect(rows.find((r) => r.port === 22)).toMatchObject({ result: "untested", via: "note!" });
   });
+  it("treats an exploited verdict as exploited even with no finding or access step", () => {
+    const d = data();
+    d.services[2] = svc(445, { verdict: "exploited" }) as never;
+    expect(serviceCoverage(d, H, {}).find((r) => r.port === 445)).toMatchObject({ result: "exploited", via: "marked exploited" });
+  });
 });
 
 describe("serviceCoverage from real work", () => {

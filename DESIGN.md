@@ -308,7 +308,7 @@ Each table declares its column policy; automatic layout never decides.
 - A chip never sits in a track that can't contain it.
 - **A status chip as a toggle.** Where a compact state flips in place (a service verdict, a privesc vector's status), the chip itself is the control:
   - a bare `button` wraps the chip and is the 28px target (`min-h-7`), with an `aria-label` naming the subject and its state;
-  - the action ("Mark untested", "Set the verdict (C, U or D on the row)") is in a Raven `Tooltip`, which keyboard focus opens too. Never a native `title`.
+  - the action ("Mark untested", "Set the verdict (C, U, E or D on the row)") is in a Raven `Tooltip`, which keyboard focus opens too. Never a native `title`.
   - Anything with more than two states, or not a state, is a `Button` or a `ToggleGroup`.
 
 ### Secondary options and disclosure

@@ -1,5 +1,5 @@
 /** The user's call on a service. `null` on the service means no call yet. */
-export type ServiceVerdict = "candidate" | "untested" | "dead_end";
+export type ServiceVerdict = "candidate" | "untested" | "dead_end" | "exploited";
 
 /** Mirrors the Rust `HostIdentity`: who the user is on a host. One per host. */
 export interface HostIdentity {

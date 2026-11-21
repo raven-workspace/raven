@@ -135,7 +135,7 @@ export const api = {
     call<Service>("service_confirm", { id, input }),
   serviceUnconfirm: (id: string) => call<Service>("service_unconfirm", { id }),
   serviceDelete: (id: string) => call<null>("service_delete", { id }),
-  /** `dead_end` needs a non-empty `reason` and adds a linked ruled-out item; leaving it removes that item. */
+  /** `dead_end` needs a non-empty `reason` and adds a linked ruled-out item; leaving it (for `exploited` too) removes that item. */
   serviceSetVerdict: (id: string, verdict: ServiceVerdict | null, reason?: string) =>
     call<Service>("service_set_verdict", { id, verdict, reason: reason ?? null }),
   hostIdentityGet: (hostId: string) => call<HostIdentity | null>("host_identity_get", { hostId }),

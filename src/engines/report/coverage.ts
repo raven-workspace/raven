@@ -164,6 +164,9 @@ export function serviceCoverage(
       } else if (access) {
         result = "exploited";
         via = access.via;
+      } else if (s.verdict === "exploited") {
+        result = "exploited";
+        via = "marked exploited";
       } else if (s.verdict === "dead_end") {
         result = "tested";
         via = "ruled out as a dead end";
