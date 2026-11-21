@@ -9,9 +9,10 @@ import { useHostFactsMutations, useVectors } from "../../queries";
 import { FactGroup, SummaryCell } from "../FactGroup/FactGroup";
 import "./VectorsFacts.scss";
 
-const STATUS_LABEL: Record<VectorStatus, string> = { try: "try", untested: "untested", ruled_out: "ruled out" };
-const STATUS_CHIP: Record<VectorStatus, ChipVariant> = { try: "accent", untested: "default", ruled_out: "default" };
-const ORDER: Record<VectorStatus, number> = { try: 0, untested: 1, ruled_out: 2 };
+const STATUS_LABEL: Record<VectorStatus, string> = { exploited: "exploited", try: "try", untested: "untested", ruled_out: "ruled out" };
+const STATUS_CHIP: Record<VectorStatus, ChipVariant> = { exploited: "accent", try: "accent", untested: "default", ruled_out: "default" };
+/** The one that got you higher leads, then what's worth trying; ruled out ones sink. */
+const ORDER: Record<VectorStatus, number> = { exploited: 0, try: 1, untested: 2, ruled_out: 3 };
 
 /** One line of text, Enter saves and Esc cancels: adding a vector, or the reason it's ruled out. */
 function LineInput({ label, placeholder, pending, onSave, onCancel }: {
@@ -51,6 +52,8 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
   const [ruling, setRuling] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const ruledOut = v.status === "ruled_out";
+  // A settled vector (ruled out or exploited) has one action on its chip: reopen it.
+  const settled = ruledOut || v.status === "exploited";
   const status = (
     <Chip variant={STATUS_CHIP[v.status]} className={ruledOut ? "vectors-facts__status--ruled-out" : undefined}>{STATUS_LABEL[v.status]}</Chip>
   );
@@ -58,7 +61,7 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
     <li className="vectors-facts__row">
       <span className={cx("vectors-facts__title", ruledOut && "vectors-facts__title--ruled-out")} title={v.title}>{v.title}</span>
       {/* A status chip as a toggle (DESIGN.md Chips): a 28px target, its action in a tooltip. */}
-      {ruledOut ? (
+      {settled ? (
         <Tooltip content="Reopen as untested">
           <button
             type="button"
@@ -82,7 +85,12 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
         </Tooltip>
       )}
       <div className="vectors-facts__actions"><ActionCell>
-        {!ruledOut && (
+        {!settled && (
+          <Button size="sm" onClick={() => setVectorStatus.mutate({ id: v.id, status: "exploited" })} aria-label={`Mark ${v.title} exploited`}>
+            Exploited
+          </Button>
+        )}
+        {!settled && (
           <Button size="sm" onClick={() => setRuling(true)} aria-label={`Rule out ${v.title}`}>Rule out</Button>
         )}
         <IconButton icon={TrashIcon} label={`Delete ${v.title}`} tone="destructive" onClick={() => setDeleting(true)} />
@@ -112,7 +120,7 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
   );
 }
 
-/** Privesc vectors on this host, worth trying first; ruled out ones stay listed, struck through. */
+/** Privesc vectors on this host: exploited first, then worth trying; ruled out ones stay listed, struck through. */
 export function VectorsFacts({ engagementId, host, open, onToggle }: {
   engagementId: string;
   host: Host;
@@ -126,8 +134,9 @@ export function VectorsFacts({ engagementId, host, open, onToggle }: {
   const count = (s: VectorStatus) => vectors.filter((v) => v.status === s).length;
   const summary = vectorsQ.isError ? (
     <span>couldn't load</span>
-  ) : !vectorsQ.data ? undefined : count("try") + count("untested") > 0 ? (
+  ) : !vectorsQ.data ? undefined : count("exploited") + count("try") + count("untested") > 0 ? (
     <>
+      {count("exploited") > 0 && <SummaryCell count={count("exploited")} label="exploited" tone="accent" />}
       {count("try") > 0 && <SummaryCell count={count("try")} label="to try" tone="accent" />}
       {count("untested") > 0 && <SummaryCell count={count("untested")} label="untested" />}
     </>

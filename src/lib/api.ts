@@ -147,6 +147,7 @@ export const api = {
    * An `auto` upsert never changes a vector the user set by hand. It rejects `status: "ruled_out"`: rule a vector out
    * with `vectorSetStatus`, which needs a reason and adds the linked ruled-out item. A manual upsert over a ruled-out
    * vector reopens it and removes that item. Deleting a vector (or a service) removes its linked item too.
+   * `vectorSetStatus` to `exploited` needs no reason; like any status change it removes a linked ruled-out item.
    */
   vectorUpsert: (hostId: string, input: VectorInput) => call<PrivescVector>("vector_upsert", { hostId, input }),
   vectorSetStatus: (id: string, status: VectorStatus, reason?: string) =>

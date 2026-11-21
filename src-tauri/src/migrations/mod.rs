@@ -38,6 +38,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (15, include_str!("../../migrations/0015_reports.sql")),
     (16, include_str!("../../migrations/0016_timebox_pause.sql")),
     (17, include_str!("../../migrations/0017_service_exploited.sql")),
+    (18, include_str!("../../migrations/0018_vector_exploited.sql")),
 ];
 
 const FK_OFF_MARKER: &str = "-- raven:foreign-keys-off";
@@ -303,14 +304,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 17));
+            assert_eq!((f, t), (1, 18));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 17 });
-        assert_eq!(version(&c), 17);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 18 });
+        assert_eq!(version(&c), 18);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -664,13 +665,13 @@ mod tests {
         c.execute("INSERT INTO settings (key, value) VALUES ('k', 'v')", []).unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (8, 17));
+            assert_eq!((f, t), (8, 18));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 8, to: 17 });
+        assert_eq!(out, MigrationOutcome { from: 8, to: 18 });
         let kept: i64 = c.query_row("SELECT count(*) FROM settings WHERE key='k'", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
         c.execute("INSERT INTO field_manual (id, imported_at, snapshot) VALUES (1, 1, '{}')", []).unwrap();

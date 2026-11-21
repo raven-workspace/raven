@@ -547,6 +547,35 @@ describe("who am I and privesc vectors", () => {
     await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("Reopen as untested"));
   });
 
+  it("Mark exploited records that a vector got you higher, without asking", async () => {
+    const user = userEvent.setup();
+    m.vectorSetStatus.mockImplementation(async (id, status) => vector(id, "x", status));
+    mount({ host: after(), vectors: [vector("v1", "SeImpersonatePrivilege abuse", "try")] });
+    const vectors = await group("Privesc vectors");
+    await user.click(await vectors.findByRole("button", { name: "Mark SeImpersonatePrivilege abuse exploited" }));
+    expect(m.vectorSetStatus).toHaveBeenCalledWith("v1", "exploited", undefined);
+  });
+
+  it("an exploited vector leads the list on an accent chip, offers only Reopen, and the summary counts it", async () => {
+    const user = userEvent.setup();
+    m.vectorSetStatus.mockImplementation(async (id, status) => vector(id, "x", status));
+    mount({
+      host: after(),
+      vectors: [vector("v1", "SeImpersonatePrivilege abuse", "try"), vector("v2", "AlwaysInstallElevated", "exploited", { createdAt: 9 })],
+    });
+    const vectors = await group("Privesc vectors");
+    const titles = (await vectors.findAllByRole("listitem")).map((li) => li.querySelector(".vectors-facts__title")?.textContent);
+    expect(titles.slice(0, 2)).toEqual(["AlwaysInstallElevated", "SeImpersonatePrivilege abuse"]);
+    const reopen = vectors.getByRole("button", { name: "Reopen AlwaysInstallElevated" });
+    expect(within(reopen).getByText("exploited")).toHaveAttribute("data-variant", "accent");
+    expect(vectors.queryByRole("button", { name: "Rule out AlwaysInstallElevated" })).not.toBeInTheDocument();
+    expect(vectors.queryByRole("button", { name: "Mark AlwaysInstallElevated exploited" })).not.toBeInTheDocument();
+    await user.click(reopen);
+    expect(m.vectorSetStatus).toHaveBeenCalledWith("v2", "untested", undefined);
+    await user.click(vectors.getByRole("button", { expanded: true, name: /^Privesc vectors/ }));
+    expect(await summaryOf("Privesc vectors")).toBe("Privesc vectors1 exploited1 to try");
+  });
+
   it("deleting a vector asks first", async () => {
     const user = userEvent.setup();
     m.vectorDelete.mockResolvedValue(null);
