@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+# --- slop-stop pre-commit hook ---
+# Blocks AI coding tool artifacts from being committed.
+# Installed by: slop-stop hook install
+# Remove with:  slop-stop hook uninstall
+slop_blocked=0
+slop_files=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACR 2>/dev/null)
+slop_old_ifs=$IFS
+IFS='
+'
+set -f
+for slop_f in $slop_files; do
+    slop_base=${slop_f##*/}
+    case "/$slop_f/" in */.claude/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Claude Code)"; continue ;; esac
+    case "$slop_base" in CLAUDE.md) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Claude Code)"; continue ;; esac
+    case "$slop_base" in .mcp.json) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Claude Code)"; continue ;; esac
+    case "$slop_base" in plan-*.md) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Claude Code)"; continue ;; esac
+    case "/$slop_f/" in */.cursor/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Cursor)"; continue ;; esac
+    case "$slop_base" in .cursorrules) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Cursor)"; continue ;; esac
+    case "$slop_base" in .cursorignore) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Cursor)"; continue ;; esac
+    case "$slop_base" in .cursorindexingignore) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Cursor)"; continue ;; esac
+    case "$slop_base" in .aider*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Aider)"; continue ;; esac
+    case "$slop_base" in .aider.conf.yml) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Aider)"; continue ;; esac
+    case "$slop_base" in .aiderignore) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Aider)"; continue ;; esac
+    case "$slop_base" in Dockerfile.aider) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Aider)"; continue ;; esac
+    case "/$slop_f/" in */.windsurf/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Windsurf)"; continue ;; esac
+    case "$slop_base" in .windsurfrules) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Windsurf)"; continue ;; esac
+    case "/$slop_f/" in */.continue/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Continue.dev)"; continue ;; esac
+    case "$slop_base" in .continuerules) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Continue.dev)"; continue ;; esac
+    case "/$slop_f/" in */.codex/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (OpenAI Codex)"; continue ;; esac
+    case "$slop_base" in AGENTS.md) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (OpenAI Codex)"; continue ;; esac
+    case "/$slop_f/" in */.amazonq/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Amazon Q)"; continue ;; esac
+    case "/$slop_f/" in */.junie/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (JetBrains Junie)"; continue ;; esac
+    case "$slop_base" in .aiignore) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (JetBrains Junie)"; continue ;; esac
+    case "$slop_base" in .clinerules) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Cline)"; continue ;; esac
+    case "/$slop_f/" in */.clinerules/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Cline)"; continue ;; esac
+    case "$slop_base" in .tabnine) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Tabnine)"; continue ;; esac
+    case "$slop_base" in .tabnine_root) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Tabnine)"; continue ;; esac
+    case "$slop_base" in .replit) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Replit)"; continue ;; esac
+    case "$slop_base" in replit.nix) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Replit)"; continue ;; esac
+    case "$slop_f" in .github/copilot-instructions.md) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (GitHub Copilot)"; continue ;; esac
+    case "$slop_base" in .copilotignore) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (GitHub Copilot)"; continue ;; esac
+    case "/$slop_f/" in */.bolt/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Bolt.new)"; continue ;; esac
+done
+set +f
+IFS=$slop_old_ifs
+if [ "$slop_blocked" -gt 0 ]; then
+    echo ""
+    echo "slop-stop: $slop_blocked AI artifact(s) blocked from commit."
+    echo "Run 'git rm --cached' to unstage them or 'git commit --no-verify' to bypass."
+    exit 1
+fi
+# --- end slop-stop ---
