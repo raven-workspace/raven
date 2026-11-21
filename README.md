@@ -14,3 +14,7 @@ npm run lint           # ESLint
 ```
 
 Requires Node 22, npm, and Rust stable (via rustup).
+
+`npm install` also points git at the hooks in `.githooks/` (slop-stop): they reject AI attribution in commit
+messages and AI tool files (`.claude/`, `CLAUDE.md`, `.cursor/` and the like) in commits. The same check runs on every
+pull request, so `--no-verify` only defers the failure.
