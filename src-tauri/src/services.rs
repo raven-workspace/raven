@@ -18,7 +18,7 @@ pub struct Service {
     pub confirmed_product: Option<String>,
     pub confirmed_version: Option<String>,
     pub confirmed_entry_id: Option<String>,
-    /// `candidate`, `untested` or `dead_end`; `None` = no call made yet.
+    /// `candidate`, `untested`, `dead_end` or `exploited`; `None` = no call made yet.
     pub verdict: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
@@ -252,8 +252,8 @@ fn service_label(s: &Service) -> String {
 /// One transaction.
 pub fn set_verdict(conn: &Connection, id: &str, verdict: Option<&str>, reason: Option<&str>) -> AppResult<Service> {
     if let Some(v) = verdict {
-        if !matches!(v, "candidate" | "untested" | "dead_end") {
-            return Err(AppError::validation("verdict", "verdict must be candidate, untested or dead_end"));
+        if !matches!(v, "candidate" | "untested" | "dead_end" | "exploited") {
+            return Err(AppError::validation("verdict", "verdict must be candidate, untested, dead_end or exploited"));
         }
     }
     let reason = blank_to_none(reason);
@@ -566,6 +566,49 @@ mod tests {
         assert!(left.iter().any(|r| r.reason == "by hand" && r.source_id.is_none()));
         assert!(left.iter().any(|r| r.source_id.as_deref() == Some(other.id.as_str())));
         assert_eq!(set_verdict(c, &s.id, None, None).unwrap().verdict, None);
+    }
+
+    #[test]
+    fn exploited_needs_no_reason_and_replaces_a_dead_end() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let h = host(c, &eng(c), "web");
+        let s = create(c, &h, sin(80)).unwrap();
+        set_verdict(c, &s.id, Some("dead_end"), Some("looked patched")).unwrap();
+        assert_eq!(ruled(c, &h).len(), 1);
+        let got = set_verdict(c, &s.id, Some("exploited"), None).unwrap();
+        assert_eq!(got.verdict.as_deref(), Some("exploited"));
+        // It got you in, so it is no longer ruled out.
+        assert!(ruled(c, &h).is_empty());
+    }
+
+    #[test]
+    fn migrates_16_to_17_keeps_services_and_their_findings() {
+        let mut c = Connection::open_in_memory().unwrap();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        crate::migrations::migrate_with(&mut c, &crate::migrations::MIGRATIONS[..16], &mut |_, _| Ok(())).unwrap();
+        c.execute("INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e1','x','lab','[]','active',1,1)", []).unwrap();
+        c.execute("INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('h1','e1','a','10.0.0.5',1,1)", []).unwrap();
+        c.execute(
+            "INSERT INTO services (id,host_id,port,protocol,state,nmap_service,created_at,updated_at,verdict) \
+             VALUES ('s1','h1',80,'tcp','open','http',1,2,'candidate')",
+            [],
+        )
+        .unwrap();
+        assert!(c.execute("UPDATE services SET verdict='exploited' WHERE id='s1'", []).is_err());
+        c.execute("INSERT INTO findings (id,engagement_id,title,created_at,updated_at) VALUES ('f1','e1','RCE',1,1)", []).unwrap();
+        c.execute("INSERT INTO finding_services (finding_id, service_id) VALUES ('f1','s1')", []).unwrap();
+
+        let out = crate::migrations::migrate_with(&mut c, &crate::migrations::MIGRATIONS[..17], &mut |_, _| Ok(())).unwrap();
+        assert_eq!(out.to, 17);
+        let s = get(&c, "s1").unwrap();
+        assert_eq!((s.port, s.nmap_service.as_deref(), s.verdict.as_deref(), s.updated_at), (80, Some("http"), Some("candidate"), 2));
+        c.execute("UPDATE services SET verdict='exploited' WHERE id='s1'", []).unwrap();
+        assert!(c.execute("UPDATE services SET verdict='bogus' WHERE id='s1'", []).is_err());
+        // finding_services still references the rebuilt table: deleting the service cascades.
+        c.execute("DELETE FROM services WHERE id='s1'", []).unwrap();
+        let n: i64 = c.query_row("SELECT count(*) FROM finding_services", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
     }
 
     #[test]

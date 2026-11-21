@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { servicesSummaryParts } from "../features/hosts/facts/ServicesFacts/ServicesFacts";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { AccessGrant, CredAttempt, Credential, Username } from "../types/credentials";
@@ -273,6 +274,32 @@ describe("services grid", () => {
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s3", "untested", undefined);
   });
 
+  it("E on a focused row marks it exploited without asking", async () => {
+    const user = userEvent.setup();
+    mount();
+    const row = await (await group("Services")).findByRole("button", { name: /^80\/tcp/ });
+    row.focus();
+    await user.keyboard("e");
+    expect(m.serviceSetVerdict).toHaveBeenCalledWith("s1", "exploited", undefined);
+  });
+
+  it("an exploited service reads as exploited on an accent chip and is the summary's entry", async () => {
+    mount({ services: [svc("s4", 21, { nmapService: "ftp", verdict: "candidate" }), SSH, svc("s5", 8080, { nmapService: "http", verdict: "exploited" })] });
+    const g = await group("Services");
+    const chip = await g.findByRole("button", { name: "Verdict for 8080/tcp: exploited" });
+    expect(within(chip).getByText("exploited")).toHaveAttribute("data-variant", "accent");
+    expect(servicesSummaryParts([svc("s4", 21, { nmapService: "ftp", verdict: "candidate" }), svc("s5", 8080, { nmapService: "http", verdict: "exploited" })]).entry).toBe("http on 8080");
+  });
+
+  it("the verdict menu offers Exploited", async () => {
+    const user = userEvent.setup();
+    mount();
+    const g = await group("Services");
+    await user.click(await g.findByRole("button", { name: "Verdict for 80/tcp: candidate" }));
+    await user.click(within(g.getByRole("radiogroup", { name: "Verdict for 80/tcp" })).getByRole("radio", { name: "Exploited" }));
+    expect(m.serviceSetVerdict).toHaveBeenCalledWith("s1", "exploited", undefined);
+  });
+
   it("C and U do nothing on a dead-end row, so its typed reason is never deleted by a stray key", async () => {
     const user = userEvent.setup();
     mount({ services: [svc("s4", 21, { nmapService: "ftp", verdict: "dead_end" })] });
@@ -300,7 +327,7 @@ describe("services grid", () => {
     expect(chip).not.toHaveAttribute("title");
     expect(chip).toHaveClass("services-facts__verdict");
     chip.focus();
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Set the verdict (C, U or D on the row)");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Set the verdict (C, U, E or D on the row)");
   });
 
   it("clicking the pressed verdict closes the menu without changing it", async () => {

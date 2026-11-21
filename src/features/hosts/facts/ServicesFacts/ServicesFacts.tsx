@@ -20,20 +20,23 @@ const VERDICT_LABEL: Record<EffectiveVerdict, string> = {
   identify: "identify",
   untested: "untested",
   dead_end: "dead end",
+  exploited: "exploited",
 };
 const VERDICT_CHIP: Record<EffectiveVerdict, ChipVariant> = {
   candidate: "accent",
   identify: "default",
   untested: "default",
   dead_end: "default",
+  exploited: "accent",
 };
 const ROW = "services-facts__row";
 
-/** What the folded Services line counts: confirmed identities, the first candidate (the entry), and unidentified ones. */
+/** What the folded Services line counts: confirmed identities, the entry (the first exploited service, else the first candidate), and unidentified ones. */
 export function servicesSummaryParts(services: Service[]) {
   const confirmed = services.filter((s) => serviceIdentity(s).confirmed).length;
   const unknown = services.filter((s) => !serviceIdentity(s).confirmed && serviceIdentity(s).unidentified).length;
-  const entry = sortServices(services).find((s) => s.verdict === "candidate");
+  const sorted = sortServices(services);
+  const entry = sorted.find((s) => s.verdict === "exploited") ?? sorted.find((s) => s.verdict === "candidate");
   return {
     confirmed,
     unknown,
@@ -95,6 +98,7 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
     }
     if (key === "c") onVerdict("candidate");
     else if (key === "u") onVerdict("untested");
+    else if (key === "e") onVerdict("exploited");
     else if (key === "d") askReason();
     else return;
     e.preventDefault();
@@ -106,7 +110,7 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
         type="button"
         data-service-row
         aria-label={`${proto} ${id.label || "unidentified"}, ${VERDICT_LABEL[verdict]}`}
-        title={verdict === "dead_end" ? `${proto}: dead end. Change it from the verdict menu` : `${proto}: C candidate, U untested, D dead end`}
+        title={verdict === "dead_end" ? `${proto}: dead end. Change it from the verdict menu` : `${proto}: C candidate, U untested, E exploited, D dead end`}
         onClick={onOpen}
         onKeyDown={onKeyDown}
         className="services-facts__service"
@@ -132,7 +136,7 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
         </span>
       </button>
       {/* A status chip as a toggle (DESIGN.md Chips): a 28px target, its action in a tooltip. */}
-      <Tooltip content="Set the verdict (C, U or D on the row)">
+      <Tooltip content="Set the verdict (C, U, E or D on the row)">
         <button
           type="button"
           aria-label={`Verdict for ${proto}: ${VERDICT_LABEL[verdict]}`}
@@ -152,7 +156,7 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
             aria-label={`Verdict for ${proto}`}
             value={s.verdict ?? ""}
             onValueChange={(v) => {
-              if (v === "candidate" || v === "untested") {
+              if (v === "candidate" || v === "untested" || v === "exploited") {
                 onVerdict(v);
                 setAsking(undefined);
               } else if (v === "dead_end") askReason();
@@ -163,6 +167,7 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
           >
             <ToggleGroupItem value="candidate">Candidate</ToggleGroupItem>
             <ToggleGroupItem value="untested">Untested</ToggleGroupItem>
+            <ToggleGroupItem value="exploited">Exploited</ToggleGroupItem>
             <ToggleGroupItem value="dead_end">Dead end…</ToggleGroupItem>
           </ToggleGroup>
           {s.verdict !== null && <Button size="sm" onClick={() => { onVerdict(null); setAsking(undefined); }}>Clear</Button>}
