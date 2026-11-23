@@ -4,7 +4,8 @@ import type { Editor } from "prosekit/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import { buildPlainTarget, sourceOf, type ReportNode, type ReportTarget } from "../engines/report";
-import * as draftModule from "../engines/report/draft";
+import * as placementModule from "../engines/report/placement";
+import * as plainModule from "../engines/report/plain";
 import { AddEvidenceButton } from "../features/report/AddEvidenceButton/AddEvidenceButton";
 import { insertEntry } from "../features/report/editor/pageActions";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext/ReportDataContext";
@@ -14,15 +15,22 @@ import { makeQueryClient } from "../lib/queryClient";
 import type { Settings } from "../types/settings";
 import { TooltipProvider } from "../ui";
 
-// Every machine of a draft is written once per build (`machineBlock` reads `findingPhaseMap` once): counting its calls
-// counts the drafts a click builds, the builds inside the engine included.
-vi.mock("../engines/report/draft", async (original) => {
-  const mod = await original<typeof import("../engines/report/draft")>();
-  return { ...mod, findingPhaseMap: vi.fn(mod.findingPhaseMap) };
+// Placing reads the placement plan (built once per data and target) and never builds a whole draft: every plan a click
+// asks for is the same one, and no draft is built.
+vi.mock("../engines/report/placement", async (original) => {
+  const mod = await original<typeof import("../engines/report/placement")>();
+  return { ...mod, placementPlan: vi.fn(mod.placementPlan) };
+});
+vi.mock("../engines/report/plain", async (original) => {
+  const mod = await original<typeof import("../engines/report/plain")>();
+  return { ...mod, buildPlainTarget: vi.fn(mod.buildPlainTarget) };
 });
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
-const builds = vi.mocked(draftModule.findingPhaseMap);
+const plans = vi.mocked(placementModule.placementPlan);
+const drafts = vi.mocked(plainModule.buildPlainTarget);
+/** The distinct plans the calls since the last clear returned. */
+const distinctPlans = () => new Set(plans.mock.results.map((r) => r.value)).size;
 
 const garnet = garnetFixtures(1_700_000_000_000);
 const target: ReportTarget = { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] };
@@ -54,26 +62,30 @@ beforeEach(() => {
   m.attachmentGet.mockResolvedValue({ id: "a1", mime: "image/png", dataBase64: "AAAA" });
 });
 
-describe("placing evidence builds the draft once per click", () => {
-  it("Add new evidence builds the target's draft once, however many entries it adds", async () => {
+describe("placing evidence never builds a draft", () => {
+  it("Add new evidence reads one placement plan, however many entries it adds", async () => {
     const editor = await ready(bare);
     render(
       <TooltipProvider>
         <AddEvidenceButton editor={editor} data={garnet} target={target} meta={{}} removed={[]} onAdded={vi.fn()} />
       </TooltipProvider>,
     );
-    builds.mockClear();
+    plans.mockClear();
+    drafts.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
     expect(await screen.findByText(/^Added \d+ entries/)).toBeInTheDocument();
     expect(Number(/^Added (\d+)/.exec(screen.getByText(/^Added/).textContent!)![1])).toBeGreaterThan(5);
-    expect(builds).toHaveBeenCalledTimes(1);
+    expect(distinctPlans()).toBe(1);
+    expect(drafts).not.toHaveBeenCalled();
   });
 
-  it("+ add builds it once for the entry it places", async () => {
+  it("+ add reads the same plan for the entry it places", async () => {
     const editor = await ready(bare);
     const entry = garnet.log.find((e) => e.id === "l-garnet-head")!;
-    builds.mockClear();
+    plans.mockClear();
+    drafts.mockClear();
     act(() => void insertEntry(editor, garnet, target, entry, false));
-    expect(builds).toHaveBeenCalledTimes(1);
+    expect(distinctPlans()).toBe(1);
+    expect(drafts).not.toHaveBeenCalled();
   });
 });

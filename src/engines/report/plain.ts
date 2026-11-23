@@ -2,16 +2,15 @@ import type { Finding, FindingFile } from "../../types/findings";
 import type { LogEntry } from "../../types/log";
 import { findingBlocks, inlineMarkdown, labelled } from "./findingText";
 import { testedLine, testedNotExploited } from "./coverage";
-import { findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
 import { msfLine, PLAIN_TABLE_KINDS, plainTable } from "./plainTables";
 import { bold, code, codeBlock, figure, heading, listItem, para, sourced, table, text, textTable } from "./nodes";
 import { ADDRESS_COMMAND } from "./proof";
-import { draftable, isFlag, placingEntries } from "./prove";
+import { isFlag } from "./prove";
+import { firstScan, machinesInOrder, PHASE_TITLE, placementPlan, type PlanStep } from "./placement";
 import { attackPathRows, portRows, resultLine } from "./tables";
 import { blockHash, sourceOf, stamp } from "./stamp";
 import { reportTargets } from "./targets";
-import { isPortScan } from "./tools";
-import type { Phase, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
+import type { ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
 import { omitted } from "./trim";
 import { capitalize, splitAffected } from "./wording";
 
@@ -40,18 +39,9 @@ export const PLAIN_NODE_TYPES: readonly string[] = [
   "figure",
 ];
 
-/** The headings of a machine's step phases, in the sample's wording. */
-export const PHASE_TITLE: Partial<Record<Phase, string>> = {
-  foothold: "Initial access",
-  lateral: "Lateral movement",
-  privesc: "Privilege escalation",
-  domain: "Domain compromise",
-  post: "Post-exploitation",
-};
-const STEP_PHASES: Phase[] = ["foothold", "lateral", "privesc", "domain"];
 export const ADDITIONAL_HEADING = "Additional findings (not on the path to root)";
 export const TESTED_HEADING = "Also tested";
-export const ENUM_HEADING = "Service enumeration";
+export const ENUM_HEADING = PHASE_TITLE.enum!;
 
 /** Finding or observation text as blocks (`findingBlocks`: pasted terminal text as code), each code block without the
  *  indent all its lines share (text pasted as an indented block). */
@@ -289,10 +279,22 @@ function absorb(step: Step, entryId: string, value: string) {
 
 const flagValue = (e: LogEntry) => (e.content.kind === "flag" ? e.content.value.trim() : "");
 
-/** A walk step: the lead entry's sentence, then every entry's evidence (screenshots that came along included). */
-function walkStep(data: ReportData, entries: LogEntry[]): Step {
-  const step: Step = { blocks: sentenceOf(entries[0]), shown: [] };
-  for (const e of entries) evidence(data, e, step);
+/**
+ * A plan step as the page prints it: its lead's sentence ("Read local.txt:" for a flag), then each entry's evidence in
+ * the plan's order. A flag the step doesn't lead is absorbed: its proof is printed unless the step already prints it,
+ * and when nothing of its own is printed it is recorded on the block that shows it (`absorb`).
+ */
+function printStep(data: ReportData, plan: PlanStep): Step {
+  const step: Step = { blocks: isFlag(plan.lead) ? flagSentence(plan.lead) : sentenceOf(plan.lead), shown: [] };
+  for (const e of plan.entries) {
+    if (!isFlag(e)) {
+      evidence(data, e, step);
+      continue;
+    }
+    const before = step.blocks.length;
+    flagEvidence(data, e, step);
+    if (e !== plan.lead && !step.blocks.slice(before).some((b) => isEntryBlock(b, e.id))) absorb(step, e.id, flagValue(e));
+  }
   return step;
 }
 
@@ -377,13 +379,8 @@ function portTable(data: ReportData, hostId: string): ReportNode | null {
   );
 }
 
-/** The host's first port scan neither kept from the report nor a dead end: the one Service enumeration prints. */
-const firstScan = (data: ReportData, hostId: string): LogEntry | undefined =>
-  data.log.filter((e) => e.hostIds.includes(hostId) && isPortScan(e) && draftable(data, e)).sort((a, b) => a.at - b.at || a.createdAt - b.createdAt)[0];
-
-/** The host's first port scan as a code block, then its open ports (script lines only under a finding's ports). */
-function portScan(data: ReportData, hostId: string): ReportNode[] {
-  const scan = firstScan(data, hostId);
+/** A host's port scan as a code block, then its open ports (script lines only under a finding's ports). */
+function portScan(data: ReportData, hostId: string, scan: LogEntry | undefined): ReportNode[] {
   if (!scan || scan.content.kind !== "command") return [];
   // Script blocks only under the ports a finding is about, and only the ones it mentions (http-git under 80).
   const scripted = new Map<number, string>();
@@ -445,78 +442,18 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
   const result = resultParagraph(data, target, hostId, meta);
   if (result) out.push(result);
 
-  const enumBlocks = [portTable(data, hostId), ...(target.kind === "standalone" ? portScan(data, hostId) : [])].filter((n): n is ReportNode => n !== null);
+  const machine = placementPlan(data, target).machines.find((m) => m.hostId === hostId);
+  const enumBlocks = [portTable(data, hostId), ...portScan(data, hostId, machine?.scan ?? undefined)].filter((n): n is ReportNode => n !== null);
   if (enumBlocks.length > 0) out.push(heading(2, ENUM_HEADING, `phase:${hostId}:enum`), ...enumBlocks);
 
-  const phaseOf = findingPhaseMap(data, target);
-  const owns = (findingId: string) => phaseOf.get(findingId)?.hostId === hostId;
-  const plan = hostPlan(data, hostId, hostEntry(data, target, hostId), target.kind === "standalone", owns);
-  const placing = placingEntries(data, hostId);
-  const stepsIn = (phase: Phase) => stepsOf(plan.kept.filter((e) => plan.split.get(e.id) === phase), placing);
-  const firstStep = (f: Finding) => Math.min(...f.stepEntryIds.map((id) => plan.time.get(id) ?? Infinity), Infinity);
-
-  /** A flag as a step's closing evidence, or as a step of its own: "Read local.txt:". Its companions (the commands that
-   *  print it and its screenshots) come with it. A flag the step before it already printed joins that step. */
-  const closeWith = (list: Step[], [flag, ...along]: LogEntry[]) => {
-    const companions = plan.companions.get(flag.id) ?? [];
-    const commands = companions.filter((e) => e.kind !== "screenshot");
-    const shots = [...along, ...companions.filter((e) => e.kind === "screenshot")];
-    const last = list[list.length - 1];
-    const value = flagValue(flag);
-    if (commands.length === 0 && last && value.length >= 8 && last.shown.some((o) => o.includes(value))) {
-      const before = last.blocks.length;
-      flagEvidence(data, flag, last);
-      if (!last.blocks.slice(before).some((b) => isEntryBlock(b, flag.id))) absorb(last, flag.id, value);
-      for (const s of shots) evidence(data, s, last);
-      return;
-    }
-    const step: Step = { blocks: flagSentence(flag), shown: [] };
-    for (const c of commands) evidence(data, c, step);
-    flagEvidence(data, flag, step);
-    for (const s of shots) evidence(data, s, step);
-    list.push(step);
-  };
-
-  const sections: Section[] = [];
-  for (const phase of STEP_PHASES) {
-    const steps = stepsIn(phase);
-    const here = plan.findings
-      .filter((f) => phaseOf.get(f.id)?.phase === phase)
-      .sort((a, b) => firstStep(a) - firstStep(b) || severityRank(a) - severityRank(b));
-    if (steps.length === 0 && here.length === 0) continue;
-    const walk = steps.filter((st) => !isFlag(st[0]));
-    const flags = steps.filter((st) => isFlag(st[0]));
-    // Each step goes under the finding whose step it is; a step of none, under the finding of the step before it.
-    const groupOf: number[] = [];
-    walk.forEach((st, i) => {
-      const owner = here.findIndex((f, k) => k > 0 && st.some((e) => f.stepEntryIds.includes(e.id)));
-      groupOf.push(owner !== -1 ? owner : i > 0 ? groupOf[i - 1] : 0);
-    });
-    const groups: (Finding | null)[] = here.length > 0 ? here : [null];
-    groups.forEach((f, k) => {
-      const title = PHASE_TITLE[phase]!;
-      const section: Section = {
-        heading: heading(2, f ? `${title}: ${f.title}` : title, `phase:${hostId}:${phase}${f ? `:${f.id}` : ""}`),
-        header: f ? findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)) : [],
-        steps: walk.filter((_, i) => groupOf[i] === k).map((st) => walkStep(data, st)),
-      };
-      // The local flag closes the phase: the last step of its last list.
-      if (k === groups.length - 1) for (const fl of flags) closeWith(section.steps, fl);
-      sections.push(section);
-    });
-  }
-  // Post-exploitation: the proof flag closes the last phase's list (as the sample reads it); anything else done after
-  // root is a section of its own.
-  const post = stepsIn("post");
-  const postFlags = post.filter((st) => isFlag(st[0]));
-  const postWalk = post.filter((st) => !isFlag(st[0]));
-  const closing = sections[sections.length - 1];
-  if (closing) for (const fl of postFlags) closeWith(closing.steps, fl);
-  if (postWalk.length > 0 || (!closing && postFlags.length > 0)) {
-    const section: Section = { heading: heading(2, PHASE_TITLE.post!, `phase:${hostId}:post`), header: [], steps: postWalk.map((st) => walkStep(data, st)) };
-    if (!closing) for (const fl of postFlags) closeWith(section.steps, fl);
-    sections.push(section);
-  }
+  const sections: Section[] = (machine?.sections ?? []).map(({ phase, finding: f, steps }) => {
+    const title = PHASE_TITLE[phase]!;
+    return {
+      heading: heading(2, f ? `${title}: ${f.title}` : title, `phase:${hostId}:${phase}${f ? `:${f.id}` : ""}`),
+      header: f ? findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)) : [],
+      steps: steps.map((st) => printStep(data, st)),
+    };
+  });
   for (const s of sections) {
     out.push(s.heading, ...s.header);
     if (s.steps.length > 0) {
@@ -525,9 +462,7 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
     }
   }
 
-  const extra = plan.findings
-    .filter((f) => phaseOf.get(f.id)?.phase === "additional")
-    .sort((a, b) => severityRank(a) - severityRank(b) || a.title.localeCompare(b.title));
+  const extra = machine?.additional ?? [];
   if (extra.length > 0) out.push(heading(2, ADDITIONAL_HEADING, `phase:${hostId}:additional`), ...extra.map(additionalItem));
 
   const tested = testedBullets(data, hostId);
@@ -593,7 +528,7 @@ function sourceRun(source: string, data: ReportData, target: ReportTarget | null
     const entry = data.log.find((e) => e.id === entryMatch[1]);
     if (!entry || entry.private) return null;
     // A host's first port scan is printed by Service enumeration, not as a step.
-    const scanned = entry.hostIds.filter((h) => firstScan(data, h)?.id === entry.id).flatMap((h) => portScan(data, h));
+    const scanned = entry.hostIds.filter((h) => firstScan(data, h)?.id === entry.id).flatMap((h) => portScan(data, h, entry));
     return scanned.some((b) => sourceOf(b) === source) ? scanned : entryRun(data, entry);
   }
   const findingMatch = FINDING_SOURCE.exec(source);
@@ -664,34 +599,10 @@ export function refreshBlocks(source: string, data: ReportData, target: ReportTa
 /** A block's source, or "" when it has none. */
 export const srcOf = (n: ReportNode) => sourceOf(n) ?? "";
 
-/** A target's draft (`buildPlainTarget`) by machine: the top-level blocks from each machine's heading to the next. */
-function machineParts(draft: ReportNode): Map<string, ReportNode[]> {
-  const parts = new Map<string, ReportNode[]>();
-  let current: ReportNode[] | null = null;
-  for (const n of draft.content ?? []) {
-    const m = n.type === "heading" ? /^facts:([^:]+)$/.exec(srcOf(n)) : null;
-    if (m) parts.set(m[1], (current = []));
-    current?.push(n);
-  }
-  return parts;
-}
-
-/** A page's draft built once and handed down, so a run placing many entries never builds it per entry. */
-export interface Drafted {
-  target: ReportTarget;
-  doc: ReportNode;
-  byMachine: Map<string, ReportNode[]>;
-}
-
-/** `target`'s draft, built once, for the placing functions (`place.ts`). */
-export function draftOf(data: ReportData, target: ReportTarget, meta: ReportMeta): Drafted {
-  const doc = buildPlainTarget(data, target, meta);
-  return { target, doc, byMachine: machineParts(doc) };
-}
-
-/** An entry's regenerated blocks with the `also` the draft records on them (`absorb`): read off the draft of each
- *  machine the entry is on, block by block in the run's order. A machine of `drafted`'s target is read off it. */
-function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta, drafted?: Drafted): ReportNode[] {
+/** An entry's regenerated blocks with the `also` the draft records on them (`absorb`): read off the plan step that
+ *  holds the entry in each target holding one of its machines, printed as the draft prints it, block by block in the
+ *  run's order. */
+function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] {
   const id = ENTRY_SOURCE.exec(source)?.[1];
   const entry = data.log.find((e) => e.id === id);
   const found: ReportNode[] = [];
@@ -699,10 +610,15 @@ function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, ta
     if (sourceOf(n) === source) found.push(n);
     else n.content?.forEach(walk);
   };
+  const targets = new Map<string, ReportTarget>();
   for (const hostId of entry?.hostIds ?? []) {
     if (!data.hosts.some((h) => h.id === hostId)) continue;
-    const own = drafted && drafted.target === target ? drafted.byMachine.get(hostId) : undefined;
-    (own ?? machineBlock(data, targetOf(data, target, meta, hostId), meta, hostId)).forEach(walk);
+    const t = targetOf(data, target, meta, hostId);
+    targets.set(`${t.kind}:${t.hostIds.join(",")}`, t);
+  }
+  for (const t of targets.values()) {
+    const step = placementPlan(data, t).at(entry!.id)?.step;
+    if (step) printStep(data, step).blocks.forEach(walk);
   }
   return blocks.map((b, i) => {
     const also = found[i]?.attrs?.also;
@@ -713,12 +629,11 @@ function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, ta
 /**
  * One entry's blocks as the draft places them (`entryBlocks`), each carrying the `also` the draft records on it: an
  * entry whose evidence one of these blocks already shows (a flag its output prints) is placed with it, never twice.
- * `drafted` is the target's draft when the caller built it already (`draftOf`).
  */
-export function draftedEntryBlocks(data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry, drafted?: Drafted): ReportNode[] {
+export function draftedEntryBlocks(data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry): ReportNode[] {
   const blocks = entryBlocks(data, entry);
   const sources = [...new Set(blocks.map(srcOf).filter((s) => s !== ""))];
-  const withAlso = new Map(sources.map((s) => [s, withAbsorbed(blocks.filter((b) => srcOf(b) === s), s, data, target, meta, drafted)]));
+  const withAlso = new Map(sources.map((s) => [s, withAbsorbed(blocks.filter((b) => srcOf(b) === s), s, data, target, meta)]));
   const seen = new Map<string, number>();
   return blocks.map((b) => {
     const s = srcOf(b);
@@ -729,6 +644,15 @@ export function draftedEntryBlocks(data: ReportData, target: ReportTarget, meta:
   });
 }
 
+/** A plan step's blocks as the draft prints them, stamped: what a screenshot that illustrates it or goes with its flag
+ *  brings to a page that already holds the step (`companionStepAt`). */
+export const stepBlocks = (data: ReportData, step: PlanStep): ReportNode[] => finish(printStep(data, step).blocks);
+
+/** A machine's Also tested run as the draft writes it: its heading and its bullets, stamped; empty when it has none. */
+export function testedRun(data: ReportData, hostId: string): ReportNode[] {
+  const bullets = testedBullets(data, hostId);
+  return bullets.length > 0 ? finish([heading(2, TESTED_HEADING, `phase:${hostId}:tested`), ...bullets]) : [];
+}
 
 /** Text nodes as ProseMirror stores them: neighbours with the same marks joined, empty ones dropped. */
 function normalize(n: ReportNode): ReportNode {

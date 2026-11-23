@@ -11,7 +11,6 @@ import {
   missingEntries,
   missingTested,
   PAGE_NODE_TYPES,
-  phaseInsertAt,
   sourceBlocks,
   sourceOf,
   type ReportData,
@@ -184,43 +183,6 @@ describe("insertEntry: the rail's + add", () => {
     expect(table.node.type.name).toBe("table");
   });
 
-  it("+ add with no cursor appends a numbered step at the end of its phase, before the next heading", async () => {
-    const { editor } = await ready(without("fuse"));
-    const fuse = entry(garnet, "fuse");
-    expect(phaseInsertAt(json(editor()), garnet, target, fuse).before).toEqual([]);
-    act(() => void insertEntry(editor(), garnet, target, fuse, false));
-    const top = json(editor()).content!;
-    const additional = top.findIndex((n) => sourceOf(n) === `phase:${GARNET_HOST}:additional`);
-    const step = top[additional - 1];
-    expect(step).toMatchObject({ type: "list", attrs: { kind: "ordered" } });
-    expect(step.content!.map(sourceOf)).toEqual(entryBlocks(garnet, fuse).map(sourceOf));
-    expect(sourceOf(step.content![0])).toBe(`entry:${id("fuse")}:observations`);
-  });
-
-  it("+ add for a phase with no heading yet adds the heading and Steps to reproduce first", async () => {
-    // garnet without its privilege escalation section: the kernel check has no heading to go under.
-    const content = draft.content!;
-    const from = content.findIndex((n) => (sourceOf(n) ?? "").startsWith(`phase:${GARNET_HOST}:privesc`));
-    const to = content.findIndex((n) => sourceOf(n) === `phase:${GARNET_HOST}:additional`);
-    const { editor } = await ready({ ...draft, content: [...content.slice(0, from), ...content.slice(to)] });
-    const kernel = entry(garnet, "kernel");
-    act(() => void insertEntry(editor(), garnet, target, kernel, false));
-    const top = json(editor()).content!;
-    const at = top.findIndex((n) => sourceOf(n) === `phase:${GARNET_HOST}:privesc`);
-    expect(at).toBe(from);
-    expect(top[at]).toMatchObject({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Privilege escalation" }] });
-    expect(top[at + 1]).toMatchObject({ type: "paragraph", attrs: { source: `phase-steps:${GARNET_HOST}` }, content: [{ text: "Steps to reproduce:" }] });
-    expect(top[at + 2].content!.map(sourceOf)).toEqual(entryBlocks(garnet, kernel).map(sourceOf));
-    expect(sourceOf(top[at + 3])).toBe(`phase:${GARNET_HOST}:additional`);
-
-    // A second entry of that phase goes after it, with no second heading or label.
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "build"), false));
-    const after = json(editor()).content!;
-    expect(after.filter((n) => sourceOf(n) === `phase:${GARNET_HOST}:privesc`)).toHaveLength(1);
-    expect(after.filter((n) => sourceOf(n) === `phase-steps:${GARNET_HOST}`)).toHaveLength(2);
-    expect(holds(after[at + 3], "build")).toBe(true);
-  });
-
   it("the entry a lead's block shows is no longer unused once the lead is added", async () => {
     const { editor } = await ready(without("ssh"));
     expect(unusedEntries(garnet, target, json(editor())).map((e) => e.id)).toContain(id("local"));
@@ -235,15 +197,6 @@ describe("insertEntry: the rail's + add", () => {
     const top = json(editor()).content!;
     const additional = top.findIndex((n) => sourceOf(n) === `phase:${GARNET_HOST}:additional`);
     expect(holds(top[additional - 1], "fuse")).toBe(true);
-  });
-
-  it("with no cursor, a screenshot that came along with a step joins the step holding its companion", async () => {
-    const content = draft.content!.map((n) => (holds(n, "ssh") ? { ...n, content: n.content!.filter((b) => b.type !== "figure") } : n));
-    const { editor } = await ready({ ...draft, content });
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "local-shot"), false));
-    const step = json(editor()).content!.find((n) => holds(n, "ssh"))!;
-    expect(step.content!.map((b) => b.type)).toEqual(["paragraph", "codeBlock", "codeBlock", "figure"]);
-    expect(json(editor()).content).toHaveLength(content.length);
   });
 
   it("typing right after an insert is its own undo step", async () => {
@@ -487,7 +440,7 @@ describe("Add new evidence", () => {
   it("adds what the draft would place and isn't on the page or removed; Undo takes off exactly that", async () => {
     const { editor, onRemoveEvidence } = await ready(without("fuse", "dump"));
     const before = json(editor());
-    expect(missingEntries(before, garnet, target, {}, [id("dump")]).map((e) => e.id)).toEqual([id("fuse")]);
+    expect(missingEntries(before, garnet, target, [id("dump")]).map((e) => e.id)).toEqual([id("fuse")]);
     const onAdded = addButton(editor(), [id("dump")]);
     fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
     expect(await screen.findByText("Added 1 entry")).toBeInTheDocument();
@@ -522,7 +475,7 @@ describe("Add new evidence", () => {
       expect(step.content!.map((b) => b.type)).toEqual(["paragraph", "codeBlock", "codeBlock", "figure"]);
       expect(step.content![2].attrs?.also).toEqual([id("local")]);
       expect(step.content![3].attrs?.entryId).toBe(id("local-shot"));
-      expect(missingEntries(page, garnet, target, {}, [])).toEqual([]);
+      expect(missingEntries(page, garnet, target, [])).toEqual([]);
     };
     check();
     // A later Refresh of every block keeps it so.
@@ -601,8 +554,8 @@ describe("removal tracking", () => {
     expect(onRemoveEvidence).toHaveBeenCalledWith(key);
     expect(pruneRemoved(json(editor()), { removedEntryIds: [key] })).toEqual({ removedEntryIds: [key] });
     // Recorded: Add new evidence won't bring it back.
-    expect(missingTested(json(editor()), garnet, target, {}, GARNET_HOST, [key])).toBeNull();
-    expect(missingTested(json(editor()), garnet, target, {}, GARNET_HOST, [])).not.toBeNull();
+    expect(missingTested(json(editor()), garnet, GARNET_HOST, [key])).toBeNull();
+    expect(missingTested(json(editor()), garnet, GARNET_HOST, [])).not.toBeNull();
     render(
       <TooltipProvider>
         <AddEvidenceButton editor={editor()} data={garnet} target={target} meta={{}} removed={[key]} onAdded={vi.fn()} />

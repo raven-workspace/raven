@@ -2,10 +2,12 @@ import { XIcon } from "@phosphor-icons/react";
 import type { Editor } from "prosekit/core";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
-  entryPhase,
   entryIdsIn,
   isPortScan,
   machinesInOrder,
+  PAGE_PHASES,
+  PHASE_TITLE,
+  placementPlan,
   targetCredentials,
   type Phase,
   type ReportData,
@@ -56,16 +58,6 @@ export interface RailGroup {
   rows: RailRow[];
 }
 
-const PHASE_LABELS: Partial<Record<Phase, string>> = {
-  enum: "Service enumeration",
-  foothold: "Initial access",
-  lateral: "Lateral movement",
-  privesc: "Privilege escalation",
-  domain: "Domain compromise",
-  post: "Post-exploitation",
-};
-const GROUP_ORDER: Phase[] = ["enum", "foothold", "lateral", "privesc", "domain", "post"];
-
 const outputsOf = (e: LogEntry) => (e.content.kind === "command" ? e.content.blocks.map((b) => b.output ?? "") : []);
 const firstLine = (text: string) =>
   text
@@ -89,37 +81,21 @@ function railRow(data: ReportData, hostId: string, e: LogEntry): RailRow {
   return { entry: e, line, ...(note ? { note } : {}) };
 }
 
-interface Placed {
-  hostId: string;
-  phase: Phase;
-  row: RailRow;
-}
-const rowCache = new WeakMap<ReportData, WeakMap<ReportTarget, Map<string, Placed>>>();
-
 /**
- * The log column (§10.1): the target's log that is not in the report, per machine (in page order) and phase (the phase
- * `phaseInsertAt` would place it in), time order inside each group. Private entries and operator-reason attempts never
+ * The log column (§10.1): the target's log that is not in the report, per machine (in page order) and phase (the
+ * placement plan's `phaseOf`, where `phaseInsertAt` would place it), time order inside each group. Private entries and operator-reason attempts never
  * show.
  */
 export function railGroups(data: ReportData, target: ReportTarget, doc: ReportNode): RailGroup[] {
-  // An entry's phase and row depend on the data alone: worked out once per load, not on every keystroke.
-  const byTarget = rowCache.get(data) ?? new WeakMap<ReportTarget, Map<string, Placed>>();
-  rowCache.set(data, byTarget);
-  const known = byTarget.get(target) ?? new Map<string, Placed>();
-  byTarget.set(target, known);
+  const plan = placementPlan(data, target);
   const placed = unusedEntries(data, target, doc).map((e) => {
-    let p = known.get(e.id);
-    if (!p) {
-      const { hostId, phase } = entryPhase(data, target, e);
-      p = { hostId, phase, row: railRow(data, hostId, e) };
-      known.set(e.id, p);
-    }
-    return p;
+    const { hostId, phase } = plan.phaseOf(e);
+    return { hostId, phase, entry: e };
   });
   return machinesInOrder(data, target).flatMap((hostId) =>
-    GROUP_ORDER.flatMap((phase) => {
-      const rows = placed.filter((p) => p.hostId === hostId && p.phase === phase).map((p) => p.row);
-      return rows.length > 0 ? [{ hostId, phase, label: PHASE_LABELS[phase]!, rows }] : [];
+    PAGE_PHASES.flatMap((phase) => {
+      const rows = placed.filter((p) => p.hostId === hostId && p.phase === phase).map((p) => railRow(data, hostId, p.entry));
+      return rows.length > 0 ? [{ hostId, phase, label: PHASE_TITLE[phase]!, rows }] : [];
     }),
   );
 }
