@@ -205,7 +205,20 @@ describe("placement plan findings", () => {
   });
 });
 
-describe("finding sections", () => {
+describe("each step names its finding section", () => {
+  it("a step of the phase's first finding goes under it, even after a step of another", () => {
+    const d = windowsHost();
+    d.log.push(entry("upload", H, 15, cmd("uploaded")));
+    d.findings = [
+      finding("rce", { title: "File upload to RCE", stepEntryIds: ["ferox", "curl"], createdAt: 1 }),
+      finding("creds", { title: "Default credentials", stepEntryIds: ["upload"], createdAt: 2 }),
+    ];
+    const plan = placementPlan(d, target([H]));
+    expect(plan.at("ferox")?.section?.finding?.id).toBe("rce");
+    expect(plan.at("upload")?.section?.finding?.id).toBe("creds");
+    expect(plan.at("curl")?.section?.finding?.id).toBe("rce");
+  });
+
   it("a step of no finding goes under the section of the step before it", () => {
     const d = windowsHost();
     d.log.push(entry("upload", H, 15, cmd("uploaded")), entry("hop-in", H, 25, cmd("ok")));

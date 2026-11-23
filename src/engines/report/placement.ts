@@ -492,10 +492,11 @@ function buildMachine(data: ReportData, target: ReportTarget, hostId: string, ow
     if (steps.length === 0 && here.length === 0) continue;
     const walk = steps.filter((st) => !isFlag(st[0]));
     const flags = steps.filter((st) => isFlag(st[0]));
-    // Each step goes under the finding whose step it is; a step of none, under the finding of the step before it.
+    // Each step names its finding section: the finding whose step it is; a step of none, the section of the step
+    // before it (the phase's first section for the first step).
     const groupOf: number[] = [];
     walk.forEach((st, i) => {
-      const owner = here.findIndex((f, k) => k > 0 && st.some((e) => f.stepEntryIds.includes(e.id)));
+      const owner = here.findIndex((f) => st.some((e) => f.stepEntryIds.includes(e.id)));
       groupOf.push(owner !== -1 ? owner : i > 0 ? groupOf[i - 1] : 0);
     });
     const groups: (Finding | null)[] = here.length > 0 ? here : [null];
