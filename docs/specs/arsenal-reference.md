@@ -1,6 +1,8 @@
 # Raven: the Arsenal as a command reference
 
-Date: 2026-11-07. Status: draft for the user's approval.
+> **Frozen record, shipped** (written 2026-11-07). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
+Date: 2026-11-07.
 Branch: `arsenal-reference`. Product record: `PRODUCT.md`.
 
 **Inputs:**

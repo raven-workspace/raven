@@ -11,7 +11,7 @@ export default function UiGallery() {
   return (
     <div data-testid="ui-gallery" className="ui-gallery">
       <h1 className="ui-gallery__title">Ink components</h1>
-      <p className="ui-gallery__lede">Debug builds only. Compare with direction A in docs/specs/mocks/visual-directions.html.</p>
+      <p className="ui-gallery__lede">Debug builds only. Compare with direction A in visual-directions.html (docs/specs/foundation.md §8 links it).</p>
 
       <div className="ui-gallery__grid">
         <Section title="Button">

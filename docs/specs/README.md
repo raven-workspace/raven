@@ -1,10 +1,10 @@
 # Design specs
 
-Each spec records what a feature round set out to build and why, in the words of the decisions made at the time. They're history: the code is the truth for current behaviour, `PRODUCT.md` describes what Raven does today, and `DESIGN.md` holds the visual rules. Read a spec when you need the reasoning behind something, or before changing a feature it covers.
+Each spec records what a feature round set out to build and why, in the words of the decisions made at the time. They're frozen: once a round ships, its spec isn't updated, and each one says so at the top. The code is the truth for current behaviour, `PRODUCT.md` describes what Raven does today, and `DESIGN.md` holds the visual rules; where a spec and the app differ, the app wins. Read a spec when you need the reasoning behind something, or before changing a feature it covers.
 
 Code comments cite specs by name and section, for example `(interpreters-and-payloads spec §3.2)`. Bare section numbers in `src/engines/report/` and `src/features/report/` (`§10.1`, `§5.7`) refer to `reports.md`, except mentions of the OffSec sample report's §4.1.
 
-Later specs override earlier ones where they overlap, and a few sections say so explicitly (for example `reports.md` §10 and §11). The "Status: draft" lines at the top of some specs are from when they were written; every spec below was approved and built.
+Later specs override earlier ones where they overlap, and a few sections say so explicitly (for example `reports.md` §10 and §11).
 
 | Spec | Covers | State |
 |---|---|---|
@@ -21,12 +21,12 @@ Later specs override earlier ones where they overlap, and a few sections say so 
 | [manual-reading.md](manual-reading.md) | The Manual's reading round: type, spacing, output blocks | Shipped |
 | [prelab-batch.md](prelab-batch.md) | Fixes batched before the first lab session | Shipped |
 | [network.md](network.md) | The Network section: tunnels, hops and the attack-path tree | Shipped |
-| [reports.md](reports.md) | The Report: OffSec's grading rules, the smart draft, the editor, checks, and export | Shipped except PDF/.7z export (§6.7, with the carried requirements in §12) |
+| [reports.md](reports.md) | The Report: OffSec's grading rules, the smart draft, the editor, checks, and export | Shipped except PDF/.7z export (§6.7, with the carried requirements in §12); screenshots on findings is RAV-26 |
 
 ## Mockups
 
-`mocks/` holds the mockups the specs cite as the chosen direction: the Ink visual directions and first layouts (`visual-directions.html`, `engagements-dashboard.html`, `engagement-view.html`, `host-view.html`) and the decision sketches for the Payloads drawer and Workbench, the credentials dock, the Manual and the Report. They fix structure and hierarchy, not exact values; the shipped UI and `DESIGN.md` win where they differ.
+The specs link the mockups they chose (the Ink visual directions, the first layouts, and the decision sketches for Payloads, Credentials, the Manual and the Report) to their copies in git history. They were removed from the tree because they show the app as it was planned, not as it is, and the design checks were reading them as current UI. For the app as it is now, run `npm run audit:visual`: it screenshots every screen at four widths into `audit-output/shots/`.
 
 ## Older references
 
-Some specs link to build plans, follow-up notes and audit triage under `docs/superpowers/`. Those were removed once their work shipped and their open items moved to Linear; find them in git history (`git log --all -- docs/superpowers`).
+Some specs link to build plans, follow-up notes and audit triage under `docs/superpowers/`, and to brainstorm sketches that were never committed. The `docs/superpowers/` files were removed once their work shipped and their open items moved to Linear; find them in git history (`git log --all -- docs/superpowers`).

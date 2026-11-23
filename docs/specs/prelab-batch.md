@@ -1,5 +1,7 @@
 # Raven pre-lab batch (2026-11-09)
 
+> **Frozen record, shipped** (written 2026-11-09). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
 ## Why
 
 The owner wants as much done as possible before the next lab, then one batch test of how everything flows in a real engagement. This round clears what is still open from two lists:

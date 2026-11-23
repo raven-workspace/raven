@@ -1,8 +1,10 @@
 # The Manual, reading round — design
 
+> **Frozen record, shipped** (written 2026-11-09). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
 Date: 2026-11-09. Branch: `manual-reading` (already holds the spacing, typography, output-block and box-drawing font commits).
 Sources: the critique `.impeccable/critique/2026-11-10T03-57-16Z__src-features-manual.md` (28/40), the structure mock
-`docs/specs/mocks/manual-structure.html`, and the decisions appended to `.impeccable/surfaces/src-features-manual.md`.
+[manual-structure.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/manual-structure.html), and the decisions appended to `.impeccable/surfaces/src-features-manual.md`.
 The owner chose: inline commands first, scope "everything", answer card (A) **and** ⌘K lookup rows (B); not the rail on `/` (C).
 
 ## 1. Inline commands (critique P1)

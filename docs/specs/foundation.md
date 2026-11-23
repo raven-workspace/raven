@@ -1,6 +1,8 @@
 # Raven (desktop): design
 
-Date: 2026-11-03. Status: draft for the user's approval.
+> **Frozen record, shipped** (written 2026-11-03, last revised 2026-11-07). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
+Date: 2026-11-03.
 
 ## 1. Intent: what this is and why
 
@@ -247,7 +249,7 @@ Each engagement keeps a list of artifacts left on targets: uploaded files and th
 - **Type:** a crisp sans for UI (SF Pro / Inter-class) and a good monospace (JetBrains Mono-class) for IPs, commands, output and timestamps. Small uppercase tracked labels for section headings.
 - **Feel:** desktop-native (proper title bar, native menus, keyboard-first), minimal and quick motion, dense but calm.
 - **No stock look:** stock component-library styling (default shadcn/Tailwind UI look) must not show through. Components are styled to this system.
-- **Reference:** the chosen mockup, direction **A** in `docs/specs/mocks/visual-directions.html`; the layout mockups are in `docs/specs/mocks/` (dashboard: option A, engagement view: option B, host view: option B).
+- **Reference:** the chosen mockup, direction **A** in [visual-directions.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/visual-directions.html); the layout mockups are in [docs/specs/mocks/](https://github.com/raven-workspace/raven/tree/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks) (dashboard: option A, engagement view: option B, host view: option B).
 
 ## 9. Engines to port from the old app's repo
 Copy these with their tests, then adapt them to the new types (Engagement, Host, Service, LogEntry, and so on):

@@ -1,6 +1,8 @@
 # Raven Reports: design
 
-Date: 2026-11-11. Branch: `feat/reports`. Status: approved brief, written design.
+> **Frozen record, mostly shipped** (written 2026-11-11, last revised 2026-11-13). Everything here is built except the PDF and .7z export: §6.7 and §12 stay live until it ships. Screenshots directly on findings, requested after this was written, is RAV-26. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
+Date: 2026-11-11. Branch: `feat/reports`.
 
 **Amended 2026-11-12 (rework round, §10).** After the owner tried Plan A, §10 replaces the parts it names: the outline becomes a tab row (§4.1), target pages become numbered steps (§5.1, §5.2), the AD set opens with an attack-path table (§5.5), appendices return as first-class pages (§5.6, §5.7), and the summary, scope and service tables are generated (§5.5). Where §10 and an earlier section disagree, §10 wins.
 
@@ -49,7 +51,7 @@ From the current OSCP+ Exam Guide (help.offsec.com article 360040165632):
 
 ## 4. The Report view
 
-The owner chose the "Page with an evidence rail" layout. Sketch: `docs/specs/mocks/report-page-and-rail.html` (1440×900, first viewport only). It is the composition the build matches; the build owes the responsive page, content below the fold and every state.
+The owner chose the "Page with an evidence rail" layout. Sketch: [report-page-and-rail.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/report-page-and-rail.html) (1440×900, first viewport only). It is the composition the build matches; the build owes the responsive page, content below the fold and every state.
 
 It lives at the engagement's **Report** section (sidebar, its existing number key). It is a full section view inside the engagement, with Raven's title bar and sidebar.
 
@@ -300,7 +302,7 @@ Checks never block export outright; export shows the open gaps in its confirm st
 
 ## 10. Rework round (2026-11-12): binding, overrides earlier sections
 
-**Why.** The owner tried Plan A on real data. They found two problems: (1) target pages were a log dump, every proving entry at full height under its own "What you did and why" placeholder (ms01 was about 8,700 px); (2) the Task 15 ruling that removed appendices overrode their explicit call. They chose **option A · Steps** from `docs/specs/mocks/report-target-rethink.html`. They also added a model report, `docs/Mock exam A — model report.md` (their Mock exam A lab written up from their vault notes), which they rate above OffSec's sample. Its shape is now the reference for target pages and the summary, alongside OffSec's section order and numbering, which still hold.
+**Why.** The owner tried Plan A on real data. They found two problems: (1) target pages were a log dump, every proving entry at full height under its own "What you did and why" placeholder (ms01 was about 8,700 px); (2) the Task 15 ruling that removed appendices overrode their explicit call. They chose **option A · Steps** from [report-target-rethink.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/report-target-rethink.html). They also added a model report, `docs/Mock exam A — model report.md` (their Mock exam A lab written up from their vault notes), which they rate above OffSec's sample. Its shape is now the reference for target pages and the summary, alongside OffSec's section order and numbering, which still hold.
 
 ### 10.1 View layout (replaces the left outline of §4.1)
 

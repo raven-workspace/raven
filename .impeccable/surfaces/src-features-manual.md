@@ -9,7 +9,7 @@ related_targets: ["src/engines/manual", "src/features/palette/Palette.tsx"]
 
 Mode: Read. Owner: one pen tester, keyboard-first, ADHD/autism (low noise, stable layout), Raven beside Kali at 900px and up.
 Jobs: open the right note by name or by the phrase on screen, read it at the spot, run its commands for the host in view.
-Spec: docs/specs/manual.md. Chosen mock: docs/specs/mocks/fm-notes-home.html (option B, "Its own place: the Manual").
+Spec: docs/specs/manual.md. Chosen mock: [fm-notes-home.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/fm-notes-home.html) (option B, "Its own place: the Manual").
 
 ## Direction contract
 
@@ -33,7 +33,7 @@ FINISH: audited at 900, 1024, 1280 and 1440 (long note, search landing, tool pag
 
 ## Decision 2026-11-09: answer card (from the critique's structural round)
 
-Mock: docs/specs/mocks/manual-structure.html (option A chosen; B lookup rows in ⌘K and C rail-on-/ declined).
+Mock: [manual-structure.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/manual-structure.html) (option A chosen; B lookup rows in ⌘K and C rail-on-/ declined).
 
 - A ⌘K hit (or ⌥↓/⌥↑) landing on a table row pins that row as an answer card between the match bar and the note: key cell in mono, Means as lead, Usually-caused-by muted, Do-this split into filled command rows (leftover prose as short connectors), Card link marked ↗ Arsenal.
 - ↵ copy, ⌘↵ copy and log (title "{table}: {error}", status says logged), ↓↑ between commands, ⌥↓↑ moves the card with the match. Esc order: card, then search, then leave.

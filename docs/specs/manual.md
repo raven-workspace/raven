@@ -1,6 +1,8 @@
 # Raven: the Manual (Field Manual reference notes)
 
-Date: 2026-11-09. Part 2 of the owner's personal hacking knowledge base in Raven; part 1 was the Arsenal (cards). Decision mock: `docs/specs/mocks/fm-notes-home.html` (option B chosen).
+> **Frozen record, shipped** (written 2026-11-09). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
+Date: 2026-11-09. Part 2 of the owner's personal hacking knowledge base in Raven; part 1 was the Arsenal (cards). Decision mock: [fm-notes-home.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/fm-notes-home.html) (option B chosen).
 
 ## 1. Why
 

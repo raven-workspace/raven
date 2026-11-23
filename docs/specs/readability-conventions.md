@@ -1,5 +1,7 @@
 # Raven: readability and UI conventions round
 
+> **Frozen record, shipped** (written 2026-11-08). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
 Date: 2026-11-08. Branch: `readability-conventions`. The conventions themselves are in **`DESIGN.md`** at the repo root, and that file is binding. This document says what this round changes, in what order, and how the conventions get enforced.
 
 ## 1. Why
@@ -68,7 +70,7 @@ The visual audit already *reports* most of these: 16,000 tiny-text findings and 
    - Every dialog uses an `X` close button with a single hover state. Form field labels are sentence-case `text-meta`.
    - Every hint line uses `HintLine`: the Arsenal drawer, the Payloads drawer and Workbench, ⌘K, and the Stuck view.
    - Secondary options become real controls:
-     - in Payloads, the fits become the visible list (option B, mock `docs/specs/mocks/fit-switch.html`) and the misfit line a `Disclosure`;
+     - in Payloads, the fits become the visible list (option B, mock [fit-switch.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/fit-switch.html)) and the misfit line a `Disclosure`;
      - checklist "N new credentials since done", "show ▸" and "re-check ▸" become controls;
      - context pickers become bordered, tabbable Select triggers.
    - Checklist goal rows: status control on the title's line (`items-start`), no 20px controls.
