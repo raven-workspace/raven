@@ -63,6 +63,10 @@ export function CredentialsSection() {
   // If the credentials query settles after the crack without listing the password (a failed refetch, or it never
   // appears), the hold lets go and normal resolution takes over: it never sticks.
   const [cracked, setCracked] = useState<{ hashId: string; passwordId: string; since: number }>();
+  // A credential the owner just picked, until the URL names it. A navigation commits after the state that releases the
+  // hold above, so for a render the URL can still name an unlisted password: without this the fallback would resolve
+  // it to the default and write that over the owner's pick.
+  const [picked, setPicked] = useState<string>();
 
   const creds = credsQ.data ?? NO_CREDS;
   const hosts = hostsQ.data ?? NO_HOSTS;
@@ -73,13 +77,17 @@ export function CredentialsSection() {
   const [params] = useSearchParams();
   const landed = !!cracked && shown.creds.some((c) => c.id === cracked.passwordId);
   const settled = !credsQ.isFetching && Math.max(credsQ.dataUpdatedAt, credsQ.errorUpdatedAt) > (cracked?.since ?? Infinity);
-  const waiting = !!cracked && !(settled && !landed) && (params.get("cred") !== cracked.passwordId || !landed);
-  const { selectedId, select, tab, setTab } = useCredentialSelection(shown.creds, ctx, loaded && !waiting);
+  const picking = picked !== undefined && params.get("cred") !== picked;
+  // The owner's pick ends the hold.
+  const waiting = !!cracked && picked === undefined && !(settled && !landed) && (params.get("cred") !== cracked.passwordId || !landed);
+  const { selectedId, select, tab, setTab } = useCredentialSelection(shown.creds, ctx, loaded && !waiting && !picking);
   // Landed: let go, so a later delete of that password can't hold the fallback off again.
   if (cracked && !waiting) setCracked(undefined);
+  // The URL names the pick: normal resolution takes over.
+  if (picked !== undefined && !picking) setPicked(undefined);
 
   const choose = useCallback((cid: string) => {
-    setCracked(undefined);
+    setPicked(cid);
     select(cid);
   }, [select]);
   // Move the selection to a credential just made (Record plaintext, Add credential), holding the old one docked until it is listed.
@@ -99,7 +107,7 @@ export function CredentialsSection() {
   if (state || !loaded) return state;
   const usernames = usersQ.data!;
   const byId = (cid?: string) => shown.creds.find((c) => c.id === cid);
-  const selected = waiting ? (byId(cracked!.passwordId) ?? byId(cracked!.hashId)) : byId(selectedId);
+  const selected = picking ? byId(picked) : waiting ? (byId(cracked!.passwordId) ?? byId(cracked!.hashId)) : byId(selectedId);
   const hidden = shown.creds.filter((c) => !isSprayable(c)).length;
 
   const panes = (

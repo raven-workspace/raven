@@ -648,21 +648,54 @@ describe("credentials dock page", () => {
   it("a cracked password that never appears in the list lets the selection fall back", async () => {
     const user = userEvent.setup();
     mount({ creds: [pw(1), NT_HASH], services: SMB, url: "/e/e1/s/credentials?cred=h" });
-    // The server answers with a password the list never shows.
-    m.credentialCrack.mockImplementation(async (hashId, plaintext) => cred({ id: "ghost", username: "jsmith", domain: "CORP", secret: plaintext, crackedFrom: hashId }));
+    // The server answers, late as under load, with a password the list never shows.
+    m.credentialCrack.mockImplementation(async (hashId, plaintext) => {
+      await new Promise((r) => setTimeout(r, 30));
+      return cred({ id: "ghost", username: "jsmith", domain: "CORP", secret: plaintext, crackedFrom: hashId });
+    });
     const d = await screen.findByRole("region", { name: "Credential" });
     await user.click(within(d).getByRole("button", { name: "Record plaintext" }));
     const dlg = await screen.findByRole("dialog");
     await user.type(within(dlg).getByLabelText("Plaintext"), "password");
     await user.click(within(dlg).getByRole("button", { name: "Save password" }));
     await waitFor(() => expect(m.credentialCrack).toHaveBeenCalledWith("h", "password"));
+    // The crack has answered once its dialog closes. Only then is "the selection is h" a fall-back: the page was
+    // mounted on ?cred=h, so before the answer it is just the starting point.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     // Not stuck on the unknown id: the default (the hash, still listed) is selected and docked again.
     await waitFor(() => expect(search().get("cred")).toBe("h"));
     expect(within(dock()).getByRole("button", { name: "Edit CORP\\jsmith (hash)" })).toBeInTheDocument();
     // And selection still works afterwards.
     await user.click(screen.getByRole("button", { name: "Select u1" }));
+    await waitFor(() => expect(search().get("cred")).toBe("c1"));
+  }, 15_000); // A generous timeout: the full suite runs many files at once.
+
+  it("a credential the owner picks while the new password is still being listed stays picked", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [pw(1), NT_HASH], services: SMB, url: "/e/e1/s/credentials?cred=h" });
+    const d = await screen.findByRole("region", { name: "Credential" });
+    // After the crack, the list is slow to come back: the page holds the hash docked, waiting for the new password.
+    let release!: () => void;
+    const slow = new Promise<void>((r) => (release = r));
+    m.credentialsList.mockImplementation(async () => {
+      await slow;
+      return [...creds];
+    });
+    await user.click(within(d).getByRole("button", { name: "Record plaintext" }));
+    const dlg = await screen.findByRole("dialog");
+    await user.type(within(dlg).getByLabelText("Plaintext"), "password");
+    await user.click(within(dlg).getByRole("button", { name: "Save password" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(search().get("cred")).toBe("c101"));
+    // The owner picks another credential before the list lands.
+    await user.click(screen.getByRole("button", { name: "Select u1" }));
+    await waitFor(() => expect(search().get("cred")).toBe("c1"));
+    release();
+    // The list lands with the new password in it, and never takes the owner's pick away.
+    expect(await screen.findByRole("button", { name: "Select CORP\\jsmith" })).toBeInTheDocument();
     expect(search().get("cred")).toBe("c1");
-  }, 15_000); // Load-sensitive: fast alone, can take over 5s under the full suite (no behaviour change).
+    expect(within(dock()).getByTitle("u1")).toBeInTheDocument();
+  });
 
   it("with only non-sprayable credentials, the newest is docked and the matrix shows the can't-be-sprayed note", async () => {
     const user = userEvent.setup();
