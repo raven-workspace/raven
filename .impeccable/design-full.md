@@ -17,17 +17,17 @@ colors:
   warn: "#e0a030"
 typography:
   title:
-    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, Instrument Sans Fallback, -apple-system, system-ui, sans-serif"
     fontSize: "20px"
     fontWeight: 600
     lineHeight: "28px"
   heading:
-    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, Instrument Sans Fallback, -apple-system, system-ui, sans-serif"
     fontSize: "15px"
     fontWeight: 600
     lineHeight: "22px"
   body:
-    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, Instrument Sans Fallback, -apple-system, system-ui, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: "20px"
@@ -37,16 +37,26 @@ typography:
     fontWeight: 400
     lineHeight: "20px"
   meta:
-    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, Instrument Sans Fallback, -apple-system, system-ui, sans-serif"
     fontSize: "13px"
     fontWeight: 400
     lineHeight: "18px"
   label:
-    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, Instrument Sans Fallback, -apple-system, system-ui, sans-serif"
     fontSize: "12px"
     fontWeight: 600
     lineHeight: "16px"
     letterSpacing: "0.08em"
+  read-title:
+    fontFamily: "Instrument Sans Variable, Instrument Sans Fallback, -apple-system, system-ui, sans-serif"
+    fontSize: "24px"
+    fontWeight: 600
+    lineHeight: "32px"
+  read:
+    fontFamily: "Instrument Sans Variable, Instrument Sans Fallback, -apple-system, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: "26px"
 rounded:
   sm: "6px"
   md: "8px"
@@ -133,6 +143,8 @@ The Manual is the one reading surface, and it adds two reading roles that nothin
 | code | 13 / 20 | 400 | Mono | Commands, IPs, hashes, identifiers, timestamps, payloads |
 | meta | 13 / 18 | 400 | UI | Helper text, secondary row lines, hint labels, warnings, empty-state text, field labels |
 | label | 12 / 16 | 600, uppercase, +0.08em | UI | Section labels only |
+
+**Fonts.** UI is Instrument Sans Variable and Mono is JetBrains Mono Variable, both bundled. While Instrument Sans loads, "Instrument Sans Fallback" stands in: local Arial scaled to Instrument Sans's widths and vertical metrics (`size-adjust` 101.7%, ascent 95.4%, descent 24.6%), so the swap doesn't reflow text. It isn't a separate typeface; never set it directly.
 
 ### Named Rules
 
@@ -387,7 +399,7 @@ One `CommandBlock` everywhere a command appears:
 
 ### Do:
 - **Do** lay out with CSS grid and explicit tracks, with one `minmax(0,1fr)` track per row.
-- **Do** use the six type roles, at 13px or more for anything read.
+- **Do** use the six type roles (plus, in the Manual only, its two reading roles), at 13px or more for anything read.
 - **Do** use Phosphor icon buttons for universal verbs, with a tooltip and an `aria-label`.
 - **Do** keep row actions visible in a fixed-width action column.
 - **Do** align side-by-side siblings on shared rows (subgrid).
