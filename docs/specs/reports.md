@@ -49,7 +49,7 @@ From the current OSCP+ Exam Guide (help.offsec.com article 360040165632):
 
 ## 4. The Report view
 
-The owner chose the "Page with an evidence rail" layout. Sketch: `.impeccable/mocks/decision/report-page-and-rail.html` (1440×900, first viewport only). It is the composition the build matches; the build owes the responsive page, content below the fold and every state.
+The owner chose the "Page with an evidence rail" layout. Sketch: `docs/specs/mocks/report-page-and-rail.html` (1440×900, first viewport only). It is the composition the build matches; the build owes the responsive page, content below the fold and every state.
 
 It lives at the engagement's **Report** section (sidebar, its existing number key). It is a full section view inside the engagement, with Raven's title bar and sidebar.
 
@@ -300,7 +300,7 @@ Checks never block export outright; export shows the open gaps in its confirm st
 
 ## 10. Rework round (2026-11-12): binding, overrides earlier sections
 
-**Why.** The owner tried Plan A on real data. They found two problems: (1) target pages were a log dump, every proving entry at full height under its own "What you did and why" placeholder (ms01 was about 8,700 px); (2) the Task 15 ruling that removed appendices overrode their explicit call. They chose **option A · Steps** from `.impeccable/mocks/decision/report-target-rethink.html`. They also added a model report, `docs/Mock exam A — model report.md` (their Mock exam A lab written up from their vault notes), which they rate above OffSec's sample. Its shape is now the reference for target pages and the summary, alongside OffSec's section order and numbering, which still hold.
+**Why.** The owner tried Plan A on real data. They found two problems: (1) target pages were a log dump, every proving entry at full height under its own "What you did and why" placeholder (ms01 was about 8,700 px); (2) the Task 15 ruling that removed appendices overrode their explicit call. They chose **option A · Steps** from `docs/specs/mocks/report-target-rethink.html`. They also added a model report, `docs/Mock exam A — model report.md` (their Mock exam A lab written up from their vault notes), which they rate above OffSec's sample. Its shape is now the reference for target pages and the summary, alongside OffSec's section order and numbering, which still hold.
 
 ### 10.1 View layout (replaces the left outline of §4.1)
 
@@ -405,3 +405,16 @@ Each check keeps its intent and reads `source` attrs and headings. The reading r
 ### 11.7 Rhythm and notices
 
 Consecutive blocks are 12px apart on the page and inside a numbered step. Notices portal above everything, 16px right of the sidebar whether it is expanded or collapsed (§10.8).
+
+## 12. Carried into the PDF export (not built yet)
+
+Requirements recorded during the Plan A and rework rounds (2026-11-11 to 2026-11-13), moved here from the round's follow-up notes so they are in front of whoever builds the export. They add to §6.7. Some were written against the §10 page machinery (chips, layout 4) that §11 replaced; check each against the plain pages before relying on it.
+
+- **What never prints:** pick hints (`.report-pick-hint`), empty-cell prompts (`.report-cell-empty`), empty slots and their labels, amber placeholders, "Not written yet." markers, and guide notes, whether editor decorations or the React-DOM `StandaloneGuide` in the appendix view (exclude `[data-guide]`). Testing considerations print only if written.
+- **Titles:** page titles render from the section's kind.
+- **Numbering:** step numbers are view decorations (`stepNumbers`), not document content, so the export numbers each list from 1 as the page shows it. Free pages (`page` sections) are numbered as body sections after the targets and before Closing; appendix pages are lettered after the targets' appendices, in tab order.
+- **Lists:** list nodes that contain slots must export.
+- **Evidence:** every evidence block prints open, trimmed and highlighted as set. A block moved to an appendix prints its "Full output: Appendix X.n" line; a split one prints both parts.
+- **Captions:** decide one caption fallback for screenshots inside steps, for the page, the checks and the PDF together. Never use a private entry's title as a caption.
+- **Judge the result:** "the most important thing is the RESULT" (owner, 2026-11-11). Screenshot every page of the exported PDF and judge it as a grader would, the same way the page was judged: at 1400px in WebKit on the exam fixture in `src/audit/examFixtures.ts` (three standalone machines, an AD set of three with an unexplained credential hop, the modified exploit, the long winPEAS run, a private entry, one appendix page and one free page).
+- **A page-style round comes first** (§4.3): two or three page-style mockups before the export work.

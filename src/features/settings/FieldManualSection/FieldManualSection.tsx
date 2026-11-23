@@ -110,7 +110,7 @@ function Lines({ label, lines }: { label: string; lines: string[] }) {
   );
 }
 
-/** Spec §5 drift: where the vault and Raven disagree. */
+/** Arsenal-import spec §5 drift: where the vault and Raven disagree. */
 function DriftReport({ drift: d }: { drift: Drift }) {
   return (
     <div className="field-manual-section__drift">

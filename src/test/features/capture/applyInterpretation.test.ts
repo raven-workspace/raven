@@ -284,7 +284,7 @@ describe("applyInterpretation", () => {
     expect(summary?.counts).toContain("9 hashes added");
   });
 
-  it("a re-dump records the stored rows it proved again (spec §3.2)", async () => {
+  it("a re-dump records the stored rows it proved again (interpreters-and-payloads interpreters-and-payloads spec §3.2)", async () => {
     setupBackend({ hosts: [DC01] });
     const dump = { command: "impacket-secretsdump corp.lan/jay:Synth123!@10.10.1.10", output: sam };
     await save([dump]);
@@ -566,7 +566,7 @@ describe("applyInterpretation", () => {
     expect(applied.record.reprovedUsernameIds).toEqual(["uJ"]);
   });
 
-  it("a re-roast records the stored hash and username it proved again, so undoing the first keeps them (spec §3.2)", async () => {
+  it("a re-roast records the stored hash and username it proved again, so undoing the first keeps them (interpreters-and-payloads interpreters-and-payloads spec §3.2)", async () => {
     const roast = (hex: string) => [
       "SMB         10.10.1.5       445    SRV12            [-] corp.lan\\drew:SynthWrong01 STATUS_LOGON_FAILURE",
       `$krb5tgs$23$*svc_sql$CORP.LAN$corp.lan/svc_sql*$${hex}$${hex}${hex}`,
@@ -594,7 +594,7 @@ describe("applyInterpretation", () => {
 describe("an nxc pair that matches a stored credential", () => {
   const win = (ip: string) => `SSH         ${ip}       22     ${ip}        [+] stan:SyntheticPw01  Linux - Shell access!`;
 
-  it("is recorded as re-proved, not created (spec §3.2)", async () => {
+  it("is recorded as re-proved, not created (interpreters-and-payloads interpreters-and-payloads spec §3.2)", async () => {
     await save([{ command: SPRAY_CMD, output: SPRAY }], ["hC"]);
     const stan = db.credentials.find((c) => c.username === "stan")!;
     await save([{ command: "nxc ssh 10.10.1.6 -u stan -p 'SyntheticPw01'", output: win("10.10.1.6") }], ["hW"]);

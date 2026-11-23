@@ -1,6 +1,6 @@
 # Raven Payloads: breadth, toggles and owner control (2b-C)
 
-Date: 2026-11-08. Builds on 2b-B Payloads (merged as PR #11). Read the 2b design first: `docs/superpowers/specs/2026-11-07-raven-interpreters-and-payloads-design.md` §4. Its "works as pasted" contract, explanation rule and keyboard rules still apply unchanged.
+Date: 2026-11-08. Builds on 2b-B Payloads (merged as PR #11). Read the 2b design first: `interpreters-and-payloads.md` §4. Its "works as pasted" contract, explanation rule and keyboard rules still apply unchanged.
 
 ## 1. Why
 

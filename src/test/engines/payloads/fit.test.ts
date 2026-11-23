@@ -202,7 +202,7 @@ describe("fit engine", () => {
   });
 });
 
-describe("service preference (spec §4.2): a soft sort key, never a fold", () => {
+describe("service preference (interpreters-and-payloads interpreters-and-payloads spec §4.2): a soft sort key, never a fold", () => {
   const situationFor = (services: Service[]) => inferSituation({ host: host(), services, entries: [], examKind: false }).situation;
 
   it("IIS puts the ASPX first; the rest keep catalogue order", () => {

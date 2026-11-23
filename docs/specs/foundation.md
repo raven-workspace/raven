@@ -247,7 +247,7 @@ Each engagement keeps a list of artifacts left on targets: uploaded files and th
 - **Type:** a crisp sans for UI (SF Pro / Inter-class) and a good monospace (JetBrains Mono-class) for IPs, commands, output and timestamps. Small uppercase tracked labels for section headings.
 - **Feel:** desktop-native (proper title bar, native menus, keyboard-first), minimal and quick motion, dense but calm.
 - **No stock look:** stock component-library styling (default shadcn/Tailwind UI look) must not show through. Components are styled to this system.
-- **Reference:** the chosen mockup, direction **A** in `docs/design/visual-directions.html`; the layout mockups are in `docs/design/` (dashboard: option A, engagement view: option B, host view: option B).
+- **Reference:** the chosen mockup, direction **A** in `docs/specs/mocks/visual-directions.html`; the layout mockups are in `docs/specs/mocks/` (dashboard: option A, engagement view: option B, host view: option B).
 
 ## 9. Engines to port from the old app's repo
 Copy these with their tests, then adapt them to the new types (Engagement, Host, Service, LogEntry, and so on):

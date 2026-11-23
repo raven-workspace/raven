@@ -15,7 +15,7 @@ const cells = (line: string): string[] => {
   return t.split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').trim());
 };
 
-/** Parses the two tables of `00-Home/Toolkit.md` (spec §4). Each backticked name in the file cell is one entry. */
+/** Parses the two tables of `00-Home/Toolkit.md` (arsenal-import spec §4). Each backticked name in the file cell is one entry. */
 export function parseToolkit(text: string): ToolkitEntry[] {
   const out: ToolkitEntry[] = [];
   let os: 'windows' | 'linux' | null = null;

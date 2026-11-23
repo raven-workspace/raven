@@ -68,7 +68,7 @@ The visual audit already *reports* most of these: 16,000 tiny-text findings and 
    - Every dialog uses an `X` close button with a single hover state. Form field labels are sentence-case `text-meta`.
    - Every hint line uses `HintLine`: the Arsenal drawer, the Payloads drawer and Workbench, ⌘K, and the Stuck view.
    - Secondary options become real controls:
-     - in Payloads, the fits become the visible list (option B, mock `.impeccable/mocks/decision/fit-switch.html`) and the misfit line a `Disclosure`;
+     - in Payloads, the fits become the visible list (option B, mock `docs/specs/mocks/fit-switch.html`) and the misfit line a `Disclosure`;
      - checklist "N new credentials since done", "show ▸" and "re-check ▸" become controls;
      - context pickers become bordered, tabbable Select triggers.
    - Checklist goal rows: status control on the title's line (`items-start`), no 20px controls.
@@ -102,7 +102,7 @@ The visual audit already *reports* most of these: 16,000 tiny-text findings and 
 
 ## 3. Non-goals
 
-- Payloads 2b-C breadth: the new payloads, toggles and stale-build blocking. Only the fit-list switch from option B is in this round, because it's the same "secondary options" convention. The rest is next round; see `docs/superpowers/specs/2026-11-08-raven-payloads-breadth-design.md` (draft, kept out of this branch's commits).
+- Payloads 2b-C breadth: the new payloads, toggles and stale-build blocking. Only the fit-list switch from option B is in this round, because it's the same "secondary options" convention. The rest is next round; see `payloads-breadth.md` (draft, kept out of this branch's commits).
 - A right-click context menu (owner deferred it).
 - Motion design.
 - Splitting long pages into tabs. Credentials is about 4000px, which breaks the page-length rule, but splitting it is an information-architecture change for its own round. This round notes it in `docs/superpowers/followups/`.

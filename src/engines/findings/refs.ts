@@ -1,6 +1,6 @@
 /**
  * refs.ts
- * Reference ids found in free text (log entries, notes), offered as one-click chips on a finding (spec §4.5).
+ * Reference ids found in free text (log entries, notes), offered as one-click chips on a finding (host-page spec §4.5).
  */
 
 // One pass per text, so ids come out in the order they appear. Groups: CVE year and number, then the EDB number

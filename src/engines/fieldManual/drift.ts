@@ -22,7 +22,7 @@ export interface Drift {
   toolkitUnused: string[];
 }
 
-/** Spec §7 "stay manual": the user types these. */
+/** Arsenal-import spec §7 "stay manual": the user types these. */
 export const MANUAL_TOKENS: ReadonlySet<string> = new Set([
   'FILE', 'SCRIPT', 'OUTPUT', 'SHARE', 'SPN', 'PARAM', 'NEW_USER', 'NEW_PASS', 'KALI_PASS',
   'LOCAL_PORT', 'LISTEN_PORT', 'BIND_PORT', 'TARGET_PORT', 'EDB_ID', 'DOMAIN_SID',
@@ -56,7 +56,7 @@ function unfilledTokens(template: string): Set<string> {
 }
 
 /**
- * What the vault and Raven disagree on (spec §5). Step mapping is exact (file name plus parsePlaybook text,
+ * What the vault and Raven disagree on (arsenal-import spec §5). Step mapping is exact (file name plus parsePlaybook text,
  * whitespace collapsed); there is no fuzzy matching.
  */
 export function computeDrift(

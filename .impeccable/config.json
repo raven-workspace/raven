@@ -25,7 +25,7 @@
         "rule": "design-system-font",
         "value": "*",
         "files": [
-          ".impeccable/mocks/decision/rail.html"
+          "docs/specs/mocks/rail.html"
         ],
         "createdAt": "2026-11-08T08:12:45.869Z",
         "reason": "Claude: throwaway mock loads the static Google Fonts builds of DESIGN.md's Instrument Sans / JetBrains Mono (the app uses the Variable builds); same faces"
@@ -34,7 +34,7 @@
         "rule": "design-system-font",
         "value": "*",
         "files": [
-          ".impeccable/mocks/decision/fm-notes-home.html"
+          "docs/specs/mocks/fm-notes-home.html"
         ],
         "createdAt": "2026-11-10T00:33:42.088Z",
         "reason": "Claude: throwaway decision mock uses the project's own faces (Instrument Sans, JetBrains Mono per PRODUCT.md) loaded by plain family name"
@@ -43,7 +43,7 @@
         "rule": "side-tab",
         "value": "*",
         "files": [
-          ".impeccable/mocks/decision/fm-notes-home.html"
+          "docs/specs/mocks/fm-notes-home.html"
         ],
         "createdAt": "2026-11-10T00:34:03.308Z",
         "reason": "Claude: throwaway decision mock; the 2px inset accent bar is Raven's existing selection marker (FitRow, Workbench generator list)"
@@ -52,7 +52,7 @@
         "rule": "cramped-padding",
         "value": "*",
         "files": [
-          ".impeccable/mocks/decision/fm-notes-home.html"
+          "docs/specs/mocks/fm-notes-home.html"
         ],
         "createdAt": "2026-11-10T00:34:03.328Z",
         "reason": "Claude: throwaway decision mock; key caps and tags copy Raven's existing Kbd/tag sizes"
@@ -61,7 +61,7 @@
         "rule": "design-system-font",
         "value": "*",
         "files": [
-          ".impeccable/mocks/decision/manual-structure.html"
+          "docs/specs/mocks/manual-structure.html"
         ],
         "createdAt": "2026-11-10T04:05:55.238Z",
         "reason": "Claude: mock uses DESIGN.md's Instrument Sans and JetBrains Mono; detector misparses the family strings"
@@ -76,7 +76,7 @@
         "rule": "low-contrast",
         "value": "*",
         "files": [
-          ".impeccable/mocks/decision/manual-structure.html"
+          "docs/specs/mocks/manual-structure.html"
         ],
         "createdAt": "2026-11-10T04:10:57.753Z",
         "reason": "Claude: decision mock only; dimmed host page behind palette, house kbd caps, palette result rows mirror the shipped Palette"
@@ -85,7 +85,7 @@
         "rule": "cramped-padding",
         "value": "*",
         "files": [
-          ".impeccable/mocks/decision/manual-structure.html"
+          "docs/specs/mocks/manual-structure.html"
         ],
         "createdAt": "2026-11-10T04:10:57.771Z",
         "reason": "Claude: decision mock only; dimmed host page behind palette, house kbd caps, palette result rows mirror the shipped Palette"
@@ -94,7 +94,7 @@
         "rule": "nested-cards",
         "value": "*",
         "files": [
-          ".impeccable/mocks/decision/manual-structure.html"
+          "docs/specs/mocks/manual-structure.html"
         ],
         "createdAt": "2026-11-10T04:10:57.790Z",
         "reason": "Claude: decision mock only; dimmed host page behind palette, house kbd caps, palette result rows mirror the shipped Palette"
@@ -116,6 +116,12 @@
         "value": "sans\",system-ui,sans-serif",
         "createdAt": "2026-11-12T00:05:18.510Z",
         "reason": "agent: DESIGN.md declares Instrument Sans Variable / JetBrains Mono Variable; static Google Fonts names in decision mocks are the same families"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "instrument sans fallback",
+        "createdAt": "2026-11-23T18:21:05.235Z",
+        "reason": "agent: metric-adjusted @font-face stand-in (local Arial) for DESIGN.md's Instrument Sans while it loads; not a separate font choice"
       }
     ]
   }
