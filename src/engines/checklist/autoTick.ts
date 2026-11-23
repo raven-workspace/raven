@@ -38,7 +38,7 @@ const FLAG_GOAL = { local: 'h-orient-proof', proof: 'h-pe-proof' } as const;
 export const FLAG_COMMAND_ID = 'flag';
 
 /**
- * The goals a log entry achieved, attributed conservatively (spec §4): attacker commands tick the hosts named in
+ * The goals a log entry achieved, attributed conservatively (foundation spec §6.4): attacker commands tick the hosts named in
  * that line; target commands tick the host the shell is on. `e-ad-*` goals tick on the engagement only when the
  * line is attributed to an AD host (the DC, or any host with 88 and 389 open); `e-setup-*` goals tick on any line.
  * Goals that don't apply to the owner never tick. De-duplicated by owner and goal (first command wins).

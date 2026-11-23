@@ -2,7 +2,7 @@
 
 Date: 2026-11-09. Branch: `manual-reading` (already holds the spacing, typography, output-block and box-drawing font commits).
 Sources: the critique `.impeccable/critique/2026-11-10T03-57-16Z__src-features-manual.md` (28/40), the structure mock
-`.impeccable/mocks/decision/manual-structure.html`, and the decisions appended to `.impeccable/surfaces/src-features-manual.md`.
+`docs/specs/mocks/manual-structure.html`, and the decisions appended to `.impeccable/surfaces/src-features-manual.md`.
 The owner chose: inline commands first, scope "everything", answer card (A) **and** ⌘K lookup rows (B); not the rail on `/` (C).
 
 ## 1. Inline commands (critique P1)

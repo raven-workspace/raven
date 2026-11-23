@@ -17,7 +17,7 @@ The owner called the test matrix the page's best part, and asked for tabs, a lay
 - **Jobs.** All four matter about equally: see what works where; grab a secret; test a new credential; crack hashes.
 - **A separate inventory.** The matrix does not become the only list. There's a separate Inventory tab.
 - **Grouped by kind.** The inventory is grouped by kind (passwords, hashes, tickets and so on), so the group headers carry the counts.
-- **Layout: "Matrix with a credential dock"**, locked on the impeccable decision page. The sketch is `.impeccable/mocks/decision/cred-matrix-dock.html`, and the build matches its arrangement.
+- **Layout: "Matrix with a credential dock"**, locked on the impeccable decision page. The sketch is `docs/specs/mocks/cred-matrix-dock.html`, and the build matches its arrangement.
   - Two tabs: **Matrix** and **Inventory**.
   - Selecting a credential opens a **dock** below the list, with everything about that one credential.
 

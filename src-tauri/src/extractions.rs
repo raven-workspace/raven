@@ -161,7 +161,7 @@ const HOST_REFS: &str = "SELECT \
 /// Snapshots are restored only onto rows not changed since the save; created rows are deleted, except a credential
 /// edited since or proven by another entry, a username something else still uses, a vector edited since, and a host
 /// that anything else still references. A credential or username another live (not undone) extraction created or
-/// proved again stays too (spec §3.2).
+/// proved again stays too (interpreters-and-payloads interpreters-and-payloads spec §3.2).
 pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
     let ext = get(conn, log_entry_id)?.ok_or(AppError::NotFound)?;
     if ext.undone_at.is_some() {

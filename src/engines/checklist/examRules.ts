@@ -10,7 +10,7 @@ import { SHELLS } from '../payloads/shells';
 const blocksOf = (entry: LogEntry) => (entry.content.kind === 'command' ? entry.content.blocks : []);
 
 /**
- * What the engagement kind lets a host's command list show (spec §7). Exam sim removes every `exam: 'banned'`
+ * What the engagement kind lets a host's command list show (foundation spec §6.4 and §6.5). Exam sim removes every `exam: 'banned'`
  * command and shows `exam: 'metasploit'` commands only on the locked host; while no host is locked they stay
  * visible and their ids come back in `msfMarker` ("uses your one Metasploit host"). Other kinds change nothing.
  */

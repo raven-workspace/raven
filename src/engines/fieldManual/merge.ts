@@ -20,7 +20,7 @@ export interface ImportReport {
   classified: { id: string; exam: ExamRule }[];
   /** Vault-added commands whose block (or whole card) is no longer in the vault; they stay. */
   addedRemoved?: string[];
-  /** Vault vs Raven (spec §5). Absent on reports saved before the drift report existed. */
+  /** Vault vs Raven (arsenal-import spec §5). Absent on reports saved before the drift report existed. */
   drift?: Drift;
   /** Things the import worked around and the owner should check (e.g. the Manual's notes kept from the last import). */
   warnings?: string[];
@@ -103,7 +103,7 @@ const cardChanged = (a: CardMeta, b: CardMeta): boolean =>
   a.title !== b.title || a.stage !== b.stage || a.category !== b.category || a.os !== b.os || a.file !== b.file;
 
 /**
- * Merges parsed vault cards over the built-in library (spec §5). Nothing is ever dropped: a built-in whose block is
+ * Merges parsed vault cards over the built-in library (arsenal-import spec §5). Nothing is ever dropped: a built-in whose block is
  * gone from the vault stays and is reported. A matched built-in keeps its id, matcher, goals, tool and exam rule;
  * only title, why and template follow the vault. Vault-added commands are (re)classified from their template. `previous` is the last import, so re-importing is idempotent.
  */

@@ -203,7 +203,7 @@ const listAll = async (engagementId: string): Promise<Lists> => {
 };
 
 /**
- * Files what a saved entry's output proved (spec §3.1), after saveCapture filed the scan and identity (`filed`):
+ * Files what a saved entry's output proved (interpreters-and-payloads interpreters-and-payloads spec §3.1), after saveCapture filed the scan and identity (`filed`):
  *  1. hosts for the new IPs (only IPs the output proved);
  *  2. dumped credentials (deduped; `$MACHINE.ACC` named after its host), cracks, and usernames;
  *  3. the nxc results through the nxc intake: every working pair becomes a credential; a failed pair whose secret is
@@ -250,7 +250,7 @@ export async function applyInterpretation(
   let noteTried: (rows: TriedPair[]) => void = () => {};
   let noteUsername: (u: Username | undefined) => void = () => {};
   let noteAttempts: (rows: CredAttempt[]) => void = () => {};
-  /** A row stored before this save that its output proved again (spec §3.2: another entry's Undo keeps it). */
+  /** A row stored before this save that its output proved again (interpreters-and-payloads spec §3.2: another entry's Undo keeps it). */
   const noteReproved = (ids: string[], id: string, stored: { id: string }[]) => {
     if (stored.some((x) => x.id === id) && !ids.includes(id)) ids.push(id);
   };

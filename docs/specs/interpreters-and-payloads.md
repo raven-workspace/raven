@@ -151,7 +151,7 @@ The layout mirrors the Arsenal: a drawer for quick use and a full-screen view.
 - **Workbench (full screen).**
   - **Left column, "Raven's read":** target, OS, where you paste it (as buttons), LHOST/LPORT, exam rules, and the generator list.
   - **Right column:** best fit as numbered steps (1 listener on Kali, 2 the payload with its context named), what each part does, and the folded "doesn't fit" line.
-- **Reference sketches:** `.impeccable/mocks/decision/drawer.html` and `workbench.html` (1440×900). They fix structure and hierarchy, not exact values.
+- **Reference sketches:** `docs/specs/mocks/drawer.html` and `workbench.html` (1440×900). They fix structure and hierarchy, not exact values.
 - **Visual system:** the Ink theme as it stands, with grid layouts.
 
 ### 4.2 Context and fit

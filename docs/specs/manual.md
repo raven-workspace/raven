@@ -1,6 +1,6 @@
 # Raven: the Manual (Field Manual reference notes)
 
-Date: 2026-11-09. Part 2 of the owner's personal hacking knowledge base in Raven; part 1 was the Arsenal (cards). Decision mock: `.impeccable/mocks/decision/fm-notes-home.html` (option B chosen).
+Date: 2026-11-09. Part 2 of the owner's personal hacking knowledge base in Raven; part 1 was the Arsenal (cards). Decision mock: `docs/specs/mocks/fm-notes-home.html` (option B chosen).
 
 ## 1. Why
 

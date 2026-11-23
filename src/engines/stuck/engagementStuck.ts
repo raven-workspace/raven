@@ -29,7 +29,7 @@ const ASREP_GOALS = ["e-ad-user-asrep", "e-ad-nocreds-asrep"];
 const nameOf = (h: Host) => h.name || h.ip || h.id;
 
 /**
- * Where to look next, sorted by area (spec §6.7): hosts with no foothold and enumeration still to do, untested
+ * Where to look next, sorted by area (foundation spec §6.4, stuck check): hosts with no foothold and enumeration still to do, untested
  * credential cells, credentials never sprayed, usernames not AS-REP-checked, open access flags and dual-homed
  * hosts without a tunnel. Derived on every call.
  */

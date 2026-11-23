@@ -266,7 +266,7 @@ function marksFor(d: PayloadDef, s: PayloadSituation, toggles: Toggles, tools: P
 }
 
 /**
- * Spec §4.2, the open services' payload: IIS → the ASPX, Tomcat → the WAR, Apache httpd or PHP → php-exec among the
+ * Interpreters-and-payloads spec §4.2, the open services' payload: IIS → the ASPX, Tomcat → the WAR, Apache httpd or PHP → php-exec among the
  * reverse shells (no msfvenom change). Tomcat's "Apache Tomcat" is not Apache httpd.
  */
 const SERVICE_PREFERENCE: { test: RegExp; ids: string[] }[] = [

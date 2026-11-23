@@ -144,7 +144,7 @@ The checklist (what they've done, what their options are next) and the host fact
   - ⌥H pick a host.
 
 **Report**
-- **Report.** The first target is the OSCP+ exam report (spec: `docs/superpowers/specs/2026-11-11-raven-reports-design.md`). Raven does the clerical work (gathering, ordering, numbering, formatting, checking against OffSec's rules) so the owner only writes explanations.
+- **Report.** The first target is the OSCP+ exam report (spec: `docs/specs/reports.md`). Raven does the clerical work (gathering, ordering, numbering, formatting, checking against OffSec's rules) so the owner only writes explanations.
   - A tab per page: Front matter, one per target, Closing, appendices and owner-written pages. Pages are drafted from log steps, findings, attempts, ruled-out items, cleanup and proofs, then edited in a rich-text editor (slash menu, tables, code).
   - Beside the page: guide notes, and an evidence column of host-linked log entries not yet on the page (`E` toggles it on narrow windows).
   - **To do:** plain-word checks per target, each with a fix and, where possible, a one-press action; false positives can be dismissed.
@@ -179,8 +179,8 @@ The checklist (what they've done, what their options are next) and the host fact
 - Real engagement data lives only in the owner's encrypted database. Never fabricate it or copy it into the repo.
 - Synthetic stress fixtures are in `src/audit/fixtures.ts`.
 - The Field Manual vault is at `~/Documents/Field Manual`.
-- Design specs are in `docs/superpowers/specs/`, implementation plans in `docs/superpowers/plans/`, open follow-ups in `docs/superpowers/followups/`, and the latest audit triage in `docs/superpowers/audits/`.
-- HTML mockups of the dashboard, engagement view, host view and the visual directions are in `docs/design/`.
+- Design specs, one per feature round, are in `docs/specs/` with an index; the mockups they chose are in `docs/specs/mocks/`.
+- Open work is tracked in Linear (RAV), not in the repo.
 
 ## Product Principles
 

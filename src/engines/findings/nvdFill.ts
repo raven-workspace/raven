@@ -1,6 +1,6 @@
 /**
  * nvdFill.ts
- * Merges NVD lookups into a finding draft (spec §5.4 fill rules). Empty fields fill directly; a field the
+ * Merges NVD lookups into a finding draft (host-page spec §5.4 fill rules). Empty fields fill directly; a field the
  * user already filled is never overwritten: it gets a "use NVD" diff instead.
  */
 

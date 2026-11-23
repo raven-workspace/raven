@@ -157,7 +157,7 @@ describe('planCredentialIntake', () => {
     expect(plan.newHashes.map((h) => h.username)).toEqual(['bob']);
   });
 
-  it('names the stored hashes and usernames it matched (re-proved, spec §3.2)', () => {
+  it('names the stored hashes and usernames it matched (re-proved, interpreters-and-payloads spec §3.2)', () => {
     const tgs = '$krb5tgs$23$*svc$ZONE2.TEST$MSSQL/db*$aabbccdd$eeff0011';
     const tgsAgain = '$krb5tgs$23$*svc$ZONE2.TEST$MSSQL/db*$11223344$55667788';
     const storedHash = cred({ id: 'hs', type: 'hash', username: 'svc', domain: 'ZONE2.TEST', secret: tgs });

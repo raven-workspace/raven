@@ -1,5 +1,5 @@
 /*
- * Raven "Ink" tokens (spec §8). The only source of colour, spacing, radius, type and motion.
+ * Raven "Ink" tokens (foundation spec §8). The only source of colour, spacing, radius, type and motion.
  * Flat true black, hairlines, one accent (#c6ff00) used only for meaning:
  * selection marker, held access, confirmed facts, focus.
  */
