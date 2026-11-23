@@ -60,9 +60,6 @@ Dockerfile.aider
 .bolt/
 
 # Claude Code
-.claude/
-CLAUDE.md
-.mcp.json
 plan-*.md
 
 # Cline
@@ -89,7 +86,6 @@ plan-*.md
 
 # OpenAI Codex
 .codex/
-AGENTS.md
 
 # Replit
 .replit
