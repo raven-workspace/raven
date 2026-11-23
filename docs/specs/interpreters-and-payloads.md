@@ -1,6 +1,8 @@
 # Raven: output interpreters and Payloads (phase 2, project 2b)
 
-Status: draft for review, 2026-11-07. Branch `interpreters-payloads`.
+> **Frozen record, shipped** (written 2026-11-07, last revised 2026-11-09). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
+Date: 2026-11-07. Branch `interpreters-payloads`.
 
 ## 1. Why
 
@@ -151,7 +153,7 @@ The layout mirrors the Arsenal: a drawer for quick use and a full-screen view.
 - **Workbench (full screen).**
   - **Left column, "Raven's read":** target, OS, where you paste it (as buttons), LHOST/LPORT, exam rules, and the generator list.
   - **Right column:** best fit as numbered steps (1 listener on Kali, 2 the payload with its context named), what each part does, and the folded "doesn't fit" line.
-- **Reference sketches:** `docs/specs/mocks/drawer.html` and `workbench.html` (1440×900). They fix structure and hierarchy, not exact values.
+- **Reference sketches:** [drawer.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/drawer.html) and [workbench.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/workbench.html) (1440×900). They fix structure and hierarchy, not exact values.
 - **Visual system:** the Ink theme as it stands, with grid layouts.
 
 ### 4.2 Context and fit

@@ -1,5 +1,7 @@
 # Raven: PEN-200 restructure (phase 2, project 1)
 
+> **Frozen record, shipped** (written 2026-11-05). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
 **Date:** 2026-11-05
 **Amends:** `2026-11-03-raven-desktop-design.md`, §5.2 (Board) and §6.4 (Checklist, the host stage order). Everything else in that spec stands.
 **Source of method:** the user's Field-Manual Obsidian vault at `~/Documents/Field Manual`.

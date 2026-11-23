@@ -1,5 +1,7 @@
 # Raven Payloads: breadth, toggles and owner control (2b-C)
 
+> **Frozen record, shipped** (written 2026-11-08, last revised 2026-11-09). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
 Date: 2026-11-08. Builds on 2b-B Payloads (merged as PR #11). Read the 2b design first: `interpreters-and-payloads.md` §4. Its "works as pasted" contract, explanation rule and keyboard rules still apply unchanged.
 
 ## 1. Why

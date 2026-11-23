@@ -1,5 +1,7 @@
 # Raven: Credentials page, matrix with a credential dock
 
+> **Frozen record, shipped** (written 2026-11-08, last revised 2026-11-09). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
 Date: 2026-11-08. Branch: `credentials-dock` (from `main` after PR #12). Binding conventions: **`DESIGN.md`**. This round changes presentation only. No data, engine or migration changes.
 
 ## 1. Why
@@ -17,7 +19,7 @@ The owner called the test matrix the page's best part, and asked for tabs, a lay
 - **Jobs.** All four matter about equally: see what works where; grab a secret; test a new credential; crack hashes.
 - **A separate inventory.** The matrix does not become the only list. There's a separate Inventory tab.
 - **Grouped by kind.** The inventory is grouped by kind (passwords, hashes, tickets and so on), so the group headers carry the counts.
-- **Layout: "Matrix with a credential dock"**, locked on the impeccable decision page. The sketch is `docs/specs/mocks/cred-matrix-dock.html`, and the build matches its arrangement.
+- **Layout: "Matrix with a credential dock"**, locked on the impeccable decision page. The sketch is [cred-matrix-dock.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/cred-matrix-dock.html), and the build matches its arrangement.
   - Two tabs: **Matrix** and **Inventory**.
   - Selecting a credential opens a **dock** below the list, with everything about that one credential.
 

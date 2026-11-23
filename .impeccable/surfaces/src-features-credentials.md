@@ -9,7 +9,7 @@ related_targets: []
 
 Mode: Operate. Owner: one pen tester, keyboard-first, ADHD/autism (low noise, stable layout).
 Jobs, equally weighted: see what works where; grab a secret; test a new credential; crack hashes.
-Spec: docs/specs/credentials.md. Chosen sketch: docs/specs/mocks/cred-matrix-dock.html.
+Spec: docs/specs/credentials.md. Chosen sketch: [cred-matrix-dock.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/cred-matrix-dock.html).
 
 ## Direction contract
 

@@ -1,5 +1,7 @@
 # Raven: Arsenal, ⌘K and the Field Manual import (phase 2, project 2a)
 
+> **Frozen record, shipped** (written 2026-11-05, last revised 2026-11-07). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
 **Date:** 2026-11-05
 **Builds on:** `2026-11-03-raven-desktop-design.md` §10 phase 2, and `2026-11-05-raven-pen200-restructure-design.md` (project 1, merged).
 **Source of commands:** the user's Field-Manual Obsidian vault at `~/Documents/Field Manual`. Its contract with Raven is `00-Home/Conventions.md`.

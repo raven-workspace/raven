@@ -1,5 +1,7 @@
 # Raven: Network section (tunnels and hops) — design
 
+> **Frozen record, shipped** (written 2026-11-11). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+
 Shaped 2026-11-11 with the owner (impeccable `shape`). Confirmed.
 
 ## Problem
