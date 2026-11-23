@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import { FIXTURES } from "../audit/fixtures";
-import { buildPlainTarget, companionStepAt, entryIdsIn, isDeadEnd, joinsAStep, phaseInsertAt, reportTargets, sourceOf } from "../engines/report";
+import { buildPlainTarget, companionStepAt, entryIdsIn, isDeadEnd, joinsAStep, missingEntries, phaseInsertAt, proofCompanions, reportTargets, sourceOf } from "../engines/report";
 import type { ReportData, ReportNode, ReportTarget } from "../engines/report";
 import { placementPlan, type PlacementPlan } from "../engines/report/placement";
 import type { AccessGrant } from "../types/credentials";
@@ -302,7 +302,8 @@ describe("the placement plan on the exam fixtures", () => {
     const plan = placementPlan(d, t);
     const inSteps = plan.machines.flatMap((m) => m.sections.flatMap((s) => s.steps.flatMap((st) => st.entries.map((e) => e.id))));
     const scans = plan.machines.flatMap((m) => (m.scan ? [m.scan.id] : []));
-    const placed = [...inSteps, ...scans];
+    const withFindings = [...plan.findingFigures.values()].flat().map((e) => e.id);
+    const placed = [...inSteps, ...scans, ...withFindings];
     expect(placed.length).toBe(new Set(placed).size);
     expect(new Set(placed)).toEqual(new Set(plan.placed));
     for (const e of ofTarget(d, t)) {
@@ -366,5 +367,94 @@ describe("placing on a page that exists: the plan says where, the page says what
     expect(companionStepAt(draft, garnet, garnetTarget, logged("head"))).toBeNull();
     expect(joinsAStep(garnet, garnetTarget, logged("head"))).toBe(false);
     expect(companionStepAt(withoutSteps("ssh"), garnet, garnetTarget, logged("local-shot"))).toBeNull();
+  });
+});
+
+describe("screenshots on findings: each placed once, only with its finding", () => {
+  const gid = (k: string) => `l-garnet-${k}`;
+  const logged = (d: ReportData, k: string) => d.log.find((e) => e.id === gid(k))!;
+  /** garnet with a screenshot logged at `at` (minutes after `after`'s time; negative: before) and linked to a finding's
+   *  steps at `index`. */
+  function withShot(findingTitle: string, index: number, after: string, minutes: number, caption = "the repository listing"): ReportData {
+    const at = logged(garnet, after).at + minutes * 60_000;
+    const shot: LogEntry = {
+      ...logged(garnet, "local-shot"),
+      id: gid("fshot"), title: caption, at, createdAt: at, updatedAt: at,
+      content: { kind: "screenshot", attachmentId: "a-fshot", caption, fileName: "fshot.png" },
+    };
+    const findings = garnet.findings.map((f) =>
+      f.title === findingTitle ? { ...f, stepEntryIds: [...f.stepEntryIds.slice(0, index), shot.id, ...f.stepEntryIds.slice(index)] } : f,
+    );
+    return { ...garnet, log: [...garnet.log, shot], findings };
+  }
+  const figuresOf = (doc: ReportNode, id: string): ReportNode[] => {
+    const out: ReportNode[] = [];
+    const walk = (n: ReportNode) => {
+      if (n.type === "figure" && n.attrs?.entryId === id) out.push(n);
+      n.content?.forEach(walk);
+    };
+    walk(doc);
+    return out;
+  };
+  const stepHolding = (doc: ReportNode, id: string) => doc.content!.filter((n) => n.type === "list" && n.attrs?.kind === "ordered" && entryIdsIn(n).has(id));
+
+  it("one linked to a finding and taken within the tag-along window of another step appears exactly once, with its finding's step", () => {
+    // Taken a minute after the dump (that step's tag-along window), linked after `show` in the git finding's steps.
+    const d = withShot("Jenkins script console with default credentials", 3, "dump", 1);
+    const plan = placementPlan(d, garnetTarget);
+    const p = plan.at(gid("fshot"))!;
+    expect(p.role).toBe("illustrates");
+    expect(p.step?.lead.id).toBe(gid("show"));
+    expect(p.step?.entries.at(-1)?.id).toBe(gid("fshot"));
+    const doc = buildPlainTarget(d, garnetTarget, {});
+    expect(figuresOf(doc, gid("fshot"))).toHaveLength(1);
+    expect(stepHolding(doc, gid("fshot"))).toHaveLength(1);
+    expect(entryIdsIn(stepHolding(doc, gid("fshot"))[0]).has(gid("show"))).toBe(true);
+  });
+
+  it("one listed before every other step goes with the step after it", () => {
+    const d = withShot("Jenkins script console with default credentials", 0, "head", -1);
+    expect(placementPlan(d, garnetTarget).at(gid("fshot"))?.step?.lead.id).toBe(gid("head"));
+  });
+
+  it("never goes with a flag, even when it names one and was taken beside it", () => {
+    const d = withShot("sudo CVE-2021-3156", 4, "proof", 1, "proof.txt on garnet");
+    const plan = placementPlan(d, garnetTarget);
+    expect(plan.at(gid("fshot"))?.role).toBe("illustrates");
+    expect(plan.at(gid("fshot"))?.step?.lead.id).toBe(gid("exp"));
+    expect(proofCompanions(d, GARNET_HOST, logged(d, "proof")).map((e) => e.id)).not.toContain(gid("fshot"));
+    expect(figuresOf(buildPlainTarget(d, garnetTarget, {}), gid("fshot"))).toHaveLength(1);
+  });
+
+  it("on an Additional finding, goes under that finding's bullet", () => {
+    const d = withShot("Weak backup password", 0, "kernel", 2, "the backup archive");
+    const plan = placementPlan(d, garnetTarget);
+    const p = plan.at(gid("fshot"))!;
+    expect(p.role).toBe("with-finding");
+    expect(p.finding?.title).toBe("Weak backup password");
+    expect(p.step).toBeNull();
+    const doc = buildPlainTarget(d, garnetTarget, {});
+    expect(figuresOf(doc, gid("fshot"))).toHaveLength(1);
+    const bullet = doc.content!.find((n) => sourceOf(n) === "finding:f-garnet-zip")!;
+    expect(figuresOf(bullet, gid("fshot"))).toHaveLength(1);
+    expect(stepHolding(doc, gid("fshot"))).toEqual([]);
+  });
+
+  it("Add new evidence puts it back where the draft has it, once", () => {
+    const d = withShot("Weak backup password", 0, "kernel", 2, "the backup archive");
+    const draft = buildPlainTarget(d, garnetTarget, {});
+    const page = { ...draft, content: draft.content!.map((n) => (sourceOf(n) === "finding:f-garnet-zip" ? { ...n, content: n.content!.filter((b) => b.type !== "figure") } : n)) };
+    expect(missingEntries(page, d, garnetTarget, []).map((e) => e.id)).toEqual([gid("fshot")]);
+    const joins = companionStepAt(page, d, garnetTarget, logged(d, "fshot"))!;
+    expect(sourceOf(page.content![joins.index])).toBe("finding:f-garnet-zip");
+    expect(joins.blocks.map((b) => [b.type, b.attrs?.entryId])).toEqual([["figure", gid("fshot")]]);
+    expect(joinsAStep(d, garnetTarget, logged(d, "fshot"))).toBe(true);
+  });
+
+  it("one kept from the report is never placed", () => {
+    const base = withShot("Jenkins script console with default credentials", 3, "dump", 1);
+    const d = { ...base, log: base.log.map((e) => (e.id === gid("fshot") ? { ...e, private: true } : e)) };
+    expect(placementPlan(d, garnetTarget).at(gid("fshot"))?.reason).toBe("kept");
+    expect(figuresOf(buildPlainTarget(d, garnetTarget, {}), gid("fshot"))).toEqual([]);
   });
 });

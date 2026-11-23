@@ -1,7 +1,7 @@
 import type { LogEntry } from "../../types/log";
 import { bold, heading, para } from "./nodes";
 import { PAGE_PHASES, PHASE_TITLE, placementPlan } from "./placement";
-import { finish, srcOf, stepBlocks, testedRun } from "./plain";
+import { entryBlocks, finish, srcOf, stepBlocks, testedRun } from "./plain";
 import { sourceOf } from "./stamp";
 import type { Phase, ReportData, ReportNode, ReportTarget } from "./types";
 
@@ -83,18 +83,29 @@ export function phaseInsertAt(doc: ReportNode, data: ReportData, target: ReportT
 /**
  * Where a screenshot that illustrates a step, or goes with its flag, goes on a page with no cursor: the plan's step
  * that holds it (with another entry leading it) is matched to the page's numbered step holding any of that step's
- * other entries, and the screenshot's own blocks go at its end. Null when the screenshot leads a step of its own, or
- * the page has no such step: it then goes as a step of its own.
+ * other entries, and the screenshot's own blocks go at its end. A finding's screenshot that goes with the finding
+ * itself goes at the end of its Additional findings bullet. Null when the screenshot leads a step of its own, or the
+ * page has no such step or bullet: it then goes as a step of its own.
  */
 export function companionStepAt(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { index: number; blocks: ReportNode[] } | null {
   if (entry.content.kind !== "screenshot") return null;
-  const step = placementPlan(data, target).at(entry.id)?.step;
+  const placed = placementPlan(data, target).at(entry.id);
+  if (placed?.role === "with-finding" && placed.finding) return findingBulletAt(doc, data, entry, placed.finding.id);
+  const step = placed?.step;
   if (!step || step.lead.id === entry.id) return null;
   const others = step.entries.map((e) => e.id).filter((id) => id !== entry.id);
   const content = doc.content ?? [];
   const index = content.findIndex((n) => isStepList(n) && others.some((id) => entryIdsIn(n).has(id)));
   if (index === -1) return null;
   return { index, blocks: stepBlocks(data, step).filter((b) => ownIds(b).has(entry.id)) };
+}
+
+/** A finding's screenshot that goes with the finding itself: at the end of the page's Additional findings bullet for
+ *  that finding (`finding:<id>`), as a figure. Null when the page has no such bullet. */
+function findingBulletAt(doc: ReportNode, data: ReportData, entry: LogEntry, findingId: string): { index: number; blocks: ReportNode[] } | null {
+  const index = (doc.content ?? []).findIndex((n) => n.type === "list" && srcOf(n) === `finding:${findingId}`);
+  if (index === -1) return null;
+  return { index, blocks: entryBlocks(data, entry).filter((b) => b.type === "figure") };
 }
 
 /**
@@ -183,12 +194,14 @@ function withoutBare(content: ReportNode[]): ReportNode[] {
 
 /**
  * Whether a screenshot illustrates another entry's step in the plan, or goes with its flag (it is not that step's
- * lead), so on a page with no cursor it joins the step holding that entry (`companionStepAt`).
+ * lead), or goes with its finding itself, so on a page with no cursor it joins the step holding that entry, or the
+ * finding's bullet (`companionStepAt`).
  */
 export function joinsAStep(data: ReportData, target: ReportTarget, entry: LogEntry): boolean {
   if (entry.content.kind !== "screenshot") return false;
-  const step = placementPlan(data, target).at(entry.id)?.step;
-  return step != null && step.lead.id !== entry.id;
+  const placed = placementPlan(data, target).at(entry.id);
+  if (placed?.role === "with-finding") return true;
+  return placed?.step != null && placed.step.lead.id !== entry.id;
 }
 
 /**

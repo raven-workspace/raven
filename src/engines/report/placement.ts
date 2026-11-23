@@ -46,6 +46,9 @@ export type Role =
   | "with-flag"
   /** A flag whose value the step before it already prints: it joins that step. */
   | "absorbed"
+  /** A finding's screenshot with no step to join: it goes with the finding itself (its Additional findings bullet, or
+   *  its section's lines). A finding's screenshot that joins a step illustrates it. */
+  | "with-finding"
   /** The machine's first port scan, printed under Service enumeration (standalone targets). */
   | "scan"
   | "not-placed";
@@ -89,6 +92,10 @@ export interface PlanMachine {
   additional: Finding[];
 }
 
+/** A finding's screenshot (`findingScreenshots`) goes with its finding's steps, only there: at the end of the step of the
+ *  nearest earlier entry in the finding's steps that the plan steps (else the nearest later one), or with the finding
+ *  itself when none is stepped. It never leads a step, never illustrates a nearby one, never goes with a flag. */
+
 /** Where one entry goes. `phase` is the phase a new step for it opens (`phaseInsertAt`): a stepped entry's own, and for
  *  a flag's companion or an entry not placed, the phase it was logged in. A flag closing the last phase's steps keeps
  *  its own phase (`post` for a proof flag). */
@@ -100,6 +107,8 @@ export interface Placement {
   phase: Phase;
   section: PlanSection | null;
   step: PlanStep | null;
+  /** For a finding's screenshot: its finding. */
+  finding?: Finding;
 }
 
 export interface PlacementPlan {
@@ -114,6 +123,8 @@ export interface PlacementPlan {
   phaseOf(entry: LogEntry): { hostId: string; phase: Phase };
   /** The ids of every entry the plan places (any role but `not-placed`). */
   placed: ReadonlySet<string>;
+  /** Each finding's screenshots that go with the finding itself (`with-finding`), in the finding's step order. */
+  findingFigures: Map<string, LogEntry[]>;
 }
 
 const plans = new WeakMap<ReportData, Map<string, PlacementPlan>>();
@@ -136,11 +147,31 @@ export function placementPlan(data: ReportData, target: ReportTarget): Placement
 /** The reasons that place an entry on the page (§10.2): goal evidence and service confirmation alone stay in the rail. */
 const PLACING: ReadonlySet<ProofReason> = new Set<ProofReason>(["access", "hop", "flag", "finding-step"]);
 
+const shotsByData = new WeakMap<ReportData, Map<string, Finding>>();
+
+/** The screenshots linked to a finding's steps, each with the first finding that lists it: they are placed only with
+ *  that finding. Kept from the report or a dead end, a screenshot is never one (it is never placed). */
+export function findingScreenshots(data: ReportData): Map<string, Finding> {
+  let out = shotsByData.get(data);
+  if (out) return out;
+  out = new Map<string, Finding>();
+  const byId = new Map(data.log.map((e) => [e.id, e]));
+  for (const f of data.findings) {
+    for (const id of f.stepEntryIds) {
+      const e = byId.get(id);
+      if (e?.kind === "screenshot" && !out.has(id) && draftable(data, e)) out.set(id, f);
+    }
+  }
+  shotsByData.set(data, out);
+  return out;
+}
+
 /** The host's entries that lead a step: proving entries (`provingEntries`) with an access, hop, flag or finding-step
- *  reason. */
+ *  reason, a finding's screenshot aside. */
 export function placingEntries(data: ReportData, hostId: string): Set<string> {
   const out = new Set<string>();
-  for (const [id, reasons] of provingEntries(data, hostId)) if (reasons.some((r) => PLACING.has(r))) out.add(id);
+  const shots = findingScreenshots(data);
+  for (const [id, reasons] of provingEntries(data, hostId)) if (!shots.has(id) && reasons.some((r) => PLACING.has(r))) out.add(id);
   return out;
 }
 
@@ -149,13 +180,16 @@ export const firstScan = (data: ReportData, hostId: string): LogEntry | undefine
   data.log.filter((e) => e.hostIds.includes(hostId) && isPortScan(e) && draftable(data, e)).sort((a, b) => a.at - b.at || a.createdAt - b.createdAt)[0];
 
 /** The host's entries that land in a step, in time order: placing ones (notes and port scans aside: the ports table
- *  covers a scan, §10.2), and screenshots taken between two of them or within `ILLUSTRATE_WINDOW_MS` after one. */
+ *  covers a scan, §10.2), and screenshots taken between two of them or within `ILLUSTRATE_WINDOW_MS` after one (a
+ *  finding's screenshot aside: it goes with its finding). */
 function steppedEntries(data: ReportData, hostId: string, placing: ReadonlySet<string>): LogEntry[] {
   const proven = data.log.filter((e) => placing.has(e.id) && e.kind !== "note" && !isPortScan(e));
+  const ofFindings = findingScreenshots(data);
   const shots = data.log.filter(
     (e) =>
       e.kind === "screenshot" &&
       !placing.has(e.id) &&
+      !ofFindings.has(e.id) &&
       e.hostIds.includes(hostId) &&
       draftable(data, e) &&
       (proven.some((k) => e.at >= k.at && e.at - k.at <= ILLUSTRATE_WINDOW_MS) ||
@@ -178,7 +212,8 @@ const shotText = (e: LogEntry) => `${e.content.kind === "screenshot" ? e.content
  *  - commands whose output (or command) holds the flag's value;
  *  - screenshots that name this flag (`proof`, `proof.txt`; or `flag` when this flag is the nearest one), or that were
  *    taken within `FLAG_WINDOW_MS` of it, name no other flag, and are nearer to it than to any other step of the host.
- *    A screenshot that proves something itself (a finding's step, an access grant) is that step's, never a companion.
+ *    A screenshot that proves something itself (a finding's step, an access grant) is that step's, never a companion,
+ *    and a finding's screenshot goes with its finding only.
  * In time order, commands before screenshots. The checks read a flag's proof from these too.
  */
 export function proofCompanions(data: ReportData, hostId: string, flagEntry: LogEntry): LogEntry[] {
@@ -186,7 +221,8 @@ export function proofCompanions(data: ReportData, hostId: string, flagEntry: Log
   if (!flag) return [];
   const value = flag.value.trim().toLowerCase();
   const onHost = data.log.filter((e) => e.id !== flagEntry.id && !e.private && e.hostIds.includes(hostId));
-  const candidates = onHost.filter((e) => draftable(data, e));
+  const ofFindings = findingScreenshots(data);
+  const candidates = onHost.filter((e) => draftable(data, e) && !ofFindings.has(e.id));
   const commands =
     value.length >= 8
       ? candidates.filter(
@@ -550,8 +586,6 @@ function buildPlan(data: ReportData, target: ReportTarget): PlacementPlan {
     for (const [fid, phase] of built.phases) if (!findings.has(fid)) findings.set(fid, { hostId, phase: phase ?? "additional" });
     builds.set(hostId, built);
   }
-  const placed = new Set<string>();
-  for (const b of builds.values()) for (const [id, p] of b.placements) if (p.role !== "not-placed") placed.add(id);
   const lookup = new Map<string, Placement>();
   for (const e of data.log) {
     const hosts = e.hostIds.filter((h) => builds.has(h));
@@ -560,6 +594,9 @@ function buildPlan(data: ReportData, target: ReportTarget): PlacementPlan {
     const all = hosts.map((h) => builds.get(h)!.placements.get(e.id)!);
     lookup.set(e.id, all.find((p) => p.role !== "not-placed") ?? all[0]);
   }
+  const findingFigures = placeFindingScreenshots(data, findings, builds, lookup);
+  const placed = new Set<string>();
+  for (const [id, p] of lookup) if (p.role !== "not-placed") placed.add(id);
   return {
     target,
     machines: machineIds.map((h) => builds.get(h)!.machine),
@@ -572,5 +609,45 @@ function buildPlan(data: ReportData, target: ReportTarget): PlacementPlan {
       return { hostId, phase: builds.get(hostId)?.wouldBe(entry) ?? "foothold" };
     },
     placed,
+    findingFigures,
   };
+}
+
+/**
+ * Places each finding's screenshot of the target with its finding (see `PlanMachine`): at the end of the step of the
+ * nearest earlier entry in the finding's steps that a step holds, else the nearest later one; with none, with the
+ * finding itself (`findingFigures`). A finding not on the target leaves its screenshots unplaced.
+ */
+function placeFindingScreenshots(
+  data: ReportData,
+  findings: Map<string, { hostId: string; phase: Phase }>,
+  builds: Map<string, MachineBuild>,
+  lookup: Map<string, Placement>,
+): Map<string, LogEntry[]> {
+  const shots = findingScreenshots(data);
+  const figures = new Map<string, LogEntry[]>();
+  for (const f of data.findings) {
+    const home = findings.get(f.id);
+    if (!home) continue;
+    const ids = f.stepEntryIds;
+    /** Where an entry of the finding's steps is stepped; null for another screenshot or an entry no step holds. */
+    const stepOf = (id: string): Placement | null => {
+      const p = shots.has(id) ? undefined : lookup.get(id);
+      return p?.step ? p : null;
+    };
+    ids.forEach((id, i) => {
+      const own = lookup.get(id);
+      if (shots.get(id) !== f || !own) return;
+      const near = [...ids.slice(0, i)].reverse().map(stepOf).find((p) => p) ?? ids.slice(i + 1).map(stepOf).find((p) => p);
+      if (near) {
+        near.step!.entries.push(own.entry);
+        lookup.set(id, { entry: own.entry, role: "illustrates", reason: null, hostId: near.hostId, phase: near.phase, section: near.section, step: near.step, finding: f });
+        return;
+      }
+      const section = builds.get(home.hostId)?.machine.sections.find((s) => s.finding?.id === f.id) ?? null;
+      figures.set(f.id, [...(figures.get(f.id) ?? []), own.entry]);
+      lookup.set(id, { entry: own.entry, role: "with-finding", reason: null, hostId: home.hostId, phase: home.phase, section, step: null, finding: f });
+    });
+  }
+  return figures;
 }
