@@ -56,14 +56,3 @@ export function provingEntries(data: ReportData, hostId: string): Map<string, Pr
   }
   return out;
 }
-
-/** The reasons that place an entry on the page (§10.2): goal evidence and service confirmation alone stay in the rail. */
-const PLACING: ReadonlySet<ProofReason> = new Set<ProofReason>(["access", "hop", "flag", "finding-step"]);
-
-/** The host's entries the draft places: proving entries (`provingEntries`) with an access, hop, flag or finding-step
- *  reason. */
-export function placingEntries(data: ReportData, hostId: string): Set<string> {
-  const out = new Set<string>();
-  for (const [id, reasons] of provingEntries(data, hostId)) if (reasons.some((r) => PLACING.has(r))) out.add(id);
-  return out;
-}

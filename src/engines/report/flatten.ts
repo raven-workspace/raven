@@ -1,5 +1,6 @@
 import type { LogEntry } from "../../types/log";
-import { ADDITIONAL_HEADING, ENUM_HEADING, entryBlocks, PHASE_TITLE, PLAIN_NODE_TYPES, sourceBlocks, TESTED_HEADING } from "./plain";
+import { ADDITIONAL_HEADING, entryBlocks, PLAIN_NODE_TYPES, sourceBlocks, TESTED_HEADING } from "./plain";
+import { PHASE_TITLE } from "./placement";
 import { hintPara, msfLine, plainTable, type PlainTableKind } from "./plainTables";
 import { sourceOf } from "./stamp";
 import { portRows } from "./tables";
@@ -273,7 +274,7 @@ function exploit(n: ReportNode, ctx: Ctx): ReportNode[] {
 }
 
 /** Phase headings worded as the plain draft writes them, so a flattened page reads like a rebuilt one. */
-const PHASE_HEADINGS: Partial<Record<Phase, string>> = { ...PHASE_TITLE, enum: ENUM_HEADING, additional: ADDITIONAL_HEADING, tested: TESTED_HEADING };
+const PHASE_HEADINGS: Partial<Record<Phase, string>> = { ...PHASE_TITLE, additional: ADDITIONAL_HEADING, tested: TESTED_HEADING };
 
 /** A phase heading in the sample's wording, a finding's own one named after it. */
 function phase(n: ReportNode, ctx: Ctx): ReportNode[] {

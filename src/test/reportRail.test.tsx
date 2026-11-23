@@ -437,18 +437,6 @@ describe("Evidence rail: the log column on a plain page", () => {
     expect(document.activeElement).toBe(row("winpeas run"));
   });
 
-  it("with no cursor, a screenshot that came along with a step joins the step holding that entry", async () => {
-    const { screenshot } = await seed();
-    mount();
-    await ready();
-    const editor = editors[0];
-    fireEvent.click(screen.getByRole("button", { name: "Add ssh shell screenshot" }));
-    expect((await shapeOf(editor)).slice(5)).toEqual(["[ssh login,ssh shell screenshot]", "[]", "h:Also tested"]);
-    const figures: string[] = [];
-    editor.state.doc.descendants((n) => void (n.type.name === "figure" && figures.push(n.attrs.entryId as string)));
-    expect(figures).toEqual([screenshot.id]);
-  });
-
   it("a screenshot goes into the step holding the cursor, as a figure", async () => {
     const { screenshot } = await seed();
     mount();

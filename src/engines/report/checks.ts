@@ -8,7 +8,8 @@ import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
 import { byTime } from "./prove";
 import { entryIdsIn } from "./place";
-import { proofCompanions, proofFacts } from "./proof";
+import { ILLUSTRATE_WINDOW_MS, proofCompanions } from "./placement";
+import { proofFacts } from "./proof";
 import { sourceOf } from "./stamp";
 import { msfHosts, msfModules } from "./tools";
 import type { CoverageOverride, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
@@ -36,7 +37,6 @@ export interface TargetChecksInput {
   coverage?: Record<string, CoverageOverride>;
 }
 
-const SHOT_WINDOW_MS = 5 * 60_000;
 const MAX_CAPTION_WORDS = 10;
 const WIN_FIX = "whoami && hostname && type C:\\Users\\Administrator\\Desktop\\proof.txt && ipconfig";
 const LINUX_FIX = "id; hostname; cat /root/proof.txt; ip addr";
@@ -364,7 +364,7 @@ export function targetChecks(input: TargetChecksInput): Check[] {
       Infinity,
     );
     const shown = step
-      ? shots.some((s) => Math.abs(s.at - step.at) <= SHOT_WINDOW_MS)
+      ? shots.some((s) => Math.abs(s.at - step.at) <= ILLUSTRATE_WINDOW_MS)
       : shots.some((s) => firstAccess === Infinity || s.at >= firstAccess);
     if (!shown) {
       out.push({ id: `access-shot:${host.name}:${g.level}`, level: "soft", text: `${host.name} has ${g.level} access with no screenshot of it on the page.` });

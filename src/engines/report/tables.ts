@@ -1,7 +1,7 @@
 import type { AccessGrant } from "../../types/credentials";
 import type { Severity } from "../../types/findings";
 import type { FlagKind } from "../../types/log";
-import { hostEntry, machinesInOrder, severityRank, findingPhaseMap } from "./draft";
+import { hostEntry, machinesInOrder, placementPlan, severityRank } from "./placement";
 import { byTime, hostName } from "./prove";
 import { expectedFlags } from "./meta";
 import type { ReportData, ReportMeta, ReportTarget } from "./types";
@@ -116,7 +116,7 @@ export function findingRows(data: ReportData, targets: ReportTarget[]): FindingR
   const rows: (Omit<FindingRow, "n"> & { rank: number; targetIndex: number; created: number })[] = [];
   targets.forEach((target, targetIndex) => {
     const machines = machinesInOrder(data, target);
-    for (const [findingId, { hostId, phase }] of findingPhaseMap(data, target)) {
+    for (const [findingId, { hostId, phase }] of placementPlan(data, target).findings) {
       const f = data.findings.find((x) => x.id === findingId);
       if (!f || seen.has(findingId)) continue;
       seen.add(findingId);

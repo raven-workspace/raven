@@ -480,7 +480,7 @@ describe("entries kept from the report never reach the draft", () => {
   });
 
   it("offers none of them in Add new evidence", () => {
-    const missing = missingEntries(doc, keptData, target, {}, []).map((e) => e.id);
+    const missing = missingEntries(doc, keptData, target, []).map((e) => e.id);
     for (const e of kept) expect(missing).not.toContain(e.id);
   });
 

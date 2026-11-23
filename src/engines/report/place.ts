@@ -1,14 +1,15 @@
 import type { LogEntry } from "../../types/log";
-import { entryPhase } from "./draft";
 import { bold, heading, para } from "./nodes";
-import { buildPlainTarget, draftOf, ENUM_HEADING, finish, PHASE_TITLE, srcOf, type Drafted } from "./plain";
+import { PAGE_PHASES, PHASE_TITLE, placementPlan } from "./placement";
+import { finish, srcOf, stepBlocks, testedRun } from "./plain";
 import { sourceOf } from "./stamp";
-import type { Phase, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
+import type { Phase, ReportData, ReportNode, ReportTarget } from "./types";
 
 /**
  * Placing entries on a page that already exists: which entries it holds, where a new step or screenshot goes, what
- * Add new evidence would bring back, and a draft without what the owner removed. The blocks themselves come from the
- * plain builder (`plain.ts`).
+ * Add new evidence would bring back, and a draft without what the owner removed. Where an entry would go is the
+ * placement plan's (`placement.ts`); whether it is there is always read off the page. The blocks themselves come from
+ * the plain builder (`plain.ts`).
  */
 
 /** The entry ids a page holds: those in `entry:<id>…` sources at any depth, every figure's `entryId`, and every id in
@@ -28,9 +29,6 @@ export function entryIdsIn(doc: ReportNode): Set<string> {
 }
 
 /* ------------------------------------------------------------------ Placing an entry */
-
-/** The phases with a heading of their own, in page order. */
-const PAGE_PHASES: Phase[] = ["enum", "foothold", "lateral", "privesc", "domain", "post"];
 
 /** Whether a level 1 or 2 heading ends the region before it. */
 const breaksRegion = (n: ReportNode) => n.type === "heading" && ((n.attrs?.level as number | undefined) ?? 1) <= 2;
@@ -56,12 +54,12 @@ function regionEnd(content: ReportNode[], head: number): number {
  * of the last heading whose source is `phase:<hostId>:<phase>` (or `…:<findingId>`), the region running to the next
  * level 1 or 2 heading or the end. `before` lists the blocks to insert first: the phase's heading when it has none
  * (before the host's first later-phase heading, else its Additional findings or Also tested heading, else the next
- * machine's heading, else at the end), and "Steps to reproduce:" when the region holds no step yet. The phase is
- * `entryPhase`'s; `enum` is the Service enumeration region. A phase with no step heading of its own goes at the end of
+ * machine's heading, else at the end), and "Steps to reproduce:" when the region holds no step yet. The phase is the
+ * placement plan's (`phaseOf`); `enum` is the Service enumeration region. A phase with no step heading of its own goes at the end of
  * the machine's part of the page.
  */
 export function phaseInsertAt(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { index: number; before: ReportNode[] } {
-  const { hostId, phase } = entryPhase(data, target, entry);
+  const { hostId, phase } = placementPlan(data, target).phaseOf(entry);
   const content = doc.content ?? [];
   const ofPhase = (n: ReportNode, p: Phase) => n.type === "heading" && (srcOf(n) === `phase:${hostId}:${p}` || srcOf(n).startsWith(`phase:${hostId}:${p}:`));
   const stepsLabel = para([bold("Steps to reproduce:")], `phase-steps:${hostId}`);
@@ -78,43 +76,36 @@ export function phaseInsertAt(doc: ReportNode, data: ReportData, target: ReportT
   let at = content.findIndex((n) => later.some((p) => ofPhase(n, p)));
   if (at === -1) at = content.findIndex((n) => ofPhase(n, "additional") || ofPhase(n, "tested"));
   if (at === -1) at = hostEnd(content, hostId);
-  const title = phase === "enum" ? ENUM_HEADING : PHASE_TITLE[phase]!;
+  const title = PHASE_TITLE[phase]!;
   return { index: at, before: finish([heading(2, title, `phase:${hostId}:${phase}`), stepsLabel]) };
 }
 
 /**
- * Where a screenshot that came along with a step goes on a page with no cursor: the draft's step that holds it (with
- * another entry leading it) is matched to the page's numbered step holding any of that step's other entries, and the
- * screenshot's own blocks from the draft go at its end. Null when the screenshot leads a step of its own, or the page
- * has no such step: it then goes as a step of its own.
+ * Where a screenshot that illustrates a step, or goes with its flag, goes on a page with no cursor: the plan's step
+ * that holds it (with another entry leading it) is matched to the page's numbered step holding any of that step's
+ * other entries, and the screenshot's own blocks go at its end. Null when the screenshot leads a step of its own, or
+ * the page has no such step: it then goes as a step of its own.
  */
-export function companionStepAt(
-  doc: ReportNode,
-  data: ReportData,
-  target: ReportTarget,
-  meta: ReportMeta,
-  entry: LogEntry,
-  drafted?: Drafted,
-): { index: number; blocks: ReportNode[] } | null {
+export function companionStepAt(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { index: number; blocks: ReportNode[] } | null {
   if (entry.content.kind !== "screenshot") return null;
-  const step = ((drafted ?? draftOf(data, target, meta)).doc.content ?? []).find((n) => isStepList(n) && (n.content ?? []).some((b) => ownIds(b).has(entry.id)));
-  if (!step || ownIds(step.content![0]).has(entry.id)) return null;
-  const others = [...entryIdsIn(step)].filter((id) => id !== entry.id);
+  const step = placementPlan(data, target).at(entry.id)?.step;
+  if (!step || step.lead.id === entry.id) return null;
+  const others = step.entries.map((e) => e.id).filter((id) => id !== entry.id);
   const content = doc.content ?? [];
   const index = content.findIndex((n) => isStepList(n) && others.some((id) => entryIdsIn(n).has(id)));
   if (index === -1) return null;
-  return { index, blocks: step.content!.filter((b) => ownIds(b).has(entry.id)) };
+  return { index, blocks: stepBlocks(data, step).filter((b) => ownIds(b).has(entry.id)) };
 }
 
 /**
- * Add new evidence's entries: those the draft would place now (`entryIdsIn(buildPlainTarget(…))`) that the page holds
- * no block of and the owner hasn't removed, in time order.
+ * Add new evidence's entries: those the plan places that the page holds no block of and the owner hasn't removed, in
+ * time order.
  */
-export function missingEntries(doc: ReportNode, data: ReportData, target: ReportTarget, meta: ReportMeta, removed: readonly string[], drafted?: Drafted): LogEntry[] {
-  const wanted = entryIdsIn(drafted?.doc ?? buildPlainTarget(data, target, meta));
+export function missingEntries(doc: ReportNode, data: ReportData, target: ReportTarget, removed: readonly string[]): LogEntry[] {
+  const { placed } = placementPlan(data, target);
   const onPage = entryIdsIn(doc);
   return data.log
-    .filter((e) => wanted.has(e.id) && !onPage.has(e.id) && !removed.includes(e.id))
+    .filter((e) => placed.has(e.id) && !onPage.has(e.id) && !removed.includes(e.id))
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 }
 
@@ -191,40 +182,31 @@ function withoutBare(content: ReportNode[]): ReportNode[] {
 }
 
 /**
- * Whether a screenshot comes along with another entry's step in the draft (it is not that step's lead), so on a page
- * with no cursor it joins the step holding that entry (`companionStepAt`).
+ * Whether a screenshot illustrates another entry's step in the plan, or goes with its flag (it is not that step's
+ * lead), so on a page with no cursor it joins the step holding that entry (`companionStepAt`).
  */
-export function joinsAStep(data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry, drafted?: Drafted): boolean {
+export function joinsAStep(data: ReportData, target: ReportTarget, entry: LogEntry): boolean {
   if (entry.content.kind !== "screenshot") return false;
-  const d = drafted ?? draftOf(data, target, meta);
-  return companionStepAt(d.doc, data, target, meta, entry, d) !== null;
+  const step = placementPlan(data, target).at(entry.id)?.step;
+  return step != null && step.lead.id !== entry.id;
 }
 
 /**
- * A machine's Also tested run as the draft writes it, for Add new evidence, when the page holds no `tested:<hostId>`
- * block and the draft has some: the bullets at the end of the page's Also tested region, or the heading and the
- * bullets at the end of the machine's part of the page. Null otherwise, and when the owner deleted it (its
- * `testedKey` is in `removed`).
+ * A machine's Also tested run as the draft writes it (`testedRun`), for Add new evidence, when the page holds no
+ * `tested:<hostId>` block and the draft has some: the bullets at the end of the page's Also tested region, or the
+ * heading and the bullets at the end of the machine's part of the page. Null otherwise, and when the owner deleted it
+ * (its `testedKey` is in `removed`).
  */
-export function missingTested(
-  doc: ReportNode,
-  data: ReportData,
-  target: ReportTarget,
-  meta: ReportMeta,
-  hostId: string,
-  removed: readonly string[] = [],
-  drafted?: Drafted,
-): { index: number; blocks: ReportNode[] } | null {
+export function missingTested(doc: ReportNode, data: ReportData, hostId: string, removed: readonly string[] = []): { index: number; blocks: ReportNode[] } | null {
   // The owner deleted the list: it stays deleted.
   if (removed.includes(testedKey(hostId))) return null;
   const content = doc.content ?? [];
   const has = (n: ReportNode): boolean => srcOf(n) === `tested:${hostId}` || (n.content ?? []).some(has);
   if (content.some(has)) return null;
-  const draft = (drafted?.doc ?? buildPlainTarget(data, target, meta)).content ?? [];
-  const bullets = draft.filter((n) => srcOf(n) === `tested:${hostId}`);
+  const run = testedRun(data, hostId);
+  const bullets = run.filter((n) => srcOf(n) === `tested:${hostId}`);
   if (bullets.length === 0) return null;
   const head = content.findIndex((n) => n.type === "heading" && srcOf(n) === `phase:${hostId}:tested`);
   if (head !== -1) return { index: regionEnd(content, head), blocks: bullets };
-  const title = draft.filter((n) => srcOf(n) === `phase:${hostId}:tested`);
-  return { index: hostEnd(content, hostId), blocks: [...title, ...bullets] };
+  return { index: hostEnd(content, hostId), blocks: run };
 }
