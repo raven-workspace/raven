@@ -21,7 +21,7 @@ Later specs override earlier ones where they overlap, and a few sections say so 
 | [manual-reading.md](manual-reading.md) | The Manual's reading round: type, spacing, output blocks | Shipped |
 | [prelab-batch.md](prelab-batch.md) | Fixes batched before the first lab session | Shipped |
 | [network.md](network.md) | The Network section: tunnels, hops and the attack-path tree | Shipped |
-| [reports.md](reports.md) | The Report: OffSec's grading rules, the smart draft, the editor, checks, and export | Shipped except PDF/.7z export (§6.7, with the carried requirements in §12); screenshots on findings is RAV-26 |
+| [reports.md](reports.md) | The Report: OffSec's grading rules, the smart draft, the editor, checks, and export | Shipped except PDF/.7z export (RAV-28; §6.7, with the carried requirements in §12) and screenshots on findings (RAV-26) |
 
 ## Mockups
 

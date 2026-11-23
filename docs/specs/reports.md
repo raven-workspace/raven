@@ -1,6 +1,6 @@
 # Raven Reports: design
 
-> **Frozen record, mostly shipped** (written 2026-11-11, last revised 2026-11-13). Everything here is built except the PDF and .7z export: §6.7 and §12 stay live until it ships. Screenshots directly on findings, requested after this was written, is RAV-26. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+> **Frozen record, mostly shipped** (written 2026-11-11, last revised 2026-11-13). Everything here is built except the PDF and .7z export: §6.7 and §12 stay live until it ships (RAV-28). Screenshots directly on findings, requested after this was written, is RAV-26. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
 
 Date: 2026-11-11. Branch: `feat/reports`.
 
