@@ -41,7 +41,7 @@ for (const flow of FLOWS) {
 // Under `empty` these screens' setups act on fixture rows or a host (a tab, a finding, a log entry, a host option) that
 // the scenario removes by definition, so there is nothing to set up. Skipped explicitly, not swallowed.
 const NEEDS_DATA = new Set([
-  "host-checklist", "host-findings", "host-log", "finding-split", "exam-host-locked", "findings", "log-images", "transfer-generator", "credentials-hash", "credentials-folded",
+  "host-checklist", "host-findings", "host-log", "finding-split", "exam-host-locked", "findings", "finding-add-screenshot", "log-images", "transfer-generator", "credentials-hash", "credentials-folded",
   // No host under `empty`, so OS is unknown and every payload fits: there is no misfit fold to open.
   "payloads-drawer-misfits",
   // The rail tip is a host's tooltip; with no hosts there is nothing to focus.
