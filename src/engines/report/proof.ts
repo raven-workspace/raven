@@ -1,6 +1,6 @@
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { byTime, provingEntries } from "./prove";
+import { byTime, draftable, provingEntries } from "./prove";
 import type { ReportData } from "./types";
 
 export interface ProofFacts {
@@ -99,7 +99,7 @@ const shotText = (e: LogEntry) => `${e.content.kind === "screenshot" ? e.content
 /**
  * The entries that show a flag's proof alongside the flag entry itself, as real captures make them: the flag is often
  * logged as just its value, the proof as a separate command (`cat proof.txt; whoami; ip a`) or screenshot. On the same
- * host, not private:
+ * host, neither kept from the report nor a dead end (`draftable`):
  *  - commands whose output (or command) holds the flag's value;
  *  - screenshots that name this flag (`proof`, `proof.txt`; or `flag` when this flag is the nearest one), or that were
  *    taken within 15 minutes of it, name no other flag, and are nearer to it than to any other step of the host. A
@@ -111,9 +111,10 @@ export function proofCompanions(data: ReportData, hostId: string, flagEntry: Log
   if (!flag) return [];
   const value = flag.value.trim().toLowerCase();
   const onHost = data.log.filter((e) => e.id !== flagEntry.id && !e.private && e.hostIds.includes(hostId));
+  const candidates = onHost.filter((e) => draftable(data, e));
   const commands =
     value.length >= 8
-      ? onHost.filter(
+      ? candidates.filter(
           (e) =>
             e.content.kind === "command" &&
             e.content.blocks.some((b) => `${b.command ?? ""}\n${b.output ?? ""}`.toLowerCase().includes(value)),
@@ -129,7 +130,7 @@ export function proofCompanions(data: ReportData, hostId: string, flagEntry: Log
     return among.every((e) => gap(e) > mine);
   };
   const other = flag.flagKind === "local" ? "proof" : "local";
-  const shots = onHost.filter((e) => {
+  const shots = candidates.filter((e) => {
     if (e.content.kind !== "screenshot" || proving.has(e.id)) return false;
     const text = shotText(e);
     if (namesKind(text, flag.flagKind)) return nearest(e, flags.filter((f) => flagOf(f)?.flagKind === flag.flagKind));

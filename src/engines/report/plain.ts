@@ -6,7 +6,7 @@ import { findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, st
 import { msfLine, PLAIN_TABLE_KINDS, plainTable } from "./plainTables";
 import { bold, code, codeBlock, figure, heading, listItem, para, sourced, table, text, textTable } from "./nodes";
 import { ADDRESS_COMMAND } from "./proof";
-import { isFlag, placingEntries } from "./prove";
+import { draftable, isFlag, placingEntries } from "./prove";
 import { attackPathRows, portRows, resultLine } from "./tables";
 import { blockHash, sourceOf, stamp } from "./stamp";
 import { reportTargets } from "./targets";
@@ -377,9 +377,9 @@ function portTable(data: ReportData, hostId: string): ReportNode | null {
   );
 }
 
-/** The host's first port scan: the one Service enumeration prints. */
+/** The host's first port scan neither kept from the report nor a dead end: the one Service enumeration prints. */
 const firstScan = (data: ReportData, hostId: string): LogEntry | undefined =>
-  data.log.filter((e) => !e.private && e.hostIds.includes(hostId) && isPortScan(e)).sort((a, b) => a.at - b.at || a.createdAt - b.createdAt)[0];
+  data.log.filter((e) => e.hostIds.includes(hostId) && isPortScan(e) && draftable(data, e)).sort((a, b) => a.at - b.at || a.createdAt - b.createdAt)[0];
 
 /** The host's first port scan as a code block, then its open ports (script lines only under a finding's ports). */
 function portScan(data: ReportData, hostId: string): ReportNode[] {

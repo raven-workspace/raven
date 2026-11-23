@@ -2,6 +2,8 @@ import { createEditor, type NodeJSON } from "prosekit/core";
 import { describe, expect, it } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import { FIXTURES } from "../audit/fixtures";
+import type { FailedAttempt } from "../types/findings";
+import type { LogEntry } from "../types/log";
 import { defineReportExtension } from "../features/report/editor/extension";
 import {
   blockHash,
@@ -17,6 +19,8 @@ import {
   titleSentence,
   withoutRemoved,
   placedIdsIn,
+  missingEntries,
+  proofCompanions,
   trimmedOutput,
   type ReportData,
   type ReportNode,
@@ -410,5 +414,77 @@ describe("plain helpers", () => {
     const out = "h\n1: lo: <LOOPBACK>\n    inet 127.0.0.1/8 scope host lo\n2: eth0: <UP>\n    link/ether aa\n    inet 10.0.0.5/24 scope global eth0";
     expect(trimmedOutput(out, "hostname; ip a", "10.0.0.5")).toBe("h\n2: eth0: <UP>\n    inet 10.0.0.5/24 scope global eth0");
     expect(trimmedOutput(out, "cat x", "10.0.0.5")).toBe(out);
+  });
+});
+
+describe("entries kept from the report never reach the draft", () => {
+  const flagValue = (id: string) => {
+    const c = logEntry(id).content;
+    return c.kind === "flag" ? c.value : "";
+  };
+  const extra = (id: string, at: number, over: Partial<LogEntry> & Pick<LogEntry, "kind" | "title" | "content">): LogEntry => ({
+    ...logEntry("l-garnet-head"), id, at, createdAt: at, updatedAt: at, titleEdited: true, returnedNothing: false, private: false, ...over,
+  });
+  const attempt = (id: string, logEntryId: string, over: Partial<FailedAttempt>): FailedAttempt => ({
+    id, engagementId: data.engagement.id, hostId: GARNET_HOST, findingId: null, title: id, reasonKind: "operator", reason: "Mine.", private: true,
+    logEntryId, createdAt: 0, updatedAt: 0, ...over,
+  });
+  const proofAt = logEntry("l-garnet-proof").at;
+  const localAt = logEntry("l-garnet-local").at;
+  const scanAt = logEntry("l-garnet-nmap").at;
+  // A command printing proof.txt behind an attempt the owner kept to themselves, one behind a private attempt, a
+  // screenshot beside local.txt marked as returning nothing, and an earlier port scan behind a kept attempt.
+  const keptCat = extra("l-garnet-kept-cat", proofAt + 20_000, {
+    kind: "command", title: "Read proof.txt again", ranOn: "garnet",
+    content: { kind: "command", blocks: [{ command: "cat /root/proof.txt", output: flagValue("l-garnet-proof"), shell: "root@garnet" }] },
+  });
+  const privateCat = extra("l-garnet-private-cat", localAt + 20_000, {
+    kind: "command", title: "Read local.txt again", ranOn: "garnet",
+    content: { kind: "command", blocks: [{ command: "cat local.txt", output: flagValue("l-garnet-local"), shell: "ronan@garnet" }] },
+  });
+  const nothingShot = extra("l-garnet-nothing-shot", localAt + 40_000, {
+    kind: "screenshot", title: "terminal", titleEdited: false, returnedNothing: true,
+    content: { kind: "screenshot", attachmentId: "a-garnet-nothing", caption: "terminal", fileName: "10.10.30.31_nothing.png" },
+  });
+  const keptScan = extra("l-garnet-kept-nmap", scanAt - 5 * 60_000, {
+    kind: "command", title: "Quick scan",
+    content: { kind: "command", blocks: [{ command: "nmap -F 10.10.30.31", output: "21/tcp open  ftp\n22/tcp open  ssh\n8080/tcp open  http-proxy" }] },
+  });
+  const kept = [keptCat, privateCat, nothingShot, keptScan];
+  const keptData: ReportData = {
+    ...data,
+    log: [...data.log, ...kept],
+    attempts: [
+      ...data.attempts,
+      attempt("fa-kept-cat", keptCat.id, { reasonKind: "operator", private: true }),
+      attempt("fa-private-cat", privateCat.id, { reasonKind: "control", private: true }),
+      attempt("fa-kept-nmap", keptScan.id, { reasonKind: "operator", private: true }),
+    ],
+  };
+  const keptDoc = buildPlainTarget(keptData, target, {});
+  const sources = all(keptDoc).map((n) => String(n.attrs?.source ?? ""));
+
+  it("drafts no flag companion kept from the report or returning nothing", () => {
+    const flags = keptData.log.filter((e) => e.content.kind === "flag");
+    const companions = flags.flatMap((f) => proofCompanions(keptData, GARNET_HOST, f)).map((e) => e.id);
+    for (const e of [keptCat, privateCat, nothingShot]) {
+      expect(companions).not.toContain(e.id);
+      expect(sources.some((s) => s.includes(e.id))).toBe(false);
+    }
+  });
+
+  it("prints a scan kept from the report under Service enumeration never", () => {
+    expect(sources.some((s) => s.includes(keptScan.id))).toBe(false);
+    expect(all(keptDoc).map(textOf).join("\n")).not.toContain("nmap -F");
+    expect(sources).toContain("entry:l-garnet-nmap:0:command");
+  });
+
+  it("offers none of them in Add new evidence", () => {
+    const missing = missingEntries(doc, keptData, target, {}, []).map((e) => e.id);
+    for (const e of kept) expect(missing).not.toContain(e.id);
+  });
+
+  it("leaves the draft as it was without them", () => {
+    expect(placedIdsIn(keptDoc)).toEqual(placedIdsIn(doc));
   });
 });

@@ -23,6 +23,10 @@ export function isDeadEnd(entry: LogEntry, data: ReportData): boolean {
   return entry.returnedNothing || data.attempts.some((a) => a.logEntryId === entry.id);
 }
 
+/** An entry a draft may print beside a step it doesn't prove (a flag's companion, the first port scan): neither kept
+ *  from the report nor a dead end. */
+export const draftable = (data: ReportData, e: LogEntry) => !keptFromReport(data, e) && !isDeadEnd(e, data);
+
 /** The host's non-private, non-dead-end entries that proved something, with every reason they count. */
 export function provingEntries(data: ReportData, hostId: string): Map<string, ProofReason[]> {
   const reasons = new Map<string, ProofReason[]>();
