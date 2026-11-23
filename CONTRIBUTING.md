@@ -4,7 +4,7 @@ Setup and commands are in the [README](README.md). This file covers how work mov
 
 ## Tracking work
 
-Issues live in Linear, in the **RAV** team. GitHub holds the code and pull requests only, so don't open GitHub issues.
+Issues live in Linear, in the **RAV** team: create and work them there. Linear syncs each issue to a GitHub issue, so you'll see them on GitHub too, but those are copies. Don't open or edit issues on GitHub.
 
 - **Labels:** each issue has a category label (`Feature`, `Improvement`, `Bug`, `Security`, `Design`, `Documentation` or `Plan`). Triage adds `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` or `wontfix`.
 - **Statuses:** Backlog, Todo, In Progress, In Review, Done, Canceled and Duplicate.

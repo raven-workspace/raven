@@ -63,7 +63,7 @@ docs/
 | Read | For |
 |---|---|
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How work is tracked, branched, committed and reviewed; code, style and data-safety rules |
-| [`PRODUCT.md`](PRODUCT.md) | Who Raven is for, what each feature does, and the product principles |
+| [`PRODUCT.md`](PRODUCT.md) | Who Raven is for, what each feature does, the rules marked binding that the code must keep, and the product principles |
 | [`DESIGN.md`](DESIGN.md) | The Ink design system: tokens, type roles, layout rules, do's and don'ts (full version in `.impeccable/design-full.md`) |
 | [`docs/specs/`](docs/specs/README.md) | Why features work the way they do |
 | [`AGENTS.md`](AGENTS.md) | Instructions for AI coding agents working in the repo |

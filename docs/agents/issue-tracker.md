@@ -1,6 +1,6 @@
 # Issue tracker: Linear
 
-Issues and specs for Raven live in Linear, in the **RAV** team ("Raven Workspace App"). Use the Linear MCP tools (`mcp__linear-server__*`) for every operation. The GitHub repo (`raven-workspace/raven`) holds code and pull requests only; don't file GitHub issues.
+Issues and specs for Raven live in Linear, in the **RAV** team ("Raven Workspace App"). Use the Linear MCP tools (`mcp__linear-server__*`) for every operation. Linear syncs each issue to a GitHub issue in `raven-workspace/raven`; those are copies. Never create, edit or close issues with `gh`: always go through Linear.
 
 ## Conventions
 
