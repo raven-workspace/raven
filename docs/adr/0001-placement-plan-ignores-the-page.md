@@ -1,0 +1,3 @@
+# The placement plan never reads the page
+
+Raven decides where each log entry of a report target goes (its role, machine, phase, step and finding section) in one placement plan built from the logged record alone. Whether an entry is on the page is always answered by reading the owner's page, never by the plan. We chose this over an edit-aware plan so that placement has one pure rule that can be tested on data, drafting and "Refresh from log" stay predictable, and the owner's edits are never second-guessed. Callers that need both (the evidence column, Add new evidence, the checks) ask the plan where an entry would go and ask the page whether it's there.
