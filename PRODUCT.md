@@ -162,7 +162,7 @@ The checklist (what they've done, what their options are next) and the host fact
   - **To do:** plain-word checks per target, each with a fix and, where possible, a one-press action; false positives can be dismissed.
   - **Report details:** the cover's facts.
   - A report strip shows the file name, time until due, targets ready and the To do count.
-  - **Not yet built:** PDF export (the correctly named PDF and .7z in one action) comes in a later round; its requirements are in `docs/specs/reports.md` §6.7 and §12, and the work is RAV-28.
+  - **Export PDF:** one action writes `OSCP-<OSID>-Exam-Report.pdf` and its unpassworded `.7z` into a folder picked once, then shows the files, their sizes (a warning over 200 MB) and the `.7z`'s MD5 to compare at upload.offsec.com, with Copy and Reveal in Finder. The PDF is Typst compiled in the app with the house fonts (docs/adr/0002): US Letter, selectable text, a contents page, page numbers, figures kept with their captions, and code printed as typed (no ligatures; a long run breaks at the panel's edge rather than off the page). Unwritten pages and sub-sections are left out, and a figure prints only when its entry may reach the report.
   - Private content never reaches the page, the evidence column or the PDF.
   - **What OffSec grades (binding, from the OSCP+ Exam Guide).**
     - **File:** a PDF named `OSCP-OS-XXXXX-Exam-Report.pdf` (the OSID, case-sensitive), inside an unpassworded `OSCP-OS-XXXXX-Exam-Report.7z` of at most 200 MB, uploaded at upload.offsec.com, where the owner checks the MD5.

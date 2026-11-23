@@ -6,6 +6,7 @@
 
 use crate::attempts::{self, CredAttempt, CredAttemptInput};
 use crate::payload_builds::{self, PayloadBuild};
+use crate::export::{self, ExportInput, ExportResult};
 use crate::reports::{self, Report, ReportDefaults, ReportPatch, ReportSection, SectionInput};
 use crate::tried_pairs::{self, TriedPair, TriedPairInput};
 use crate::extractions::{self, Extraction, ExtractionRecord, ExtractionSummary};
@@ -772,6 +773,21 @@ pub async fn report_get_or_create(app: AppHandle, engagement_id: String) -> AppR
         reports::get_or_create(v.conn()?, &engagement_id, &defaults)
     })
     .await
+}
+
+/// Exports the report (docs/adr/0002): reads its screenshots from the vault, compiles the PDF and writes it and its
+/// `.7z` off the main thread without holding the vault, then records the export. Nothing leaves the machine.
+#[tauri::command]
+pub async fn report_export(app: AppHandle, report_id: String, input: ExportInput) -> AppResult<ExportResult> {
+    let ids = input.attachment_ids.clone();
+    let images = with_vault(app.clone(), move |v| export::load_images(v.conn()?, &ids)).await?;
+    let result = off_main(move || {
+        let (pdf, pages) = export::compile_pdf(&input.source, images)?;
+        export::write_export(std::path::Path::new(&input.folder), &input.file_stem, &pdf, pages)
+    })
+    .await?;
+    with_vault(app, move |v| reports::mark_exported(v.conn()?, &report_id)).await?;
+    Ok(result)
 }
 
 #[tauri::command]

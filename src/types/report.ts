@@ -20,6 +20,8 @@ export interface ReportMeta {
   reportDate?: string;
   /** Report-level check ids the owner dismissed from To do (a false positive): not counted, listed as dismissed. */
   dismissedChecks?: string[];
+  /** The folder the export writes into, picked once and remembered. */
+  exportFolder?: string;
 }
 
 /** `appendix-*` kinds are no longer created (layout 2 has no generated appendices); old rows stay hidden. */
@@ -40,6 +42,28 @@ export type SectionKind =
   | "references"
   /** An owner-written page (+ Page): an appendix page or a free page, keyed by a fresh id. */
   | "page";
+
+/** What the export sends the backend: the report as Typst (`reportTypst`), its screenshots and where to write. */
+export interface ExportInput {
+  source: string;
+  attachmentIds: string[];
+  folder: string;
+  /** `OSCP-<OSID>-Exam-Report`. */
+  fileStem: string;
+}
+
+/** What one export wrote. Mirrors the Rust `ExportResult`. */
+export interface ExportResult {
+  pdfPath: string;
+  pdfBytes: number;
+  archivePath: string;
+  archiveBytes: number;
+  /** The `.7z`'s MD5, lower-case hex, to compare at upload.offsec.com. */
+  md5: string;
+  pages: number;
+  /** Over OffSec's 200 MB limit. */
+  tooLarge: boolean;
+}
 
 export interface Report {
   id: string;

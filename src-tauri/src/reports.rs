@@ -180,6 +180,15 @@ pub fn update(conn: &Connection, id: &str, patch: ReportPatch) -> AppResult<Repo
     report_by(conn, "id", id)?.ok_or(AppError::NotFound)
 }
 
+/// Records that the report was exported now.
+pub fn mark_exported(conn: &Connection, id: &str) -> AppResult<Report> {
+    let n = conn.execute("UPDATE reports SET exported_at=?1 WHERE id=?2", params![now_ms(), id])?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    report_by(conn, "id", id)?.ok_or(AppError::NotFound)
+}
+
 /// A section's page and meta, serialized, at most 8 MiB.
 const MAX_SECTION_BYTES: usize = 8 * 1024 * 1024;
 
@@ -377,6 +386,18 @@ mod tests {
         assert_eq!(a.title, "OSCP Exam Report");
         assert_eq!(a.meta, json!({}));
         assert!(matches!(get_or_create(c, "missing", &defaults()), Err(AppError::NotFound)));
+    }
+
+    #[test]
+    fn mark_exported_records_when_and_refuses_an_unknown_report() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "E");
+        let r = get_or_create(c, &e, &defaults()).unwrap();
+        assert_eq!(r.exported_at, None);
+        let marked = mark_exported(c, &r.id).unwrap();
+        assert!(marked.exported_at.is_some());
+        assert!(matches!(mark_exported(c, "nope"), Err(AppError::NotFound)));
     }
 
     #[test]

@@ -22,3 +22,4 @@ export * from "./plain";
 export * from "./place";
 export * from "./plainTables";
 export * from "./flatten";
+export * from "./typst";

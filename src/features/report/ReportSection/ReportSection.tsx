@@ -14,7 +14,10 @@ import {
   isAppendixPage,
   isReady,
   isValidOsid,
+  keptFromReport,
   needsFlatten,
+  printedDate,
+  reportTypst,
   numberAppendices,
   reportChecks,
   reportDueAt,
@@ -27,6 +30,8 @@ import {
   targetNumbers,
   withoutRemoved,
   type Check,
+  type ExportPage,
+  type ExportSource,
   type FlagKind,
   type PageMeta,
   type ReportData,
@@ -47,6 +52,7 @@ import { usePayloadsStore } from "../../payloads/usePayloadsStore";
 import { ReportDataContext, type ReportDataValue } from "../editor/ReportDataContext/ReportDataContext";
 import { keepCopiedText, openFindBar, posAtPath, ReportEditor, selectBlockAt } from "../editor/ReportEditor/ReportEditor";
 import { AddEvidenceButton } from "../AddEvidenceButton/AddEvidenceButton";
+import { ExportButton } from "../ExportButton/ExportButton";
 import { EvidenceDrawer, EvidenceRail } from "../EvidenceRail/EvidenceRail";
 import { GuidePanel } from "../GuidePanel/GuidePanel";
 import { ReportDetails } from "../ReportDetails/ReportDetails";
@@ -934,6 +940,49 @@ function ReportBody({
     </>
   );
 
+  /**
+   * The report as it prints, for Export PDF: every page in outline order (Report details aside: its fields are the front
+   * page), each under the title and with the heading numbers the page shows, the open page as typed. A figure prints
+   * only when its entry may reach the report.
+   */
+  const buildExport = (): ExportSource => {
+    const pages: ExportPage[] = [];
+    for (const e of entries) {
+      const s = e.section;
+      if (s.kind === "details") continue;
+      const doc = openLiveDoc && s.id === openSection?.id ? openLiveDoc : savedDocOf(s);
+      if (isAppendixPage(s)) {
+        pages.push({ doc, title: { number: null, text: `Appendix ${pageLetter(s.id)} – ${pageTitleOf(s)}` }, nested: true });
+        continue;
+      }
+      const n = numbers.get(s.id);
+      const title = n?.title ? { number: n.title.number, text: n.title.text } : null;
+      if (e.target) {
+        const target = e.target;
+        const number = n?.number;
+        pages.push({ doc, title, numbering: number ? (d) => targetNumbers(d, target, number) : undefined, nested: true });
+      } else if (s.kind === "page") {
+        pages.push({ doc, title, nested: true });
+      } else {
+        const kind = s.kind;
+        const number = n?.number;
+        pages.push({ doc, title, numbering: number ? (d) => subsectionNumbers(kind, number, d) : undefined, nested: false });
+      }
+    }
+    const printable = (entryId: string) => {
+      const entry = data.log.find((l) => l.id === entryId);
+      return entry !== undefined && !keptFromReport(data, entry);
+    };
+    const front = {
+      title: report.title,
+      candidate: report.candidateName,
+      osid: report.osid.trim(),
+      email: report.email,
+      date: printedDate(reportMeta.reportDate) || printedDate(new Date().toISOString().slice(0, 10)),
+    };
+    return reportTypst(front, pages, printable);
+  };
+
   return (
     <section ref={sectionRef} aria-label="Report" className="report-section">
       <ReportStrip
@@ -972,7 +1021,7 @@ function ReportBody({
               const s = sections.find((x) => x.id === id);
               if (s) setDeleting(s);
             }}
-            exportSlot={null}
+            exportSlot={<ExportButton report={report} build={buildExport} gaps={gaps} onSaveReport={saveReport} />}
             listRef={navRef}
           />
           <div className={cx("report-section__body", railBeside && "report-section__body--rail")}>
