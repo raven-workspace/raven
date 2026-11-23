@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { FieldManualSnapshot } from "../engines/fieldManual/merge";
 import type { VaultFile } from "../types/fieldManual";
 import type { BackupInfo } from "../types/backup";
@@ -41,7 +42,7 @@ import type {
   UsernameInput,
 } from "../types/credentials";
 import type { PayloadBuild } from "../types/payloadBuild";
-import type { Report, ReportNode, ReportPatch, ReportSection, SectionInput } from "../types/report";
+import type { ExportInput, ExportResult, Report, ReportNode, ReportPatch, ReportSection, SectionInput } from "../types/report";
 import type { Hop, HopInput, InterfaceDismissal, Tunnel, TunnelInput } from "../types/network";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
@@ -215,6 +216,25 @@ export const api = {
   payloadBuildRecord: (input: PayloadBuild) => call<PayloadBuild>("payload_build_record", { input }),
   reportGetOrCreate: (engagementId: string) => call<Report>("report_get_or_create", { engagementId }),
   reportUpdate: (id: string, patch: ReportPatch) => call<Report>("report_update", { id, patch }),
+  /** Writes the report's PDF and `.7z` into `input.folder` (docs/adr/0002) and records the export. */
+  reportExport: (reportId: string, input: ExportInput) => call<ExportResult>("report_export", { reportId, input }),
+  /** The macOS folder picker; null when the owner cancels. */
+  pickFolder: async (title: string, defaultPath?: string): Promise<string | null> => {
+    try {
+      const picked = await openDialog({ directory: true, multiple: false, title, ...(defaultPath ? { defaultPath } : {}) });
+      return typeof picked === "string" ? picked : null;
+    } catch (raw) {
+      throw RavenError.from(raw);
+    }
+  },
+  /** Shows a file in Finder, selected. */
+  revealInFinder: async (path: string): Promise<void> => {
+    try {
+      await revealItemInDir(path);
+    } catch (raw) {
+      throw RavenError.from(raw);
+    }
+  },
   reportSectionsList: (reportId: string) => call<ReportSection[]>("report_sections_list", { reportId }),
   reportSectionUpsert: (reportId: string, input: SectionInput) => call<ReportSection>("report_section_upsert", { reportId, input }),
   reportSectionSave: (id: string, doc: ReportNode, meta: Record<string, unknown>) =>

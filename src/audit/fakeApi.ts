@@ -128,6 +128,29 @@ const base = {
   fieldManualSave: async () => null,
   fieldManualLoad: async () => clone(AUDIT_FIELD_MANUAL),
   openObsidian: async () => {},
+  // The export can't compile a PDF in the browser: it answers as the app would, with a fixed size and MD5, so the
+  // audit sees the result panel. The real PDF is judged from `cargo run --example export_report`.
+  reportExport: async (reportId: string, input) => {
+    const report = find(db.reports, reportId);
+    // What the button sent, with its screenshots, for `audit/export-report.mjs` to compile with the real backend.
+    (globalThis as { __ravenLastExport?: unknown }).__ravenLastExport = {
+      input: clone(input),
+      images: Object.fromEntries(input.attachmentIds.map((id: string) => [id, db.attachments.find((a) => a.id === id)?.dataBase64 ?? null])),
+    };
+    report.exportedAt = now();
+    const archiveBytes = 1_284_096;
+    return {
+      pdfPath: `${input.folder}/${input.fileStem}.pdf`,
+      pdfBytes: 1_402_880,
+      archivePath: `${input.folder}/${input.fileStem}.7z`,
+      archiveBytes,
+      md5: "5d41402abc4b2a76b9719d911017c592",
+      pages: 31,
+      tooLarge: false,
+    };
+  },
+  pickFolder: async () => "/Users/sam/Documents/OSCP exam",
+  revealInFinder: async () => {},
   backupRestore: async () => unsupported("Restore"),
   backupRestoreLocked: async () => unsupported("Restore"),
 

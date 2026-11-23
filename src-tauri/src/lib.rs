@@ -8,6 +8,7 @@ pub mod credentials;
 mod db;
 pub mod engagements;
 pub mod error;
+pub mod export;
 pub mod extractions;
 pub mod host_facts;
 pub mod hosts;
@@ -32,6 +33,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let paths = paths::DataPaths::resolve(app.handle())?;
             app.manage(Mutex::new(vault::Vault::new(paths)));
@@ -122,6 +124,7 @@ pub fn run() {
             commands::payload_builds_list,
             commands::report_get_or_create,
             commands::report_update,
+            commands::report_export,
             commands::report_sections_list,
             commands::report_section_upsert,
             commands::report_section_save,
