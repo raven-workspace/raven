@@ -52,6 +52,7 @@ The checklist (what they've done, what their options are next) and the host fact
 | `N` | field notes |
 | ⌘K | search |
 | `A` | Arsenal drawer |
+| `P` | Payloads drawer |
 | `M` | the Manual, at the last note read |
 | `H` | stuck view (on a host) |
 | number keys | engagement sections |
@@ -67,12 +68,14 @@ The checklist (what they've done, what their options are next) and the host fact
   - open threads, cleanup count and last activity.
 
   Past engagements sit in a searchable table. Engagements are created, archived and deleted (with confirmation).
-- **Engagement view.** A left sidebar holds the sections (Board, Log, Credentials, Findings, Engagement checklist, Report) and the host list, with state glyphs and open-thread dots. A status strip at the top shows the timebox, rooted/flags, open threads, cleanup and the Metasploit lock.
+- **Engagement view.** A left sidebar holds the sections (Board, Log, Credentials, Findings, Network, Engagement checklist, Report) and the host list, with state glyphs and open-thread dots. A status strip at the top shows the timebox, rooted/flags, open threads, cleanup and the Metasploit lock.
 - **Board.** A kanban of the PEN-200 stages: Information gathering, Vulnerability detection, Initial foothold, Privilege escalation, Post-exploitation, Reporting. Hosts move automatically from checklist progress and can be placed by hand. Lateral movement is engagement-level, not a column.
+- **Network.** The attack path as a tree: Kali, then hosts by hop depth, each node saying how it was reached and carrying its tunnels. Hosts not yet reached sit in a tray below. Hops and tunnels are added and edited here. When the section is too narrow for the tree, the same path reads as an indented list.
 
 **Hosts**
 - **Host view.** A header with the name, IP, OS, access, stage and open threads.
-- **Services.** Nmap's guess is kept as history; a confirmed product and version, with a link to the proving log entry, takes precedence.
+- **Services.** Nmap's guess is kept as history; a confirmed product and version, with a link to the proving log entry, takes precedence. A service can be marked **exploited** (the one that got you in); it leads the folded summary and counts as exploited in report coverage.
+- **Privesc vectors.** Candidate routes to higher privileges, each untested, try, ruled out (with a reason) or **exploited**. The exploited one leads the list, and the mark survives the parser re-reading the output.
 - **Now.** The open steps of the current stage.
 - **Tabs:**
   - Story: this host's log;
@@ -131,6 +134,7 @@ The checklist (what they've done, what their options are next) and the host fact
   - full-screen browse with stage and category filters;
   - card links from checklist steps.
 - **Generators:** "Transfer a file".
+- **Payloads (`P`).** A right-edge drawer, with a full-screen workbench, that builds payloads for the host in view. Generators: Shell, Transfer, SQL injection, msfvenom, Encode and Upgrade. Each fits the payload to the host's OS, the paste context (bash prompt, injected command, URL parameter, PHP `system()`, cmd.exe, PowerShell, web shell, SQL string, Office macro), whether callbacks are blocked, filters and the tools on the target. Values Raven doesn't know are flagged in amber. Exam-sim rules (the Metasploit lock) apply.
 - **Placeholders** fill from the host, the engagement, settings and the Toolkit.
 - **⌘K search.** Commands, generators, cards and engagement items, with these keys:
   - ↵ copy;
@@ -140,7 +144,14 @@ The checklist (what they've done, what their options are next) and the host fact
   - ⌥H pick a host.
 
 **Report**
-- **Report.** A placeholder for now (phase 3). Log steps, findings, attempts, ruled-out items, cleanup and proofs are all recorded to feed it. Private content never reaches a report.
+- **Report.** The first target is the OSCP+ exam report (spec: `docs/superpowers/specs/2026-11-11-raven-reports-design.md`). Raven does the clerical work (gathering, ordering, numbering, formatting, checking against OffSec's rules) so the owner only writes explanations.
+  - A tab per page: Front matter, one per target, Closing, appendices and owner-written pages. Pages are drafted from log steps, findings, attempts, ruled-out items, cleanup and proofs, then edited in a rich-text editor (slash menu, tables, code).
+  - Beside the page: guide notes, and an evidence column of host-linked log entries not yet on the page (`E` toggles it on narrow windows).
+  - **To do:** plain-word checks per target, each with a fix and, where possible, a one-press action; false positives can be dismissed.
+  - **Report details:** the cover's facts.
+  - A report strip shows the file name, time until due, targets ready and the To do count.
+  - **Not yet built:** PDF export (the correctly named PDF and .7z in one action) comes in a later round.
+  - Private content never reaches the page, the evidence column or the PDF.
 
 **Settings and data**
 - **Settings:**
@@ -154,7 +165,7 @@ The checklist (what they've done, what their options are next) and the host fact
   - import from old Raven.
 - **Vault.** Local-only. The encrypted database is unlocked by a vault password, auto-locks, and makes no network calls at runtime except NIST NVD CVE lookups.
 - **Data safety.** Since 2026-10-25, stored data is real lab data. Changes need migrations and must take a backup first.
-- **Stack:** Tauri 2, React 19, TypeScript, SCSS and Vite.
+- **Stack:** Tauri 2 (Rust backend, SQL migrations), React 19, TypeScript and Vite. Styles are SCSS, one stylesheet per feature component folder; Tailwind was removed on 2026-11-20. UI primitives are Radix, the report editor is ProseKit, data goes through TanStack Query and Zustand, and icons are Phosphor.
 - **Visual audit.** `npm run audit:visual` runs the UI against synthetic stress data for layout, accessibility, keyboard and UX checks.
 
 ## Brand Commitments
@@ -168,7 +179,8 @@ The checklist (what they've done, what their options are next) and the host fact
 - Real engagement data lives only in the owner's encrypted database. Never fabricate it or copy it into the repo.
 - Synthetic stress fixtures are in `src/audit/fixtures.ts`.
 - The Field Manual vault is at `~/Documents/Field Manual`.
-- Design specs are in `docs/superpowers/specs/`, and the latest audit triage is in `docs/superpowers/audits/`.
+- Design specs are in `docs/superpowers/specs/`, implementation plans in `docs/superpowers/plans/`, open follow-ups in `docs/superpowers/followups/`, and the latest audit triage in `docs/superpowers/audits/`.
+- HTML mockups of the dashboard, engagement view, host view and the visual directions are in `docs/design/`.
 
 ## Product Principles
 
