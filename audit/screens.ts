@@ -184,6 +184,14 @@ export const SCREENS: Screen[] = [
     },
   },
   {
+    id: "finding-add-screenshot", path: `${E}/s/findings`, ready: "role=group[name='Add a screenshot']",
+    // Adding a screenshot from a finding's steps: the drop zone, the caption, the actions.
+    setup: async (page) => {
+      await page.getByRole("button", { name: /^Edit Domain compromise via Kerberoastable/ }).click();
+      await page.getByRole("region", { name: "Finding" }).getByRole("button", { name: "Add screenshot" }).click();
+    },
+  },
+  {
     id: "findings-list", path: `/e/${AUDIT_IDS.findingsListEngagement}/s/findings`, ready: "role=region[name='Findings']",
   },
   { id: "log", path: `${E}/s/log`, ready: "role=region[name='Log']" },

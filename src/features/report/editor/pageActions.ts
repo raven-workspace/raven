@@ -1,4 +1,3 @@
-import type { QueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
 import { createContext, useContext } from "react";
 import { Fragment, type Node as PMNode } from "prosekit/pm/model";
@@ -18,10 +17,7 @@ import {
   type ReportNode,
   type ReportTarget,
 } from "../../../engines/report";
-import { api } from "../../../lib/api";
 import type { LogEntry } from "../../../types/log";
-import { readImage, releaseImage } from "../../capture/imagePaste";
-import { logKey } from "../../log/queries";
 import { showsHint } from "./extension";
 
 /** What the page's menus and toolbar ask the page to do beyond ProseKit's own commands. */
@@ -59,30 +55,6 @@ export function hostAtPos(editor: Editor, pos: number, target: ReportTarget | un
     if (hostId && target.hostIds.includes(hostId)) found = hostId;
   });
   return found ?? target.hostIds[0];
-}
-
-const fileNameOf = (file: File) => file.name || `screenshot.${file.type.split("/")[1] ?? "png"}`;
-
-/**
- * Saves an image as a screenshot log entry for `hostIds` (the attachment storage the capture panel uses), and adds it
- * to the cached log at once so the page can render it before the refetch.
- */
-export async function saveScreenshot(qc: QueryClient, engagementId: string, hostIds: string[], file: File): Promise<LogEntry> {
-  const image = await readImage(file);
-  releaseImage(image);
-  const entry = await api.logCreate(engagementId, {
-    title: "Screenshot",
-    ranOn: null,
-    hostIds,
-    observations: null,
-    returnedNothing: false,
-    private: false,
-    content: { kind: "screenshot", attachmentId: "", caption: "", fileName: fileNameOf(file) },
-    attachment: { mime: image.mime, dataBase64: image.dataBase64 },
-  });
-  qc.setQueryData<LogEntry[]>(logKey(engagementId), (list) => (list ? [...list, entry] : list));
-  void qc.invalidateQueries({ queryKey: logKey(engagementId) });
-  return entry;
 }
 
 /** Where `block` (a node the block handle named at `pos`) stands now: there if it still is, else wherever it moved. */

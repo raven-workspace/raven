@@ -399,8 +399,9 @@ function portScan(data: ReportData, hostId: string, scan: LogEntry | undefined):
   return out;
 }
 
-/** A finding as one Additional findings bullet: "**<title>** (<Severity>): <description>", code runs as code blocks. */
-function additionalItem(f: Finding): ReportNode {
+/** A finding as one Additional findings bullet: "**<title>** (<Severity>): <description>", code runs as code blocks,
+ *  then its screenshots that go with the finding itself (`findingFigures`) as figures. */
+function additionalItem(f: Finding, figures: ReportNode[] = []): ReportNode {
   const lead = [bold(f.title), text(f.severity ? ` (${capitalize(f.severity)})` : "")];
   const blocks = writtenBlocks(splitAffected(f.description ?? "").explanation);
   const [first, ...rest] = blocks;
@@ -408,7 +409,7 @@ function additionalItem(f: Finding): ReportNode {
     first?.type === "paragraph"
       ? [para([...lead, text(": "), ...(first.content ?? [])]), ...rest]
       : [para(blocks.length > 0 ? [...lead, text(":")] : lead), ...blocks];
-  return listItem("bullet", content, `finding:${f.id}`);
+  return listItem("bullet", [...content, ...figures], `finding:${f.id}`);
 }
 
 /** A machine's heading: "<name> (<IP>)", "<name>" with no IP. Its number is the page's (`targetNumbers`). */
@@ -436,6 +437,21 @@ function attackPathBlocks(data: ReportData, hostIds: string[]): ReportNode[] {
   ];
 }
 
+/** A finding's screenshots that go with the finding itself, as figures: from the plan of each target holding one of
+ *  its machines (`target` first). */
+function findingFigures(data: ReportData, target: ReportTarget | null, meta: ReportMeta, f: Finding): ReportNode[] {
+  const shots = new Map<string, LogEntry>();
+  for (const hostId of f.hostIds) {
+    if (!data.hosts.some((h) => h.id === hostId)) continue;
+    for (const e of placementPlan(data, targetOf(data, target, meta, hostId)).findingFigures.get(f.id) ?? []) shots.set(e.id, e);
+  }
+  return [...shots.values()].map((e) => {
+    const step: Step = { blocks: [], shown: [] };
+    evidence(data, e, step);
+    return step.blocks;
+  }).flat();
+}
+
 /** One machine of the target, in the sample's order. */
 function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, hostId: string): ReportNode[] {
   const out: ReportNode[] = [factsHeading(data, hostId)];
@@ -450,7 +466,7 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
     const title = PHASE_TITLE[phase]!;
     return {
       heading: heading(2, f ? `${title}: ${f.title}` : title, `phase:${hostId}:${phase}${f ? `:${f.id}` : ""}`),
-      header: f ? findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)) : [],
+      header: f ? [...findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)), ...findingFigures(data, target, meta, f)] : [],
       steps: steps.map((st) => printStep(data, st)),
     };
   });
@@ -463,7 +479,7 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
   }
 
   const extra = machine?.additional ?? [];
-  if (extra.length > 0) out.push(heading(2, ADDITIONAL_HEADING, `phase:${hostId}:additional`), ...extra.map(additionalItem));
+  if (extra.length > 0) out.push(heading(2, ADDITIONAL_HEADING, `phase:${hostId}:additional`), ...extra.map((f) => additionalItem(f, findingFigures(data, target, meta, f))));
 
   const tested = testedBullets(data, hostId);
   if (tested.length > 0) out.push(heading(2, TESTED_HEADING, `phase:${hostId}:tested`), ...tested);
@@ -536,7 +552,7 @@ function sourceRun(source: string, data: ReportData, target: ReportTarget | null
     const file = kind === "file" ? data.findingFiles.find((ff) => ff.id === id) : undefined;
     const f = data.findings.find((x) => x.id === (findingMatch ? findingMatch[1] : file?.findingId));
     if (!f) return null;
-    return [...findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)), additionalItem(f)];
+    return [...findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)), additionalItem(f, findingFigures(data, target, meta, f))];
   }
   if (source === "msf") return [msfLine(data)];
   const tableKind = PLAIN_TABLE_KINDS.find((k) => source === `table:${k}`);
