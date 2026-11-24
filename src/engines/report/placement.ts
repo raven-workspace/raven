@@ -212,8 +212,9 @@ const shotText = (e: LogEntry) => `${e.content.kind === "screenshot" ? e.content
  *  - commands whose output (or command) holds the flag's value;
  *  - screenshots that name this flag (`proof`, `proof.txt`; or `flag` when this flag is the nearest one), or that were
  *    taken within `FLAG_WINDOW_MS` of it, name no other flag, and are nearer to it than to any other step of the host.
- *    A screenshot that proves something itself (a finding's step, an access grant) is that step's, never a companion,
- *    and a finding's screenshot goes with its finding only.
+ *    A screenshot that places itself (a finding's step, an access grant: `placingEntries`) is that step's, never a
+ *    companion; one that only proves (goal evidence, a confirmed service) can be. A finding's screenshot goes with its
+ *    finding only.
  * In time order, commands before screenshots. The checks read a flag's proof from these too.
  */
 export function proofCompanions(data: ReportData, hostId: string, flagEntry: LogEntry): LogEntry[] {
@@ -241,8 +242,11 @@ export function proofCompanions(data: ReportData, hostId: string, flagEntry: Log
     return among.every((e) => gap(e) > mine);
   };
   const other = flag.flagKind === "local" ? "proof" : "local";
+  // A screenshot that leads a step of its own is that step's; one that only proves (goal evidence, a confirmed service)
+  // can still go with the flag.
+  const placing = placingEntries(data, hostId);
   const shots = candidates.filter((e) => {
-    if (e.content.kind !== "screenshot" || proving.has(e.id)) return false;
+    if (e.content.kind !== "screenshot" || placing.has(e.id)) return false;
     const text = shotText(e);
     if (namesKind(text, flag.flagKind)) return nearest(e, flags.filter((f) => flagOf(f)?.flagKind === flag.flagKind));
     if (namesKind(text, other)) return false;
