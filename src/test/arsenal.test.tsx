@@ -112,6 +112,20 @@ const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n
 const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^Fill for host/ });
 
 describe("Arsenal", () => {
+  it("hosts that fail to load: the drawer's picker says so, and Retry brings the picker back (RAV-22)", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockRejectedValue(new Error("vault busy"));
+    mount("/e/e1");
+    await screen.findByRole("navigation", { name: "Engagement" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    expect(await d.findByText("Couldn't load hosts")).toBeInTheDocument();
+    m.hostsList.mockResolvedValue([H1]);
+    await user.click(d.getByRole("button", { name: "Retry" }));
+    expect(await d.findByRole("button", { name: /^Fill for host/ })).toBeInTheDocument();
+    expect(d.queryByText("Couldn't load hosts")).toBeNull();
+  });
+
   it("A opens the drawer filled for the host in view and Esc closes it", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");

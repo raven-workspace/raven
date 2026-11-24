@@ -132,6 +132,19 @@ async function openOn(path: string, settings?: { attackerIp?: string; listenerPo
 }
 
 describe("Payloads drawer", () => {
+  it("hosts that fail to load: the picker says so, and Retry brings it back (RAV-22)", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockRejectedValue(new Error("vault busy"));
+    mount("/e/e1");
+    await screen.findByRole("navigation", { name: "Engagement" });
+    await user.keyboard("p");
+    const d = within(await drawer());
+    expect(await d.findByText("Couldn't load hosts")).toBeInTheDocument();
+    m.hostsList.mockResolvedValue([IIS, BARE]);
+    await user.click(d.getByRole("button", { name: "Retry" }));
+    expect(await d.findByRole("button", { name: /^Fill for host/ })).toBeInTheDocument();
+  });
+
   it("P toggles the drawer and A closes it", async () => {
     const { user } = await openOn("/e/e1/h/h1");
     await user.keyboard("p");

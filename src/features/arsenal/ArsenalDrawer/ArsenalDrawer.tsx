@@ -322,7 +322,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         </div>
         {engagementId && (
           <div className="arsenal-drawer__chips">
-            <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} className="arsenal-drawer__chip" />
+            <HostChip ref={pickerRef} hosts={d.hosts} loadError={d.hostsError} value={host?.id ?? null} onChange={pickHost} className="arsenal-drawer__chip" />
             <CredChip
               ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
               onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="arsenal-drawer__chip"

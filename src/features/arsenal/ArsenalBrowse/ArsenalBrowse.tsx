@@ -302,7 +302,7 @@ export function ArsenalBrowse() {
           {engagementId ? (
             <>
               <HostChip
-                ref={hostRef} align="start" hosts={d.hosts} value={host?.id ?? null} className="arsenal-browse__host"
+                ref={hostRef} align="start" hosts={d.hosts} loadError={d.hostsError} value={host?.id ?? null} className="arsenal-browse__host"
                 onChange={(id) => {
                   setHostId(id);
                   setOverrides({});

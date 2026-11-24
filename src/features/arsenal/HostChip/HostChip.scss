@@ -10,4 +10,17 @@
   .host-chip--share {
     max-width: 40%;
   }
+
+  // Hosts failed to load: the warning, then Retry, on one line.
+  .host-load-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .host-load-error__text {
+    @include type(meta);
+    color: var(--warn);
+    white-space: nowrap;
+  }
 }

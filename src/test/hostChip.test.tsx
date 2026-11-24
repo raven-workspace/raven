@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { HostChip, isHostPickKey } from "../features/arsenal/HostChip/HostChip";
+import { HostChips } from "../features/capture/HostChips/HostChips";
 import type { HostChipHandle } from "../features/arsenal/HostChip/HostChip";
 import type { Host } from "../types/host";
 
@@ -126,3 +127,38 @@ describe("HostChip", () => {
     expect(isHostPickKey({ altKey: false, metaKey: false, ctrlKey: false, code: "KeyH", key: "h" })).toBe(false);
   });
 });
+
+describe("host pickers when hosts fail to load (RAV-22)", () => {
+  it("HostChip says Couldn't load hosts with Retry, offers no list, and ⌥H's open() retries", async () => {
+    const user = userEvent.setup();
+    const retry = vi.fn();
+    const ref = createRef<HostChipHandle>();
+    render(<HostChip ref={ref} hosts={[]} value={null} onChange={vi.fn()} loadError={{ retry }} />);
+    expect(screen.getByText("Couldn't load hosts")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Fill for host/ })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    act(() => ref.current!.open());
+    expect(retry).toHaveBeenCalledTimes(2);
+    act(() => ref.current!.focus());
+    expect(screen.getByRole("button", { name: "Retry" })).toHaveFocus();
+  });
+
+  it("with no error and no hosts, the chip still reads No host", () => {
+    render(<HostChip hosts={[]} value={null} onChange={vi.fn()} loadError={null} />);
+    expect(screen.getByRole("button", { name: "Fill for host" })).toHaveTextContent(/^No host$/);
+    expect(screen.queryByText("Couldn't load hosts")).toBeNull();
+  });
+
+  it("Capture's HostChips says Couldn't load hosts with Retry instead of No host", async () => {
+    const user = userEvent.setup();
+    const retry = vi.fn();
+    const { rerender } = render(<HostChips hosts={[]} linked={[]} onLinked={vi.fn()} loadError={{ retry }} />);
+    expect(screen.getByText("Couldn't load hosts")).toBeInTheDocument();
+    expect(screen.queryByText("No host")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+    rerender(<HostChips hosts={[]} linked={[]} onLinked={vi.fn()} />);
+    expect(screen.getByText("No host")).toBeInTheDocument();
+  });
+});
+

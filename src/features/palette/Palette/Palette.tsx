@@ -290,7 +290,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         {engagementId && (
           <div className="palette__chips">
             <HostChip
-              ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} align="start" className="palette__chip"
+              ref={pickerRef} hosts={d.hosts} loadError={d.hostsError} value={host?.id ?? null} onChange={pickHost} align="start" className="palette__chip"
               {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})}
             />
             <CredChip

@@ -30,7 +30,8 @@ const NO_MACHINES: string[] = [];
 export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; pasteRef: RefObject<HTMLElement | null> }) {
   const id = engagement.id;
   const qc = useQueryClient();
-  const listed = useHosts(id).data ?? NO_HOSTS;
+  const hostsQ = useHosts(id);
+  const listed = hostsQ.data ?? NO_HOSTS;
   const machines = useSettings().data?.machines ?? NO_MACHINES;
   const pd = useCaptureStore((s) => s.drafts[id]) ?? EMPTY_DRAFT;
   // Hosts a failed save already created count as known, even before the list refetches.
@@ -228,7 +229,10 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           captionRef={captionRef}
         />
 
-        <HostChips hosts={hosts} linked={r.edits.hostIds} onLinked={(hostIds) => set({ hostIds })} />
+        <HostChips
+          hosts={hosts} linked={r.edits.hostIds} onLinked={(hostIds) => set({ hostIds })}
+          loadError={hostsQ.isError ? { retry: () => void hostsQ.refetch() } : null}
+        />
         {r.servicesLine && <p className="capture-form__services">{r.servicesLine}</p>}
         {r.credentialsLine && (
           // The only cue that saving writes credential rows: foreground text with a key, unlike the services line.

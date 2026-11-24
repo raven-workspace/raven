@@ -1,16 +1,21 @@
 import type { Host } from "../../../types/host";
 import { X } from "@phosphor-icons/react";
 import { Chip, ChipSet, IconButton, Select } from "../../../ui/index";
+import { HostsLoadError } from "../../arsenal/HostChip/HostChip";
+import type { HostsError } from "../../palette/fillData";
 import "./HostChips.scss";
 
 export interface HostChipsProps {
   hosts: Host[];
   linked: string[];
   onLinked: (ids: string[]) => void;
+  /** The hosts failed to load: say so and offer a retry, not "No host". */
+  loadError?: HostsError | null;
 }
 
 /** Linked hosts as removable chips, and a picker. */
-export function HostChips({ hosts, linked, onLinked }: HostChipsProps) {
+export function HostChips({ hosts, linked, onLinked, loadError }: HostChipsProps) {
+  if (loadError) return <HostsLoadError error={loadError} className="host-chips" />;
   const byId = new Map(hosts.map((h) => [h.id, h]));
   const free = hosts.filter((h) => !linked.includes(h.id));
   return (
