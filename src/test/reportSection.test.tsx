@@ -645,6 +645,33 @@ describe("Report view", () => {
     await waitFor(() => expect(screen.queryByText(/Couldn't build this page's draft/)).not.toBeInTheDocument());
   });
 
+  it("a page whose draft fails to build stops no other page; its Retry clears only its own failure", async () => {
+    const real = api.reportSectionUpsert;
+    let failing: string | null = null;
+    vi.spyOn(api, "reportSectionUpsert").mockImplementation(async (rid, input) => {
+      // The first page to build its draft fails, every time, until Retry.
+      if (input.draftBuiltAt !== null && (failing ??= input.targetKey) === input.targetKey) throw new Error("db busy");
+      return real(rid, input);
+    });
+    mount();
+    await ready();
+    expect(await screen.findByText(/Couldn't build this page's draft/)).toBeInTheDocument();
+    const first = targetRows().find((t) => t.getAttribute("aria-selected") === "true")!;
+    const other = targetRows().find((t) => t !== first)!;
+    fireEvent.click(other);
+    await waitFor(() => expect(other).toHaveAttribute("aria-selected", "true"));
+    // The other page builds: its draft is on the page, and it says nothing about the first page's failure.
+    await waitFor(() => expect(document.querySelector(".report-page .ProseMirror")).not.toBeNull());
+    expect(screen.queryByText(/Couldn't build this page's draft/)).toBeNull();
+    // Back on the first, its failure still shows; Retry builds it.
+    fireEvent.click(first);
+    expect(await screen.findByText(/Couldn't build this page's draft/)).toBeInTheDocument();
+    failing = "none";
+    fireEvent.click(screen.getByRole("button", { name: "Retry building the draft" }));
+    await waitFor(() => expect(screen.queryByText(/Couldn't build this page's draft/)).not.toBeInTheDocument());
+    await waitFor(() => expect(document.querySelector(".report-page .ProseMirror")).not.toBeNull());
+  });
+
   it("shows a placeholder for client engagements", async () => {
     mount("e-old");
     expect(await screen.findByText("Client reports come after the exam")).toBeInTheDocument();
