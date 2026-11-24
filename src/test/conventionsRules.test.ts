@@ -183,6 +183,25 @@ describe("joined-strings in engines (narrow)", () => {
     expect(breaks("joined-strings", E, "// `${a} — ${b}` was the old title\nconst a = 1;")).toBe(false);
     expect(breaks("joined-strings", E, "const w = `${n} hosts detected — primary target ports mapped.`;")).toBe(false);
   });
+  it("flags a separator string concatenated with + or passed to .join() (RAV-23)", () => {
+    expect(breaks("joined-strings", E, 'const t = a + " — " + b;')).toBe(true);
+    expect(breaks("joined-strings", E, 'const t = " · " + x;')).toBe(true);
+    expect(breaks("joined-strings", E, "const t = x + ' → ';")).toBe(true);
+    expect(breaks("joined-strings", E, 'const t = parts.join(" · ");')).toBe(true);
+    expect(breaks("joined-strings", E, 'const t = [a, b].join(" → ");')).toBe(true);
+    expect(breaks("joined-strings", E, 'const t = a + " \\u2014 " + b;')).toBe(true);
+    // Only a separator that is the argument itself: a computed one is the caller's to check.
+    expect(breaks("joined-strings", E, 'const t = parts.join(sep(" — "));')).toBe(false);
+  });
+  it("leaves a prose string with a separator alone, and the same in a comment (RAV-23)", () => {
+    expect(breaks("joined-strings", E, 'const p = "Run it — then check";')).toBe(false);
+    expect(breaks("joined-strings", E, 'const p = { text: "Run it — then check", n: 1 + 2 };')).toBe(false);
+    expect(breaks("joined-strings", E, '// a + " — " + b was the old title\nconst a = 1;')).toBe(false);
+    expect(breaks("joined-strings", E, '/* parts.join(" · ") */ const a = 1;')).toBe(false);
+    expect(breaks("joined-strings", E, 'const t = parts.join(", ");')).toBe(false);
+    // A quote inside a template literal is not a string's start.
+    expect(breaks("joined-strings", E, 'const t = `it\'s ${a}` + " done";')).toBe(false);
+  });
   it("applies no markup rules to engines", () => {
     for (const r of ["tiny-type", "feature-flex", "hand-hint", "esc-close", "unknown-color", "off-scale-spacing"] as const)
       expect(breaks(r, E, 'const c = ".a { font-size: 9px; display: flex; color: #fff; padding: 6px; }"; <div><Kbd>a</Kbd><Kbd>esc</Kbd></div>'), r).toBe(false);
