@@ -5,7 +5,7 @@ import type { CardMeta } from "../../../engines/library/store";
 import type { LibraryCommand } from "../../../engines/library/types";
 import type { ManualNote } from "../../../engines/manual/index";
 import { resolveLink } from "../../../engines/manual/links";
-import { isInlineCommand, lookupColumns, shortTitle } from "../../../engines/manual/lookup";
+import { isInlineCommand, lookupColumns, plain, shortTitle } from "../../../engines/manual/lookup";
 import { cx } from "../../../lib/cx";
 import { parseMarkdown, type Block, type Inline } from "../../../engines/manual/markdown";
 import { maskPlaceholders, matchRanges, matchRegex } from "../../../engines/manual/search";
@@ -183,10 +183,6 @@ const firstLine = (text: string) => {
 
 const WINDOWS_LANGS = new Set(["cmd", "bat", "batch", "powershell", "ps1", "ps", "pwsh"]);
 const LINUX_LANGS = new Set(["bash", "sh", "zsh", "shell"]);
-
-/** Inline Markdown as plain text (a heading's words, markers gone). */
-const plain = (parts: Inline[]): string =>
-  parts.map((p) => ("text" in p ? p.text : "code" in p ? p.code : "strong" in p ? plain(p.strong) : "em" in p ? plain(p.em) : p.link.label)).join("");
 
 /**
  * A code block as a library command. The fence title is where it runs, as on a card (`parseCard`): `Kali…` is the

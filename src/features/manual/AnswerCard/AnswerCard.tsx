@@ -2,7 +2,7 @@ import { XIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { getCards, useLibraryVersion } from "../../../engines/library/store";
 import type { LibraryCommand } from "../../../engines/library/types";
-import type { LookupRow } from "../../../engines/manual/lookup";
+import { plain, type LookupRow } from "../../../engines/manual/lookup";
 import { resolveLink } from "../../../engines/manual/links";
 import type { Inline } from "../../../engines/manual/markdown";
 import { CommandBlock, IconButton } from "../../../ui/index";
@@ -19,10 +19,6 @@ import "./AnswerCard.scss";
 const SHOWN = 3;
 /** A ↓ ↑ stop inside the card: a command row or "+ n more". */
 const STOP = "[data-card-stop]";
-
-/** An inline value's plain text. */
-const plain = (parts: Inline[]): string =>
-  parts.map((p) => ("text" in p ? p.text : "code" in p ? p.code : "strong" in p ? plain(p.strong) : "em" in p ? plain(p.em) : p.link.label)).join("");
 
 /**
  * What the action cell says besides its commands (they have rows of their own): links and single-token code stay, the
