@@ -7,7 +7,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { DRAFT_LAYOUT, sourceOf, type ReportNode } from "../engines/report";
-import { ReportSectionView } from "../features/report/ReportSection/ReportSection";
+import { RAIL_OPEN_KEY, ReportSectionView } from "../features/report/ReportSection/ReportSection";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
@@ -33,6 +33,7 @@ vi.mock("../features/report/editor/ReportEditor/ReportEditor", async (importOrig
 });
 
 afterEach(() => {
+  localStorage.removeItem(RAIL_OPEN_KEY);
   vi.restoreAllMocks();
   editors.length = 0;
   resetAuditState();
@@ -327,6 +328,46 @@ describe("Evidence rail: the log column", () => {
     fireEvent.keyDown(window, { code: "Digit3", altKey: true });
     await screen.findByRole("tab", { name: /Unused/ });
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("complementary", { name: "Evidence" })));
+  });
+
+  it("remembers whether the column was left open, for the next report; a drawer still starts closed (RAV-32)", async () => {
+    await seed();
+    let width = 1100;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const w = this.getAttribute("aria-label") === "Report" ? width : 0;
+      return { width: w, height: 0, top: 0, left: 0, right: w, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
+    const column = () => screen.queryByRole("complementary", { name: "Evidence" });
+    const visit = async () => {
+      editors.length = 0;
+      const view = mount();
+      await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+      return view;
+    };
+
+    // Docked: closed by default; opened, the next report opens with it open.
+    let view = await visit();
+    expect(column()).toBeNull();
+    fireEvent.keyDown(window, { key: "e" });
+    expect(await screen.findByRole("complementary", { name: "Evidence" })).toBeInTheDocument();
+    view.unmount();
+    view = await visit();
+    expect(column()).not.toBeNull();
+    // Closed, the next report opens with it closed.
+    fireEvent.click(screen.getByRole("button", { name: "Evidence" }));
+    await waitFor(() => expect(column()).toBeNull());
+    view.unmount();
+    view = await visit();
+    expect(column()).toBeNull();
+    fireEvent.keyDown(window, { key: "e" });
+    await screen.findByRole("complementary", { name: "Evidence" });
+    view.unmount();
+
+    // A drawer would cover the page: left open, it still starts closed.
+    width = 900;
+    view = await visit();
+    expect(column()).toBeNull();
+    view.unmount();
   });
 
   it("Esc meant for a field, a menu, a list or a popover leaves the drawer open", async () => {

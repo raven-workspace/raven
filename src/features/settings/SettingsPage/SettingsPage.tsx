@@ -215,7 +215,7 @@ function ReportDetails({
           onBlur={() => methodology.trim() !== settings.reportMethodology && onSave({ reportMethodology: methodology.trim() })}
         />
       </Field>
-      <p className="settings-page__note">Copied into each new report. Edit them per report afterwards.</p>
+      <p className="settings-page__note">Raven copies these into each new report. Changing them here doesn't change reports you've already started.</p>
       <div className="settings-page__aside">
         <Button size="sm" disabled={(settings.reportGuidesHidden ?? []).length === 0} onClick={() => onSave({ reportGuidesHidden: [] })}>
           Show guide notes again

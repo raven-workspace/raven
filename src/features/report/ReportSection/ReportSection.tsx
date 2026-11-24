@@ -115,6 +115,9 @@ const RAIL_BREAKPOINT = 1200;
 /** From this pane width (and under 1200) the column, when open, docks beside the page and the paper narrows: 320px of
  *  column still leaves the paper about 560px of text. Narrower, the column is a drawer over the page. */
 const DOCK_BREAKPOINT = 1000;
+/** Whether the evidence column was left open: one per-device state for every report ("1" or "0"). */
+export const RAIL_OPEN_KEY = "raven.report.evidenceOpen";
+
 /** Where the evidence column sits: always beside the page, beside it while open, or a drawer over it while open. */
 type RailMode = "column" | "dock" | "drawer";
 const railModeAt = (width: number): RailMode =>
@@ -510,9 +513,13 @@ function ReportBody({
     const state: TabItem["state"] = !started(e.target!) ? "not-started" : fails > 0 ? "todo" : "ready";
     tabs.push({ id: e.section.id, label: `${i + 1} ${e.item.label}`, state, todo: fails, reorderable: e.item.reorderable });
   });
+  // A free page's tab leads with the section number it prints under ("§6 Lessons learned"), from the same `numbers` as
+  // the page, so the two agree after any reorder. The § keeps it from reading as the next target: target tabs count
+  // the targets (1–6), which print as 4.1, 4.2 and so on.
   for (const e of entries.filter((x) => x.item.group === "pages")) {
     const title = pageTitleOf(e.section);
-    tabs.push({ id: e.section.id, label: title, state: "none", detail: `Section ${numbers.get(e.section.id)?.number ?? ""}`, page: true, title, reorderable: true });
+    const n = numbers.get(e.section.id)?.number;
+    tabs.push({ id: e.section.id, label: n ? `§${n} ${title}` : title, state: "none", page: true, title, reorderable: true });
   }
   if (closingParts.length > 0) tabs.push({ id: CLOSING_TAB, label: "Closing", state: "none" });
   for (const e of entries.filter((x) => x.item.group === "appendix-pages")) {
@@ -678,7 +685,11 @@ function ReportBody({
   const railMode = railModeAt(paneWidth);
   // Under 1200px the column is a toggle (the strip's Evidence button, E); docked or a drawer is the width's call.
   const narrow = railMode !== "column";
-  const [railOpen, setRailOpen] = useState(false);
+  // Open or closed as last left (one state for every report), until toggled on this visit. A drawer would cover the
+  // page, so it starts closed whatever was left.
+  const [railLeftOpen] = useState(() => localStorage.getItem(RAIL_OPEN_KEY) === "1");
+  const [railChoice, setRailOpen] = useState<boolean | null>(null);
+  const railOpen = railChoice ?? (railMode !== "drawer" && railLeftOpen);
   const [railFocus, setRailFocus] = useState(0);
   // The column takes its own grid track (the paper narrows beside it): always when wide, while open when docked.
   const railBeside = railMode === "column" || (railMode === "dock" && railOpen);
@@ -690,6 +701,8 @@ function ReportBody({
       useArsenalStore.getState().close();
       usePayloadsStore.getState().close();
     }
+    // Your own open or close is remembered; another drawer sliding this one out is not.
+    localStorage.setItem(RAIL_OPEN_KEY, open ? "1" : "0");
     setRailOpen(open);
   };
   useEffect(() => {
@@ -1138,7 +1151,7 @@ function ReportBody({
               </div>
             </div>
             {railMode === "drawer" ? (
-              <EvidenceDrawer open={railOpen} focusKey={railFocus} onClose={() => setRailOpen(false)}>
+              <EvidenceDrawer open={railOpen} focusKey={railFocus} onClose={() => toggleRail(false)}>
                 {rail}
               </EvidenceDrawer>
             ) : railBeside ? (

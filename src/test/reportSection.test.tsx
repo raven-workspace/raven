@@ -94,6 +94,8 @@ const targetRows = () => tabEls().filter((t) => /^\d+ /.test(labelOf(t)));
 const targetLabels = () => targetRows().map(labelOf);
 const tab = (label: string) => tabEls().find((t) => labelOf(t) === label)!;
 const rowFor = (name: string) => targetRows().find((t) => labelOf(t).replace(/^\d+ /, "") === name)!;
+/** A free page's tab by its title, without the "§6 " its label leads with. */
+const pageTab = (title: string) => tabEls().find((t) => labelOf(t).replace(/^§\d+ /, "") === title)!;
 /** Opens a part of Front matter or Closing: the tab, then the part in its segmented row. */
 const openPart = (group: "Front matter" | "Closing", part: RegExp) => {
   fireEvent.click(tab(group));
@@ -1331,7 +1333,7 @@ describe("Report view: the result", () => {
       const save = vi.spyOn(api, "reportSectionSave");
       mount();
       await ready();
-      fireEvent.click(tab("Owner notes"));
+      fireEvent.click(pageTab("Owner notes"));
       await waitFor(() => expect(paper().textContent).toContain("The sudo rule is the way to root."));
       expect(paper().textContent).toContain("Every tool ran from the attacking machine unless the step says otherwise.");
       // The flattened page is saved once, the page as stored kept in the meta.
@@ -1366,7 +1368,7 @@ describe("Report view: the result", () => {
         const save = vi.spyOn(api, "reportSectionSave");
         mount();
         await ready();
-        fireEvent.click(tab("Broken notes"));
+        fireEvent.click(pageTab("Broken notes"));
         expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't convert this page to the new format");
         expect(screen.getByRole("alert")).toHaveTextContent("Invalid content for node list");
         expect(document.querySelector(".ProseMirror")).toBeNull();
@@ -1399,7 +1401,7 @@ describe("Report view: the result", () => {
       const save = vi.spyOn(api, "reportSectionSave");
       mount();
       await ready();
-      fireEvent.click(tab("Private notes"));
+      fireEvent.click(pageTab("Private notes"));
       await waitFor(() => expect(paper().textContent).toContain("Owner intro"));
       await waitFor(() => expect(save.mock.calls.some(([id]) => id === page.id)).toBe(true));
       const [, doc] = save.mock.calls.filter(([id]) => id === page.id)[0] as unknown as [string, ReportNode];
@@ -1541,8 +1543,9 @@ describe("Report view: appendix pages and free pages (+ Page)", () => {
     mount();
     await ready();
     await addPage("Free page");
-    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "Untitled page", "Closing"]));
-    expect(detailOf(tab("Untitled page"))).toBe("Section 6");
+    // The tab leads with the section number the page prints under, marked § (RAV-32), and its name says it.
+    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "§6 Untitled page", "Closing"]));
+    expect(tab("§6 Untitled page")).toHaveAccessibleName(/^§6 Untitled page/);
     await waitFor(() => expect(h1()).toBe("6Untitled page"));
   });
 
@@ -1561,16 +1564,37 @@ describe("Report view: appendix pages and free pages (+ Page)", () => {
     expect(document.activeElement).toBe(input);
     fireEvent.change(input, { target: { value: "Port knocking" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(tabLabels()).toContain("Port knocking"));
+    await waitFor(() => expect(tabLabels()).toContain("§6 Port knocking"));
     await waitFor(() => expect(h1()).toBe("6Port knocking"));
-    expect(document.activeElement).toBe(tab("Port knocking"));
+    expect(document.activeElement).toBe(tab("§6 Port knocking"));
     // F2 on the focused tab renames too; Esc keeps the title.
-    fireEvent.keyDown(tab("Port knocking"), { key: "F2" });
+    fireEvent.keyDown(tab("§6 Port knocking"), { key: "F2" });
     const again = screen.getByRole("textbox", { name: "Page title" });
     fireEvent.change(again, { target: { value: "Something else" } });
     fireEvent.keyDown(again, { key: "Escape" });
-    expect(tabLabels()).toContain("Port knocking");
+    expect(tabLabels()).toContain("§6 Port knocking");
     await waitFor(async () => expect((await pages())[0].meta).toMatchObject({ title: "Port knocking", placement: "body" }));
+  });
+
+  it("⌥→ on a free page's tab moves it later: its tab number and printed number move together (RAV-32)", async () => {
+    mount();
+    await ready();
+    await addPage("Free page");
+    await waitFor(() => expect(tabLabels()).toContain("§6 Untitled page"));
+    // Tell them apart: rename the first, then add a second.
+    fireEvent.keyDown(tab("§6 Untitled page"), { key: "F2" });
+    const input = screen.getByRole("textbox", { name: "Page title" });
+    fireEvent.change(input, { target: { value: "Alpha" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(tabLabels()).toContain("§6 Alpha"));
+    await addPage("Free page");
+    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "§6 Alpha", "§7 Untitled page", "Closing"]));
+    fireEvent.keyDown(tab("§6 Alpha"), { key: "ArrowRight", altKey: true });
+    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "§6 Untitled page", "§7 Alpha", "Closing"]));
+    fireEvent.click(tab("§7 Alpha"));
+    await waitFor(() => expect(h1()).toBe("7Alpha"));
+    fireEvent.click(tab("§6 Untitled page"));
+    await waitFor(() => expect(h1()).toBe("6Untitled page"));
   });
 
   it("⌥→ on an appendix page's tab moves it later: the letters follow; ⌫ on the tab asks to delete", async () => {
@@ -1650,7 +1674,7 @@ describe("Report view: undoing a page delete", () => {
     await waitFor(() => expect(tabLabels()).not.toContain("Appendix B"));
     // A page added meanwhile takes the deleted page's position.
     await addPage("Free page");
-    await waitFor(() => expect(tabLabels()).toContain("Untitled page"));
+    await waitFor(() => expect(tabLabels().some((l) => /^§\d+ Untitled page$/.test(l))).toBe(true));
 
     const notice = (await screen.findAllByRole("status")).find((n) => n.textContent?.includes("Deleted Untitled appendix"))!;
     fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));

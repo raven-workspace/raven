@@ -361,6 +361,17 @@ describe("Arsenal", () => {
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
 
+  it("with no host, the drawer's ⌘↵ hint reads copy and log, no host (RAV-32)", async () => {
+    const user = userEvent.setup();
+    mount("/");
+    await screen.findByText("Lab A");
+    await user.keyboard("a");
+    await drawer();
+    const hints = within(screen.getByLabelText("Arsenal shortcuts"));
+    expect(hints.getByText("copy and log, no host")).toBeInTheDocument();
+    expect(hints.queryByText("log (no host)")).toBeNull();
+  });
+
   it("A opens a hostless drawer on the dashboard and is ignored while typing", async () => {
     const user = userEvent.setup();
     mount("/");
