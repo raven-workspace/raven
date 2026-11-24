@@ -31,14 +31,58 @@ const isEngine = (file: string) => file.startsWith("src/engines/");
 const isStyle = (file: string) => file.endsWith(".scss");
 const STYLE_RULES: RuleId[] = ["tiny-type", "feature-flex", "unknown-color", "off-scale-spacing"];
 
+/** A spaced separator in a string's text: ` · `, ` — `, ` → `, or their \u escapes. */
+const SPACED_SEPARATOR = /\s(·|—|→|\\u00B7|\\u2014|\\u2192)\s/i;
+
 /**
- * Engines hold prose (field manual, playbook text) where a dash or arrow is punctuation. Only a separator touching a
- * `${…}` interpolation in a template literal is a joined structured value (`${host} — no foothold`).
+ * The single- and double-quoted string literals in `code`, each with where it starts and ends. Template literals are
+ * skipped whole (their `${…}` included), so a quote inside one is never read as a string; a string stops at its line's
+ * end, so a stray quote (in a regex) costs at most that line.
+ */
+function quotedLiterals(code: string): { start: number; end: number; text: string }[] {
+  const out: { start: number; end: number; text: string }[] = [];
+  let i = 0;
+  while (i < code.length) {
+    const c = code[i];
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < code.length && code[j] !== c && code[j] !== "\n") j += code[j] === "\\" ? 2 : 1;
+      out.push({ start: i, end: j + 1, text: code.slice(i + 1, j) });
+      i = j + 1;
+    } else if (c === "`") {
+      let j = i + 1;
+      let depth = 0;
+      while (j < code.length && !(depth === 0 && code[j] === "`")) {
+        if (code[j] === "\\" || (code[j] === "$" && code[j + 1] === "{")) {
+          if (code[j] === "$") depth++;
+          j++;
+        } else if (depth > 0 && code[j] === "}") depth--;
+        j++;
+      }
+      i = j + 1;
+    } else i++;
+  }
+  return out;
+}
+
+/**
+ * Engines hold prose (field manual, playbook text) where a dash or arrow is punctuation. A separator is a joined
+ * structured value only when it glues values together: touching a `${…}` interpolation in a template literal
+ * (`${host} — no foothold`), or in a string concatenated with `+` (`a + " — " + b`) or passed to `.join(…)`
+ * (`parts.join(" · ")`).
  */
 function engineJoined(src: string): boolean {
   const code = stripComments(src);
   for (const m of code.matchAll(/`(?:[^`\\]|\\.)*`/g)) {
     if (/\}\s+(·|—|→)\s|\s(·|—|→)\s+\$\{/.test(m[0])) return true;
+  }
+  for (const lit of quotedLiterals(code)) {
+    if (!SPACED_SEPARATOR.test(lit.text)) continue;
+    // What touches the string on either side (a short window: enough for `.join(` and a `+`).
+    const before = code.slice(Math.max(0, lit.start - 40), lit.start).trimEnd();
+    const after = code.slice(lit.end, lit.end + 40).trimStart();
+    if (before.endsWith("+") || after.startsWith("+")) return true;
+    if (/\.join\(\s*$/.test(before) && after.startsWith(")")) return true;
   }
   return false;
 }
