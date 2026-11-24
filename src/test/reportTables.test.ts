@@ -151,6 +151,20 @@ describe("resultLine", () => {
     expect(resultLine(twoRoots, standalone("h1"), "h1", {}).access).toBe("shell as `ronan`, then root");
   });
 
+  it("names each account that got local administrator, once", () => {
+    const d = lab();
+    d.usernames = [{ id: "a", username: "a" }, { id: "x", username: "x" }, { id: "y", username: "y" }] as never;
+    d.grants = [grant("h2", "user", "a", "g1", 10), grant("h2", "admin", "x", "g2", 20), grant("h2", "admin", "y", "g3", 30)];
+    expect(resultLine(d, standalone("h2"), "h2", {}).access).toBe("shell as `a`, then local administrator as `x`, then local administrator as `y`");
+
+    // The same account again is no new step: one clause.
+    d.grants = [grant("h2", "user", "a", "g1", 10), grant("h2", "admin", "x", "g2", 20), grant("h2", "admin", "x", "g3", 30)];
+    expect(resultLine(d, standalone("h2"), "h2", {}).access).toBe("shell as `a`, then local administrator as `x`");
+    // Nor is the account the first grant already named as local administrator.
+    d.grants = [grant("h2", "admin", "x", "g1", 10), grant("h2", "admin", "x", "g2", 20), grant("h2", "admin", "y", "g3", 30)];
+    expect(resultLine(d, standalone("h2"), "h2", {}).access).toBe("shell as `x` (local administrator), then local administrator as `y`");
+  });
+
   it("is empty with no grants and omits a missing expected flag", () => {
     const d = lab();
     d.grants = [];
