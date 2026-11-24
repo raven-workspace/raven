@@ -931,6 +931,37 @@ describe("Manual: focus follows intent, one Tab stop, hints", () => {
     expect(where()).toBe(`/manual/${CARDY.id}`);
   });
 
+  it("a card opened from a note, then another from elsewhere, steps back on Esc instead of returning to the note (RAV-21)", async () => {
+    const user = userEvent.setup();
+    m.fieldManualLoad.mockResolvedValue({
+      ...snapshot([...NOTES, CARDY]),
+      cards: [{ id: "some-card", title: "Some Card", stage: "initial-foothold", category: "Active-Directory", os: "windows", file: "02-Cards/AD/Some-Card.md" }],
+    } as FieldManualSnapshot);
+    mount([`/manual/${CARDY.id}`]);
+    await openNote("Cc Card");
+    await user.click(screen.getByRole("button", { name: "Some Card" }));
+    expect(useArsenalStore.getState().fromManual).toBe(true);
+    // As ⌘K, the Arsenal list or a goal row opens a card.
+    act(() => useArsenalStore.getState().openCard("other-card"));
+    expect(useArsenalStore.getState().fromManual).toBe(false);
+    press("Escape");
+    expect(useArsenalStore.getState()).toMatchObject({ open: true, cardId: null });
+  });
+
+  it("a link inside a card opened from a note keeps the way back to the note (RAV-21)", () => {
+    act(() => useArsenalStore.getState().openCard("some-card", undefined, { from: "manual" }));
+    act(() => useArsenalStore.getState().openCard("linked-card", undefined, { from: "link" }));
+    expect(useArsenalStore.getState()).toMatchObject({ open: true, cardId: "linked-card", fromManual: true });
+    // A link in a drawer that was not opened from the Manual stays that way, and a closed drawer starts over.
+    act(() => useArsenalStore.getState().openCard("plain-card"));
+    act(() => useArsenalStore.getState().openCard("linked-card", undefined, { from: "link" }));
+    expect(useArsenalStore.getState().fromManual).toBe(false);
+    act(() => useArsenalStore.getState().openCard("some-card", undefined, { from: "manual" }));
+    act(() => useArsenalStore.getState().close());
+    act(() => useArsenalStore.getState().openCard("linked-card", undefined, { from: "link" }));
+    expect(useArsenalStore.getState().fromManual).toBe(false);
+  });
+
   it("a card opened from elsewhere still steps back inside the drawer first", async () => {
     mount(["/manual"]);
     await openNote("Bb Basics");
