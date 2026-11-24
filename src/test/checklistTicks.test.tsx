@@ -8,11 +8,12 @@ import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { applicableGoals } from "../engines/checklist";
 import { useChecklistMutations } from "../features/checklist/queries";
-import { autoTickFromLog, loadTickContext, resetAutoTicks, resyncBoards, syncEntryTicks, tickFromLog } from "../features/checklist/ticks";
+import { autoTickFromLog, loadTickContext, resetAutoTicks, resyncBoards, syncBoards, syncEntryTicks, tickFromLog } from "../features/checklist/ticks";
 import { useServiceMutations } from "../features/services/queries";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
+import type { AccessGrant } from "../types/credentials";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { LogEntry, LogEntryInput } from "../types/log";
@@ -625,6 +626,40 @@ describe("ticks.ts", () => {
     m.checklistPut.mockClear();
     expect(await tickFromLog("e1", await loadTickContext("e1"))).toEqual({ updated: 0, message: "Updated 0 goals" });
     expect(m.checklistPut).not.toHaveBeenCalled();
+  });
+});
+
+describe("board sync from access grants (RAV-33)", () => {
+  const admin: AccessGrant = { id: "g1", engagementId: "e1", usernameId: "u1", hostId: "h2", level: "admin", via: "winrm", logEntryId: null, at: 1 };
+  const footholdTicked = () => [item({ ownerId: "h2", goalId: "h-foot-listener", status: "done" })];
+
+  it("an admin grant moves a host in Initial foothold to Post-exploitation with no checklist change", async () => {
+    store = footholdTicked();
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "initial-foothold", boardDerived: "initial-foothold" } : h));
+    m.accessGrantsList.mockResolvedValue([admin]);
+    await syncBoards("e1", await loadTickContext("e1"));
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "post-exploitation");
+    expect(m.checklistPut).not.toHaveBeenCalled();
+  });
+
+  it("removing the only elevated grant falls back to the checklist's column", async () => {
+    store = footholdTicked();
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "post-exploitation", boardDerived: "post-exploitation" } : h));
+    m.accessGrantsList.mockResolvedValue([{ ...admin, level: "user" }]);
+    await syncBoards("e1", await loadTickContext("e1"));
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "initial-foothold");
+  });
+
+  it("a card placed by hand stays until the grant changes the derived column", async () => {
+    store = footholdTicked();
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "vulnerability-detection", boardManual: true, boardDerived: "initial-foothold" } : h));
+    m.accessGrantsList.mockResolvedValue([]);
+    await syncBoards("e1", await loadTickContext("e1"));
+    expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h2", expect.anything());
+
+    m.accessGrantsList.mockResolvedValue([admin]);
+    await syncBoards("e1", await loadTickContext("e1"));
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "post-exploitation");
   });
 });
 

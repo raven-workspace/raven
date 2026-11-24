@@ -3,12 +3,14 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resyncBoards } from "../features/checklist/ticks";
+import { useAccessGrantMutations } from "../features/credentials/queries";
 import { useHostMutations } from "../features/hosts/queries";
 import { useLogMutations } from "../features/log/queries";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { useServiceMutations } from "../features/services/queries";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
+import type { AccessGrant } from "../types/credentials";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { LogEntry, LogEntryInput } from "../types/log";
@@ -134,6 +136,21 @@ describe("cache invalidation (M4)", () => {
     await act(() => result.current.update.mutateAsync({ id: "h1", input: { name: "x" } }));
     // Once for each save, and once more after each resync (it may have written cover rows).
     await vi.waitFor(() => expect(keys().filter((k) => JSON.stringify(k) === JSON.stringify(["checklist", "e1"]))).toHaveLength(4));
+  });
+
+  it("access grant create and delete re-sync the board and refetch hosts", async () => {
+    m.accessGrantCreate.mockResolvedValue({} as AccessGrant);
+    m.accessGrantDelete.mockResolvedValue(null);
+    const { wrapper, keys } = setup();
+    const { result } = renderHook(() => useAccessGrantMutations("e1"), { wrapper });
+    await act(() => result.current.create.mutateAsync({ usernameId: "u1", grant: { hostId: "h1", level: "admin", via: "winrm" } }));
+    expect(keys()).toContainEqual(["accessGrants", "e1"]);
+    await vi.waitFor(() => expect(resyncBoards).toHaveBeenCalledWith("e1"));
+    await vi.waitFor(() => expect(keys()).toContainEqual(["hosts", "e1"]));
+
+    vi.mocked(resyncBoards).mockClear();
+    await act(() => result.current.remove.mutateAsync("g1"));
+    await vi.waitFor(() => expect(resyncBoards).toHaveBeenCalledWith("e1"));
   });
 
   it("changing a host's OS re-syncs the board", async () => {

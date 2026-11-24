@@ -111,9 +111,13 @@ export function useUsernameMutations(eid: string) {
   };
 }
 
+/** An elevated grant moves its host to Post-exploitation (and removing it lets the host fall back), so each change re-syncs the board. */
 export function useAccessGrantMutations(eid: string) {
   const qc = useQueryClient();
-  const onSuccess = () => void qc.invalidateQueries({ queryKey: accessGrantsKey(eid) });
+  const onSuccess = () => {
+    void qc.invalidateQueries({ queryKey: accessGrantsKey(eid) });
+    void resyncAndRefresh(qc, eid);
+  };
   return {
     create: useMutation({
       mutationFn: (v: { usernameId: string; grant: AccessGrantInput }) =>
