@@ -78,6 +78,13 @@ describe("findingBlocks", () => {
     const blocks = findingBlocks("| a | b |\n| - | - |\n| 1 | 2 |");
     expect(blocks.map((b) => b.type)).toEqual(["table"]);
   });
+
+  it("reads a table without outer pipes as a table; prose with a pipe over a rule stays prose (RAV-19)", () => {
+    const blocks = findingBlocks("a | b\n--- | ---\n1 | 2");
+    expect(blocks.map((b) => b.type)).toEqual(["table"]);
+    expect(textOf(blocks[0]!)).toBe("ab12");
+    expect(findingBlocks("this | that\n---").map((b) => b.type)).not.toContain("table");
+  });
 });
 
 describe("labelled", () => {

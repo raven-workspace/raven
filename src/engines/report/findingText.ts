@@ -1,4 +1,4 @@
-import { cells, isTableRow, isTableStart, parseInlineWith, type Inline } from "../manual/markdown";
+import { cells, isTableStart, parseInlineWith, tableEnd, type Inline } from "../manual/markdown";
 import { terminalBlocks } from "./terminal";
 import { bold, codeBlock, joinText, listItem, para, table, text as textNode, type Mark } from "./nodes";
 import type { ReportNode } from "./types";
@@ -56,13 +56,10 @@ function proseBlocks(text: string): ReportNode[] {
     }
     if (isTableStart(lines, i)) {
       flush();
+      const end = tableEnd(lines, i);
       const head = cells(line).map(inline);
-      const rows: ReportNode[][][] = [];
-      i += 2;
-      while (i < lines.length && isTableRow(lines[i])) {
-        rows.push(cells(lines[i]).map(inline));
-        i++;
-      }
+      const rows = lines.slice(i + 2, end).map((l) => cells(l).map(inline));
+      i = end;
       out.push(table(head.map(joinText), rows.map((r) => r.map(joinText))));
       continue;
     }

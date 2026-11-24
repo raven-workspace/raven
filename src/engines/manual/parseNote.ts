@@ -1,5 +1,5 @@
 import { splitFrontmatter } from "../fieldManual/frontmatter";
-import { anchorIds, FENCE, OUTLINE_HEADING, slug, tableCaption } from "./anchors";
+import { anchorIds, fenceWalk, OUTLINE_HEADING, slug, tableCaption } from "./anchors";
 import type { ManualFolder, ManualNote, OutlineEntry } from "./types";
 
 export { slug };
@@ -18,15 +18,9 @@ export function outlineOf(body: string): { outline: OutlineEntry[]; h1?: string 
   const outline: OutlineEntry[] = [];
   const ids = anchorIds();
   let h1: string | undefined;
-  let fence: string | null = null;
+  const walk = fenceWalk();
   for (const line of body.split("\n")) {
-    const f = FENCE.exec(line);
-    if (f) {
-      if (fence === null) fence = f[1][0];
-      else if (f[1][0] === fence) fence = null;
-      continue;
-    }
-    if (fence !== null) continue;
+    if (walk(line) !== "text") continue;
     const h = OUTLINE_HEADING.exec(line);
     if (h) {
       const text = h[2];

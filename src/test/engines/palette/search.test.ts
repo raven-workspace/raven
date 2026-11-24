@@ -13,7 +13,7 @@ const ctx = (library: LibraryCommand[], over: Partial<PaletteContext> = {}): Pal
 describe('searchPalette', () => {
   it('Manual notes come back on their own, title hits first, with the matching line and section', () => {
     // Synthetic notes only.
-    const body = parseNote('04-Foundations/Zz Codes.md', '# Zz Codes\n## Status\n| `ZZ_LOGON_FAILED` | wrong password |\n')!;
+    const body = parseNote('04-Foundations/Zz Codes.md', '# Zz Codes\n## Status\n| Code | Means |\n| --- | --- |\n| `ZZ_LOGON_FAILED` | wrong password |\n')!;
     const titled = parseNote('04-Foundations/Logon Failed Zz.md', '# Logon Failed Zz\n')!;
     const r = searchPalette('logon failed', ctx([cmd('c1', { title: 'Logon failed check' })], { notes: [body, titled] }));
     expect(r.groups.flatMap((g) => g.hits).map((h) => h.id)).toEqual(['c1']);

@@ -105,7 +105,9 @@ describe("searchManual: emphasis around code", () => {
 
 describe("searchManual: the snippet reads as the note renders the line (RAV-20)", () => {
   const note = (lines: string[]) => parseNote("04-Foundations/Zz Render.md", ["# Zz Render", "## Lines", ...lines].join("\n"))!;
-  const snippet = (line: string, query: string) => searchManual(query, [note([line])])[0]?.line;
+  // A table row is one only under a header and separator.
+  const snippet = (line: string, query: string) =>
+    searchManual(query, [note(line.startsWith("|") ? ["| Code | Means |", "| --- | --- |", line] : [line])])[0]?.line;
 
   it.each([
     ["use __bold__ here", "use", "use bold here"],
@@ -148,6 +150,21 @@ describe("searchManual: placeholders never match (RAV-20)", () => {
 
   it("a match never runs from text into an inline command, as the note marks each apart", () => {
     expect(searchManual("then run zzother", [n])).toEqual([]);
+  });
+});
+
+describe("searchManual: tables and fences as the note reads them (RAV-19)", () => {
+  it("a table without outer pipes reads as cells; a prose line with a pipe stays prose", () => {
+    const n = parseNote("04-Foundations/Zz Bare.md", "# Zz Bare\n## Codes\nCode | Means\n--- | ---\nZZ_BARE | zzbare thing\n\nkeep zzpipe | as is\n")!;
+    expect(searchManual("zzbare", [n])[0]).toMatchObject({ anchor: "codes", line: "ZZ_BARE  zzbare thing" });
+    expect(searchManual("zzpipe", [n])[0]?.line).toBe("keep zzpipe | as is");
+  });
+
+  it("text after a longer fence's inner fence is code, under the section the note shows", () => {
+    const n = parseNote("04-Foundations/Zz Fence.md", ["# Zz Fence", "## One", "````md", "```sh", "## zzinside", "```", "zzstill code", "````", "## Two", "zzafter"].join("\n"))!;
+    expect(searchManual("zzinside", [n])[0]).toMatchObject({ anchor: "one", line: "## zzinside" });
+    expect(searchManual("zzstill", [n])[0]).toMatchObject({ anchor: "one" });
+    expect(searchManual("zzafter", [n])[0]).toMatchObject({ anchor: "two" });
   });
 });
 
