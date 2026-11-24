@@ -645,6 +645,33 @@ describe("Report view", () => {
     await waitFor(() => expect(screen.queryByText(/Couldn't build this page's draft/)).not.toBeInTheDocument());
   });
 
+  it("a page whose draft fails to build stops no other page; its Retry clears only its own failure", async () => {
+    const real = api.reportSectionUpsert;
+    let failing: string | null = null;
+    vi.spyOn(api, "reportSectionUpsert").mockImplementation(async (rid, input) => {
+      // The first page to build its draft fails, every time, until Retry.
+      if (input.draftBuiltAt !== null && (failing ??= input.targetKey) === input.targetKey) throw new Error("db busy");
+      return real(rid, input);
+    });
+    mount();
+    await ready();
+    expect(await screen.findByText(/Couldn't build this page's draft/)).toBeInTheDocument();
+    const first = targetRows().find((t) => t.getAttribute("aria-selected") === "true")!;
+    const other = targetRows().find((t) => t !== first)!;
+    fireEvent.click(other);
+    await waitFor(() => expect(other).toHaveAttribute("aria-selected", "true"));
+    // The other page builds: its draft is on the page, and it says nothing about the first page's failure.
+    await waitFor(() => expect(document.querySelector(".report-page .ProseMirror")).not.toBeNull());
+    expect(screen.queryByText(/Couldn't build this page's draft/)).toBeNull();
+    // Back on the first, its failure still shows; Retry builds it.
+    fireEvent.click(first);
+    expect(await screen.findByText(/Couldn't build this page's draft/)).toBeInTheDocument();
+    failing = "none";
+    fireEvent.click(screen.getByRole("button", { name: "Retry building the draft" }));
+    await waitFor(() => expect(screen.queryByText(/Couldn't build this page's draft/)).not.toBeInTheDocument());
+    await waitFor(() => expect(document.querySelector(".report-page .ProseMirror")).not.toBeNull());
+  });
+
   it("shows a placeholder for client engagements", async () => {
     mount("e-old");
     expect(await screen.findByText("Client reports come after the exam")).toBeInTheDocument();
@@ -1593,6 +1620,46 @@ describe("Report view: appendix pages and free pages (+ Page)", () => {
     const [back] = await pages();
     expect(JSON.stringify(back.doc)).toContain("Every user dumped from the DC");
     expect(back.meta).toMatchObject({ title: "Untitled appendix", placement: "appendix" });
+  });
+});
+
+describe("Report view: undoing a page delete", () => {
+  const addPage = async (kind: "Appendix page" | "Free page") => {
+    fireEvent.click(screen.getByRole("button", { name: "+ Page" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: kind }));
+  };
+  const ordered = async () => {
+    const report = await api.reportGetOrCreate("e-exam");
+    return (await api.reportSectionsList(report.id)).sort((a, b) => a.position - b.position);
+  };
+
+  it("puts the page back at its old place, every position still unique, after a page was added meanwhile", async () => {
+    mount();
+    await ready();
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toContain("Appendix A"));
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toContain("Appendix B"));
+    const before = await ordered();
+    const victim = before.filter((s) => s.kind === "page").at(-1)!;
+    const oldIndex = before.findIndex((s) => s.id === victim.id);
+
+    fireEvent.keyDown(tab("Appendix B"), { key: "Backspace" });
+    const dialog = await screen.findByRole("dialog", { name: "Delete Untitled appendix? Its text goes with it." });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete page" }));
+    await waitFor(() => expect(tabLabels()).not.toContain("Appendix B"));
+    // A page added meanwhile takes the deleted page's position.
+    await addPage("Free page");
+    await waitFor(() => expect(tabLabels()).toContain("Untitled page"));
+
+    const notice = (await screen.findAllByRole("status")).find((n) => n.textContent?.includes("Deleted Untitled appendix"))!;
+    fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(tabLabels()).toContain("Appendix B"));
+    await waitFor(async () => {
+      const after = await ordered();
+      expect(new Set(after.map((s) => s.position)).size).toBe(after.length);
+      expect(after.findIndex((s) => s.targetKey === victim.targetKey)).toBe(oldIndex);
+    });
   });
 });
 

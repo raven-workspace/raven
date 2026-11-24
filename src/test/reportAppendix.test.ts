@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entriesOnPage, joinPages, numberAppendices, sectionNumbers, suggestMoves, withBlockAppended, withoutAppended } from "../engines/report";
+import { appendixLetter, entriesOnPage, joinPages, numberAppendices, sectionNumbers, suggestMoves, withBlockAppended, withoutAppended } from "../engines/report";
 import type { ReportData } from "../engines/report";
 import type { ReportNode } from "../engines/report";
 
@@ -24,6 +24,11 @@ describe("appendix pages and free pages (+ Page)", () => {
       { sectionId: "p2", letter: "A" },
       { sectionId: "p3", letter: "B" },
     ]);
+  });
+  it("letters past Z as spreadsheet columns do: Z, AA, AB … AZ, BA … ZZ, AAA", () => {
+    const pages = Array.from({ length: 28 }, (_, i) => page(`p${i}`, "appendix", i));
+    expect(numberAppendices(pages).pages.map((p) => p.letter).slice(24)).toEqual(["Y", "Z", "AA", "AB"]);
+    expect([0, 25, 26, 51, 52, 701, 702].map(appendixLetter)).toEqual(["A", "Z", "AA", "AZ", "BA", "ZZ", "AAA"]);
   });
   it("a lone appendix page is Appendix A", () => {
     expect(numberAppendices([page("p1", "appendix", 0)]).pages).toEqual([{ sectionId: "p1", letter: "A" }]);

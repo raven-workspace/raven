@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import { FIXTURES } from "../audit/fixtures";
-import { buildPlainTarget, companionStepAt, isDeadEnd, joinsAStep, missingEntries, phaseInsertAt, proofCompanions, reportTargets, sourceOf, placedIn } from "../engines/report";
+import { buildPlainTarget, companionStepAt, targetChecks, isDeadEnd, joinsAStep, missingEntries, phaseInsertAt, proofCompanions, reportTargets, sourceOf, placedIn } from "../engines/report";
 import type { ReportData, ReportNode, ReportTarget } from "../engines/report";
 import { placementPlan, type PlacementPlan } from "../engines/report/placement";
 import type { AccessGrant } from "../types/credentials";
@@ -427,6 +427,22 @@ describe("screenshots on findings: each placed once, only with its finding", () 
     expect(plan.at(gid("fshot"))?.step?.lead.id).toBe(gid("exp"));
     expect(proofCompanions(d, GARNET_HOST, logged(d, "proof")).map((e) => e.id)).not.toContain(gid("fshot"));
     expect(figuresOf(buildPlainTarget(d, garnetTarget, {}), gid("fshot"))).toHaveLength(1);
+  });
+
+  it("a flag's screenshot that is also goal evidence stays with the flag's proof, placed once", () => {
+    // proof.txt's screenshot also ticks a checklist goal: it proves something without placing.
+    const d: ReportData = {
+      ...garnet,
+      checklist: [...garnet.checklist, { ...garnet.checklist[0], goalId: "h-root", evidence: [{ entryId: gid("proof-shot") }] }],
+    };
+    expect(proofCompanions(d, GARNET_HOST, logged(d, "proof")).map((e) => e.id)).toContain(gid("proof-shot"));
+    expect(placementPlan(d, garnetTarget).at(gid("proof-shot"))?.role).toBe("with-flag");
+    expect(figuresOf(buildPlainTarget(d, garnetTarget, {}), gid("proof-shot"))).toHaveLength(1);
+    // The checks read the proof from these too: it has its screenshot.
+    const page = buildPlainTarget(d, garnetTarget, {});
+    expect(targetChecks({ data: d, target: garnetTarget, doc: page, meta: { expectedFlags: { [GARNET_HOST]: ["proof"] } }, sectionId: "s" }).map((c) => c.id)).not.toContain(
+      `proof-screenshot:garnet:proof`,
+    );
   });
 
   it("on an Additional finding, goes under that finding's bullet", () => {

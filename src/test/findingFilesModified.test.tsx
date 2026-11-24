@@ -63,6 +63,21 @@ describe("finding files: modified exploit", () => {
     expect(input.originalContent).toBeUndefined();
   });
 
+  it("refuses an original URL over 8 KiB, and says why", async () => {
+    m.findingFilesList.mockResolvedValue([{ ...FILE, modified: true, originalUrl: "https://x.test/1" }]);
+    const user = userEvent.setup();
+    render(<QueryClientProvider client={makeQueryClient()}><Host /></QueryClientProvider>);
+    await user.click(await screen.findByRole("button", { name: "Edit exploit.py" }));
+    const group = screen.getByRole("group", { name: "Finding files" });
+    const url = within(group).getByLabelText("Original URL");
+    await user.clear(url);
+    await user.click(url);
+    await user.paste(`https://e.test/${"a".repeat(8 * 1024)}`);
+    await user.click(within(group).getByRole("button", { name: "Save file" }));
+    expect(await within(group).findByText("The original URL is over 8 KiB")).toBeInTheDocument();
+    expect(m.findingFileUpdate).not.toHaveBeenCalled();
+  });
+
   it("marks a modified file in its row", async () => {
     m.findingFilesList.mockResolvedValue([{ ...FILE, modified: true, originalUrl: "https://x.test/1" }]);
     render(<QueryClientProvider client={makeQueryClient()}><Host /></QueryClientProvider>);
