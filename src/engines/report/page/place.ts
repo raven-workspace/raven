@@ -2,7 +2,8 @@ import type { LogEntry } from "../../../types/log";
 import { bold, heading, para } from "../nodes";
 import { PAGE_PHASES, PHASE_TITLE, placementPlan } from "../placement";
 import { entryBlocks, finish, stepBlocks, testedRun } from "../plain";
-import { type BlockLike, blockSource, entriesNamedBy, testedListOf } from "./block";
+import { keptFromReport } from "../prove";
+import { type BlockLike, blockSource, entriesNamedBy, isCopiedFrom, testedListOf } from "./block";
 import { parseSource, source } from "./source";
 import type { Phase, ReportData, ReportNode, ReportTarget } from "../types";
 
@@ -33,6 +34,27 @@ export function placedIn(node: BlockLike & { content?: readonly ReportNode[] }):
   };
   walk(node);
   return placed;
+}
+
+/**
+ * The entries a page places for the report, at any depth: every entry a block was copied from, and every entry a block
+ * also shows that may still reach the report. An entry kept from the report (GLOSSARY.md), or deleted, that only an
+ * `also` names is not on the page: the block's words are another entry's, so nothing of it is. One a block was copied
+ * from still is (its words are there, and its check says so). What was taken off is read with `placedIn`, which counts
+ * every `also`.
+ */
+export function entriesOnPage(doc: ReportNode, data: Pick<ReportData, "log" | "attempts">): Set<string> {
+  const reaches = (id: string) => {
+    const entry = data.log.find((e) => e.id === id);
+    return entry !== undefined && !keptFromReport(data, entry);
+  };
+  const out = new Set<string>();
+  const walk = (n: ReportNode) => {
+    for (const id of entriesNamedBy(n)) if (isCopiedFrom(n, id) || reaches(id)) out.add(id);
+    n.content?.forEach(walk);
+  };
+  walk(doc);
+  return out;
 }
 
 /* ------------------------------------------------------------------ What the owner took off */
@@ -161,7 +183,7 @@ function findingBulletAt(doc: ReportNode, data: ReportData, entry: LogEntry, fin
  */
 export function missingEntries(doc: ReportNode, data: ReportData, target: ReportTarget, removed: readonly string[]): LogEntry[] {
   const { placed } = placementPlan(data, target);
-  const onPage = placedIn(doc).entries;
+  const onPage = entriesOnPage(doc, data);
   return data.log
     .filter((e) => placed.has(e.id) && !onPage.has(e.id) && !removed.includes(e.id))
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));

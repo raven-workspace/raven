@@ -6,9 +6,9 @@ import { serviceCoverage } from "./coverage";
 import { isWeakCaption } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
-import { byTime } from "./prove";
+import { byTime, keptFromReport } from "./prove";
 import { blockSource, copiedFrom } from "./page/block";
-import { placedIn } from "./page";
+import { entriesOnPage } from "./page";
 import { ILLUSTRATE_WINDOW_MS, proofCompanions } from "./placement";
 import { proofFacts } from "./proof";
 import { sourceOf } from "./stamp";
@@ -299,12 +299,12 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   const { data, target, doc, meta, sectionId } = input;
   const out: Check[] = [];
   const nodes = visit(doc);
-  const onPage = placedIn(doc).entries;
+  const onPage = entriesOnPage(doc, data);
   const hosts = target.hostIds.flatMap((id) => data.hosts.find((h) => h.id === id) ?? []);
   const entryOf = (id: string) => data.log.find((e) => e.id === id);
   for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage));
 
-  // A block from a private or deleted entry: the words or picture on the page may be what was hidden or meant to go.
+  // A block from an entry kept from the report (private, or behind a private or operator attempt) or deleted: the words or picture on the page may be what was hidden or meant to go.
   // One check per entry, at its first block. A command block with no output block of its entry after it (before that
   // entry's next command block) is soft, per block.
   const seenEntry = new Set<string>();
@@ -324,7 +324,7 @@ export function targetChecks(input: TargetChecksInput): Check[] {
     if (id === "" || seenEntry.has(id)) continue;
     seenEntry.add(id);
     const entry = entryOf(id);
-    if (entry && !entry.private) continue;
+    if (entry && !keptFromReport(data, entry)) continue;
     out.push(
       entry
         ? { id: `copied-private:${id}`, level: "fail", text: "A block on the page comes from an entry that is now private.", anchor: { nodeIndex: index } }
