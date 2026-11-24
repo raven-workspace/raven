@@ -510,9 +510,12 @@ function ReportBody({
     const state: TabItem["state"] = !started(e.target!) ? "not-started" : fails > 0 ? "todo" : "ready";
     tabs.push({ id: e.section.id, label: `${i + 1} ${e.item.label}`, state, todo: fails, reorderable: e.item.reorderable });
   });
+  // A free page's tab leads with the section number it prints under, like a target's ("5 Lessons learned"): both come
+  // from `numbers`, so the tab and the page agree after any reorder.
   for (const e of entries.filter((x) => x.item.group === "pages")) {
     const title = pageTitleOf(e.section);
-    tabs.push({ id: e.section.id, label: title, state: "none", detail: `Section ${numbers.get(e.section.id)?.number ?? ""}`, page: true, title, reorderable: true });
+    const n = numbers.get(e.section.id)?.number;
+    tabs.push({ id: e.section.id, label: n ? `${n} ${title}` : title, state: "none", page: true, title, reorderable: true });
   }
   if (closingParts.length > 0) tabs.push({ id: CLOSING_TAB, label: "Closing", state: "none" });
   for (const e of entries.filter((x) => x.item.group === "appendix-pages")) {
