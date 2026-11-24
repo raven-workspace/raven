@@ -6,8 +6,10 @@ import { NodeSelection } from "prosekit/pm/state";
 import { StepMap } from "prosekit/pm/transform";
 import {
   blockHash,
+  blockSource,
   companionStepAt,
   draftedEntryBlocks,
+  parseSource,
   phaseInsertAt,
   refreshBlocks,
   refreshFamily,
@@ -37,8 +39,8 @@ const topIndexAt = (doc: Editor["state"]["doc"], pos: number) => doc.resolve(Mat
 
 /** The machine a top-level block names: a machine heading (`facts:<hostId>`) or a phase heading (`phase:<hostId>:…`). */
 function hostOfBlock(node: PMNode): string | null {
-  const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
-  return /^(?:facts|phase):([^:]+)/.exec(source)?.[1] ?? null;
+  const s = blockSource({ type: node.type.name, attrs: node.attrs });
+  return s?.kind === "facts" || s?.kind === "phase" ? s.hostId : null;
 }
 
 /**
@@ -351,7 +353,8 @@ export function refreshRun(editor: Editor, run: SourceRun, data: ReportData, tar
 
 /** The block menu's Refresh item for a source: the log's, a finding's (its file's too), else Raven's own. */
 export function refreshLabel(source: string): "Refresh from log" | "Refresh from finding" | "Refresh from Raven" {
-  if (source.startsWith("entry:")) return "Refresh from log";
-  if (source.startsWith("finding:") || source.startsWith("file:")) return "Refresh from finding";
+  const kind = parseSource(source)?.kind;
+  if (kind === "entry") return "Refresh from log";
+  if (kind === "finding" || kind === "file") return "Refresh from finding";
   return "Refresh from Raven";
 }

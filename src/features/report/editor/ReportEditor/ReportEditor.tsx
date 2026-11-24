@@ -6,7 +6,7 @@ import type { Node as PMNode } from "prosekit/pm/model";
 import { isHistoryTransaction } from "prosekit/pm/history";
 import { NodeSelection, Plugin, PluginKey, type Command, type Transaction } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
-import { placedIdsIn, type ReportNode } from "../../../../engines/report/index";
+import { placedIdsIn, unlinkCopiedFrom, type ReportNode } from "../../../../engines/report/index";
 import { reportError } from "../../../../lib/lockSignal";
 import { RavenError } from "../../../../types/errors";
 import { BlockHandle } from "../BlockHandle/BlockHandle";
@@ -45,15 +45,9 @@ export function keepCopiedText(editor: Editor, entryId: string): boolean {
   return editor.exec((state, dispatch) => {
     const tr = state.tr;
     state.doc.descendants((node, pos) => {
-      const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
-      const fromSource = source === `entry:${entryId}` || source.startsWith(`entry:${entryId}:`);
-      const figure = node.type.name === "figure" && node.attrs.entryId === entryId;
-      if (!fromSource && !figure) return true;
-      const attrs: Record<string, unknown> = { ...node.attrs };
-      if (fromSource) Object.assign(attrs, { source: null, gen: null });
-      if (figure) attrs.entryId = null;
+      const attrs = unlinkCopiedFrom({ type: node.type.name, attrs: node.attrs }, entryId);
       // Same size, so later positions hold; a list or table goes on to its own blocks with their sources.
-      tr.setNodeMarkup(pos, undefined, attrs);
+      if (attrs) tr.setNodeMarkup(pos, undefined, attrs);
       return true;
     });
     if (!tr.docChanged) return false;

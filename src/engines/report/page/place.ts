@@ -1,8 +1,9 @@
 import type { LogEntry } from "../../../types/log";
 import { bold, heading, para } from "../nodes";
 import { PAGE_PHASES, PHASE_TITLE, placementPlan } from "../placement";
-import { entryBlocks, finish, srcOf, stepBlocks, testedRun } from "../plain";
-import { sourceOf } from "../stamp";
+import { entryBlocks, finish, stepBlocks, testedRun } from "../plain";
+import { blockSource, entriesNamedBy, testedListOf } from "./block";
+import { parseSource, source } from "./source";
 import type { Phase, ReportData, ReportNode, ReportTarget } from "../types";
 
 /**
@@ -17,11 +18,7 @@ import type { Phase, ReportData, ReportNode, ReportTarget } from "../types";
 export function entryIdsIn(doc: ReportNode): Set<string> {
   const ids = new Set<string>();
   const walk = (n: ReportNode) => {
-    const source = sourceOf(n);
-    const m = source ? /^entry:([^:]+)/.exec(source) : null;
-    if (m) ids.add(m[1]);
-    if (n.type === "figure" && typeof n.attrs?.entryId === "string" && n.attrs.entryId !== "") ids.add(n.attrs.entryId);
-    if (Array.isArray(n.attrs?.also)) for (const id of n.attrs.also) if (typeof id === "string" && id !== "") ids.add(id);
+    for (const id of entriesNamedBy(n)) ids.add(id);
     n.content?.forEach(walk);
   };
   walk(doc);
@@ -34,12 +31,17 @@ export function entryIdsIn(doc: ReportNode): Set<string> {
 const breaksRegion = (n: ReportNode) => n.type === "heading" && ((n.attrs?.level as number | undefined) ?? 1) <= 2;
 const isStepList = (n: ReportNode) => n.type === "list" && n.attrs?.kind === "ordered";
 /** The entries a block names itself (its source, a figure's entry, its `also`), not its children's. */
-const ownIds = (n: ReportNode) => entryIdsIn({ type: n.type, attrs: n.attrs });
+const ownIds = (n: ReportNode) => new Set(entriesNamedBy(n));
 
+/** The machine whose heading a block is (`facts`), or null. */
+const factsOf = (n: ReportNode) => {
+  const s = blockSource(n);
+  return s?.kind === "facts" ? s.hostId : null;
+};
 /** The top-level index where a machine's part of the page ends: its next machine's heading, else the end. */
 function hostEnd(content: ReportNode[], hostId: string): number {
-  const facts = content.findIndex((n) => srcOf(n) === `facts:${hostId}`);
-  const next = facts === -1 ? -1 : content.findIndex((n, i) => i > facts && srcOf(n).startsWith("facts:"));
+  const facts = content.findIndex((n) => factsOf(n) === hostId);
+  const next = facts === -1 ? -1 : content.findIndex((n, i) => i > facts && factsOf(n) !== null);
   return next === -1 ? content.length : next;
 }
 /** The end of the region a heading at `head` opens: the next level 1 or 2 heading, else the end. */
@@ -61,14 +63,21 @@ function regionEnd(content: ReportNode[], head: number): number {
 export function phaseInsertAt(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { index: number; before: ReportNode[] } {
   const { hostId, phase } = placementPlan(data, target).phaseOf(entry);
   const content = doc.content ?? [];
-  const ofPhase = (n: ReportNode, p: Phase) => n.type === "heading" && (srcOf(n) === `phase:${hostId}:${p}` || srcOf(n).startsWith(`phase:${hostId}:${p}:`));
-  const stepsLabel = para([bold("Steps to reproduce:")], `phase-steps:${hostId}`);
+  const ofPhase = (n: ReportNode, p: Phase) => {
+    const s = blockSource(n);
+    return n.type === "heading" && s?.kind === "phase" && s.hostId === hostId && s.phase === p;
+  };
+  const isStepsLabel = (n: ReportNode) => {
+    const s = blockSource(n);
+    return s?.kind === "phase-steps" && s.hostId === hostId;
+  };
+  const stepsLabel = para([bold("Steps to reproduce:")], source.phaseSteps(hostId));
   if (!PAGE_PHASES.includes(phase)) return { index: hostEnd(content, hostId), before: [] };
 
   const head = content.reduce((found, n, i) => (ofPhase(n, phase) ? i : found), -1);
   if (head !== -1) {
     const end = regionEnd(content, head);
-    const labelled = content.slice(head + 1, end).some((n) => isStepList(n) || srcOf(n) === `phase-steps:${hostId}`);
+    const labelled = content.slice(head + 1, end).some((n) => isStepList(n) || isStepsLabel(n));
     return { index: end, before: finish(labelled ? [] : [stepsLabel]) };
   }
 
@@ -77,7 +86,7 @@ export function phaseInsertAt(doc: ReportNode, data: ReportData, target: ReportT
   if (at === -1) at = content.findIndex((n) => ofPhase(n, "additional") || ofPhase(n, "tested"));
   if (at === -1) at = hostEnd(content, hostId);
   const title = PHASE_TITLE[phase]!;
-  return { index: at, before: finish([heading(2, title, `phase:${hostId}:${phase}`), stepsLabel]) };
+  return { index: at, before: finish([heading(2, title, source.phase(hostId, phase)), stepsLabel]) };
 }
 
 /**
@@ -103,7 +112,10 @@ export function companionStepAt(doc: ReportNode, data: ReportData, target: Repor
 /** A finding's screenshot that goes with the finding itself: at the end of the page's Additional findings bullet for
  *  that finding (`finding:<id>`), as a figure. Null when the page has no such bullet. */
 function findingBulletAt(doc: ReportNode, data: ReportData, entry: LogEntry, findingId: string): { index: number; blocks: ReportNode[] } | null {
-  const index = (doc.content ?? []).findIndex((n) => n.type === "list" && srcOf(n) === `finding:${findingId}`);
+  const index = (doc.content ?? []).findIndex((n) => {
+    const s = blockSource(n);
+    return n.type === "list" && s?.kind === "finding" && s.findingId === findingId && s.part === null;
+  });
   if (index === -1) return null;
   return { index, blocks: entryBlocks(data, entry).filter((b) => b.type === "figure") };
 }
@@ -121,15 +133,20 @@ export function missingEntries(doc: ReportNode, data: ReportData, target: Report
 }
 
 /** What `removedEntryIds` records when the owner deletes a machine's whole Also tested list. */
-export const testedKey = (hostId: string) => `tested:${hostId}`;
+export const testedKey = (hostId: string) => source.tested(hostId);
+/** The machine a `removedEntryIds` key names the Also tested list of, or null for an entry id. */
+const testedKeyHost = (key: string) => {
+  const s = parseSource(key);
+  return s?.kind === "tested" ? s.hostId : null;
+};
 
 /** What a page places that its owner can remove and Add new evidence would bring back: its entries (`entryIdsIn`)
  *  and each machine's Also tested list (`testedKey`, from a `tested:<hostId>` block). */
 export function placedIdsIn(doc: ReportNode): Set<string> {
   const ids = entryIdsIn(doc);
   const walk = (n: ReportNode) => {
-    const m = /^tested:([^:]+)$/.exec(srcOf(n));
-    if (m) ids.add(testedKey(m[1]));
+    const hostId = testedListOf(n);
+    if (hostId !== null) ids.add(testedKey(hostId));
     n.content?.forEach(walk);
   };
   walk(doc);
@@ -147,13 +164,13 @@ export function placedIdsIn(doc: ReportNode): Set<string> {
 export function withoutRemoved(doc: ReportNode, removed: readonly string[]): ReportNode {
   if (removed.length === 0) return doc;
   const gone = new Set(removed);
-  const tested = new Set(removed.flatMap((k) => /^tested:([^:]+)$/.exec(k)?.[1] ?? []));
-  const entryOf = (n: ReportNode) => /^entry:([^:]+)/.exec(srcOf(n))?.[1] ?? (n.type === "figure" && typeof n.attrs?.entryId === "string" ? n.attrs.entryId : null);
+  const tested = new Set(removed.flatMap((k) => testedKeyHost(k) ?? []));
   const dropped = (n: ReportNode) => {
-    const id = entryOf(n);
+    const s = blockSource(n);
+    const id = s?.kind === "entry" ? s.entryId : n.type === "figure" && typeof n.attrs?.entryId === "string" ? n.attrs.entryId : null;
     if (id !== null && gone.has(id)) return true;
-    const m = /^(?:tested:([^:]+)|phase:([^:]+):tested)$/.exec(srcOf(n));
-    return m !== null && tested.has(m[1] ?? m[2]);
+    if (s?.kind === "tested") return tested.has(s.hostId);
+    return s?.kind === "phase" && s.phase === "tested" && s.findingId === null && tested.has(s.hostId);
   };
   const clean = (n: ReportNode): ReportNode | null => {
     if (dropped(n)) return null;
@@ -181,12 +198,13 @@ function withoutBare(content: ReportNode[]): ReportNode[] {
   const out: ReportNode[] = [];
   for (let i = content.length - 1; i >= 0; i--) {
     const n = content[i];
-    if (srcOf(n).startsWith("phase-steps:")) {
+    const s = blockSource(n);
+    if (s?.kind === "phase-steps") {
       const end = out.findIndex(breaksRegion);
       if (!(end === -1 ? out : out.slice(0, end)).some(isStepList)) continue;
     }
     const next = out[0];
-    if (n.type === "heading" && srcOf(n).startsWith("phase:") && (!next || (next.type === "heading" && level(next) <= level(n)))) continue;
+    if (n.type === "heading" && s?.kind === "phase" && (!next || (next.type === "heading" && level(next) <= level(n)))) continue;
     out.unshift(n);
   }
   return out;
@@ -214,12 +232,16 @@ export function missingTested(doc: ReportNode, data: ReportData, hostId: string,
   // The owner deleted the list: it stays deleted.
   if (removed.includes(testedKey(hostId))) return null;
   const content = doc.content ?? [];
-  const has = (n: ReportNode): boolean => srcOf(n) === `tested:${hostId}` || (n.content ?? []).some(has);
+  const isBullet = (n: ReportNode) => testedListOf(n) === hostId;
+  const has = (n: ReportNode): boolean => isBullet(n) || (n.content ?? []).some(has);
   if (content.some(has)) return null;
   const run = testedRun(data, hostId);
-  const bullets = run.filter((n) => srcOf(n) === `tested:${hostId}`);
+  const bullets = run.filter(isBullet);
   if (bullets.length === 0) return null;
-  const head = content.findIndex((n) => n.type === "heading" && srcOf(n) === `phase:${hostId}:tested`);
+  const head = content.findIndex((n) => {
+    const s = blockSource(n);
+    return n.type === "heading" && s?.kind === "phase" && s.hostId === hostId && s.phase === "tested" && s.findingId === null;
+  });
   if (head !== -1) return { index: regionEnd(content, head), blocks: bullets };
   return { index: hostEnd(content, hostId), blocks: run };
 }

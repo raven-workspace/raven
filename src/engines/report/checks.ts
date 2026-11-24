@@ -7,6 +7,7 @@ import { isWeakCaption } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
 import { byTime } from "./prove";
+import { blockSource, copiedFrom } from "./page/block";
 import { entryIdsIn } from "./page";
 import { ILLUSTRATE_WINDOW_MS, proofCompanions } from "./placement";
 import { proofFacts } from "./proof";
@@ -69,8 +70,26 @@ const textOf = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map
 const hasText = (n: ReportNode | undefined) => n != null && n.type === "paragraph" && textOf(n).trim() !== "";
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 
-/** The entry a block's source names (`entry:<id>…`), or null. */
-const entryOfSource = (node: ReportNode): string | null => /^entry:([^:]+)/.exec(sourceOf(node) ?? "")?.[1] ?? null;
+/** The entry a block's source names, or null. */
+const entryOfSource = (node: ReportNode): string | null => {
+  const s = blockSource(node);
+  return s?.kind === "entry" ? s.entryId : null;
+};
+/** Whether a block is an entry's note. */
+const isNote = (node: ReportNode): boolean => {
+  const s = blockSource(node);
+  return s?.kind === "entry" && s.part !== null && "name" in s.part && s.part.name === "note";
+};
+/** The finding a block's source names (any part of it), or null. */
+const findingOfSource = (node: ReportNode): string | null => {
+  const s = blockSource(node);
+  return s?.kind === "finding" ? s.findingId : null;
+};
+/** The finding file a block's source names, or null. */
+const fileOfSource = (node: ReportNode): string | null => {
+  const s = blockSource(node);
+  return s?.kind === "file" ? s.fileId : null;
+};
 /** The entry id a figure shows, or "". */
 const figureEntry = (node: ReportNode): string => (node.type === "figure" && typeof node.attrs?.entryId === "string" ? node.attrs.entryId : "");
 const hasKind = (n: ReportNode, types: string[]): boolean => (n.content ?? []).some((c) => types.includes(c.type) || hasKind(c, types));
@@ -123,7 +142,7 @@ function stepChecks(nodes: Visit[], sectionId: string): Check[] {
       explain.push({ check: { id: `explain:${entryId === "" ? `node-${index}` : entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot: lead?.type === "figure" });
       continue;
     }
-    if (!hasKind(node, ["codeBlock", "figure"]) && !sourceOf(lead ?? node)?.endsWith(":note")) {
+    if (!hasKind(node, ["codeBlock", "figure"]) && !isNote(lead ?? node)) {
       out.push({
         id: `step-replay:${sectionId}:${path}`,
         level: "soft",
@@ -293,16 +312,15 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   const waiting = new Map<string, { block: string; index: number }>();
   const silent: { id: string; block: string; index: number }[] = [];
   for (const { node, index } of nodes) {
-    const source = sourceOf(node) ?? "";
-    const cmd = /^entry:([^:]+):(\d+):command$/.exec(source);
-    if (cmd) {
-      const was = waiting.get(cmd[1]!);
-      if (was) silent.push({ id: cmd[1]!, ...was });
-      waiting.set(cmd[1]!, { block: cmd[2]!, index });
+    const s = blockSource(node);
+    const run = s?.kind === "entry" && s.part && "run" in s.part ? { entryId: s.entryId, ...s.part } : null;
+    if (run?.side === "command") {
+      const was = waiting.get(run.entryId);
+      if (was) silent.push({ id: run.entryId, ...was });
+      waiting.set(run.entryId, { block: String(run.run), index });
     }
-    const res = /^entry:([^:]+):\d+:output$/.exec(source)?.[1];
-    if (res) waiting.delete(res);
-    const id = figureEntry(node) || entryOfSource(node) || "";
+    if (run?.side === "output") waiting.delete(run.entryId);
+    const id = copiedFrom(node) ?? "";
     if (id === "" || seenEntry.has(id)) continue;
     seenEntry.add(id);
     const entry = entryOf(id);
@@ -324,9 +342,8 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   // A finding or file that was deleted: one check per id, at its first block.
   const goneSeen = new Set<string>();
   for (const { node, index } of nodes) {
-    const source = sourceOf(node) ?? "";
-    const finding = /^finding:([^:]+)/.exec(source)?.[1];
-    const file = /^file:(.+)$/.exec(source)?.[1];
+    const finding = findingOfSource(node);
+    const file = fileOfSource(node);
     const id = finding ?? file;
     if (!id || goneSeen.has(id)) continue;
     goneSeen.add(id);
@@ -374,7 +391,7 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   // Findings named by any `finding:<id>…` block, checked once, anchored at the first.
   const checkedFindings = new Set<string>();
   for (const { node, index } of nodes) {
-    const id = /^finding:([^:]+)/.exec(sourceOf(node) ?? "")?.[1];
+    const id = findingOfSource(node);
     const f = id ? data.findings.find((x) => x.id === id) : undefined;
     if (!f || checkedFindings.has(f.id)) continue;
     checkedFindings.add(f.id);
@@ -399,7 +416,7 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   // A modified exploit: its original's URL and content, and a sentence after its blocks saying what changed.
   const checkedFiles = new Set<string>();
   for (const { node, index, siblings, at } of nodes) {
-    const id = /^file:(.+)$/.exec(sourceOf(node) ?? "")?.[1];
+    const id = fileOfSource(node);
     const file = id ? data.findingFiles.find((x) => x.id === id) : undefined;
     if (!file || checkedFiles.has(file.id)) continue;
     checkedFiles.add(file.id);
@@ -411,7 +428,7 @@ export function targetChecks(input: TargetChecksInput): Check[] {
     // The run of the file's blocks; the explanation is a paragraph in the run after its code (the finding's exploit
     // notes) or the sibling after it.
     let end = at;
-    while (sourceOf(siblings[end + 1] ?? { type: "" }) === `file:${file.id}`) end++;
+    while (fileOfSource(siblings[end + 1] ?? { type: "" }) === file.id) end++;
     const code = siblings.slice(at, end + 1).findIndex((b) => b.type === "codeBlock");
     const noted = code >= 0 && siblings.slice(at + code + 1, end + 1).some(hasText);
     if (!noted && !hasText(siblings[end + 1])) {

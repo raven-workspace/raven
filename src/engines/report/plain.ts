@@ -9,7 +9,8 @@ import { isFlag } from "./prove";
 import { firstScan, machinesInOrder, PHASE_TITLE, placementPlan, type PlanStep } from "./placement";
 import { attackPathRows, portRows, resultLine } from "./tables";
 import { blockHash, sourceOf, stamp } from "./stamp";
-import { source as src } from "./page/source";
+import { blockSource } from "./page/block";
+import { parseSource, source as src, sourceString } from "./page/source";
 import { reportTargets } from "./targets";
 import type { ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
 import { omitted } from "./trim";
@@ -256,10 +257,10 @@ function flagEvidence(data: ReportData, entry: LogEntry, step: Step) {
   if (c.attachmentId) step.blocks.push(figure(c.attachmentId, `${c.flagKind}.txt`, entry.id));
 }
 
-/** Whether a block is one of an entry's own (`entry:<id>` or `entry:<id>:…`). */
+/** Whether a block is one of an entry's own: its source names the entry. */
 const isEntryBlock = (b: ReportNode, entryId: string) => {
-  const source = sourceOf(b);
-  return source === `entry:${entryId}` || (source?.startsWith(`entry:${entryId}:`) ?? false);
+  const s = blockSource(b);
+  return s?.kind === "entry" && s.entryId === entryId;
 };
 
 /**
@@ -527,8 +528,6 @@ export function entryBlocks(data: ReportData, entry: LogEntry): ReportNode[] {
   return finish(entryRun(data, entry));
 }
 
-const ENTRY_SOURCE = /^entry:([^:]+)(?::(?:\d+:(?:command|output)|title|observations|request|response|note|proof|value))?$/;
-const FINDING_SOURCE = /^finding:([^:]+)(?::(?:explanation|fix|severity|affected|exploit))?$/;
 
 /** The target a machine belongs to: the page's own, else the report's target holding it, else the machine alone. */
 function targetOf(data: ReportData, target: ReportTarget | null, meta: ReportMeta, hostId: string): ReportTarget {
@@ -539,41 +538,54 @@ function targetOf(data: ReportData, target: ReportTarget | null, meta: ReportMet
 /** Every block of a source, before the filter: the function that wrote it in the draft. Null when the source is
  *  unknown or its entry, finding, file or host is private or gone. */
 function sourceRun(source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] | null {
-  const [kind, id] = source.split(":");
-  const entryMatch = ENTRY_SOURCE.exec(source);
-  if (entryMatch) {
-    const entry = data.log.find((e) => e.id === entryMatch[1]);
-    if (!entry || entry.private) return null;
-    // A host's first port scan is printed by Service enumeration, not as a step.
-    const scanned = entry.hostIds.filter((h) => firstScan(data, h)?.id === entry.id).flatMap((h) => portScan(data, h, entry));
-    return scanned.some((b) => sourceOf(b) === source) ? scanned : entryRun(data, entry);
-  }
-  const findingMatch = FINDING_SOURCE.exec(source);
-  if (findingMatch || source === `file:${id}`) {
-    const file = kind === "file" ? data.findingFiles.find((ff) => ff.id === id) : undefined;
-    const f = data.findings.find((x) => x.id === (findingMatch ? findingMatch[1] : file?.findingId));
-    if (!f) return null;
-    return [...findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)), additionalItem(f, findingFigures(data, target, meta, f))];
-  }
-  if (source === "msf") return [msfLine(data)];
-  const tableKind = PLAIN_TABLE_KINDS.find((k) => source === `table:${k}`);
-  if (tableKind) return plainTable(tableKind, data, meta);
-  if (source === "attack-path") {
-    const set = target?.kind === "ad-set" ? target : reportTargets(data, meta).find((t) => t.kind === "ad-set");
-    return set ? attackPathBlocks(data, set.hostIds) : [];
-  }
-  const hostKinds = ["facts", "result", "ports", "tested"];
-  if (!hostKinds.includes(kind) || source !== `${kind}:${id}`) return null;
-  if (!data.hosts.some((h) => h.id === id)) return null;
-  switch (kind) {
+  const s = parseSource(source);
+  switch (s?.kind) {
+    case "entry": {
+      // A part the draft no longer writes regenerates nothing.
+      if (s.part && "unknown" in s.part) return null;
+      const entry = data.log.find((e) => e.id === s.entryId);
+      if (!entry || entry.private) return null;
+      // A host's first port scan is printed by Service enumeration, not as a step.
+      const scanned = entry.hostIds.filter((h) => firstScan(data, h)?.id === entry.id).flatMap((h) => portScan(data, h, entry));
+      return scanned.some((b) => sourceOf(b) === source) ? scanned : entryRun(data, entry);
+    }
+    case "finding":
+    case "file": {
+      if (s.kind === "finding" && s.part === "unknown") return null;
+      const findingId = s.kind === "finding" ? s.findingId : data.findingFiles.find((ff) => ff.id === s.fileId)?.findingId;
+      const f = data.findings.find((x) => x.id === findingId);
+      if (!f) return null;
+      return [...findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)), additionalItem(f, findingFigures(data, target, meta, f))];
+    }
+    case "msf":
+      return [msfLine(data)];
+    case "table": {
+      const tableKind = PLAIN_TABLE_KINDS.find((k) => k === s.table);
+      return tableKind ? plainTable(tableKind, data, meta) : null;
+    }
+    case "attack-path": {
+      const set = target?.kind === "ad-set" ? target : reportTargets(data, meta).find((t) => t.kind === "ad-set");
+      return set ? attackPathBlocks(data, set.hostIds) : [];
+    }
     case "facts":
-      return [factsHeading(data, id)];
     case "result":
-      return [resultParagraph(data, targetOf(data, target, meta, id), id, meta)].filter((n): n is ReportNode => n !== null);
     case "ports":
-      return [portTable(data, id)].filter((n): n is ReportNode => n !== null);
+    case "tested": {
+      const id = s.hostId;
+      if (!data.hosts.some((h) => h.id === id)) return null;
+      switch (s.kind) {
+        case "facts":
+          return [factsHeading(data, id)];
+        case "result":
+          return [resultParagraph(data, targetOf(data, target, meta, id), id, meta)].filter((n): n is ReportNode => n !== null);
+        case "ports":
+          return [portTable(data, id)].filter((n): n is ReportNode => n !== null);
+        default:
+          return testedBullets(data, id);
+      }
+    }
     default:
-      return testedBullets(data, id);
+      return null;
   }
 }
 
@@ -587,16 +599,20 @@ export function sourceBlocks(source: string, data: ReportData, target: ReportTar
   const run = sourceRun(source, data, target, meta);
   if (!run) return null;
   const blocks = run.filter((b) => sourceOf(b) === source);
-  return finish(source.startsWith("entry:") ? withAbsorbed(blocks, source, data, target, meta) : blocks);
+  return finish(parseSource(source)?.kind === "entry" ? withAbsorbed(blocks, source, data, target, meta) : blocks);
 }
 
-const SENTENCE_SOURCE = /^entry:([^:]+):(?:title|observations)$/;
+/** The entry whose sentence (its title or its observations) a source is, or null. */
+function sentenceOfSource(source: string): string | null {
+  const s = parseSource(source);
+  return s?.kind === "entry" && s.part && "name" in s.part && (s.part.name === "title" || s.part.name === "observations") ? s.entryId : null;
+}
 
 /** The source Refresh groups a block under: an entry's sentence is one family (`entry:<id>:sentence`), whether the
  *  page holds its title or its observations; every other source is its own. */
 export function refreshFamily(source: string): string {
-  const m = SENTENCE_SOURCE.exec(source);
-  return m ? `entry:${m[1]}:sentence` : source;
+  const entryId = sentenceOfSource(source);
+  return entryId ? sourceString({ kind: "entry", entryId, part: { unknown: "sentence" } }) : source;
 }
 
 /**
@@ -606,9 +622,9 @@ export function refreshFamily(source: string): string {
  * table with nothing to show). Refresh never takes a block away and puts nothing back.
  */
 export function refreshBlocks(source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] | null {
-  const m = SENTENCE_SOURCE.exec(source);
-  const blocks = m
-    ? [...(sourceBlocks(src.entry(m[1], "title"), data, target, meta) ?? []), ...(sourceBlocks(src.entry(m[1], "observations"), data, target, meta) ?? [])]
+  const entryId = sentenceOfSource(source);
+  const blocks = entryId
+    ? [...(sourceBlocks(src.entry(entryId, "title"), data, target, meta) ?? []), ...(sourceBlocks(src.entry(entryId, "observations"), data, target, meta) ?? [])]
     : sourceBlocks(source, data, target, meta);
   return blocks && blocks.length > 0 ? blocks : null;
 }
@@ -620,8 +636,8 @@ export const srcOf = (n: ReportNode) => sourceOf(n) ?? "";
  *  holds the entry in each target holding one of its machines, printed as the draft prints it, block by block in the
  *  run's order. */
 function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] {
-  const id = ENTRY_SOURCE.exec(source)?.[1];
-  const entry = data.log.find((e) => e.id === id);
+  const s = parseSource(source);
+  const entry = s?.kind === "entry" ? data.log.find((e) => e.id === s.entryId) : undefined;
   const found: ReportNode[] = [];
   const walk = (n: ReportNode) => {
     if (sourceOf(n) === source) found.push(n);

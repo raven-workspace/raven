@@ -3,6 +3,7 @@ import { ADDITIONAL_HEADING, entryBlocks, PLAIN_NODE_TYPES, sourceBlocks, TESTED
 import { PHASE_TITLE } from "./placement";
 import { hintPara, msfLine, plainTable, type PlainTableKind } from "./plainTables";
 import { sourceOf } from "./stamp";
+import { blockSource } from "./page/block";
 import { source as src } from "./page/source";
 import { portRows } from "./tables";
 import { bold, codeBlock, figure, heading, listItem, para, sourced, text } from "./nodes";
@@ -173,11 +174,11 @@ function evidence(n: ReportNode, ctx: Ctx): ReportNode[] {
     // The entry's blocks as a draft step holds them, its sentence left out (the step has the owner's); a block of a
     // command entry only its own command and output.
     const blocks = entryBlocks(ctx.data, entry).filter((b) => {
-      const source = sourceOf(b) ?? "";
-      if (source.endsWith(":title") || source.endsWith(":observations")) return false;
+      const s = blockSource(b);
+      const part = s?.kind === "entry" ? s.part : null;
+      if (part && "name" in part && (part.name === "title" || part.name === "observations")) return false;
       if (block === null || entry.content.kind !== "command") return true;
-      const m = /:(\d+):(?:command|output)$/.exec(source);
-      return m ? Number(m[1]) === block : false;
+      return part !== null && "run" in part && part.run === block;
     });
     return unstamped(blocks);
   }
