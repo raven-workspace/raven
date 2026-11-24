@@ -208,6 +208,19 @@ describe("findingRows", () => {
     expect(rows[0].host).toBe("MS01 / DC01");
     expect(rows[0].result).toBe("Domain Admin");
   });
+
+  it("in an AD set, lists same-severity findings in machine order, whenever they were logged", () => {
+    const d = empty();
+    d.hosts = [host("ms01", "MS01", { os: "windows", adSetEffective: true }), host("dc01", "DC01", { os: "windows", adSetEffective: true })];
+    d.usernames = [{ id: "u1", username: "tom" }] as never;
+    d.log = [entry("up", "ms01", 5, cmd), entry("dcsync", "dc01", 90, cmd)];
+    d.hops = [hop(null, "ms01", "up", 5, "upload"), hop("ms01", "dc01", "dcsync", 90, "pass-the-hash")];
+    d.grants = [grant("ms01", "user", "u1", "up", 5), grant("dc01", "admin", "u1", "dcsync", 90)];
+    // The DC's finding was logged first.
+    d.findings = [finding("dc", "On the DC", "high", ["dc01"], ["dcsync"], 1), finding("ms", "On MS01", "high", ["ms01"], ["up"], 2)];
+    const rows = findingRows(d, [{ key: "ad-set", kind: "ad-set", hostIds: ["ms01", "dc01"] }]);
+    expect(rows.map((r) => [r.host, r.title])).toEqual([["MS01", "On MS01"], ["DC01", "On the DC"]]);
+  });
 });
 
 describe("scopeRows", () => {

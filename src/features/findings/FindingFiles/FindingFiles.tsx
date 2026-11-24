@@ -9,6 +9,8 @@ import { copyPlain } from "../../../lib/clipboard";
 import "./FindingFiles.scss";
 
 const MAX_BYTES = 1024 * 1024;
+/** The backend's cap on an exploit's original URL. */
+const MAX_URL_BYTES = 8 * 1024;
 const AUTO = "auto";
 const LANGUAGE_OPTIONS = [{ value: AUTO, label: "Auto (from name)" }, ...LANGUAGES.map((l) => ({ value: l, label: l }))];
 const bytes = (s: string) => new TextEncoder().encode(s).length;
@@ -92,6 +94,7 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
     if (name === "") return fail("Give the file a name");
     if (bytes(d.content) > MAX_BYTES) return fail("The content is over 1 MiB");
     if (d.modified && bytes(d.originalContent) > MAX_BYTES) return fail("The original code is over 1 MiB");
+    if (d.modified && bytes(d.originalUrl.trim()) > MAX_URL_BYTES) return fail("The original URL is over 8 KiB");
     setError(undefined);
     setBusy(true);
     const input = {

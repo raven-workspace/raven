@@ -12,7 +12,12 @@ export interface AppendixIndex {
   pages: AppendixPageLetter[];
 }
 
-const FIRST_LETTER = "A".charCodeAt(0);
+/** The letter of the appendix at `index` (from 0), as spreadsheet columns go: A … Z, AA, AB … AZ, BA … ZZ, AAA. */
+export function appendixLetter(index: number): string {
+  let out = "";
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) out = String.fromCharCode(65 + ((n - 1) % 26)) + out;
+  return out;
+}
 /** Lines of a code block past which it is suggested for an appendix page (`suggestMoves`). */
 export const MAX_INLINE_LINES = 60;
 
@@ -20,12 +25,12 @@ export const MAX_INLINE_LINES = 60;
 export const isAppendixPage = (s: { kind: SectionKind; meta?: unknown }) =>
   s.kind === "page" && (s.meta as Partial<PageMeta> | undefined)?.placement === "appendix";
 
-/** Appendix letters: each appendix page (+ Page) takes the next letter from A, by position. Nothing is moved out of a page. */
+/** Appendix letters: each appendix page (+ Page) takes the next letter from A, by position (past Z: AA, AB …). Nothing is moved out of a page. */
 export function numberAppendices(sections: { id: string; kind: SectionKind; meta?: unknown; position?: number }[]): AppendixIndex {
   const pages = sections
     .filter(isAppendixPage)
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-    .map((s, i) => ({ sectionId: s.id, letter: String.fromCharCode(FIRST_LETTER + i) }));
+    .map((s, i) => ({ sectionId: s.id, letter: appendixLetter(i) }));
   return { pages };
 }
 

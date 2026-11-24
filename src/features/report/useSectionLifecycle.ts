@@ -104,8 +104,8 @@ export function useOpenFlatten(
 }
 
 /**
- * Builds the open section's plain draft from `drafts` when it has no current page. `draftFailed` is a failed build's
- * message (`retryDraft` tries again); `draftBlocked` the section whose rebuild waits on an unsaved change (`retryBlocked`
+ * Builds the open section's plain draft from `drafts` when it has no current page. `draftFailed` is the open section's
+ * failed build's message, kept per section so one page's failure stops no other (`retryDraft` tries that page again); `draftBlocked` the section whose rebuild waits on an unsaved change (`retryBlocked`
  * tries again, `rebuildAnyway` rebuilds with the change kept in the archived old page).
  */
 export function useDraftBuild(
@@ -118,21 +118,22 @@ export function useDraftBuild(
   // A section opened with no page yet, or one under another layout, gets its plain draft, built and stored once
   // (draftBuiltAt marks it).
   const building = useRef(new Set<string>());
-  const [draftFailed, setDraftFailed] = useState<string | null>(null);
+  // Failed builds' messages, by section id.
+  const [failed, setFailed] = useState<ReadonlyMap<string, string>>(new Map());
   // A section whose rebuild waits on an earlier change to its old page that isn't saved (failed or refused).
   const [draftBlocked, setDraftBlocked] = useState<string | null>(null);
   // Sections the owner asked to rebuild anyway: their unsaved change goes into the archived old page instead.
   const rebuildAnyway = useRef(new Set<string>());
   useEffect(() => {
     const s = openSection;
-    if (!s || hasCurrentPage(s) || s.kind === "details" || draftFailed || draftBlocked === s.id || building.current.has(s.id)) return;
+    if (!s || hasCurrentPage(s) || s.kind === "details" || failed.has(s.id) || draftBlocked === s.id || building.current.has(s.id)) return;
     const doc = drafts.get(s.id);
     if (!doc) return;
     building.current.add(s.id);
     const fail = (e: unknown) => {
       building.current.delete(s.id);
       reportError(e);
-      setDraftFailed(RavenError.from(e).message);
+      setFailed((was) => new Map(was).set(s.id, RavenError.from(e).message));
     };
     // Rebuild anyway: once a write of it already on its way has settled (so it can't land after the rebuild), the
     // unsaved change is dropped from the queue (it is never tried again) and lives on in the archived old page below
@@ -191,10 +192,18 @@ export function useDraftBuild(
           });
       })
       .catch(fail);
-  }, [openSection, drafts, reportId, qc, draftFailed, draftBlocked, cachedSection]);
+  }, [openSection, drafts, reportId, qc, failed, draftBlocked, cachedSection]);
+  const openId = openSection?.id;
   return {
-    draftFailed,
-    retryDraft: () => setDraftFailed(null),
+    draftFailed: openId === undefined ? null : (failed.get(openId) ?? null),
+    retryDraft: () => {
+      if (openId === undefined) return;
+      setFailed((was) => {
+        const next = new Map(was);
+        next.delete(openId);
+        return next;
+      });
+    },
     draftBlocked,
     retryBlocked: () => setDraftBlocked(null),
     rebuildAnyway: (id: string) => {
