@@ -169,21 +169,24 @@ export async function applyDaCover(engagementId: string, ctx: TickContext, byOwn
 }
 
 /**
- * Moves each host to the column its checklist implies, only when that differs from the column last derived (a
- * hand placement holds until then). `byOwner` is the current checklist; read from the store when left out.
+ * Moves each host to the column its checklist and access grants imply, only when that differs from the column last
+ * derived (a hand placement holds until then). `byOwner` is the current checklist; read from the store when left out.
  *
  * While the engagement has no checklist rows at all (an engagement from before step 3 whose log has not been ticked
  * yet), a hand-placed host with no derived column is left alone: its first derived column must come from its real
  * checklist, so the store's seed (T6-R2) records that one rather than an empty-checklist "information-gathering".
  */
 export async function syncBoards(engagementId: string, ctx: TickContext, byOwner?: Map<string, ChecklistState>): Promise<void> {
-  const states = byOwner ?? byOwnerOf(await api.checklistList(engagementId));
+  const [states, grants] = await Promise.all([
+    byOwner ?? api.checklistList(engagementId).then(byOwnerOf),
+    api.accessGrantsList(engagementId),
+  ]);
   const { engagement, hosts, servicesByHost } = ctx;
   const noRows = [...states.values()].every((s) => Object.keys(s).length === 0);
   for (const host of hosts) {
     if (noRows && host.boardDerived == null && host.boardManual) continue;
     const applicable = applicableGoals(host, engagement, hosts, servicesByHost);
-    const column = derivedColumn(host, states.get(host.id) ?? {}, applicable);
+    const column = derivedColumn(host, states.get(host.id) ?? {}, applicable, grants ?? []);
     if (column !== host.boardDerived) await api.hostSyncBoard(host.id, column);
   }
 }
