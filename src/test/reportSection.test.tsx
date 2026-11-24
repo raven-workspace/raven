@@ -1623,6 +1623,46 @@ describe("Report view: appendix pages and free pages (+ Page)", () => {
   });
 });
 
+describe("Report view: undoing a page delete", () => {
+  const addPage = async (kind: "Appendix page" | "Free page") => {
+    fireEvent.click(screen.getByRole("button", { name: "+ Page" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: kind }));
+  };
+  const ordered = async () => {
+    const report = await api.reportGetOrCreate("e-exam");
+    return (await api.reportSectionsList(report.id)).sort((a, b) => a.position - b.position);
+  };
+
+  it("puts the page back at its old place, every position still unique, after a page was added meanwhile", async () => {
+    mount();
+    await ready();
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toContain("Appendix A"));
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toContain("Appendix B"));
+    const before = await ordered();
+    const victim = before.filter((s) => s.kind === "page").at(-1)!;
+    const oldIndex = before.findIndex((s) => s.id === victim.id);
+
+    fireEvent.keyDown(tab("Appendix B"), { key: "Backspace" });
+    const dialog = await screen.findByRole("dialog", { name: "Delete Untitled appendix? Its text goes with it." });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete page" }));
+    await waitFor(() => expect(tabLabels()).not.toContain("Appendix B"));
+    // A page added meanwhile takes the deleted page's position.
+    await addPage("Free page");
+    await waitFor(() => expect(tabLabels()).toContain("Untitled page"));
+
+    const notice = (await screen.findAllByRole("status")).find((n) => n.textContent?.includes("Deleted Untitled appendix"))!;
+    fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(tabLabels()).toContain("Appendix B"));
+    await waitFor(async () => {
+      const after = await ordered();
+      expect(new Set(after.map((s) => s.position)).size).toBe(after.length);
+      expect(after.findIndex((s) => s.targetKey === victim.targetKey)).toBe(oldIndex);
+    });
+  });
+});
+
 describe("Report view: Move to appendix", () => {
   const paper = () => document.querySelector<HTMLElement>(".report-page")!;
   const h1 = () => within(paper()).queryByRole("heading", { level: 1 })?.textContent;
