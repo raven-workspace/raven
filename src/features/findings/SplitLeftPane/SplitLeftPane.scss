@@ -71,8 +71,9 @@
       }
     }
 
-    &:disabled {
+    &[aria-disabled="true"] {
       opacity: 40%;
+      cursor: default;
     }
   }
 

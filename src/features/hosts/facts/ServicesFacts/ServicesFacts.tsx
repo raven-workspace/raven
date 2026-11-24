@@ -217,16 +217,17 @@ export function FoldedRows({ label, services, render, defaultOpen = false }: {
   return (
     <>
       <li className={ROW}>
-        <button
-          type="button"
-          aria-expanded={open}
-          title={open ? `Fold ${label}` : `Show ${label}`}
-          onClick={() => setOpen(!open)}
-          className="services-facts__fold"
-        >
-          <DisclosureCaret open={open} />
-          <span className="services-facts__fold-label">{label}</span>
-        </button>
+        <Tooltip content={open ? `Fold ${label}` : `Show ${label}`}>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+            className="services-facts__fold"
+          >
+            <DisclosureCaret open={open} />
+            <span className="services-facts__fold-label">{label}</span>
+          </button>
+        </Tooltip>
       </li>
       {/* The folded rows sit in their own list item so they can open and close as one; subgrid keeps the columns. */}
       <Collapse open={open} as="li" className="services-facts__folded">

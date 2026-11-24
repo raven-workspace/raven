@@ -247,6 +247,45 @@ describe("finding split editor", () => {
     expect(stepTitles(form)).toEqual(["web probe"]);
   });
 
+  it("a reference chip, a log row picked as a step and the context tabs explain themselves in tooltips on keyboard focus (RAV-22)", async () => {
+    const user = userEvent.setup();
+    m.nvdLookup.mockRejectedValue(new RavenError("no_key", "No NVD key"));
+    mount();
+    const form = await openSplit(user);
+    const ref = await within(within(form).getByRole("group", { name: "Suggested references" })).findByRole("button", { name: "Add CVE-2021-41773" });
+    expect(ref).not.toHaveAttribute("title");
+    act(() => ref.focus());
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Add CVE-2021-41773 to the references");
+    act(() => ref.blur());
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+
+    const [row] = await screen.findAllByRole("button", { name: /^Add .* as a step$/ });
+    expect(row).not.toHaveAttribute("title");
+    act(() => row!.focus());
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent(/^Add as a step/);
+    expect(within(tip).getByText("↵")).toHaveClass("tooltip__key");
+    act(() => row!.blur());
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+
+    const notes = within(contextTabs()).getByRole("tab", { name: "Notes" });
+    expect(notes).not.toHaveAttribute("title");
+    act(() => notes.focus());
+    expect(within(await screen.findByRole("tooltip")).getByText("N")).toHaveClass("tooltip__key");
+  });
+
+  it("the disabled Facts tab keeps its reason reachable from the keyboard (RAV-22)", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/s/findings");
+    await user.click(await screen.findByRole("button", { name: "Add finding" }));
+    await screen.findByRole("form", { name: "New finding" });
+    const facts = within(contextTabs()).getByRole("tab", { name: "Facts" });
+    expect(facts).not.toHaveAttribute("title");
+    act(() => facts.focus());
+    expect(facts).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Pick an affected host to see its facts");
+  });
+
   it("references from this host's log and notes are offered as chips, minus those added", async () => {
     const user = userEvent.setup();
     m.notesList.mockResolvedValue([{ ownerId: "h1", engagementId: "e1", hostId: "h1", body: "try CVE-2019-0708 later", private: false, updatedAt: 3 }]);
@@ -368,7 +407,11 @@ describe("finding split editor", () => {
     // Every host's entries: the engagement Log.
     expect(await screen.findByRole("button", { name: "Add web probe as a step" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add nmap sweep as a step" })).toBeInTheDocument();
-    expect(within(contextTabs()).getByRole("tab", { name: "Facts" })).toBeDisabled();
+    // aria-disabled, not disabled: still a Tab stop, so its reason shows from the keyboard (RAV-22). A click does nothing.
+    const facts = within(contextTabs()).getByRole("tab", { name: "Facts" });
+    expect(facts).toHaveAttribute("aria-disabled", "true");
+    await user.click(facts);
+    expect(facts).toHaveAttribute("aria-selected", "false");
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("form", { name: "New finding" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Findings" })).toBeInTheDocument();

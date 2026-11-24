@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { suggestRefs } from "../../../engines/findings/index";
 import type { LogEntry } from "../../../types/log";
-import { ChipSet } from "../../../ui/index";
+import { ChipSet, Tooltip } from "../../../ui/index";
 import { useLog } from "../../log/queries";
 import { useNotes } from "../../notes/queries";
 import { useNotesStore } from "../../notes/useNotesStore";
@@ -52,16 +52,16 @@ export function RefSuggestions({ eid, hostIds, added, onAdd }: {
       <span className="ref-suggestions__label">Found in the log and notes</span>
       <ChipSet>
       {suggestions.map((r) => (
-        <button
-          key={r}
-          type="button"
-          aria-label={`Add ${r}`}
-          title={`Add ${r} to the references`}
-          onClick={() => onAdd(r)}
-          className="ref-suggestions__ref"
-        >
-          {r}
-        </button>
+        <Tooltip key={r} content={`Add ${r} to the references`}>
+          <button
+            type="button"
+            aria-label={`Add ${r}`}
+            onClick={() => onAdd(r)}
+            className="ref-suggestions__ref"
+          >
+            {r}
+          </button>
+        </Tooltip>
       ))}
       </ChipSet>
     </div>

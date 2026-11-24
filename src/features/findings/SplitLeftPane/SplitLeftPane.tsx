@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cx } from "../../../lib/cx";
-import { ChipSet, queryState } from "../../../ui/index";
+import { ChipSet, queryState, Tooltip } from "../../../ui/index";
 import { SCROLL_PANE } from "../../../ui/controlStyles";
 import { TAB_MARK } from "../../../ui/shadcn/tabs";
 import { TabMarker, usePanelFade } from "../../../ui/TabMarker";
@@ -15,9 +15,9 @@ import "./SplitLeftPane.scss";
 
 export type ContextTab = "log" | "facts" | "notes";
 const TABS: { id: ContextTab; label: string; title: string }[] = [
-  { id: "log", label: "Log", title: "Log: click an entry to add it as a step" },
-  { id: "facts", label: "Facts", title: "Facts" },
-  { id: "notes", label: "Notes", title: "Notes (N)" },
+  { id: "log", label: "Log", title: "Click an entry to add it as a step" },
+  { id: "facts", label: "Facts", title: "The affected host's facts" },
+  { id: "notes", label: "Notes", title: "Notes" },
 ];
 
 /**
@@ -77,18 +77,21 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
         {TABS.map((t) => {
           const disabled = t.id === "facts" && !active;
           return (
-            <button
-              key={t.id}
-              role="tab"
-              type="button"
-              aria-selected={tab === t.id}
-              disabled={disabled}
-              title={disabled ? "Pick an affected host to see its facts" : t.title}
-              onClick={() => onTab(t.id)}
-              className="split-left-pane__tab"
-            >
-              {t.label}
-            </button>
+            // aria-disabled, not disabled: the tab stays focusable, so its reason shows from the keyboard too.
+            <Tooltip key={t.id} content={disabled ? "Pick an affected host to see its facts" : <span>{t.title}{t.id === "notes" && <span className="tooltip__key">N</span>}</span>}>
+              <button
+                role="tab"
+                type="button"
+                aria-selected={tab === t.id}
+                aria-disabled={disabled || undefined}
+                onClick={() => {
+                  if (!disabled) onTab(t.id);
+                }}
+                className="split-left-pane__tab"
+              >
+                {t.label}
+              </button>
+            </Tooltip>
           );
         })}
       </div>

@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -94,8 +94,8 @@ function mount(opts: {
 const group = async (name: string) => within(await screen.findByRole("region", { name }));
 /** A folded group is one summary button; an open one has a header that folds it. */
 const toggleOf = async (name: string) =>
-  (await (await group(name)).findAllByRole("button")).find((b) => /^(Open|Fold) /.test(b.title))!;
-const isOpen = async (name: string) => (await (await group(name)).findAllByRole("button")).some((b) => b.getAttribute("aria-expanded") === "true" && b.title.startsWith("Fold"));
+  (await (await group(name)).findAllByRole("button")).find((b) => b.classList.contains("fact-group__toggle"))!;
+const isOpen = async (name: string) => (await (await group(name)).findAllByRole("button")).some((b) => b.getAttribute("aria-expanded") === "true" && b.classList.contains("fact-group__toggle"));
 const summaryOf = async (name: string) => {
   const g = await group(name);
   const b = await g.findByRole("button", { expanded: false });
@@ -331,6 +331,24 @@ describe("services grid", () => {
     await user.click(await g.findByRole("button", { name: "Verdict for 22/tcp: untested" }));
     await user.click(within(g.getByRole("radiogroup", { name: "Verdict for 22/tcp" })).getByRole("radio", { name: "Candidate" }));
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s3", "candidate", undefined);
+  });
+
+  it("a fact group's toggle explains itself in a tooltip on keyboard focus, with its key, not a title (RAV-22)", async () => {
+    mount();
+    const toggle = await toggleOf("Services");
+    expect(toggle).not.toHaveAttribute("title");
+    act(() => toggle.focus());
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent(/^Fold Services/);
+    expect(within(tip).getByText("S")).toHaveClass("tooltip__key");
+  });
+
+  it("a folded run of services explains itself in a tooltip on keyboard focus, not a title (RAV-22)", async () => {
+    mount({ services: Array.from({ length: 7 }, (_, i) => svc(`rpc${i}`, 49664 + i, { nmapService: "msrpc" })) });
+    const fold = await (await group("Services")).findByRole("button", { name: "msrpc ×7" });
+    expect(fold).not.toHaveAttribute("title");
+    act(() => fold.focus());
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Show msrpc ×7");
   });
 
   it("the verdict chip's hint is a tooltip that keyboard focus opens", async () => {
