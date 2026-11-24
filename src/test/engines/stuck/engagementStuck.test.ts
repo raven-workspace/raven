@@ -86,6 +86,19 @@ describe("engagementStuck lines", () => {
     expect(done.filter((x) => x.text.includes("never sprayed"))).toEqual([]);
   });
 
+  it("credentials read with their domain: CORP\\admin and a local admin are two subjects (RAV-22)", () => {
+    const hosts = [host("A", { os: "windows" })];
+    const l = run({
+      hosts, byOwner: { A: FOOT_DONE }, services: { A: [svc("A", 445, "microsoft-ds")] }, usernames: [uname("u1")],
+      credentials: [cred({ id: "c1", username: "admin", domain: "CORP" }), cred({ id: "c2", username: "admin", domain: null, scope: "local", localHostId: "A" })],
+      attempts: [attempt({ credId: "c1", hostId: "A", service: "smb", port: 445 }), attempt({ credId: "c2", hostId: "A", service: "smb", port: 445 })],
+    }).filter((x) => x.area === "credentials");
+    const subjects = l.map((x) => x.subject);
+    expect(subjects).toContain("CORP\\admin");
+    expect(subjects).toContain("admin");
+    expect(new Set(l.map((x) => `${x.subject}|${x.text}`)).size).toBe(l.length);
+  });
+
   it("usernames not AS-REP-checked", () => {
     const hosts = [host("DC", { os: "windows" })];
     const base = { hosts, byOwner: { DC: FOOT_DONE }, services: { DC: [svc("DC", 88, "kerberos-sec"), svc("DC", 389, "ldap")] }, usernames: [uname("u1"), uname("u2")] };
