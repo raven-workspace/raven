@@ -119,6 +119,19 @@ beforeEach(() => {
 });
 
 describe("facts by phase", () => {
+  it("a failed services load shows the standard error in Services, and Retry loads them (RAV-22)", async () => {
+    const user = userEvent.setup();
+    mount();
+    m.servicesList.mockRejectedValue(new Error("vault busy"));
+    const group = await screen.findByRole("region", { name: "Services" });
+    const alert = await within(group).findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load services");
+    m.servicesList.mockResolvedValue([NGINX, SMB, SSH]);
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(within(group).queryByRole("alert")).toBeNull());
+    expect(group.querySelector("[data-services-grid]")).not.toBeNull();
+  });
+
   it("before a foothold: Coverage, Services and Host Credentials are open; the after-foothold groups are folded summaries", async () => {
     mount();
     for (const name of ["Coverage", "Services", "Host Credentials"]) expect(await isOpen(name)).toBe(true);

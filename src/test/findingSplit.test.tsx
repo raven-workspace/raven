@@ -122,6 +122,20 @@ async function addRef(user: User, form: HTMLElement, ref: string) {
 }
 
 describe("finding split editor", () => {
+  it("a failed log load in the split pane shows the standard error, and Retry loads the log (RAV-22)", async () => {
+    const user = userEvent.setup();
+    m.logList.mockRejectedValue(new Error("vault busy"));
+    mount();
+    await openSplit(user);
+    const panel = await screen.findByRole("tabpanel", { name: "Log" });
+    const alert = await within(panel).findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load the log");
+    m.logList.mockResolvedValue([L1, L2, L3, L4]);
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(within(panel).queryByRole("alert")).toBeNull());
+    expect(within(panel).getAllByRole("listitem").length).toBeGreaterThan(0);
+  });
+
   it("F on a host page shows a form named New finding beside a Log tab, with no dialog", async () => {
     const user = userEvent.setup();
     mount();

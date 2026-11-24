@@ -1,7 +1,7 @@
 import { Check, Copy, PencilSimple, Trash } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import type { FindingFile } from "../../../types/findings";
-import { ActionCell, Button, Field, useFlash, IconButton, Input, Select, Textarea, Toggle, fieldLabelClass } from "../../../ui/index";
+import { ActionCell, Button, Field, useFlash, IconButton, Input, queryState, Select, Textarea, Toggle, fieldLabelClass } from "../../../ui/index";
 import { ConfirmDelete } from "../../checklist/ConfirmDelete/ConfirmDelete";
 import { CodeView, guessLanguage, LANGUAGES } from "../CodeView/CodeView";
 import { useFindingFileMutations, useFindingFiles } from "../queries";
@@ -250,7 +250,7 @@ export function FindingFiles({ findingId, form, onForm, onDirty, register }: {
         <span className={fieldLabelClass}>Files</span>
         {!form && <Button size="sm" onClick={() => open()}>Add file</Button>}
       </div>
-      {files.isError && <p role="alert" className="finding-files__error">Couldn't load files: {files.error.message}</p>}
+      {files.isError && queryState([files], "files")}
       {formReady && (
         <FileForm
           key={formFile?.id ?? "new"}

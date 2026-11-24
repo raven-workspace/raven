@@ -85,11 +85,6 @@
     border-top: 1px solid var(--line);
   }
 
-  .split-left-pane__error {
-    @include type(meta);
-    color: var(--warn);
-  }
-
   .split-left-pane__hint {
     @include type(meta);
     color: var(--muted);

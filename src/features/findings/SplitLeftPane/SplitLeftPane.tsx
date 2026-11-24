@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cx } from "../../../lib/cx";
-import { ChipSet } from "../../../ui/index";
+import { ChipSet, queryState } from "../../../ui/index";
 import { SCROLL_PANE } from "../../../ui/controlStyles";
 import { TAB_MARK } from "../../../ui/shadcn/tabs";
 import { TabMarker, usePanelFade } from "../../../ui/TabMarker";
@@ -100,7 +100,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
       >
         {tab === "log" ? (
           log.isError ? (
-            <p role="alert" className="split-left-pane__error">Couldn't load the log: {log.error.message}</p>
+            queryState([log], "the log")
           ) : entries.length === 0 && log.data ? (
             <p className="split-left-pane__hint">Nothing logged {active ? "on this host" : "yet"}. Press L to capture.</p>
           ) : (

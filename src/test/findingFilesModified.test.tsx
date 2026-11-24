@@ -69,3 +69,18 @@ describe("finding files: modified exploit", () => {
     expect(await screen.findByText("Modified")).toBeInTheDocument();
   });
 });
+
+describe("finding files: load error (RAV-22)", () => {
+  it("a failed load shows the standard error, and Retry loads the files", async () => {
+    const user = userEvent.setup();
+    m.findingFilesList.mockRejectedValue(new Error("vault busy"));
+    render(<QueryClientProvider client={makeQueryClient()}><Host /></QueryClientProvider>);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load files");
+    m.findingFilesList.mockResolvedValue([FILE]);
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("button", { name: "Edit exploit.py" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
