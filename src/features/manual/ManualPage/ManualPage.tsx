@@ -560,12 +560,16 @@ export function ManualPage() {
   const { host } = useFillBase(scope.engagementId, scope.hostId);
   const cardEscRef: CardEsc = useRef(null);
   const [cardShown, setCardShown] = useState(false);
-  // A load that is still going after 300ms says so; a fast one shows nothing.
+  // A load that is still going after 300ms says so; a fast one shows nothing. Each load starts quiet: one that ends
+  // clears the flag, so a quick Retry after a slow failed load shows nothing either.
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     if (status !== "loading") return;
     const t = setTimeout(() => setSlow(true), LOADING_MS);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      setSlow(false);
+    };
   }, [status]);
 
   useKeydown((e) => {

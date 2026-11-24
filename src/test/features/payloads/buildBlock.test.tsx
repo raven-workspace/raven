@@ -251,7 +251,7 @@ describe("Payload build memory", () => {
     usePayloadsStore.setState({ lhost: NEW_LHOST, overrides: { "": { os: "windows", context: "powershell" } } });
     const { user, d } = await openOn("Nishang cradle (served rev.ps1)");
     await d.findByText(REBUILD_LINE);
-    await user.click(d.getByRole("button", { name: /^(Host |No host)/ }));
+    await user.click(d.getByRole("button", { name: /^Fill for host/ }));
     await user.click(d.getByRole("option", { name: /No host/ }));
     await vi.waitFor(() => expect(d.queryByText(REBUILD_LINE)).not.toBeInTheDocument());
     await user.click(fitRow(d, "Nishang cradle (served rev.ps1)"));

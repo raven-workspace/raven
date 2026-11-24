@@ -5,6 +5,36 @@ import type { ManualNote } from "./types";
 export const plain = (parts: Inline[]): string =>
   parts.map((p) => ("text" in p ? p.text : "code" in p ? p.code : "strong" in p ? plain(p.strong) : "em" in p ? plain(p.em) : p.link.label)).join("");
 
+/** Where a command was taken out of an action cell's text. */
+const SEAM = "\uE000";
+
+/**
+ * What a lookup row's action cell says besides its commands (they have rows of their own): links and single-token code
+ * stay. Only where a command was taken out are the separators tidied: orphaned ones fold ("or , then" reads "or, then",
+ * "it: , then" reads "it: then"), and separators at either end go. Every other comma, semicolon and space is kept as
+ * written ("TCP,UDP" stays). Null when nothing but punctuation is left.
+ */
+export function leftover(action: Inline[], commands: string[]): Inline[] | null {
+  const kept: Inline[] = [];
+  for (const part of action) {
+    const p = "code" in part && commands.includes(part.code) ? { text: SEAM } : part;
+    const last = kept[kept.length - 1];
+    if ("text" in p && last && "text" in last) kept[kept.length - 1] = { text: last.text + p.text };
+    else kept.push(p);
+  }
+  const out = kept
+    .map((p, i) => {
+      if (!("text" in p)) return p;
+      // A seam with the spaces and separators around it reads as its first separator (a colon, comma or semicolon) and a space.
+      let t = p.text.replace(/[\s,;:]*\uE000[\s,;:\uE000]*/g, (run) => `${/[:,;]/.exec(run)?.[0] ?? ""} `);
+      if (i === 0) t = t.replace(/^[\s,;]+/, "");
+      if (i === kept.length - 1) t = t.replace(/[\s,;]+$/, "");
+      return { text: t };
+    })
+    .filter((p) => !("text" in p) || p.text !== "");
+  return /[\p{L}\p{N}]/u.test(plain(out)) ? out : null;
+}
+
 /** A key cell (a flag, an error code, a port, a privilege, a path) up to this many characters keeps to one line. */
 const KEY_MAX = 32;
 

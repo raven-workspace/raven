@@ -33,7 +33,8 @@ export function HostChip({ hosts, value, onChange, onMousePick, engagementName, 
         value={value}
         onPick={onChange}
         {...(onMousePick ? { onMousePick } : {})}
-        label={current ? `Host ${shown}` : shown}
+        // Named for what picking does, as its list is; the chip itself shows the short "Host dc01".
+        label={current ? `Fill for host ${shown}` : "Fill for host"}
         listLabel="Fill for host"
         title={`${current ? current.name : "No host"}${engagementName ? ` in ${engagementName}` : ""}: fill for another host (⌥H)`}
         align={align}

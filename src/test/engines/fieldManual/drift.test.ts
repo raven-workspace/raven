@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeDrift } from '../../../engines/fieldManual/drift';
+import { parseNote } from '../../../engines/manual';
 import type { ParsedCard } from '../../../engines/fieldManual/parseCard';
 import type { PlaybookItem } from '../../../engines/fieldManual/parsePlaybook';
 import type { ChecklistGoal } from '../../../engines/checklist/types';
@@ -66,17 +67,17 @@ describe('computeDrift', () => {
       [],
     );
     expect(d.unfillable).toEqual([
-      { token: 'FILE', count: 2, manual: true },
-      { token: 'WHATEVER', count: 2, manual: false },
-      { token: 'OUTPUT', count: 1, manual: true },
+      { token: 'FILE', count: 2, manual: true, from: { arsenal: 2, notes: 0 } },
+      { token: 'WHATEVER', count: 2, manual: false, from: { arsenal: 2, notes: 0 } },
+      { token: 'OUTPUT', count: 1, manual: true, from: { arsenal: 1, notes: 0 } },
     ]);
   });
 
   it('FILL_ tokens are manual', () => {
     const d = computeDrift([], [], [cmd('a', 'plink -pw {FILL_KALI_PASS} {FILL_ANYTHING}')], [], []);
     expect(d.unfillable).toEqual([
-      { token: 'FILL_ANYTHING', count: 1, manual: true },
-      { token: 'FILL_KALI_PASS', count: 1, manual: true },
+      { token: 'FILL_ANYTHING', count: 1, manual: true, from: { arsenal: 1, notes: 0 } },
+      { token: 'FILL_KALI_PASS', count: 1, manual: true, from: { arsenal: 1, notes: 0 } },
     ]);
   });
 
@@ -120,5 +121,26 @@ describe('computeDrift', () => {
   it('unfillable lists only UPPER_SNAKE tokens', () => {
     const d = computeDrift([], [], [cmd('a', 'x {11111111-2222-4333-8444-555555555555} {name} {pos} {MY_TOKEN} {SUBNET_2}')], [], []);
     expect(d.unfillable.map((u) => u.token)).toEqual(['MY_TOKEN', 'SUBNET_2']);
+  });
+
+  it('Manual note commands count too, with where each token was seen; output fences do not (RAV-21)', () => {
+    const note = parseNote('03-Tools/Zz Drift.md', [
+      '# Zz Drift',
+      '```bash',
+      'zzscan -t {TARGET_IP} --key {NEWTOKEN}',
+      '```',
+      '```text',
+      'banner says {OUTTOKEN}',
+      '```',
+      '**Table 1 — Zz codes**',
+      '| Code | Means | Do this |',
+      '| - | - | - |',
+      '| `ZZ_ONE` | Broke. | `zzfix {NEWTOKEN} {ROWTOKEN}` |',
+    ].join('\n'))!;
+    const d = computeDrift([], [], [cmd('a', 'zzarsenal {NEWTOKEN}')], [], [], [note]);
+    expect(d.unfillable).toEqual([
+      { token: 'NEWTOKEN', count: 3, manual: false, from: { arsenal: 1, notes: 2 } },
+      { token: 'ROWTOKEN', count: 1, manual: false, from: { arsenal: 0, notes: 1 } },
+    ]);
   });
 });

@@ -11,7 +11,10 @@ interface ArsenalState {
   blockId: string | null;
   /** A card-less command shown alone in the drawer (the reading view); null when none. */
   solo: LibraryCommand | null;
-  /** The drawer was opened from the Manual: its first Esc closes it, however far it navigated inside. */
+  /**
+   * The cards on screen were reached from the Manual (a card opened from a note, then links inside it): the first Esc
+   * closes the drawer, back on the note. Opening anything from elsewhere clears it.
+   */
   fromManual: boolean;
   /** What full-screen browse showed last, so it opens where you stopped. */
   lastRead: { kind: "card" | "command" | "generator"; id: string } | null;
@@ -19,8 +22,11 @@ interface ArsenalState {
   openSolo: (command: LibraryCommand) => void;
   /** Leaves the solo view (the drawer stays as it is). */
   clearSolo: () => void;
-  /** Opens the drawer, on a card (at one of its blocks) when given, else on search. */
-  openCard: (cardId?: string, blockId?: string, opts?: { from?: "manual" }) => void;
+  /**
+   * Opens the drawer, on a card (at one of its blocks) when given, else on search. `from`: "manual" for a card opened
+   * from a note; "link" for a link inside the card on screen, which keeps where that card came from.
+   */
+  openCard: (cardId?: string, blockId?: string, opts?: { from?: "manual" | "link" }) => void;
   toggle: () => void;
   close: () => void;
   /** Hands the drawer over to the browse screen: the drawer closes, the card stays. */
@@ -35,12 +41,12 @@ export const useArsenalStore = create<ArsenalState>()((set, get) => ({
   lastRead: null,
   fromManual: false,
   openSolo: (command) => {
-    set({ open: true, cardId: null, blockId: null, solo: command });
+    set({ open: true, fromManual: false, cardId: null, blockId: null, solo: command });
   },
   clearSolo: () => set({ solo: null }),
   openCard: (cardId, blockId, opts) => {
-    // Moves inside an open drawer keep where it was opened from.
-    const fromManual = opts?.from === "manual" || (get().open && get().fromManual);
+    // Only a link inside the card on screen keeps where it was opened from.
+    const fromManual = opts?.from === "manual" || (opts?.from === "link" && get().open && get().fromManual);
     set({ open: true, fromManual, solo: null, cardId: cardId ?? null, blockId: cardId ? (blockId ?? null) : null });
   },
   toggle: () => (get().open ? get().close() : get().openCard(get().cardId ?? undefined, get().blockId ?? undefined)),

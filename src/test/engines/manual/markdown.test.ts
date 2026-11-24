@@ -179,12 +179,13 @@ describe("parseInline: emphasis around inline code", () => {
 describe("RAV-19: parser edge cases", () => {
   const tableOf = (body: string) => parseMarkdown(body).find((b) => b.kind === "table");
 
-  it("emphasis is near linear: a 200,000-character line of `*a` parses in under 100 ms", () => {
+  it("emphasis is near linear: a 200,000-character line of `*a` parses well under a second", () => {
     const line = "*a".repeat(100_000);
     parseInline("*a".repeat(1_000));
     const t = performance.now();
     const out = parseInline(line);
-    expect(performance.now() - t).toBeLessThan(100);
+    // About 30 ms on an idle machine; the quadratic matcher took about 5 s. The bound leaves room for a loaded machine.
+    expect(performance.now() - t).toBeLessThan(1_000);
     expect(out.length).toBeGreaterThan(0);
   });
 

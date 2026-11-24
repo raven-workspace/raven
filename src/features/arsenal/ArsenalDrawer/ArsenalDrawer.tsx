@@ -135,7 +135,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   useEffect(() => resetGuard(), [currentId, resetGuard]);
 
   const showing = searching ? "results" : solo ? "solo" : cardId ? "card" : category !== null ? "results" : "categories";
-  const openLinkedCard = (id: string) => useArsenalStore.getState().openCard(id);
+  const openLinkedCard = (id: string) => useArsenalStore.getState().openCard(id, undefined, { from: "link" });
   const onList = showing === "categories" || showing === "results";
   // A card, a lone command or a category fades in where the last view was; typed search results never do.
   const viewRef = useRef<HTMLDivElement>(null);
@@ -196,7 +196,8 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
 
   /** From a card (or one command) back to the list. */
   const back = useCallback(() => {
-    useArsenalStore.setState({ cardId: null, blockId: null, solo: null });
+    // The list was not reached from the Manual.
+    useArsenalStore.setState({ cardId: null, blockId: null, solo: null, fromManual: false });
     searchRef.current?.focus();
   }, []);
   // Capture phase: Esc reaches the drawer before the screen's own Esc handler. On a card it goes back; in a category

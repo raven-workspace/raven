@@ -74,6 +74,20 @@ describe("Field Manual import", () => {
     expect(await screen.findByText(/1 cards, \d+ commands, 2 notes\./)).toBeInTheDocument();
   });
 
+  it("drift lists a Manual note's unfillable placeholder as coming from the Manual; output fences don't count (RAV-21)", async () => {
+    const user = userEvent.setup();
+    m.fieldManualScan.mockResolvedValue([
+      { relPath: "02-Cards/zz.md", mtimeMs: 5, text: CARD },
+      { relPath: "03-Tools/Zz-Tool.md", mtimeMs: 5, text: "---\nid: tool-zz\ntitle: Zz Tool\n---\n## Use\n```bash\nzzrun {TARGET_IP} {ZZNEWTOKEN}\n```\n```text\nsaw {ZZOUTTOKEN}\n```\n" },
+    ]);
+    m.fieldManualSave.mockResolvedValue(null);
+    mount(<FieldManualSection />);
+    await user.click(await screen.findByRole("button", { name: "Import now" }));
+    await user.click(await screen.findByRole("button", { name: /Placeholders Raven can't fill/ }));
+    expect(await screen.findByText("{ZZNEWTOKEN} Manual ×1")).toBeInTheDocument();
+    expect(screen.queryByText(/ZZOUTTOKEN/)).toBeNull();
+  });
+
   it("the report shows an import warning (notes kept from the last import)", async () => {
     m.fieldManualLoad.mockResolvedValue({
       importedAt: 100, cards: [], overlay: {}, added: [], playbook: [], toolkit: [], notes: [],

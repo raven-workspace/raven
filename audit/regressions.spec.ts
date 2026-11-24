@@ -319,7 +319,7 @@ test("host picker is a Tab stop", async ({ page }) => {
   const search = page.getByRole("dialog").getByRole("combobox", { name: "Search" });
   await search.waitFor();
   await search.fill("smb");
-  const chip = page.getByRole("button", { name: /^(Host |No host$)/ });
+  const chip = page.getByRole("button", { name: /^Fill for host/ });
   await expect(chip).not.toHaveAttribute("tabindex", "-1");
   let reached = false;
   for (let i = 0; i < 8 && !reached; i++) {
