@@ -10,7 +10,7 @@ import { api, resetAuditState } from "../audit/fakeApi";
 import { reportSchema } from "../features/report/editor/extension";
 import { ReportSectionView } from "../features/report/ReportSection/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
-import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, placedIdsIn, type ReportNode, type SectionMeta } from "../engines/report";
+import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, type ReportNode, type SectionMeta, placedIn, removalKeys } from "../engines/report";
 import { discardReports, flushReports, queueReportSave } from "../features/report/saveQueue";
 import { ReportTabs, type TabItem } from "../features/report/ReportTabs/ReportTabs";
 import { CheckList, TodoPanel } from "../features/report/TodoPanel/TodoPanel";
@@ -20,6 +20,9 @@ import { RavenError } from "../types/errors";
 import { TooltipProvider } from "../ui";
 import layout3Json from "./fixtures/report-layout3-owner.json";
 import layout5Json from "./fixtures/report-layout5-web01.json";
+
+/** What a page places, as `removedEntryIds` records it. */
+const placedKeys = (n: ReportNode) => new Set(removalKeys(placedIn(n)));
 
 vi.mock("../lib/api", () => import("../audit/fakeApi"));
 // The audit fixture also stores web01's layout-5 page (the audit's Restore screens); these tests store their own
@@ -1043,7 +1046,7 @@ describe("Report view: the result", () => {
       fireEvent.click(rowFor("web01"));
       await waitFor(() => expect(draftUpserts(upsert, WEB)).toHaveLength(1));
       const [, input] = draftUpserts(upsert, WEB)[0] as [string, { meta: SectionMeta; doc: ReportNode }];
-      const placed = placedIdsIn(input.doc);
+      const placed = placedKeys(input.doc);
       for (const id of removed) expect(placed.has(id)).toBe(false);
       // The rest of the draft is there: the entries the owner kept.
       expect(placed.has("l-exam-web01-tar")).toBe(true);

@@ -19,7 +19,7 @@ export * from "./guides";
 export * from "./findingText";
 export * from "./terminal";
 export * from "./plain";
-export * from "./place";
+export * from "./page";
 export * from "./plainTables";
 export * from "./flatten";
 export * from "./typst";

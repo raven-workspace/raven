@@ -32,6 +32,10 @@ _Avoid_: plan (the plan is the decision; the draft is the page printed from it)
 A report target's document as the owner has edited it. Whether an entry is "on the page" is always a question about the page, never the plan.
 _Avoid_: draft (once edited, it is the owner's)
 
+**Block source**:
+Where a block on a page came from: a log entry and which part of it, a finding, a machine's facts, a phase heading, or a machine's Also tested list. It stays on the block as the owner edits, so Raven can follow the block back to what it shows.
+_Avoid_: origin, ref, provenance
+
 **Kept from the report**:
 A log entry that may never reach the page, the evidence column or the PDF: a private entry, or one tied to an attempt the owner marked private or kept to themselves.
 _Avoid_: hidden, private (private is one way to be kept from the report)

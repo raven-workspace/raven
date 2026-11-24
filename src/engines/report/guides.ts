@@ -1,6 +1,7 @@
 import type { SectionKind } from "../../types/report";
 import { HOUSE_CLEANING, INTRODUCTION, RECOMMENDATIONS, SCOPE } from "./frontMatter";
-import { sourceOf } from "./stamp";
+import { blockSource } from "./page/block";
+import type { BlockSource } from "./page/source";
 import type { PageMeta, ReportNode } from "./types";
 
 /**
@@ -137,29 +138,30 @@ export function sectionGuide(kind: SectionKind, placement?: PageMeta["placement"
 }
 
 /** The guide a block's `source` carries, or null. */
-function sourceGuide(source: string, kind: SectionKind): GuideId | null {
-  const [head, , part] = source.split(":");
-  switch (head) {
+function sourceGuide(source: BlockSource, kind: SectionKind): GuideId | null {
+  switch (source.kind) {
     case "ports":
     case "result":
-      return head;
+      return source.kind;
     case "phase-steps":
       return "steps";
     case "finding":
-      return part === "explanation" ? "vuln" : null;
+      return source.part === "explanation" ? "vuln" : null;
     case "file":
       return "exploit";
     case "attack-path":
-      return source === head ? "attack-path" : null;
+      return "attack-path";
+    case "phase":
+      return source.findingId === null && Object.hasOwn(PHASE_GUIDES, source.phase) ? PHASE_GUIDES[source.phase]! : null;
     case "table":
-      switch (source) {
-        case "table:findings":
+      switch (source.table) {
+        case "findings":
           return "findings-table";
-        case "table:scope-table":
+        case "scope-table":
           return "scope";
-        case "table:tested":
+        case "tested":
           return kind === "engagement-tested" ? "tested" : null;
-        case "table:cleanup":
+        case "cleanup":
           return "house-cleaning";
         default:
           return null;
@@ -177,11 +179,8 @@ export function guidesOf(doc: ReportNode, kind: SectionKind, placement?: PageMet
   };
   add(sectionGuide(kind, placement));
   const walk = (node: ReportNode) => {
-    const source = sourceOf(node);
-    if (source) {
-      const phase = /^phase:[^:]+:(post|additional|tested)$/.exec(source)?.[1];
-      add(phase ? PHASE_GUIDES[phase] : sourceGuide(source, kind));
-    }
+    const source = blockSource(node);
+    if (source) add(sourceGuide(source, kind));
     if (node.type === "heading") add(HEADING_GUIDES[kind]?.[textOf(node).trim().toLowerCase()]);
     node.content?.forEach(walk);
   };

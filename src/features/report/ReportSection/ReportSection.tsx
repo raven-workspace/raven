@@ -29,6 +29,7 @@ import {
   targetChecks,
   targetNumbers,
   withoutRemoved,
+  isCopiedFrom,
   type Check,
   type ExportPage,
   type ExportSource,
@@ -755,9 +756,7 @@ function ReportBody({
     // The anchor's node by its index in the page (the checks' own walk), else the first block from its entry: a figure
     // of it, or a block whose source names it.
     const { entryId, nodeIndex } = check.anchor ?? {};
-    const fromEntry = (node: PMNode) =>
-      (node.type.name === "figure" && node.attrs.entryId === entryId) ||
-      (typeof node.attrs.source === "string" && /^entry:([^:]+)/.exec(node.attrs.source)?.[1] === entryId);
+    const fromEntry = (node: PMNode) => entryId !== undefined && isCopiedFrom({ type: node.type.name, attrs: node.attrs }, entryId);
     let index = 0;
     if (pos === null)
       doc.descendants((node, p) => {

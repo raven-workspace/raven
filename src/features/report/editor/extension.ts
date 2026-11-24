@@ -45,7 +45,7 @@ import { defineVirtualSelection } from "prosekit/extensions/virtual-selection";
 import type { Node as PMNode, Schema } from "prosekit/pm/model";
 import { Plugin, PluginKey, type Command, type EditorState } from "prosekit/pm/state";
 import { Decoration, DecorationSet } from "prosekit/pm/view";
-import type { ReportNode } from "../../../engines/report";
+import { copiedFrom, type ReportNode } from "../../../engines/report";
 import { defineReactNodeView } from "prosekit/react";
 import { hljsParser } from "./codeHighlight";
 import { moveCell } from "./commands";
@@ -172,12 +172,8 @@ function headingNumbers(numbers: SubNumbers) {
  *  redraws. */
 export type SourceGone = { current: ((entryId: string) => "private" | "deleted" | null) | undefined };
 
-/** The log entry a block was copied from: a figure's `entryId`, else its `entry:<id>…` source. */
-function entryOf(node: PMNode): string | null {
-  if (node.type.name === "figure" && typeof node.attrs.entryId === "string" && node.attrs.entryId !== "") return node.attrs.entryId;
-  const source = node.attrs.source as unknown;
-  return typeof source === "string" ? (/^entry:([^:]+)/.exec(source)?.[1] ?? null) : null;
-}
+/** The log entry a block was copied from (`copiedFrom`). */
+const entryOf = (node: PMNode): string | null => copiedFrom({ type: node.type.name, attrs: node.attrs });
 
 /**
  * Marks text copied from the log whose entry is now private or was deleted (`data-source-gone`): the page shows it in

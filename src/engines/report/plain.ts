@@ -9,6 +9,8 @@ import { isFlag } from "./prove";
 import { firstScan, machinesInOrder, PHASE_TITLE, placementPlan, type PlanStep } from "./placement";
 import { attackPathRows, portRows, resultLine } from "./tables";
 import { blockHash, sourceOf, stamp } from "./stamp";
+import { blockSource } from "./page/block";
+import { parseSource, source as src, sourceString } from "./page/source";
 import { reportTargets } from "./targets";
 import type { ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
 import { omitted } from "./trim";
@@ -170,14 +172,14 @@ export function titleSentence(title: string): string {
 /** A step's sentence: the owner's observations when written (as written), else the title as a sentence. Never empty. */
 function sentenceOf(entry: LogEntry): ReportNode[] {
   const said = entry.observations?.trim() ? writtenBlocks(entry.observations.trim()) : [];
-  if (said.length > 0 && said[0].type === "paragraph") return sourced(said, `entry:${entry.id}:observations`);
-  return [para(inlineMarkdown(titleSentence(entry.title)), `entry:${entry.id}:title`), ...sourced(said, `entry:${entry.id}:observations`)];
+  if (said.length > 0 && said[0].type === "paragraph") return sourced(said, src.entry(entry.id, "observations"));
+  return [para(inlineMarkdown(titleSentence(entry.title)), src.entry(entry.id, "title")), ...sourced(said, src.entry(entry.id, "observations"))];
 }
 
 /** A flag's sentence: the owner's observations when written, else "Read local.txt:". */
 function flagSentence(flag: LogEntry): ReportNode[] {
-  if (flag.observations?.trim()) return sourced(writtenBlocks(flag.observations.trim()), `entry:${flag.id}:observations`);
-  return [para([text(`Read ${flag.content.kind === "flag" ? flag.content.flagKind : "the"}.txt:`)], `entry:${flag.id}:title`)];
+  if (flag.observations?.trim()) return sourced(writtenBlocks(flag.observations.trim()), src.entry(flag.id, "observations"));
+  return [para([text(`Read ${flag.content.kind === "flag" ? flag.content.flagKind : "the"}.txt:`)], src.entry(flag.id, "title"))];
 }
 
 /** One step in progress: its blocks, and the outputs it shows (to leave out a flag proof printed already). */
@@ -199,25 +201,25 @@ function evidence(data: ReportData, entry: LogEntry, step: Step) {
       if (command !== "") pending.push({ command, at: i });
       if (output === "" && i < c.blocks.length - 1) return;
       if (pending.length > 0) {
-        step.blocks.push(codeBlock(pending.map((p) => p.command).join("\n"), { source: `entry:${entry.id}:${pending[0].at}:command` }));
+        step.blocks.push(codeBlock(pending.map((p) => p.command).join("\n"), { source: src.entryRun(entry.id, pending[0].at, "command") }));
       }
       pending = [];
       if (output !== "") {
-        step.blocks.push(codeBlock(output, { source: `entry:${entry.id}:${i}:output` }));
+        step.blocks.push(codeBlock(output, { source: src.entryRun(entry.id, i, "output") }));
         step.shown.push(b.output ?? "");
       }
     });
   } else if (c.kind === "http") {
-    if (c.request.trim()) step.blocks.push(codeBlock(c.request.trim(), { source: `entry:${entry.id}:request` }));
+    if (c.request.trim()) step.blocks.push(codeBlock(c.request.trim(), { source: src.entry(entry.id, "request") }));
     const response = trimmedOutput(c.response ?? "");
     if (response) {
-      step.blocks.push(codeBlock(response, { source: `entry:${entry.id}:response` }));
+      step.blocks.push(codeBlock(response, { source: src.entry(entry.id, "response") }));
       step.shown.push(c.response ?? "");
     }
   } else if (c.kind === "screenshot") {
     step.blocks.push(figure(c.attachmentId, c.caption.trim() || entry.title, entry.id));
   } else if (c.kind === "note") {
-    step.blocks.push(...sourced(writtenBlocks(c.text), `entry:${entry.id}:note`));
+    step.blocks.push(...sourced(writtenBlocks(c.text), src.entry(entry.id, "note")));
   }
 }
 
@@ -246,19 +248,19 @@ function flagEvidence(data: ReportData, entry: LogEntry, step: Step) {
   if (proof !== "" && !printed(proof, step.shown)) {
     const ip = data.hosts.find((h) => entry.hostIds.includes(h.id))?.ip ?? null;
     // A pasted proof holds its own commands: `ip a` in it cuts the addresses to the machine's own.
-    step.blocks.push(codeBlock(trimmedOutput(proof, proof, ip), { source: `entry:${entry.id}:proof` }));
+    step.blocks.push(codeBlock(trimmedOutput(proof, proof, ip), { source: src.entry(entry.id, "proof") }));
     step.shown.push(proof);
   } else if (proof === "" && c.value.trim() !== "" && !shown.includes(c.value.trim())) {
-    step.blocks.push(codeBlock(c.value.trim(), { source: `entry:${entry.id}:value` }));
+    step.blocks.push(codeBlock(c.value.trim(), { source: src.entry(entry.id, "value") }));
     step.shown.push(c.value);
   }
   if (c.attachmentId) step.blocks.push(figure(c.attachmentId, `${c.flagKind}.txt`, entry.id));
 }
 
-/** Whether a block is one of an entry's own (`entry:<id>` or `entry:<id>:…`). */
+/** Whether a block is one of an entry's own: its source names the entry. */
 const isEntryBlock = (b: ReportNode, entryId: string) => {
-  const source = sourceOf(b);
-  return source === `entry:${entryId}` || (source?.startsWith(`entry:${entryId}:`) ?? false);
+  const s = blockSource(b);
+  return s?.kind === "entry" && s.entryId === entryId;
 };
 
 /**
@@ -311,11 +313,11 @@ function findingHeader(f: Finding, files: FindingFile[]): ReportNode[] {
   const out: ReportNode[] = [];
   const { affected, explanation } = splitAffected(f.description ?? "");
   const expl = writtenBlocks(explanation);
-  if (expl.length > 0) out.push(...sourced(labelled("Vulnerability explanation:", expl), `finding:${f.id}:explanation`));
+  if (expl.length > 0) out.push(...sourced(labelled("Vulnerability explanation:", expl), src.finding(f.id, "explanation")));
   const fix = writtenBlocks((f.remediation ?? "").trim());
-  if (fix.length > 0) out.push(...sourced(labelled("Vulnerability fix:", fix), `finding:${f.id}:fix`));
-  if (f.severity) out.push(para([bold("Severity:"), text(` ${capitalize(f.severity)}`)], `finding:${f.id}:severity`));
-  if (affected) out.push(...sourced(labelled("Affected:", [para(inlineMarkdown(affected))]), `finding:${f.id}:affected`));
+  if (fix.length > 0) out.push(...sourced(labelled("Vulnerability fix:", fix), src.finding(f.id, "fix")));
+  if (f.severity) out.push(para([bold("Severity:"), text(` ${capitalize(f.severity)}`)], src.finding(f.id, "severity")));
+  if (affected) out.push(...sourced(labelled("Affected:", [para(inlineMarkdown(affected))]), src.finding(f.id, "affected")));
   out.push(...exploitLines(f, files));
   return out;
 }
@@ -331,7 +333,7 @@ function exploitLines(f: Finding, files: FindingFile[]): ReportNode[] {
     return [para(intro), ...blocks];
   };
   files.forEach((file, i) => {
-    const source = `file:${file.id}`;
+    const source = src.file(file.id);
     const tail = i === files.length - 1 ? notes : [];
     if (!file.modified) {
       const intro = file.originalUrl ? [text(`Public exploit from ${file.originalUrl}, used without changes.`)] : [code(file.name), text(", used without changes.")];
@@ -342,7 +344,7 @@ function exploitLines(f: Finding, files: FindingFile[]): ReportNode[] {
       out.push(...sourced(labelled("Exploit code:", [para(intro), ...body, ...tail]), source));
     }
   });
-  if (files.length === 0 && notes.length > 0) out.push(...sourced(labelled("Exploit code:", notes), `finding:${f.id}:exploit`));
+  if (files.length === 0 && notes.length > 0) out.push(...sourced(labelled("Exploit code:", notes), src.finding(f.id, "exploit")));
   return out;
 }
 
@@ -361,7 +363,7 @@ function resultParagraph(data: ReportData, target: ReportTarget, hostId: string,
     content.push(text(i === 0 ? " " : ", "), text(`${f.kind}.txt `), code(f.value));
     if (i === line.flags.length - 1) content.push(text("."));
   });
-  return content.length > 1 ? para(content, `result:${hostId}`) : null;
+  return content.length > 1 ? para(content, src.result(hostId)) : null;
 }
 
 /** An nmap service name as the sample prints it ("ftp" → "FTP"); a product name stays as written. */
@@ -375,7 +377,7 @@ function portTable(data: ReportData, hostId: string): ReportNode | null {
   return textTable(
     ["Port", "Service", "Version", "Notes"],
     rows.map((r) => [r.port, serviceName(r.service, nmapNamed(r.serviceId)), r.version, ""]),
-    `ports:${hostId}`,
+    src.ports(hostId),
   );
 }
 
@@ -392,9 +394,9 @@ function portScan(data: ReportData, hostId: string, scan: LogEntry | undefined):
   const out: ReportNode[] = [];
   scan.content.blocks.forEach((b, i) => {
     if ((b.command ?? "").trim() === "") return;
-    out.push(codeBlock(b.command.trim(), { source: `entry:${scan.id}:${i}:command` }));
+    out.push(codeBlock(b.command.trim(), { source: src.entryRun(scan.id, i, "command") }));
     const output = openPortLines(b.output ?? "", scripted) || trimmedOutput(b.output ?? "");
-    if (output) out.push(codeBlock(output, { source: `entry:${scan.id}:${i}:output` }));
+    if (output) out.push(codeBlock(output, { source: src.entryRun(scan.id, i, "output") }));
   });
   return out;
 }
@@ -409,18 +411,18 @@ function additionalItem(f: Finding, figures: ReportNode[] = []): ReportNode {
     first?.type === "paragraph"
       ? [para([...lead, text(": "), ...(first.content ?? [])]), ...rest]
       : [para(blocks.length > 0 ? [...lead, text(":")] : lead), ...blocks];
-  return listItem("bullet", [...content, ...figures], `finding:${f.id}`);
+  return listItem("bullet", [...content, ...figures], src.finding(f.id));
 }
 
 /** A machine's heading: "<name> (<IP>)", "<name>" with no IP. Its number is the page's (`targetNumbers`). */
 function factsHeading(data: ReportData, hostId: string): ReportNode {
   const host = data.hosts.find((h) => h.id === hostId);
-  return heading(1, `${host?.name ?? hostId}${host?.ip ? ` (${host.ip})` : ""}`, `facts:${hostId}`);
+  return heading(1, `${host?.name ?? hostId}${host?.ip ? ` (${host.ip})` : ""}`, src.facts(hostId));
 }
 
 /** Also tested: one bullet per thing tried that went nowhere. */
 const testedBullets = (data: ReportData, hostId: string): ReportNode[] =>
-  testedNotExploited(data, hostId).map((t) => listItem("bullet", [para([text(testedLine(t))])], `tested:${hostId}`));
+  testedNotExploited(data, hostId).map((t) => listItem("bullet", [para([text(testedLine(t))])], src.tested(hostId)));
 
 /** An AD set's attack path: a bold "Attack path" line and its Step | From | Technique | To | Access gained table. */
 function attackPathBlocks(data: ReportData, hostIds: string[]): ReportNode[] {
@@ -428,11 +430,11 @@ function attackPathBlocks(data: ReportData, hostIds: string[]): ReportNode[] {
   if (rows.length === 0) return [];
   const ticked = (value: string) => value.split(/`([^`]*)`/).flatMap((t, i) => (t === "" ? [] : [i % 2 === 1 ? code(t) : text(t)]));
   return [
-    para([bold("Attack path")], "attack-path"),
+    para([bold("Attack path")], src.attackPath),
     table(
       ["Step", "From", "Technique", "To", "Access gained"].map((h) => [text(h)]),
       rows.map((r) => [[text(String(r.step))], [text(r.from)], [text(r.technique)], [text(r.to)], ticked(r.access)]),
-      "attack-path",
+      src.attackPath,
     ),
   ];
 }
@@ -460,12 +462,12 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
 
   const machine = placementPlan(data, target).machines.find((m) => m.hostId === hostId);
   const enumBlocks = [portTable(data, hostId), ...portScan(data, hostId, machine?.scan ?? undefined)].filter((n): n is ReportNode => n !== null);
-  if (enumBlocks.length > 0) out.push(heading(2, ENUM_HEADING, `phase:${hostId}:enum`), ...enumBlocks);
+  if (enumBlocks.length > 0) out.push(heading(2, ENUM_HEADING, src.phase(hostId, "enum")), ...enumBlocks);
 
   const sections: Section[] = (machine?.sections ?? []).map(({ phase, finding: f, steps }) => {
     const title = PHASE_TITLE[phase]!;
     return {
-      heading: heading(2, f ? `${title}: ${f.title}` : title, `phase:${hostId}:${phase}${f ? `:${f.id}` : ""}`),
+      heading: heading(2, f ? `${title}: ${f.title}` : title, src.phase(hostId, phase, f?.id)),
       header: f ? [...findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)), ...findingFigures(data, target, meta, f)] : [],
       steps: steps.map((st) => printStep(data, st)),
     };
@@ -473,16 +475,16 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
   for (const s of sections) {
     out.push(s.heading, ...s.header);
     if (s.steps.length > 0) {
-      out.push(para([bold("Steps to reproduce:")], `phase-steps:${hostId}`));
+      out.push(para([bold("Steps to reproduce:")], src.phaseSteps(hostId)));
       out.push(...s.steps.map((st) => listItem("ordered", st.blocks)));
     }
   }
 
   const extra = machine?.additional ?? [];
-  if (extra.length > 0) out.push(heading(2, ADDITIONAL_HEADING, `phase:${hostId}:additional`), ...extra.map((f) => additionalItem(f, findingFigures(data, target, meta, f))));
+  if (extra.length > 0) out.push(heading(2, ADDITIONAL_HEADING, src.phase(hostId, "additional")), ...extra.map((f) => additionalItem(f, findingFigures(data, target, meta, f))));
 
   const tested = testedBullets(data, hostId);
-  if (tested.length > 0) out.push(heading(2, TESTED_HEADING, `phase:${hostId}:tested`), ...tested);
+  if (tested.length > 0) out.push(heading(2, TESTED_HEADING, src.phase(hostId, "tested")), ...tested);
   return out;
 }
 
@@ -526,8 +528,6 @@ export function entryBlocks(data: ReportData, entry: LogEntry): ReportNode[] {
   return finish(entryRun(data, entry));
 }
 
-const ENTRY_SOURCE = /^entry:([^:]+)(?::(?:\d+:(?:command|output)|title|observations|request|response|note|proof|value))?$/;
-const FINDING_SOURCE = /^finding:([^:]+)(?::(?:explanation|fix|severity|affected|exploit))?$/;
 
 /** The target a machine belongs to: the page's own, else the report's target holding it, else the machine alone. */
 function targetOf(data: ReportData, target: ReportTarget | null, meta: ReportMeta, hostId: string): ReportTarget {
@@ -538,41 +538,54 @@ function targetOf(data: ReportData, target: ReportTarget | null, meta: ReportMet
 /** Every block of a source, before the filter: the function that wrote it in the draft. Null when the source is
  *  unknown or its entry, finding, file or host is private or gone. */
 function sourceRun(source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] | null {
-  const [kind, id] = source.split(":");
-  const entryMatch = ENTRY_SOURCE.exec(source);
-  if (entryMatch) {
-    const entry = data.log.find((e) => e.id === entryMatch[1]);
-    if (!entry || entry.private) return null;
-    // A host's first port scan is printed by Service enumeration, not as a step.
-    const scanned = entry.hostIds.filter((h) => firstScan(data, h)?.id === entry.id).flatMap((h) => portScan(data, h, entry));
-    return scanned.some((b) => sourceOf(b) === source) ? scanned : entryRun(data, entry);
-  }
-  const findingMatch = FINDING_SOURCE.exec(source);
-  if (findingMatch || source === `file:${id}`) {
-    const file = kind === "file" ? data.findingFiles.find((ff) => ff.id === id) : undefined;
-    const f = data.findings.find((x) => x.id === (findingMatch ? findingMatch[1] : file?.findingId));
-    if (!f) return null;
-    return [...findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)), additionalItem(f, findingFigures(data, target, meta, f))];
-  }
-  if (source === "msf") return [msfLine(data)];
-  const tableKind = PLAIN_TABLE_KINDS.find((k) => source === `table:${k}`);
-  if (tableKind) return plainTable(tableKind, data, meta);
-  if (source === "attack-path") {
-    const set = target?.kind === "ad-set" ? target : reportTargets(data, meta).find((t) => t.kind === "ad-set");
-    return set ? attackPathBlocks(data, set.hostIds) : [];
-  }
-  const hostKinds = ["facts", "result", "ports", "tested"];
-  if (!hostKinds.includes(kind) || source !== `${kind}:${id}`) return null;
-  if (!data.hosts.some((h) => h.id === id)) return null;
-  switch (kind) {
+  const s = parseSource(source);
+  switch (s?.kind) {
+    case "entry": {
+      // A part the draft no longer writes regenerates nothing.
+      if (s.part && "unknown" in s.part) return null;
+      const entry = data.log.find((e) => e.id === s.entryId);
+      if (!entry || entry.private) return null;
+      // A host's first port scan is printed by Service enumeration, not as a step.
+      const scanned = entry.hostIds.filter((h) => firstScan(data, h)?.id === entry.id).flatMap((h) => portScan(data, h, entry));
+      return scanned.some((b) => sourceOf(b) === source) ? scanned : entryRun(data, entry);
+    }
+    case "finding":
+    case "file": {
+      if (s.kind === "finding" && s.part === "unknown") return null;
+      const findingId = s.kind === "finding" ? s.findingId : data.findingFiles.find((ff) => ff.id === s.fileId)?.findingId;
+      const f = data.findings.find((x) => x.id === findingId);
+      if (!f) return null;
+      return [...findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)), additionalItem(f, findingFigures(data, target, meta, f))];
+    }
+    case "msf":
+      return [msfLine(data)];
+    case "table": {
+      const tableKind = PLAIN_TABLE_KINDS.find((k) => k === s.table);
+      return tableKind ? plainTable(tableKind, data, meta) : null;
+    }
+    case "attack-path": {
+      const set = target?.kind === "ad-set" ? target : reportTargets(data, meta).find((t) => t.kind === "ad-set");
+      return set ? attackPathBlocks(data, set.hostIds) : [];
+    }
     case "facts":
-      return [factsHeading(data, id)];
     case "result":
-      return [resultParagraph(data, targetOf(data, target, meta, id), id, meta)].filter((n): n is ReportNode => n !== null);
     case "ports":
-      return [portTable(data, id)].filter((n): n is ReportNode => n !== null);
+    case "tested": {
+      const id = s.hostId;
+      if (!data.hosts.some((h) => h.id === id)) return null;
+      switch (s.kind) {
+        case "facts":
+          return [factsHeading(data, id)];
+        case "result":
+          return [resultParagraph(data, targetOf(data, target, meta, id), id, meta)].filter((n): n is ReportNode => n !== null);
+        case "ports":
+          return [portTable(data, id)].filter((n): n is ReportNode => n !== null);
+        default:
+          return testedBullets(data, id);
+      }
+    }
     default:
-      return testedBullets(data, id);
+      return null;
   }
 }
 
@@ -586,16 +599,20 @@ export function sourceBlocks(source: string, data: ReportData, target: ReportTar
   const run = sourceRun(source, data, target, meta);
   if (!run) return null;
   const blocks = run.filter((b) => sourceOf(b) === source);
-  return finish(source.startsWith("entry:") ? withAbsorbed(blocks, source, data, target, meta) : blocks);
+  return finish(parseSource(source)?.kind === "entry" ? withAbsorbed(blocks, source, data, target, meta) : blocks);
 }
 
-const SENTENCE_SOURCE = /^entry:([^:]+):(?:title|observations)$/;
+/** The entry whose sentence (its title or its observations) a source is, or null. */
+function sentenceOfSource(source: string): string | null {
+  const s = parseSource(source);
+  return s?.kind === "entry" && s.part && "name" in s.part && (s.part.name === "title" || s.part.name === "observations") ? s.entryId : null;
+}
 
 /** The source Refresh groups a block under: an entry's sentence is one family (`entry:<id>:sentence`), whether the
  *  page holds its title or its observations; every other source is its own. */
 export function refreshFamily(source: string): string {
-  const m = SENTENCE_SOURCE.exec(source);
-  return m ? `entry:${m[1]}:sentence` : source;
+  const entryId = sentenceOfSource(source);
+  return entryId ? sourceString({ kind: "entry", entryId, part: { unknown: "sentence" } }) : source;
 }
 
 /**
@@ -605,9 +622,9 @@ export function refreshFamily(source: string): string {
  * table with nothing to show). Refresh never takes a block away and puts nothing back.
  */
 export function refreshBlocks(source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] | null {
-  const m = SENTENCE_SOURCE.exec(source);
-  const blocks = m
-    ? [...(sourceBlocks(`entry:${m[1]}:title`, data, target, meta) ?? []), ...(sourceBlocks(`entry:${m[1]}:observations`, data, target, meta) ?? [])]
+  const entryId = sentenceOfSource(source);
+  const blocks = entryId
+    ? [...(sourceBlocks(src.entry(entryId, "title"), data, target, meta) ?? []), ...(sourceBlocks(src.entry(entryId, "observations"), data, target, meta) ?? [])]
     : sourceBlocks(source, data, target, meta);
   return blocks && blocks.length > 0 ? blocks : null;
 }
@@ -619,8 +636,8 @@ export const srcOf = (n: ReportNode) => sourceOf(n) ?? "";
  *  holds the entry in each target holding one of its machines, printed as the draft prints it, block by block in the
  *  run's order. */
 function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] {
-  const id = ENTRY_SOURCE.exec(source)?.[1];
-  const entry = data.log.find((e) => e.id === id);
+  const s = parseSource(source);
+  const entry = s?.kind === "entry" ? data.log.find((e) => e.id === s.entryId) : undefined;
   const found: ReportNode[] = [];
   const walk = (n: ReportNode) => {
     if (sourceOf(n) === source) found.push(n);
@@ -667,7 +684,7 @@ export const stepBlocks = (data: ReportData, step: PlanStep): ReportNode[] => fi
 /** A machine's Also tested run as the draft writes it: its heading and its bullets, stamped; empty when it has none. */
 export function testedRun(data: ReportData, hostId: string): ReportNode[] {
   const bullets = testedBullets(data, hostId);
-  return bullets.length > 0 ? finish([heading(2, TESTED_HEADING, `phase:${hostId}:tested`), ...bullets]) : [];
+  return bullets.length > 0 ? finish([heading(2, TESTED_HEADING, src.phase(hostId, "tested")), ...bullets]) : [];
 }
 
 /** Text nodes as ProseMirror stores them: neighbours with the same marks joined, empty ones dropped. */

@@ -54,8 +54,8 @@ export const DRAFT_LAYOUT = 6;
 
 /** Stored in `report_sections.meta`. */
 export interface SectionMeta {
-  /** What the owner took off the page, so Add new evidence won't bring it back: entry ids, and `tested:<hostId>` for a
-   *  machine's whole Also tested list (`testedKey`). */
+  /** What the owner took off the page, so Add new evidence won't bring it back, as the Page module's removal keys
+   *  (`removalKeys`): entry ids, and a key for a machine's whole Also tested list. */
   removedEntryIds?: string[];
   coverage?: Record<string, CoverageOverride>;
   /** Check ids the owner dismissed from this page's To do (a false positive): not counted, listed as dismissed. Owner

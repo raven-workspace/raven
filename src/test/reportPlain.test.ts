@@ -9,7 +9,6 @@ import {
   blockHash,
   buildPlainTarget,
   entryBlocks,
-  entryIdsIn,
   machinesInOrder,
   openPortLines,
   PLAIN_NODE_TYPES,
@@ -18,14 +17,20 @@ import {
   sourceOf,
   titleSentence,
   withoutRemoved,
-  placedIdsIn,
   missingEntries,
   proofCompanions,
   trimmedOutput,
   type ReportData,
   type ReportNode,
   type ReportTarget,
+  placedIn,
+  removalKeys,
 } from "../engines/report";
+
+/** The entries a page or block places. */
+const entriesOnPage = (n: ReportNode) => placedIn(n).entries;
+/** What a page places, as `removedEntryIds` records it. */
+const placedKeys = (n: ReportNode) => new Set(removalKeys(placedIn(n)));
 
 const data = garnetFixtures(1_700_000_000_000);
 const target: ReportTarget = { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] };
@@ -288,8 +293,8 @@ describe("plain entry blocks and Refresh sources", () => {
   });
 
   it("entryIdsIn reads sources and figures", () => {
-    expect(entryIdsIn(doc)).toEqual(new Set(expectedPlacedIds));
-    expect(entryIdsIn({ type: "doc", content: [{ type: "figure", attrs: { entryId: "l-x", attachmentId: "a" } }] })).toEqual(new Set(["l-x"]));
+    expect(entriesOnPage(doc)).toEqual(new Set(expectedPlacedIds));
+    expect(entriesOnPage({ type: "doc", content: [{ type: "figure", attrs: { entryId: "l-x", attachmentId: "a" } }] })).toEqual(new Set(["l-x"]));
   });
 
   it("a flag whose value a step already prints is recorded on the block that prints it", () => {
@@ -298,7 +303,7 @@ describe("plain entry blocks and Refresh sources", () => {
     expect(holders[0].type).toBe("codeBlock");
     expect(textOf(holders[0])).toContain("4c1d8e2f9a7b3065e2c4a9f1d7b80e36");
     expect(sourceOf(holders[0])).not.toMatch(/^entry:l-garnet-local[:]?/);
-    expect(entryIdsIn(doc).has("l-garnet-local")).toBe(true);
+    expect(entriesOnPage(doc).has("l-garnet-local")).toBe(true);
     const regenerated = sourceBlocks(sourceOf(holders[0])!, data, target, {})!;
     expect(regenerated).toEqual([holders[0]]);
     expect(regenerated[0].attrs?.also).toEqual(["l-garnet-local"]);
@@ -310,7 +315,7 @@ describe("plain entry blocks and Refresh sources", () => {
     const steps0 = steps.length;
     const removed = ["l-garnet-head", "l-garnet-local", `tested:${GARNET_HOST}`];
     const out = withoutRemoved(doc, removed);
-    const placed = placedIdsIn(out);
+    const placed = placedKeys(out);
     for (const id of removed) expect(placed.has(id)).toBe(false);
     // The login step that printed local.txt stays; it just no longer claims the flag.
     const holder = all(out).find((n) => textOf(n).includes("4c1d8e2f9a7b3065e2c4a9f1d7b80e36") && n.type === "codeBlock");
@@ -322,7 +327,7 @@ describe("plain entry blocks and Refresh sources", () => {
     expect(all(out).some((n) => String(n.attrs?.source ?? "").startsWith("tested:") || n.attrs?.source === `phase:${GARNET_HOST}:tested`)).toBe(false);
     // Everything else is the draft as it was.
     expect(withoutRemoved(doc, [])).toBe(doc);
-    expect(placedIdsIn(withoutRemoved(doc, ["l-garnet-head"])).size).toBe(placedIdsIn(doc).size - 1);
+    expect(placedKeys(withoutRemoved(doc, ["l-garnet-head"])).size).toBe(placedKeys(doc).size - 1);
   });
 
   it("withoutRemoved drops a Steps to reproduce label and a phase heading the removals leave bare, nothing else", () => {
@@ -485,6 +490,6 @@ describe("entries kept from the report never reach the draft", () => {
   });
 
   it("leaves the draft as it was without them", () => {
-    expect(placedIdsIn(keptDoc)).toEqual(placedIdsIn(doc));
+    expect(placedKeys(keptDoc)).toEqual(placedKeys(doc));
   });
 });
