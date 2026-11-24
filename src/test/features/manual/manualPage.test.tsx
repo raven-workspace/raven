@@ -659,6 +659,28 @@ describe("Manual: loading and layout", () => {
     expect(await screen.findByText("Opening the Manual…", {}, { timeout: 1500 })).toHaveClass("manual-page__loading");
   });
 
+  it("a Retry that loads within the delay never shows the loading line, even after a slow first load (RAV-21)", async () => {
+    let fail!: (e: unknown) => void;
+    const first = new Promise<never>((_, reject) => (fail = reject));
+    first.catch(() => {});
+    m.fieldManualLoad.mockReturnValue(first);
+    mount(["/manual"]);
+    expect(await screen.findByText("Opening the Manual…", {}, { timeout: 1500 })).toBeInTheDocument();
+    fail(new Error("disk busy"));
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    let load!: () => void;
+    m.fieldManualLoad.mockReturnValue(new Promise((resolve) => (load = () => resolve(snapshot(NOTES)))));
+    const seen: boolean[] = [];
+    const watch = new MutationObserver(() => seen.push(screen.queryByText("Opening the Manual…") !== null));
+    watch.observe(document.body, { childList: true, subtree: true, characterData: true });
+    fireEvent.click(retry);
+    await new Promise((r) => setTimeout(r, 50));
+    load();
+    await openNote("Bb Basics");
+    watch.disconnect();
+    expect(seen).not.toContain(true);
+  });
+
   it("the rail track narrows with the window", async () => {
     mount(["/manual"]);
     await openNote("Bb Basics");
