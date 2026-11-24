@@ -7,7 +7,7 @@ import { isWeakCaption } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
 import { byTime } from "./prove";
-import { entryIdsIn } from "./place";
+import { entryIdsIn } from "./page";
 import { ILLUSTRATE_WINDOW_MS, proofCompanions } from "./placement";
 import { proofFacts } from "./proof";
 import { sourceOf } from "./stamp";

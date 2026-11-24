@@ -8,3 +8,4 @@ export { source, parseSource, sourceString } from "./source";
 export type { BlockSource, EntryPart, EntryPartName, FindingPart, HostSourceKind } from "./source";
 export { alsoShows, blockSource, copiedFrom, entriesNamedBy, isCopiedFrom, testedListOf, unlinkCopiedFrom } from "./block";
 export type { BlockLike } from "./block";
+export * from "./place";

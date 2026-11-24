@@ -1,9 +1,9 @@
-import type { LogEntry } from "../../types/log";
-import { bold, heading, para } from "./nodes";
-import { PAGE_PHASES, PHASE_TITLE, placementPlan } from "./placement";
-import { entryBlocks, finish, srcOf, stepBlocks, testedRun } from "./plain";
-import { sourceOf } from "./stamp";
-import type { Phase, ReportData, ReportNode, ReportTarget } from "./types";
+import type { LogEntry } from "../../../types/log";
+import { bold, heading, para } from "../nodes";
+import { PAGE_PHASES, PHASE_TITLE, placementPlan } from "../placement";
+import { entryBlocks, finish, srcOf, stepBlocks, testedRun } from "../plain";
+import { sourceOf } from "../stamp";
+import type { Phase, ReportData, ReportNode, ReportTarget } from "../types";
 
 /**
  * Placing entries on a page that already exists: which entries it holds, where a new step or screenshot goes, what
