@@ -42,3 +42,39 @@ export function suggestMoves(doc: ReportNode): { key: string; reason: string }[]
   walk(doc, "");
   return out;
 }
+
+/* ------------------------------------------------------------------ Move to appendix */
+
+/** Whether two blocks are the same, attr for attr and child for child, whatever order their keys were saved in. */
+function sameNode(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
+  const kb = Object.keys(b).filter((k) => (b as Record<string, unknown>)[k] !== undefined);
+  return ka.length === kb.length && ka.every((k) => sameNode((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+/** A page with nothing on it yet: no block, or a new page's one empty paragraph. */
+const isBlank = (blocks: ReportNode[]) => blocks.length === 0 || (blocks.length === 1 && blocks[0].type === "paragraph" && !blocks[0].content?.length);
+
+/**
+ * An appendix page with `block` moved to its end (Move to appendix), attrs and all: its source and a figure's entry go
+ * with it. A page with nothing on it yet (a new page's one empty paragraph) takes the block in that paragraph's place.
+ */
+export function withBlockAppended(doc: ReportNode, block: ReportNode): ReportNode {
+  const content = doc.content ?? [];
+  return { ...doc, content: isBlank(content) ? [block] : [...content, block] };
+}
+
+/**
+ * Undo of `withBlockAppended`: the page without its last top-level block equal to `block`, one empty paragraph when
+ * nothing is left. Null when the page holds no such block (the owner changed it or took it off).
+ */
+export function withoutAppended(doc: ReportNode, block: ReportNode): ReportNode | null {
+  const content = doc.content ?? [];
+  let at = content.length - 1;
+  while (at >= 0 && !sameNode(content[at], block)) at--;
+  if (at === -1) return null;
+  const rest = content.filter((_, i) => i !== at);
+  return { ...doc, content: rest.length > 0 ? rest : [{ type: "paragraph" }] };
+}

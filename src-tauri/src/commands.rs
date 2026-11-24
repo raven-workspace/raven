@@ -811,6 +811,11 @@ pub async fn report_section_save(app: AppHandle, id: String, doc: serde_json::Va
 }
 
 #[tauri::command]
+pub async fn report_sections_save(app: AppHandle, report_id: String, writes: Vec<reports::SectionWrite>, delete: Option<String>) -> AppResult<Vec<ReportSection>> {
+    with_vault(app, move |v| reports::sections_save(v.conn()?, &report_id, writes, delete)).await
+}
+
+#[tauri::command]
 pub async fn report_section_delete(app: AppHandle, report_id: String, id: String) -> AppResult<()> {
     with_vault(app, move |v| reports::section_delete(v.conn()?, &report_id, &id)).await
 }

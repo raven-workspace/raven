@@ -57,6 +57,12 @@ export function entriesOnPage(doc: ReportNode, data: Pick<ReportData, "log" | "a
   return out;
 }
 
+/** Several pages read as one, for what the report holds across them: an entry on any appendix page is in the report,
+ *  so the page it moved from doesn't offer it again (`entriesOnPage`, `missingEntries`). */
+export function joinPages(pages: readonly ReportNode[]): ReportNode {
+  return { type: "doc", content: pages.flatMap((p) => p.content ?? []) };
+}
+
 /* ------------------------------------------------------------------ What the owner took off */
 
 /**

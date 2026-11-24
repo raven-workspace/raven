@@ -2,7 +2,7 @@ import type { Editor } from "prosekit/core";
 import { createContext, useContext } from "react";
 import { Fragment, type Node as PMNode } from "prosekit/pm/model";
 import { closeHistory } from "prosekit/pm/history";
-import { NodeSelection } from "prosekit/pm/state";
+import { NodeSelection, type Transaction } from "prosekit/pm/state";
 import { StepMap } from "prosekit/pm/transform";
 import {
   blockHash,
@@ -82,6 +82,46 @@ export function deleteBlockAt(editor: Editor, block: { node: PMNode; pos: number
     dispatch?.(state.tr.delete(pos, pos + block.node.nodeSize));
     return true;
   });
+}
+
+/**
+ * Move to appendix, the page's side: the transaction taking `block` off the page, not yet dispatched, and the index
+ * path from the doc root where it stood (for Undo). It is the page's own change (`PROGRAMMATIC`, so not the owner's
+ * removal) and stays out of ⌘Z: the move is undone from its notice, both pages at once. Null when the block is gone.
+ */
+export function takeBlock(editor: Editor, block: { node: PMNode; pos: number }): { tr: Transaction; path: number[] } | null {
+  const pos = currentPos(editor, block);
+  if (pos === null) return null;
+  const at = editor.state.doc.resolve(pos);
+  const path = Array.from({ length: at.depth + 1 }, (_, d) => at.index(d));
+  const tr = editor.state.tr.delete(pos, pos + block.node.nodeSize).setMeta(PROGRAMMATIC, true).setMeta("addToHistory", false);
+  return { tr, path };
+}
+
+/**
+ * Move to appendix's Undo, the page's side: the transaction putting `block` back at `path`, not yet dispatched. Where
+ * the page changed since, it goes as near as the page allows: the end of the deepest block on its path that still
+ * stands and takes it, else the end of the page. Null when the page takes it nowhere.
+ */
+export function putBlockBack(editor: Editor, path: readonly number[], block: PMNode): Transaction | null {
+  const doc = editor.state.doc;
+  let parent = doc;
+  let start = 0;
+  let depth = 0;
+  for (; depth < path.length - 1 && path[depth] < parent.childCount; depth++) {
+    let pos = start;
+    for (let i = 0; i < path[depth]; i++) pos += parent.child(i).nodeSize;
+    start = pos + 1;
+    parent = parent.child(path[depth]);
+  }
+  const index = depth === path.length - 1 ? Math.min(path[depth], parent.childCount) : parent.childCount;
+  let pos = start;
+  for (let i = 0; i < index; i++) pos += parent.child(i).nodeSize;
+  if (!parent.canReplaceWith(index, index, block.type)) {
+    if (!doc.canReplaceWith(doc.childCount, doc.childCount, block.type)) return null;
+    pos = doc.content.size;
+  }
+  return editor.state.tr.insert(pos, block).setMeta(PROGRAMMATIC, true).setMeta("addToHistory", false);
 }
 
 /** Marks a transaction the page makes itself (Add new evidence's Undo or a Refresh): what it

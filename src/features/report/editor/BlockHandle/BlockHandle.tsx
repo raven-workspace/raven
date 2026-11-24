@@ -9,24 +9,28 @@ import { refreshBlocks } from "../../../../engines/report/index";
 import { Button, Dialog, Tooltip } from "../../../../ui/index";
 import { currentRun, deleteBlockAt, isEdited, refreshLabel, refreshRun, sourceRun, type SourceRun } from "../pageActions";
 import { usePageContext } from "../ReportDataContext/ReportDataContext";
-import { MENU, MENU_ITEM, MENU_ITEM_DESTRUCTIVE, walkMenuItems } from "../../menuItems/menuItems";
+import { MENU, MENU_ITEM, MENU_ITEM_DESTRUCTIVE, MENU_ITEM_PAGE, walkMenuItems } from "../../menuItems/menuItems";
 
 type Hovered = { node: PMNode; pos: number } | null;
 
 /**
  * The page's drag handle: hovering a block shows it in the left gutter, and dragging it moves the block (attrs and
  * all, in one undoable step) to where the drop line shows. Beside it, ⋯ opens the block's menu: Refresh (from the log,
- * a finding or Raven) where the block's source can be written again, Full width on a resized screenshot, and Delete. Refresh replaces the block's whole
+ * a finding or Raven) where the block's source can be written again, Full width on a resized screenshot, Move to appendix
+ * (off an appendix page: the menu turns into the appendix pages to pick from, and New appendix page), and Delete. Refresh replaces the block's whole
  * run (`sourceRun`); when the owner has edited it, it asks first. No add button: insertion stays in the evidence rail.
  */
 export function BlockHandle() {
   const editor = useEditor();
-  const { data, target, reportMeta } = usePageContext();
+  const { data, target, reportMeta, appendices, onMoveToAppendix } = usePageContext();
   // The block the handle is beside, and the one the open menu acts on (held while the pointer is in the menu).
   const hovered = useRef<Hovered>(null);
   const [menu, setMenu] = useState<Hovered>(null);
   // An edited run waiting on the owner's answer.
   const [confirm, setConfirm] = useState<SourceRun | null>(null);
+  // Move to appendix's picker: the menu lists the appendix pages in place of its actions.
+  const [picking, setPicking] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const meta = reportMeta ?? {};
   // The hovered block's run, while it still stands where the handle saw it.
@@ -35,6 +39,11 @@ export function BlockHandle() {
   const done = () => {
     setMenu(null);
     editor.focus();
+  };
+  const moveTo = (appendixId: string | null) => {
+    const block = menu;
+    done();
+    if (block && onMoveToAppendix) onMoveToAppendix(block, appendixId);
   };
   /** Refreshes a run the owner confirmed (or that needs no asking). A run that moved since is found again by its
    *  source; if what stands there now is edited, the owner is asked again about that run. */
@@ -47,6 +56,10 @@ export function BlockHandle() {
   // The handle hides while the page scrolls, and its menu would lose its anchor (Radix then pins it to the window's
   // corner): a scroll closes the menu, as the pointer leaving a hovered block does not.
   const open = menu !== null;
+  // The picker opens on its first page, so the keyboard carries on from Move to appendix.
+  useEffect(() => {
+    if (picking) menuRef.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
+  }, [picking]);
   useEffect(() => {
     if (!open) return;
     const close = () => setMenu(null);
@@ -72,7 +85,13 @@ export function BlockHandle() {
                 <DotsSixVertical size={16} weight="bold" aria-hidden />
               </BlockHandleDraggable>
             </Tooltip>
-            <Popover.Root open={menu !== null} onOpenChange={(open) => setMenu(open ? hovered.current : null)}>
+            <Popover.Root
+              open={menu !== null}
+              onOpenChange={(open) => {
+                setMenu(open ? hovered.current : null);
+                setPicking(false);
+              }}
+            >
               <Tooltip side="left" content="Block actions">
                 <Popover.Trigger asChild>
                   <button type="button" aria-label="Block actions" className="report-handle-grip report-handle-menu">
@@ -89,49 +108,70 @@ export function BlockHandle() {
                   aria-label="Block actions"
                   onKeyDown={walkMenuItems}
                   className={MENU}
+                  ref={menuRef}
                 >
-                  {canRefresh && (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={MENU_ITEM}
-                      onClick={() => {
-                        setMenu(null);
-                        if (isEdited(run.nodes)) setConfirm(run);
-                        else {
-                          refresh(run);
-                          editor.focus();
-                        }
-                      }}
-                    >
-                      {refreshLabel(run.source)}
-                    </button>
+                  {picking && appendices ? (
+                    <>
+                      {appendices.map((a) => (
+                        <button key={a.sectionId} type="button" role="menuitem" className={MENU_ITEM_PAGE} title={a.label} onClick={() => moveTo(a.sectionId)}>
+                          {a.label}
+                        </button>
+                      ))}
+                      <button type="button" role="menuitem" className={MENU_ITEM} onClick={() => moveTo(null)}>
+                        New appendix page
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {canRefresh && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className={MENU_ITEM}
+                          onClick={() => {
+                            setMenu(null);
+                            if (isEdited(run.nodes)) setConfirm(run);
+                            else {
+                              refresh(run);
+                              editor.focus();
+                            }
+                          }}
+                        >
+                          {refreshLabel(run.source)}
+                        </button>
+                      )}
+                      {menu?.node.type.name === "figure" && menu.node.attrs.width != null && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className={MENU_ITEM}
+                          onClick={() => {
+                            const { pos, node } = menu;
+                            if (editor.state.doc.nodeAt(pos) === node) editor.view.dispatch(editor.state.tr.setNodeAttribute(pos, "width", null));
+                            done();
+                          }}
+                        >
+                          Full width
+                        </button>
+                      )}
+                      {appendices && onMoveToAppendix && (
+                        <button type="button" role="menuitem" className={MENU_ITEM} onClick={() => setPicking(true)}>
+                          Move to appendix…
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={MENU_ITEM_DESTRUCTIVE}
+                        onClick={() => {
+                          if (menu) deleteBlockAt(editor, menu);
+                          done();
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </>
                   )}
-                  {menu?.node.type.name === "figure" && menu.node.attrs.width != null && (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={MENU_ITEM}
-                      onClick={() => {
-                        const { pos, node } = menu;
-                        if (editor.state.doc.nodeAt(pos) === node) editor.view.dispatch(editor.state.tr.setNodeAttribute(pos, "width", null));
-                        done();
-                      }}
-                    >
-                      Full width
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={MENU_ITEM_DESTRUCTIVE}
-                    onClick={() => {
-                      if (menu) deleteBlockAt(editor, menu);
-                      done();
-                    }}
-                  >
-                    Delete
-                  </button>
                 </Popover.Content>
               </Popover.Portal>
             </Popover.Root>

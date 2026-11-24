@@ -5,6 +5,8 @@ import "./menuItems.scss";
 export const MENU = "report-menu";
 /** A text item in one of them. */
 export const MENU_ITEM = "report-menu__item";
+/** An item naming a page (Move to appendix's picker): a long title is cut short. */
+export const MENU_ITEM_PAGE = "report-menu__item report-menu__item--page";
 /** A destructive item (Delete): amber on hover and keyboard focus. */
 export const MENU_ITEM_DESTRUCTIVE = "report-menu__item report-menu__item--destructive";
 

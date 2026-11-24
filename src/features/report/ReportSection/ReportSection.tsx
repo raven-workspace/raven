@@ -13,6 +13,7 @@ import {
   flattenToPlain,
   isAppendixPage,
   isReady,
+  joinPages,
   isValidOsid,
   keptFromReport,
   needsFlatten,
@@ -86,6 +87,7 @@ import { useDraftBuild, useEnsureSections, useOpenFlatten } from "../useSectionL
 import { useSettings } from "../../settings/queries";
 import { useEngagement } from "../../engagements/queries";
 import { RavenError } from "../../../types/errors";
+import { moveToAppendix, undoMoveToAppendix, type MovedBlock } from "../moveToAppendix";
 import "./ReportSection.scss";
 
 const HINTS: Hint[] = [
@@ -832,6 +834,63 @@ function ReportBody({
     />
   ) : null;
 
+  // Move to appendix (§10.4): the appendix pages a block can move to, in letter order, offered off an appendix page.
+  const appendixSections = useMemo(
+    () => appendix.pages.flatMap((p) => entries.find((e) => e.section.id === p.sectionId)?.section ?? []),
+    [appendix, entries],
+  );
+  const openIsAppendix = openSection ? isAppendixPage(openSection) : false;
+  const moveTargets = useMemo(
+    () =>
+      openIsAppendix
+        ? undefined
+        : appendixSections.map((s, i) => ({
+            sectionId: s.id,
+            label: `Appendix ${appendix.pages[i].letter} – ${(metaOf(s) as Partial<PageMeta>).title || pageTitle("appendix")}`,
+          })),
+    [openIsAppendix, appendixSections, appendix, metaOf],
+  );
+  // The appendix pages other than the open one, as stored: an entry on one is in the report, so this page doesn't
+  // offer it again (the evidence column, the slash menu, Add new evidence).
+  const otherPages = useMemo(() => appendixSections.filter((s) => s.id !== openSection?.id).map(savedDocOf), [appendixSections, openSection, savedDocOf]);
+  // The move's notice offers Undo while the page the block left stays open.
+  const [moved, setMoved] = useState<MovedBlock | null>(null);
+  const [moveFailed, setMoveFailed] = useState<string | null>(null);
+  // A move or its Undo on its way: another waits for it.
+  const [moving, setMoving] = useState(false);
+  const onMoveToAppendix = useCallback(
+    (block: { node: PMNode; pos: number }, appendixId: string | null) => {
+      if (!pageEditor || !openSection || moving) return;
+      setMoving(true);
+      setMoved(null);
+      setMoveFailed(null);
+      moveToAppendix(qc, report, pageEditor, openSection.id, block, appendixId)
+        .then(setMoved)
+        .catch((e: unknown) => {
+          reportError(e);
+          setMoveFailed(`Couldn't move the block: ${RavenError.from(e).message}. Nothing moved.`);
+        })
+        .finally(() => setMoving(false));
+    },
+    [pageEditor, openSection, qc, report, moving],
+  );
+  const undoMove = () => {
+    const m = moved;
+    setMoved(null);
+    if (!m || !pageEditor || openSection?.id !== m.sourceId || moving) return;
+    setMoving(true);
+    undoMoveToAppendix(qc, report, pageEditor, m)
+      .catch((e: unknown) => {
+        reportError(e);
+        setMoveFailed(`Couldn't undo the move: ${RavenError.from(e).message}.`);
+      })
+      .finally(() => setMoving(false));
+  };
+  const closeMoved = useCallback(() => setMoved(null), []);
+  const closeMoveFailed = useCallback(() => setMoveFailed(null), []);
+  // Undo puts the block back on the page it left: the notice shows only while that page is open.
+  const movedHere = moved && moved.sourceId === openSection?.id ? moved : null;
+
   const contextValue = useMemo(
     (): ReportDataValue | null =>
       openSectionMeta
@@ -841,9 +900,12 @@ function ReportBody({
             reportMeta,
             onImageWidth,
             target: openTarget,
+            appendices: moveTargets,
+            onMoveToAppendix,
+            otherPages,
           }
         : null,
-    [data, openSectionMeta, onRemoveEvidence, reportMeta, onImageWidth, openTarget],
+    [data, openSectionMeta, onRemoveEvidence, reportMeta, onImageWidth, openTarget, moveTargets, onMoveToAppendix, otherPages],
   );
 
   const notStarted = open?.target && !started(open.target);
@@ -866,6 +928,8 @@ function ReportBody({
       </div>
     ) : null;
   const railDoc = openSection ? (openLiveDoc ?? savedDocOf(openSection)) : EMPTY_DOC;
+  // What the evidence column counts as in the report: the open page and the appendix pages.
+  const railReportDoc = useMemo(() => (otherPages.length > 0 ? joinPages([railDoc, ...otherPages]) : railDoc), [railDoc, otherPages]);
   const guides =
     openSection && openSection.kind !== "details" && hasCurrentPage(openSection) && contextValue ? (
       <GuidePanel key={openSection.id} kind={openSection.kind} placement={openSection.kind === "page" ? (openSection.meta as Partial<PageMeta>).placement : undefined} doc={railDoc} />
@@ -876,7 +940,7 @@ function ReportBody({
       <EvidenceRail
         target={open?.target}
         data={data}
-        doc={railDoc}
+        doc={railReportDoc}
         editor={pageEditor}
         didWell={openSection?.kind === "summary"}
         meta={reportMeta}
@@ -1060,6 +1124,7 @@ function ReportBody({
                           target={open.target}
                           meta={reportMeta}
                           removed={openSectionMeta?.removedEntryIds ?? []}
+                          elsewhere={otherPages}
                           onAdded={() => void saver.flush()}
                         />
                       )
@@ -1122,7 +1187,27 @@ function ReportBody({
             </Button>
           }
         >
-          <p className="report-section__deleted">{`Deleted ${pageTitleOf(deleted)}`}</p>
+          <p className="report-section__notice">{`Deleted ${pageTitleOf(deleted)}`}</p>
+        </TimedNotice>
+      )}
+      {movedHere && (
+        <TimedNotice
+          timerKey={movedHere}
+          onClose={closeMoved}
+          action={
+            <Button size="sm" onClick={undoMove}>
+              Undo
+            </Button>
+          }
+        >
+          <p className="report-section__notice">{`Moved to Appendix ${pageLetter(movedHere.appendixId)}`}</p>
+        </TimedNotice>
+      )}
+      {moveFailed && (
+        <TimedNotice timerKey={moveFailed} onClose={closeMoveFailed}>
+          <p role="alert" className="report-section__notice">
+            {moveFailed}
+          </p>
         </TimedNotice>
       )}
     </section>
