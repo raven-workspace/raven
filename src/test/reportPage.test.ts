@@ -8,6 +8,7 @@ import {
   buildSectionDraft,
   copiedFrom,
   entriesNamedBy,
+  entriesOnPage,
   isCopiedFrom,
   parseSource,
   placedIn,
@@ -183,6 +184,39 @@ describe("what a page places", () => {
 
   it("keeps only the removal keys the page no longer places", () => {
     expect(stillRemoved(["l1", "l2", "tested:h1", "tested:h2"], page)).toEqual(["l2", "tested:h2"]);
+  });
+});
+
+describe("what a page places for the report", () => {
+  const page: ReportNode = {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { source: "entry:l1:title" } },
+      { type: "list", attrs: { kind: "ordered" }, content: [{ type: "codeBlock", attrs: { source: "entry:l1:0:output", also: ["flag1"] } }] },
+      { type: "figure", attrs: { entryId: "s1", source: "entry:s1" } },
+    ],
+  };
+  const entry = (id: string, o: Record<string, unknown> = {}) => ({ id, private: false, ...o });
+  const data = (log: Record<string, unknown>[], attempts: Record<string, unknown>[] = []) => ({ log, attempts }) as unknown as ReportData;
+
+  it("counts what a block only also shows while it may reach the report", () => {
+    expect(entriesOnPage(page, data([entry("l1"), entry("flag1"), entry("s1")]))).toEqual(new Set(["l1", "flag1", "s1"]));
+  });
+
+  it("drops a kept entry that only an also names: private, behind a private or operator attempt, or gone", () => {
+    const onPage = (log: Record<string, unknown>[], attempts: Record<string, unknown>[] = []) => entriesOnPage(page, data(log, attempts));
+    expect(onPage([entry("l1"), entry("flag1", { private: true }), entry("s1")])).toEqual(new Set(["l1", "s1"]));
+    expect(onPage([entry("l1"), entry("flag1"), entry("s1")], [{ logEntryId: "flag1", private: true, reasonKind: "control" }])).toEqual(new Set(["l1", "s1"]));
+    expect(onPage([entry("l1"), entry("flag1"), entry("s1")], [{ logEntryId: "flag1", private: false, reasonKind: "operator" }])).toEqual(new Set(["l1", "s1"]));
+    expect(onPage([entry("l1"), entry("s1")])).toEqual(new Set(["l1", "s1"]));
+  });
+
+  it("still counts a kept entry a block was copied from: its words are on the page, and its check says so", () => {
+    expect(entriesOnPage(page, data([entry("l1", { private: true }), entry("flag1")]))).toEqual(new Set(["l1", "flag1", "s1"]));
+  });
+
+  it("leaves what was taken off as the page alone: a kept entry's also is still a removal key", () => {
+    expect(placedIn(page).entries).toEqual(new Set(["l1", "flag1", "s1"]));
   });
 });
 

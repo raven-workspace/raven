@@ -9,7 +9,8 @@ import { type BlockSource, parseSource } from "./source";
  * - **copied from**: the block's text or picture is that entry's (its `entry:` source, or a figure's `entryId`). It
  *   follows that entry: Refresh rebuilds it, and the checks flag it when the entry goes private or is deleted.
  * - **also shows**: the block holds that entry's evidence, but its text is another entry's (a flag whose value a
- *   command's output prints). Recorded in the hidden `also` attr so the page still counts the entry as placed.
+ *   command's output prints). Recorded in the hidden `also` attr so the page still counts the entry as placed, while
+ *   it may reach the report (`entriesOnPage`).
  */
 export interface BlockLike {
   type: string;
