@@ -1,6 +1,7 @@
 import type { SectionKind } from "../../types/report";
 import type { Settings } from "../../types/settings";
 import { doc, heading, listItem, para, text as textNode } from "./nodes";
+import { source, type HeadingName } from "./page/source";
 import { hintPara, msfLine, plainTable, type PlainTableKind } from "./plainTables";
 import type { ReportData, ReportMeta, ReportNode } from "./types";
 
@@ -11,6 +12,16 @@ export const INTRODUCTION = "Introduction";
 export const SCOPE = "Scope";
 export const RECOMMENDATIONS = "Recommendations";
 export const HOUSE_CLEANING = "House Cleaning";
+
+/** The drafted headings a guide note belongs to, by text: each carries its `heading:` source, so the note follows it
+ *  through a rename. Left unstamped (no `gen`): renaming one is the owner's to do and says nothing. */
+const GUIDED: Record<string, HeadingName> = {
+  [INTRODUCTION]: "introduction",
+  [SCOPE]: "scope",
+  [RECOMMENDATIONS]: "recommendations",
+  [HOUSE_CLEANING]: "house-cleaning",
+};
+const subheading = (name: string) => heading(2, name, GUIDED[name] ? source.heading(GUIDED[name]) : undefined);
 
 /** Section 1's parts, in the sample's order, with the hint each empty part shows. */
 const INTRO_PARTS: [string, string][] = [
@@ -106,9 +117,9 @@ export function buildSectionDraft(kind: SectionKind, data: ReportData, settings:
       return doc([
         ...INTRO_PARTS.flatMap(([name, hint]) => {
           const blocks = settingsBlocks(parts[name]);
-          return [heading(2, name), ...(blocks.length > 0 ? blocks : [hintPara(hint)])];
+          return [subheading(name), ...(blocks.length > 0 ? blocks : [hintPara(hint)])];
         }),
-        heading(2, SCOPE),
+        subheading(SCOPE),
         ...copy("scope-table"),
       ]);
     }
@@ -119,7 +130,7 @@ export function buildSectionDraft(kind: SectionKind, data: ReportData, settings:
         hintPara("Vulnerabilities and trends"),
         hintPara("Wrap-up"),
         ...copy("findings"),
-        heading(2, RECOMMENDATIONS),
+        subheading(RECOMMENDATIONS),
         hintPara("Recommendations"),
       ]);
     case "considerations":
@@ -128,7 +139,7 @@ export function buildSectionDraft(kind: SectionKind, data: ReportData, settings:
       return doc([
         ...settingsBlocks(settings.reportMethodology ?? ""),
         ...STAGES.flatMap(([stage, fact]) => [
-          heading(2, stage),
+          subheading(stage),
           hintPara(`How ${stage.toLowerCase()} was done`),
           ...(fact === "msf" ? [msfLine(data)] : fact === "cleanup" ? copy("cleanup") : []),
         ]),

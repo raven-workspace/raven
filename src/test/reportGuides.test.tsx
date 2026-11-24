@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { Editor } from "prosekit/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
-import { buildPlainTarget, buildSectionDraft, type ReportData, type ReportNode } from "../engines/report";
+import { buildPlainTarget, buildSectionDraft, refreshBlocks, type ReportData, type ReportNode } from "../engines/report";
 import { GUIDES, guidesOf, sectionGuide, type GuideId } from "../engines/report/guides";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext/ReportDataContext";
 import { GuidePanel } from "../features/report/GuidePanel/GuidePanel";
@@ -133,6 +133,39 @@ describe("guidesOf", () => {
     expect(guidesOf(page, "engagement-tested")).toContain("tested");
   });
 
+  it("keeps a drafted heading's guide through a rename: it follows the heading's source", () => {
+    const rename = (doc: ReportNode, from: string, to: string): ReportNode => ({
+      ...doc,
+      content: doc.content!.map((n) => (n.type === "heading" && n.content?.[0]?.text === from ? { ...n, content: [{ type: "text", text: to }] } : n)),
+    });
+    const draft = (kind: "introduction" | "summary" | "methodology") => buildSectionDraft(kind, data, settings(), {});
+    expect(guidesOf(rename(draft("summary"), "Recommendations", "Remediation"), "summary")).toContain("recommendations");
+    expect(guidesOf(rename(draft("introduction"), "Introduction", "About this report"), "introduction")).toContain("introduction");
+    // Scope and House Cleaning without the tables that carry the same guide: the heading alone keeps it.
+    const headingsOnly = (d: ReportNode) => ({ ...d, content: d.content!.filter((n) => n.type === "heading") });
+    expect(guidesOf(headingsOnly(rename(draft("introduction"), "Scope", "Targets")), "introduction")).toContain("scope");
+    expect(guidesOf(headingsOnly(rename(draft("methodology"), "House Cleaning", "Clean-up")), "methodology")).toContain("house-cleaning");
+  });
+
+  it("a drafted heading's source says nothing when renamed: no Refresh, no generated-block hash to mark it edited", () => {
+    for (const kind of ["introduction", "summary", "methodology"] as const) {
+      for (const n of buildSectionDraft(kind, data, settings(), {}).content!.filter((x) => String(x.attrs?.source ?? "").startsWith("heading:"))) {
+        expect(n.attrs?.gen).toBeUndefined();
+        expect(refreshBlocks(String(n.attrs!.source), data, null, {})).toBeNull();
+      }
+    }
+  });
+
+  it("finds a heading with no source (a report saved before headings carried one) by its text", () => {
+    const old = (d: ReportNode): ReportNode => ({
+      ...d,
+      content: d.content!.map((n) => (n.type === "heading" ? { ...n, attrs: { level: n.attrs?.level } } : n)).filter((n) => n.type === "heading"),
+    });
+    expect(guidesOf(old(buildSectionDraft("summary", data, settings(), {})), "summary")).toEqual(["summary", "recommendations"]);
+    expect(guidesOf(old(buildSectionDraft("introduction", data, settings(), {})), "introduction")).toEqual(["introduction", "scope"]);
+    expect(guidesOf(old(buildSectionDraft("methodology", data, settings(), {})), "methodology")).toEqual(["methodology", "house-cleaning"]);
+  });
+
   it("starts with the page's own guide, then takes a heading's from the page kind", () => {
     const page: ReportNode = { type: "doc", content: [h("Scope"), h("House cleaning")] };
     expect(guidesOf(page, "methodology")).toEqual(["methodology", "house-cleaning"]);
@@ -259,3 +292,4 @@ describe("guide notes beside the page", () => {
     expect(document.activeElement).not.toBe(document.body);
   });
 });
+
