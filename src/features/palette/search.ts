@@ -102,25 +102,35 @@ function lookupCommands(r: LookupRow): LibraryCommand[] {
   });
 }
 
-/** Lookup rows matching the query, their commands under the same exam rules as the Arsenal's (pending rules: none). */
+/** A lookup row as a ⌘K group, its commands under the same exam rules as the Arsenal's; null when none is left. */
+function lookupGroup(r: LookupRow, ctx: PaletteContext): LookupGroup | null {
+  let cmds = lookupCommands(r);
+  let msfMarker = new Set<string>();
+  if (ctx.exam) {
+    const f = filterForKind(cmds, ctx.exam.kind, { hostId: ctx.exam.hostId, msfHostId: ctx.exam.msfHostId ?? null });
+    cmds = f.shown;
+    msfMarker = f.msfMarker;
+  }
+  if (cmds.length === 0) return null;
+  return {
+    key: `lookup-${r.noteId}-${r.anchor}-${r.row}`, code: r.key, text: plain(r.means).trim(),
+    results: cmds.map((c) => ({ type: "command", id: c.id, title: c.template, command: c, msfMarker: msfMarker.has(c.id), lookup: { noteId: r.noteId, anchor: r.anchor, row: r.row } })),
+  };
+}
+
+/**
+ * Lookup rows matching the query, as groups (pending rules: none). The exam rules drop a row before the row cap counts
+ * it, so a row left with no command never hides a later one that has some.
+ */
 function lookupGroups(query: string, ctx: PaletteContext): LookupGroup[] {
   if (ctx.examPending) return [];
-  const out: LookupGroup[] = [];
-  for (const r of searchLookups(query, ctx.notes ?? [])) {
-    let cmds = lookupCommands(r);
-    let msfMarker = new Set<string>();
-    if (ctx.exam) {
-      const f = filterForKind(cmds, ctx.exam.kind, { hostId: ctx.exam.hostId, msfHostId: ctx.exam.msfHostId ?? null });
-      cmds = f.shown;
-      msfMarker = f.msfMarker;
-    }
-    if (cmds.length === 0) continue;
-    out.push({
-      key: `lookup-${r.noteId}-${r.anchor}-${r.row}`, code: r.key, text: plain(r.means).trim(),
-      results: cmds.map((c) => ({ type: "command", id: c.id, title: c.template, command: c, msfMarker: msfMarker.has(c.id), lookup: { noteId: r.noteId, anchor: r.anchor, row: r.row } })),
-    });
-  }
-  return out;
+  const groups = new Map<LookupRow, LookupGroup>();
+  const keep = (r: LookupRow) => {
+    const g = lookupGroup(r, ctx);
+    if (g) groups.set(r, g);
+    return g !== null;
+  };
+  return searchLookups(query, ctx.notes ?? [], undefined, keep).map((r) => groups.get(r)!);
 }
 
 /**

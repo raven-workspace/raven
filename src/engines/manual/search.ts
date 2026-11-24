@@ -1,7 +1,6 @@
-import { splitWikilinks } from "../library/wikilinks";
 import { FENCE, OUTLINE_HEADING, tableCaption } from "./anchors";
-import { lookupRows, plain, type LookupRow } from "./lookup";
-import { cells, TABLE_SEPARATOR } from "./markdown";
+import { isInlineCommand, lookupRows, plain, type LookupRow } from "./lookup";
+import { lineRuns, type Inline } from "./markdown";
 import type { ManualNote } from "./types";
 import { escapeRegExp } from "../regex";
 
@@ -10,7 +9,7 @@ export interface ManualHit {
   title: string;
   /** The nearest outline id before the matching line (a heading or `table-N`); absent before the first. */
   anchor?: string;
-  /** The matching line, Markdown markers stripped, cut to about 120 characters around the match ("" for a title-only hit). */
+  /** The matching line as the note renders it, cut to about 120 characters around the match ("" for a title-only hit). */
   line: string;
   inTitle: boolean;
 }
@@ -37,23 +36,32 @@ export function matchRanges(text: string, query: string | RegExp | null): [numbe
 
 const MAX_LINE = 120;
 
-/** A source line as it reads on screen: heading, quote and list markers, table pipes, emphasis and link syntax gone. */
-function readable(line: string): string {
-  let s = line.trim();
-  if (s.startsWith("|")) return cells(s).filter(Boolean).map(readable).join("  ");
-  // A wikilink reads as the label the note shows: its alias, else its target (never the `#heading`).
-  s = splitWikilinks(s).map((p) => ("text" in p ? p.text : p.label)).join("");
-  s = s
-    .replace(/^#{1,6}\s+/, "").replace(/\s+#+$/, "")
-    .replace(/^>\s?/, "")
-    .replace(/^([-*+]|\d+[.)])\s+/, "")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/\*\*/g, "")
-    .replace(/(^|[^\w*])\*(\S(?:[^*]*\S)?)\*(?=[^\w*]|$)/g, "$1$2")
-    // `_x_` italics (never inside a word, so snake_case stays; never just inside a code span's backticks).
-    .replace(/(^|[^\w_`])_(\S(?:[^_]*\S)?)_(?=[^\w_`]|$)/g, "$1$2")
-    .replace(/`/g, "");
-  return s.trim();
+const PLACEHOLDERS = /\{[A-Za-z][A-Za-z0-9_]*\}/g;
+
+/**
+ * `text` with every `{PLACEHOLDER}` blanked out, length kept: the note shows a placeholder filled for the host in view,
+ * so its name is never a match (text around it still is).
+ */
+export function maskPlaceholders(text: string): string {
+  return text.replace(PLACEHOLDERS, (m) => "\u0000".repeat(m.length));
+}
+
+/**
+ * An inline run's text as the note shows it, split where the note marks matches separately: an inline command marks
+ * its own matches (on its filled text), so it is a piece of its own; everything else in the run is one piece.
+ */
+function piecesOf(parts: Inline[]): string[] {
+  const out: string[] = [""];
+  const walk = (ps: Inline[]) => {
+    for (const p of ps) {
+      if ("code" in p && isInlineCommand(p.code)) out.push(p.code, "");
+      else if ("strong" in p) walk(p.strong);
+      else if ("em" in p) walk(p.em);
+      else out[out.length - 1] += plain([p]);
+    }
+  };
+  walk(parts);
+  return out.filter(Boolean);
 }
 
 /** `line` cut to about MAX_LINE characters, keeping the match at `at` in view. */
@@ -65,10 +73,37 @@ function cut(line: string, at: number): string {
   return `${start > 0 ? "…" : ""}${line.slice(start, end).trim()}${end < line.length ? "…" : ""}`;
 }
 
-/** A note's searchable lines, as they read, each with the outline id of its section. */
-type Line = { text: string; anchor?: string };
+/**
+ * A note's searchable line as it reads, with the outline id of its section. `pieces` are the `[start, end)` spans of
+ * `text` a match may fall in: a match never crosses from one to the next, as the note never marks one that does.
+ */
+type Line = { text: string; pieces: [number, number][]; anchor?: string };
 
-/** Readable lines per note: computed once per imported note, not on every keystroke. */
+/** A run's pieces with the whitespace at its edges gone, as the note's whitespace collapses there. */
+function trimmed(pieces: string[]): string[] {
+  const out = [...pieces];
+  if (out.length > 0) {
+    out[0] = out[0]!.trimStart();
+    out[out.length - 1] = out[out.length - 1]!.trimEnd();
+  }
+  return out.filter(Boolean);
+}
+
+/** A line's runs joined by `sep`, with each piece's span in the result. */
+function lineOf(runs: string[][], sep: string): { text: string; pieces: [number, number][] } {
+  let text = "";
+  const pieces: [number, number][] = [];
+  for (const run of runs.filter((r) => r.length > 0)) {
+    if (text) text += sep;
+    for (const piece of run) {
+      pieces.push([text.length, text.length + piece.length]);
+      text += piece;
+    }
+  }
+  return { text, pieces };
+}
+
+/** Searchable lines per note: computed once per imported note, not on every keystroke. */
 const linesCache = new WeakMap<ManualNote, Line[]>();
 
 function linesOf(note: ManualNote): Line[] {
@@ -84,20 +119,20 @@ function linesOf(note: ManualNote): Line[] {
       else if (f[1][0] === fence) fence = null;
       continue;
     }
-    let text: string;
-    if (fence !== null) text = raw.trim();
+    let line: { text: string; pieces: [number, number][] };
+    if (fence !== null) line = lineOf([[raw.trim()]], "");
     else {
       const h = OUTLINE_HEADING.exec(raw);
       // The h1 repeats the title: a title hit already covers it.
       if (h?.[1] === "#") continue;
       // Same walk as the outline (`parseNote`): each `##`, `###` and table caption is the next outline entry.
       if (h || tableCaption(raw)) section++;
-      if (TABLE_SEPARATOR.test(raw) && raw.includes("-")) continue;
-      text = readable(raw);
+      const { runs, sep } = lineRuns(raw);
+      line = lineOf(runs.map((r) => trimmed(piecesOf(r))), sep);
     }
-    if (!text) continue;
+    if (!line.text) continue;
     const anchor = note.outline[section]?.id;
-    out.push(anchor ? { text, anchor } : { text });
+    out.push(anchor ? { ...line, anchor } : line);
   }
   linesCache.set(note, out);
   return out;
@@ -106,8 +141,10 @@ function linesOf(note: ManualNote): Line[] {
 /** The note's first body match (fenced code included), with its section, or null. */
 function firstBodyMatch(note: ManualNote, re: RegExp): { anchor?: string; line: string } | null {
   for (const l of linesOf(note)) {
-    const m = matchRanges(l.text, re)[0];
-    if (m) return { ...(l.anchor ? { anchor: l.anchor } : {}), line: cut(l.text, m[0]) };
+    for (const [start, end] of l.pieces) {
+      const m = matchRanges(maskPlaceholders(l.text.slice(start, end)), re)[0];
+      if (m) return { ...(l.anchor ? { anchor: l.anchor } : {}), line: cut(l.text, start + m[0]) };
+    }
   }
   return null;
 }
@@ -134,9 +171,10 @@ export function searchManual(query: string, notes: ManualNote[], max = 8): Manua
 
 /**
  * ⌘K's Lookup group: lookup-table rows with at least one command whose key or means matches the query. Key matches
- * come before means matches, each in note order; at most `max`.
+ * come before means matches, each in note order; at most `max`. `keep` drops a row before it counts toward `max` (the
+ * palette's exam rules), so a dropped row never crowds out one after it.
  */
-export function searchLookups(query: string, notes: ManualNote[], max = 2): LookupRow[] {
+export function searchLookups(query: string, notes: ManualNote[], max = 2, keep: (row: LookupRow) => boolean = () => true): LookupRow[] {
   const re = matchRegex(query);
   if (!re) return [];
   const keyed: LookupRow[] = [];
@@ -144,8 +182,9 @@ export function searchLookups(query: string, notes: ManualNote[], max = 2): Look
   for (const n of notes) {
     for (const r of lookupRows(n)) {
       if (r.commands.length === 0) continue;
-      if (matchRanges(r.key, re).length > 0) keyed.push(r);
-      else if (meant.length < max && matchRanges(plain(r.means), re).length > 0) meant.push(r);
+      if (matchRanges(r.key, re).length > 0) {
+        if (keep(r)) keyed.push(r);
+      } else if (meant.length < max && matchRanges(plain(r.means), re).length > 0 && keep(r)) meant.push(r);
     }
     if (keyed.length >= max) break;
   }

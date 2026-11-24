@@ -908,4 +908,20 @@ describe("⌘K Lookup group", () => {
     expect(titles(searchPalette("ZZ_SQLERR", { ...base, exam: { kind: "exam-sim", hostId: "h1" } }))).toEqual(["zzcurl {URL}"]);
     expect(searchPalette("ZZ_SQLERR", { ...base, examPending: true }).lookups).toEqual([]);
   });
+
+  it("in an exam sim, rows left with no command do not crowd out a later allowed row (RAV-20)", () => {
+    const BANNED = parseNote("04-Foundations/Zz-Banned.md", [
+      "# Zz Banned",
+      "**Table 1 — Zz web errors**",
+      "| Error | Means | Do this |",
+      "| - | - | - |",
+      "| `ZZ_WEB_ONE` | The query broke. | `sqlmap -u {URL}` |",
+      "| `ZZ_WEB_TWO` | The query broke again. | `sqlmap -r {FILE}` |",
+      "| `ZZ_WEB_THREE` | Still broken. | `zzcurl {URL}` |",
+    ].join("\n"))!;
+    const base = { library: [], cards: [], generators: [], notes: [BANNED] };
+    const keys = (r: ReturnType<typeof searchPalette>) => r.lookups.map((g) => g.code);
+    expect(keys(searchPalette("ZZ_WEB", base))).toEqual(["ZZ_WEB_ONE", "ZZ_WEB_TWO"]);
+    expect(keys(searchPalette("ZZ_WEB", { ...base, exam: { kind: "exam-sim", hostId: "h1" } }))).toEqual(["ZZ_WEB_THREE"]);
+  });
 });
