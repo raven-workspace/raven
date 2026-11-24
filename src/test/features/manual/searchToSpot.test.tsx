@@ -304,3 +304,49 @@ describe("the note at the match", () => {
     expect(screen.getByRole("status", { name: "Search in this note" })).toHaveTextContent("No match in this note");
   });
 });
+
+describe("⌘K and the opened note agree (RAV-20)", () => {
+  const SPLIT = parseNote("04-Foundations/Zz Split.md", [
+    "# Zz Split",
+    "## Gate",
+    "The zzgate said zzaccess **zzdenied** twice.",
+    "```bash",
+    "zzscan --zzloud -t {ZZRHOST}",
+    "```",
+  ].join("\n"))!;
+  beforeEach(() => m.fieldManualLoad.mockResolvedValue(snapshot([...NOTES, SPLIT])));
+
+  const search = async (user: ReturnType<typeof userEvent.setup>, query: string) => {
+    mount();
+    await ready();
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), query);
+  };
+
+  it("a phrase across bold is found, and the opened note marks it as one continuous match", async () => {
+    const user = userEvent.setup();
+    await search(user, "zzaccess zzdenied");
+    const [row] = within(await screen.findByRole("group", { name: "Manual" })).getAllByRole("option");
+    expect(row).toHaveTextContent("The zzgate said zzaccess zzdenied twice.");
+    await user.keyboard("{Enter}");
+    await screen.findByRole("article", { name: "Zz Split" });
+    await waitFor(() => expect(current()).toHaveLength(2));
+    expect(marks().map((el) => [el.textContent, el.dataset.match])).toEqual([["zzaccess ", "start"], ["zzdenied", "cont"]]);
+    expect(marks()[1]!.closest("strong")).not.toBeNull();
+    expect(screen.getByRole("status", { name: "Search in this note" })).toHaveTextContent("match 1 of 1");
+  });
+
+  it("a placeholder's name alone finds nothing; text beside it opens the note on a match", async () => {
+    const user = userEvent.setup();
+    await search(user, "zzrhost");
+    expect(await screen.findByText("Nothing matches, the Manual included")).toBeInTheDocument();
+    await user.clear(screen.getByRole("combobox", { name: "Search" }));
+    await user.type(screen.getByRole("combobox", { name: "Search" }), "zzloud");
+    const [row] = within(await screen.findByRole("group", { name: "Manual" })).getAllByRole("option");
+    expect(row).toHaveTextContent("zzscan --zzloud -t {ZZRHOST}");
+    await user.keyboard("{Enter}");
+    await screen.findByRole("article", { name: "Zz Split" });
+    await waitFor(() => expect(current()).toHaveLength(1));
+    expect(screen.getByRole("status", { name: "Search in this note" })).not.toHaveTextContent("No match in this note");
+  });
+});

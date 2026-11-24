@@ -180,6 +180,28 @@ export function parseMarkdown(body: string, opts: MarkdownOptions = {}): Block[]
   return out;
 }
 
+/**
+ * One source line outside a fence as the note renders it: its inline runs (a table row's cells; a caption's bold name
+ * and its trail), each parsed as `parseMarkdown` parses it, and the separator they read with. Heading, list, quote and
+ * callout markers come off. A blank line, a rule or a table separator renders nothing: no runs.
+ */
+export function lineRuns(line: string): { runs: Inline[][]; sep: string } {
+  const none = { runs: [], sep: "" };
+  if (line.trim() === "" || RULE.test(line) || (TABLE_SEPARATOR.test(line) && line.includes("-"))) return none;
+  if (isTableRow(line)) return { runs: cells(line).filter(Boolean).map((c) => parseInline(c)), sep: "  " };
+  const h = OUTLINE_HEADING.exec(line) ?? DEEP_HEADING.exec(line);
+  if (h) return { runs: [parseInline(h[2])], sep: "" };
+  const caption = tableCaption(line);
+  if (caption) {
+    const trimmed = line.trim();
+    const head = parseInline(trimmed.slice(0, trimmed.length - caption.trail.length).trim());
+    return { runs: caption.trail ? [head, parseInline(caption.trail)] : [head], sep: " " };
+  }
+  const item = LIST_ITEM.exec(line);
+  const text = item ? item[2] : line.replace(QUOTE, "").replace(/^\[![\w-]+\][+-]?\s*/, "").trim();
+  return text === "" ? none : { runs: [parseInline(text)], sep: "" };
+}
+
 const isSpace = (c: string) => /\s/.test(c);
 const isPunct = (c: string) => /[\p{P}\p{S}]/u.test(c);
 const PUNCT = /[\\`*_{}[\]()#+\-.!|<>~]/;
