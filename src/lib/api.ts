@@ -240,6 +240,9 @@ export const api = {
   reportSectionSave: (id: string, doc: ReportNode, meta: Record<string, unknown>) =>
     call<ReportSection>("report_section_save", { id, doc, meta }),
   reportSectionsReorder: (reportId: string, ids: string[]) => call<null>("report_sections_reorder", { reportId, ids }),
+  /** Writes several of the report's sections, and deletes one of its pages, all or nothing (Move to appendix). */
+  reportSectionsSave: (reportId: string, writes: { id: string; doc: ReportNode; meta: Record<string, unknown> }[], deletePage: string | null = null) =>
+    call<ReportSection[]>("report_sections_save", { reportId, writes, delete: deletePage }),
   /** Owner-written pages only (kind `page`); any other section is refused. */
   reportSectionDelete: (reportId: string, id: string) => call<null>("report_section_delete", { reportId, id }),
   triedPairsList: (engagementId: string) => call<TriedPair[]>("tried_pairs_list", { engagementId }),

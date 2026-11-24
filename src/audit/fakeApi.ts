@@ -486,6 +486,16 @@ const base = {
     });
     return null;
   },
+  reportSectionsSave: async (reportId: string, writes, deletePage = null) => {
+    const mine = writes.map((w) => db.reportSections.find((s) => s.id === w.id && s.reportId === reportId));
+    if (mine.some((s) => !s)) throw new RavenError("not_found", "Not found");
+    const gone = deletePage === null ? -1 : db.reportSections.findIndex((s) => s.id === deletePage && s.reportId === reportId);
+    if (deletePage !== null && gone === -1) throw new RavenError("not_found", "Not found");
+    if (gone !== -1 && db.reportSections[gone].kind !== "page") throw new RavenError("validation", "only pages can be deleted", "kind");
+    writes.forEach((w, i) => Object.assign(mine[i]!, { doc: clone(w.doc), meta: clone(w.meta), updatedAt: now() }));
+    if (gone !== -1) db.reportSections.splice(gone, 1);
+    return mine.map((s) => clone(s!));
+  },
   reportSectionDelete: async (reportId: string, id: string) => {
     const at = db.reportSections.findIndex((s) => s.id === id && s.reportId === reportId);
     if (at === -1) throw new RavenError("not_found", "Not found");

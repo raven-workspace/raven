@@ -1,7 +1,7 @@
 import type { Editor } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { useCallback, useState } from "react";
-import { draftedEntryBlocks, joinsAStep, machinesInOrder, missingEntries, missingTested, type ReportData, type ReportMeta, type ReportNode, type ReportTarget, placedIn } from "../../../engines/report/index";
+import { draftedEntryBlocks, joinPages, joinsAStep, machinesInOrder, missingEntries, missingTested, type ReportData, type ReportMeta, type ReportNode, type ReportTarget, placedIn } from "../../../engines/report/index";
 import { Button, TimedNotice } from "../../../ui/index";
 import { collectInserted, insertBlocksAt, insertEntry } from "../editor/pageActions";
 import { removeExact } from "../editor/ReportEditor/ReportEditor";
@@ -25,6 +25,7 @@ export function AddEvidenceButton({
   target,
   meta,
   removed,
+  elsewhere = [],
   onAdded,
 }: {
   editor: Editor | null;
@@ -32,6 +33,8 @@ export function AddEvidenceButton({
   target: ReportTarget;
   meta: ReportMeta;
   removed: string[];
+  /** The report's appendix pages, as stored: an entry moved to one is in the report, so it isn't added again. */
+  elsewhere?: ReportNode[];
   /** The page changed: write it now rather than after the autosave delay. */
   onAdded(): void;
 }) {
@@ -40,7 +43,7 @@ export function AddEvidenceButton({
   const run = () => {
     if (!editor) return;
     const page = () => editor.getDocJSON() as ReportNode;
-    const missing = missingEntries(page(), data, target, removed);
+    const missing = missingEntries(joinPages([page(), ...elsewhere]), data, target, removed);
     // An entry another missing one shows in its own blocks (a flag its output prints) comes with it, whatever the order.
     const absorbed = new Set(
       missing.flatMap((e) => [...placedIn({ type: "doc", content: draftedEntryBlocks(data, target, meta, e) }).entries].filter((id) => id !== e.id)),

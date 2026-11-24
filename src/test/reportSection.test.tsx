@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { reportSchema } from "../features/report/editor/extension";
+import { PROGRAMMATIC } from "../features/report/editor/pageActions";
 import { ReportSectionView } from "../features/report/ReportSection/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
 import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, type ReportNode, type SectionMeta, placedIn, removalKeys } from "../engines/report";
@@ -1592,6 +1593,65 @@ describe("Report view: appendix pages and free pages (+ Page)", () => {
     const [back] = await pages();
     expect(JSON.stringify(back.doc)).toContain("Every user dumped from the DC");
     expect(back.meta).toMatchObject({ title: "Untitled appendix", placement: "appendix" });
+  });
+});
+
+describe("Report view: Move to appendix", () => {
+  const paper = () => document.querySelector<HTMLElement>(".report-page")!;
+  const h1 = () => within(paper()).queryByRole("heading", { level: 1 })?.textContent;
+  const sources = (n: ReportNode): string[] => [...(typeof n.attrs?.source === "string" ? [n.attrs.source] : []), ...(n.content ?? []).flatMap(sources)];
+  const pages = async () => (await api.reportSectionsList((await api.reportGetOrCreate("e-exam")).id)).filter((s) => s.kind === "page");
+
+  it("moves a block to a new appendix page and back with the notice's Undo; the page it left doesn't add it again", async () => {
+    await seedLnx();
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    const editor = pageEditor();
+    await waitFor(() => expect(editor.mounted).toBe(true));
+    // The scan's output is its only block on the page: its command goes first, as the page's own change.
+    act(() => {
+      let at = -1;
+      editor.state.doc.descendants((node, pos) => {
+        if (at === -1 && /^entry:.+:command$/.test(String(node.attrs.source))) at = pos;
+        return at === -1;
+      });
+      editor.view.dispatch(editor.state.tr.delete(at, at + editor.state.doc.nodeAt(at)!.nodeSize).setMeta(PROGRAMMATIC, true));
+    });
+    let block: { node: import("prosekit/pm/model").Node; pos: number } | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (!block && node.type.name === "codeBlock" && /^entry:.+:output$/.test(String(node.attrs.source))) block = { node, pos };
+      return !block;
+    });
+    expect(block).not.toBeNull();
+    const source = String(block!.node.attrs.source);
+    const entryId = source.split(":")[1];
+    const root = document.querySelector("prosekit-block-handle-root")!;
+    act(() => void root.dispatchEvent(Object.assign(new Event("stateChange"), { detail: block })));
+    fireEvent.click(screen.getByRole("button", { name: "Block actions", hidden: true }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Move to appendix…" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "New appendix page" }));
+
+    await waitFor(() => expect(tabLabels()).toContain("Appendix A"));
+    const notice = (await screen.findAllByRole("status")).find((n) => n.textContent?.includes("Moved to Appendix A"))!;
+    expect(notice).toBeDefined();
+    expect(sources(editor.getDocJSON() as ReportNode)).not.toContain(source);
+    const [stored] = await pages();
+    expect(stored.meta).toMatchObject({ placement: "appendix" });
+    expect(sources(stored.doc!)).toEqual([source]);
+    // Its entry is in the report, on the appendix page: Add new evidence doesn't put it back, and it isn't removed.
+    fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
+    await act(() => flushReports());
+    expect(sources(editor.getDocJSON() as ReportNode).some((s) => s.startsWith(`entry:${entryId}`))).toBe(false);
+    const report = await api.reportGetOrCreate("e-exam");
+    const target = (await api.reportSectionsList(report.id)).find((s) => s.kind === "target" && s.targetKey === LNX)!;
+    expect((target.meta as SectionMeta).removedEntryIds ?? []).not.toContain(entryId);
+
+    fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(tabLabels()).not.toContain("Appendix A"));
+    expect(await pages()).toEqual([]);
+    expect(sources(editor.getDocJSON() as ReportNode)).toContain(source);
+    expect(h1()).not.toMatch(/Appendix/);
   });
 });
 
