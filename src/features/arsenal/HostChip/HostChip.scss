@@ -13,7 +13,9 @@
 
   // Hosts failed to load: the warning, then Retry, on one line.
   .host-load-error {
-    display: flex;
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: start;
     align-items: center;
     gap: var(--space-sm);
   }
