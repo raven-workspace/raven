@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
-import { placedIdsIn, type ReportNode, type SectionMeta } from "../../engines/report";
+import { stillRemoved, type ReportNode, type SectionMeta } from "../../engines/report";
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
 import { RavenError } from "../../types/errors";
@@ -87,8 +87,7 @@ export function patchCachedSection(qc: QueryClient, id: string, patch: Partial<R
 /** Drops removed-entry ids whose entry is on the page again (an undo), so the meta only lists entries really removed. */
 export function pruneRemoved(doc: ReportNode, meta: SectionMeta): SectionMeta {
   if (!meta.removedEntryIds?.length) return meta;
-  const onPage = placedIdsIn(doc);
-  const kept = meta.removedEntryIds.filter((id) => !onPage.has(id));
+  const kept = stillRemoved(meta.removedEntryIds, doc);
   return kept.length === meta.removedEntryIds.length ? meta : { ...meta, removedEntryIds: kept };
 }
 

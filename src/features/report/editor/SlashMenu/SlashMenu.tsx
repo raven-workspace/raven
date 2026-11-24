@@ -19,7 +19,7 @@ import { TextSelection } from "prosekit/pm/state";
 import { AutocompleteEmpty, AutocompleteItem, AutocompletePopup, AutocompletePositioner, AutocompleteRoot } from "prosekit/react/autocomplete";
 import { useEditor } from "prosekit/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { entryIdsIn, keptFromReport, type ReportData, type ReportNode } from "../../../../engines/report/index";
+import { keptFromReport, placedIn, type ReportData, type ReportNode } from "../../../../engines/report/index";
 import type { LogEntry } from "../../../../types/log";
 import { cx } from "../../../../lib/cx";
 import { labelClass } from "../../../../ui/index";
@@ -79,7 +79,7 @@ export function fuzzyScore(query: string, text: string): number | null {
 
 /** Evidence the slash menu offers: what the rail offers (this target's entries not on the page yet, none kept from the report). */
 function candidates(data: ReportData, hostIds: string[], doc: ReportNode): LogEntry[] {
-  const onPage = entryIdsIn(doc);
+  const onPage = placedIn(doc).entries;
   return data.log
     .filter((e) => !keptFromReport(data, e) && !onPage.has(e.id) && e.hostIds.some((h) => hostIds.includes(h)))
     .sort((a, b) => b.at - a.at || b.createdAt - a.createdAt);

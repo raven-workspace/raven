@@ -2,11 +2,11 @@ import { XIcon } from "@phosphor-icons/react";
 import type { Editor } from "prosekit/core";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
-  entryIdsIn,
   isPortScan,
   machinesInOrder,
   PAGE_PHASES,
   PHASE_TITLE,
+  placedIn,
   placementPlan,
   targetCredentials,
   type Phase,
@@ -34,9 +34,9 @@ type RailTab = "unused" | "notes" | "creds";
 
 
 /** Host-linked, non-private entries (any host of the target) with no block on the page sourced from them
- *  (`entryIdsIn`), in time order. An entry behind an operator-reason attempt never shows. */
+ *  (`placedIn`), in time order. An entry behind an operator-reason attempt never shows. */
 export function unusedEntries(data: ReportData, target: ReportTarget, doc: ReportNode): LogEntry[] {
-  const onPage = entryIdsIn(doc);
+  const onPage = placedIn(doc).entries;
   return data.log
     .filter((e) => !keptFromReport(data, e) && !onPage.has(e.id) && e.hostIds.some((h) => target.hostIds.includes(h)))
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));

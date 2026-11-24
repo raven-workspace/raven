@@ -1,7 +1,7 @@
 import type { Editor } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { useCallback, useState } from "react";
-import { draftedEntryBlocks, entryIdsIn, joinsAStep, machinesInOrder, missingEntries, missingTested, type ReportData, type ReportMeta, type ReportNode, type ReportTarget } from "../../../engines/report/index";
+import { draftedEntryBlocks, joinsAStep, machinesInOrder, missingEntries, missingTested, type ReportData, type ReportMeta, type ReportNode, type ReportTarget, placedIn } from "../../../engines/report/index";
 import { Button, TimedNotice } from "../../../ui/index";
 import { collectInserted, insertBlocksAt, insertEntry } from "../editor/pageActions";
 import { removeExact } from "../editor/ReportEditor/ReportEditor";
@@ -43,7 +43,7 @@ export function AddEvidenceButton({
     const missing = missingEntries(page(), data, target, removed);
     // An entry another missing one shows in its own blocks (a flag its output prints) comes with it, whatever the order.
     const absorbed = new Set(
-      missing.flatMap((e) => [...entryIdsIn({ type: "doc", content: draftedEntryBlocks(data, target, meta, e) })].filter((id) => id !== e.id)),
+      missing.flatMap((e) => [...placedIn({ type: "doc", content: draftedEntryBlocks(data, target, meta, e) }).entries].filter((id) => id !== e.id)),
     );
     // Leads first: an absorbed entry is looked at once the entry that shows it is in, and a screenshot that comes along
     // with a step once that step is on the page.
@@ -55,7 +55,7 @@ export function AddEvidenceButton({
     const nodes = collectInserted(editor, () => {
       for (const entry of order) {
         // Placed by an earlier insert (in its `also`): not added twice.
-        if (entryIdsIn(page()).has(entry.id)) continue;
+        if (placedIn(page()).entries.has(entry.id)) continue;
         insertEntry(editor, data, target, entry, false, meta);
         n++;
       }

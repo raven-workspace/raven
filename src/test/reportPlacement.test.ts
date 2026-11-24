@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import { FIXTURES } from "../audit/fixtures";
-import { buildPlainTarget, companionStepAt, entryIdsIn, isDeadEnd, joinsAStep, missingEntries, phaseInsertAt, proofCompanions, reportTargets, sourceOf } from "../engines/report";
+import { buildPlainTarget, companionStepAt, isDeadEnd, joinsAStep, missingEntries, phaseInsertAt, proofCompanions, reportTargets, sourceOf, placedIn } from "../engines/report";
 import type { ReportData, ReportNode, ReportTarget } from "../engines/report";
 import { placementPlan, type PlacementPlan } from "../engines/report/placement";
 import type { AccessGrant } from "../types/credentials";
@@ -11,6 +11,9 @@ import type { Host } from "../types/host";
 import type { LogContent, LogEntry } from "../types/log";
 import type { Hop } from "../types/network";
 import type { Service } from "../types/service";
+
+/** The entries a page or block places. */
+const entriesOnPage = (n: ReportNode) => placedIn(n).entries;
 
 const MIN = 60_000;
 const T0 = 1_700_000_000_000;
@@ -332,7 +335,7 @@ describe("the placement plan on the exam fixtures", () => {
 describe("placing on a page that exists: the plan says where, the page says what's there", () => {
   const draft = buildPlainTarget(garnet, garnetTarget, {});
   const gid = (k: string) => `l-garnet-${k}`;
-  const holds = (n: ReportNode, k: string) => entryIdsIn(n).has(gid(k));
+  const holds = (n: ReportNode, k: string) => entriesOnPage(n).has(gid(k));
   const withoutSteps = (...keys: string[]): ReportNode => ({ ...draft, content: draft.content!.filter((n) => !keys.some((k) => holds(n, k))) });
   const logged = (k: string) => garnet.log.find((e) => e.id === gid(k))!;
   const at = (doc: ReportNode, source: string) => doc.content!.findIndex((n) => sourceOf(n) === source);
@@ -396,7 +399,7 @@ describe("screenshots on findings: each placed once, only with its finding", () 
     walk(doc);
     return out;
   };
-  const stepHolding = (doc: ReportNode, id: string) => doc.content!.filter((n) => n.type === "list" && n.attrs?.kind === "ordered" && entryIdsIn(n).has(id));
+  const stepHolding = (doc: ReportNode, id: string) => doc.content!.filter((n) => n.type === "list" && n.attrs?.kind === "ordered" && entriesOnPage(n).has(id));
 
   it("one linked to a finding and taken within the tag-along window of another step appears exactly once, with its finding's step", () => {
     // Taken a minute after the dump (that step's tag-along window), linked after `show` in the git finding's steps.
@@ -409,7 +412,7 @@ describe("screenshots on findings: each placed once, only with its finding", () 
     const doc = buildPlainTarget(d, garnetTarget, {});
     expect(figuresOf(doc, gid("fshot"))).toHaveLength(1);
     expect(stepHolding(doc, gid("fshot"))).toHaveLength(1);
-    expect(entryIdsIn(stepHolding(doc, gid("fshot"))[0]).has(gid("show"))).toBe(true);
+    expect(entriesOnPage(stepHolding(doc, gid("fshot"))[0]).has(gid("show"))).toBe(true);
   });
 
   it("one listed before every other step goes with the step after it", () => {

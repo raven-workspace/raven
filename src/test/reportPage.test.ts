@@ -10,7 +10,10 @@ import {
   entriesNamedBy,
   isCopiedFrom,
   parseSource,
+  placedIn,
+  removalKeys,
   reportTargets,
+  stillRemoved,
   source,
   sourceString,
   testedListOf,
@@ -152,6 +155,34 @@ describe("what one block names", () => {
     expect(unlinkCopiedFrom(block("figure", { entryId: "s1", source: "entry:s1", gen: "abc" }), "s1")).toEqual({ entryId: null, source: null, gen: null });
     expect(unlinkCopiedFrom(block("codeBlock", { source: "entry:l1:0:output", also: ["flag1"] }), "flag1")).toBeNull();
     expect(unlinkCopiedFrom(block("paragraph", { source: "finding:f1:fix" }), "f1")).toBeNull();
+  });
+});
+
+describe("what a page places", () => {
+  const page: ReportNode = {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { source: "entry:l1:title" } },
+      { type: "codeBlock", attrs: { source: "entry:l1:0:output", also: ["flag1"] } },
+      { type: "figure", attrs: { entryId: "s1", source: "entry:s1" } },
+      { type: "list", attrs: { kind: "bullet", source: "tested:h1" }, content: [{ type: "paragraph", attrs: { source: "finding:f1:fix" } }] },
+    ],
+  };
+
+  it("reads entries and Also tested lists apart, at any depth", () => {
+    expect(placedIn(page)).toEqual({ entries: new Set(["l1", "flag1", "s1"]), testedLists: new Set(["h1"]) });
+  });
+
+  it("reads a block without its children as what it places itself", () => {
+    expect(placedIn({ type: "list", attrs: { source: "tested:h1" } })).toEqual({ entries: new Set(), testedLists: new Set(["h1"]) });
+  });
+
+  it("records what was taken off as the keys removedEntryIds has always held", () => {
+    expect(removalKeys({ entries: new Set(["l1"]), testedLists: new Set(["h1"]) })).toEqual(["l1", "tested:h1"]);
+  });
+
+  it("keeps only the removal keys the page no longer places", () => {
+    expect(stillRemoved(["l1", "l2", "tested:h1", "tested:h2"], page)).toEqual(["l2", "tested:h2"]);
   });
 });
 

@@ -7,7 +7,6 @@ import { FIXTURES } from "../audit/fixtures";
 import { AUDIT_PNGS } from "../audit/images";
 import {
   buildPlainTarget,
-  entryIdsIn,
   sourceOf,
   groupChecks,
   proofCompanions,
@@ -16,9 +15,13 @@ import {
   type ReportData,
   type ReportNode,
   type ReportTarget,
+  placedIn,
 } from "../engines/report";
 import { saveCapture } from "../features/capture/saveCapture";
 import type { LogContent } from "../types/log";
+
+/** The entries a page or block places. */
+const entriesOnPage = (n: ReportNode) => placedIn(n).entries;
 
 vi.mock("../lib/api", () => import("../audit/fakeApi"));
 
@@ -127,7 +130,7 @@ describe("xfer03's report page makes no false claim", () => {
     const after = (key: string, n: number) => shown.slice(shown.indexOf(id(key)), shown.indexOf(id(key)) + n);
     expect(after("local", 2)).toEqual([id("local"), id("local-shot")]);
     expect(after("proof", 3)).toEqual([id("proof"), id("proof-read"), id("proof-shot")]);
-    expect(entryIdsIn(doc).has(id("proof-read"))).toBe(true);
+    expect(entriesOnPage(doc).has(id("proof-read"))).toBe(true);
   });
 
   it("raises no proof fail and at most the one screenshot reminder", () => {

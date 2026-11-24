@@ -6,7 +6,7 @@ import type { Node as PMNode } from "prosekit/pm/model";
 import { isHistoryTransaction } from "prosekit/pm/history";
 import { NodeSelection, Plugin, PluginKey, type Command, type Transaction } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
-import { placedIdsIn, unlinkCopiedFrom, type ReportNode } from "../../../../engines/report/index";
+import { placedIn, removalKeys, unlinkCopiedFrom, type ReportNode } from "../../../../engines/report/index";
 import { reportError } from "../../../../lib/lockSignal";
 import { RavenError } from "../../../../types/errors";
 import { BlockHandle } from "../BlockHandle/BlockHandle";
@@ -80,14 +80,13 @@ export function selectBlockAt(editor: Editor, pos: number) {
 
 export { PROGRAMMATIC };
 
-/** What a block places itself (its entry by source, a figure's `entryId`, its `also`, a machine's Also tested list by
- *  a `tested:` source), not its children's. */
-const ownEntryIds = (node: PMNode) => placedIdsIn({ type: node.type.name, attrs: node.attrs });
+/** The removal keys of what a block places itself (`placedIn` on the block alone), not its children's. */
+const ownEntryIds = (node: PMNode) => removalKeys(placedIn({ type: node.type.name, attrs: node.attrs }));
 
 /**
  * What a transaction took off the page: entries (and Also tested lists) named by blocks in the ranges it deleted
- * (inside a list item too) that the page no longer names anywhere (`placedIdsIn`'s rule: a source, a figure's entry,
- * an `also`, a `tested:<hostId>` source). None for
+ * (inside a list item too) that the page no longer names anywhere (`placedIn`'s rule: a block's source, a figure's
+ * entry, an `also`, a machine's Also tested bullets). None for
  * the page's own transactions (`PROGRAMMATIC`) and for undo and redo.
  */
 export function removedByTransaction(tr: Transaction): string[] {

@@ -8,7 +8,7 @@ import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
 import { byTime } from "./prove";
 import { blockSource, copiedFrom } from "./page/block";
-import { entryIdsIn } from "./page";
+import { placedIn } from "./page";
 import { ILLUSTRATE_WINDOW_MS, proofCompanions } from "./placement";
 import { proofFacts } from "./proof";
 import { sourceOf } from "./stamp";
@@ -299,7 +299,7 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   const { data, target, doc, meta, sectionId } = input;
   const out: Check[] = [];
   const nodes = visit(doc);
-  const onPage = entryIdsIn(doc);
+  const onPage = placedIn(doc).entries;
   const hosts = target.hostIds.flatMap((id) => data.hosts.find((h) => h.id === id) ?? []);
   const entryOf = (id: string) => data.log.find((e) => e.id === id);
   for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage));

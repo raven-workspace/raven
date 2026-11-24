@@ -2,7 +2,7 @@ import type { LogEntry } from "../../../types/log";
 import { bold, heading, para } from "../nodes";
 import { PAGE_PHASES, PHASE_TITLE, placementPlan } from "../placement";
 import { entryBlocks, finish, stepBlocks, testedRun } from "../plain";
-import { blockSource, entriesNamedBy, testedListOf } from "./block";
+import { type BlockLike, blockSource, entriesNamedBy, testedListOf } from "./block";
 import { parseSource, source } from "./source";
 import type { Phase, ReportData, ReportNode, ReportTarget } from "../types";
 
@@ -13,17 +13,52 @@ import type { Phase, ReportData, ReportNode, ReportTarget } from "../types";
  * the plain builder (`plain.ts`).
  */
 
-/** The entry ids a page holds: those in `entry:<id>…` sources at any depth, every figure's `entryId`, and every id in
- *  an `also` attr (an entry a block already shows). */
-export function entryIdsIn(doc: ReportNode): Set<string> {
-  const ids = new Set<string>();
-  const walk = (n: ReportNode) => {
-    for (const id of entriesNamedBy(n)) ids.add(id);
+/** What a page places that its owner can take off and Add new evidence would bring back. */
+export interface Placed {
+  /** Entries its blocks were copied from or also show (`entriesNamedBy`), at any depth. */
+  entries: Set<string>;
+  /** Machines whose Also tested list it holds a bullet of. */
+  testedLists: Set<string>;
+}
+
+/** What a page, or one block and what it holds, places. Given a block without its children (`{ type, attrs }`, as the
+ *  editor passes a node), what that block places itself. */
+export function placedIn(node: BlockLike & { content?: readonly ReportNode[] }): Placed {
+  const placed: Placed = { entries: new Set(), testedLists: new Set() };
+  const walk = (n: BlockLike & { content?: readonly ReportNode[] }) => {
+    for (const id of entriesNamedBy(n)) placed.entries.add(id);
+    const hostId = testedListOf(n);
+    if (hostId !== null) placed.testedLists.add(hostId);
     n.content?.forEach(walk);
   };
-  walk(doc);
-  return ids;
+  walk(node);
+  return placed;
 }
+
+/* ------------------------------------------------------------------ What the owner took off */
+
+/**
+ * The keys a page's `removedEntryIds` records for what was taken off: an entry by its id, a machine's Also tested list
+ * by its own key. Callers pass them along as they are; only this module reads them.
+ */
+export function removalKeys(placed: Placed): string[] {
+  return [...placed.entries, ...[...placed.testedLists].map(testedKey)];
+}
+
+/** The removal keys still off the page `doc`: those whose entry or Also tested list it no longer places (an undo
+ *  puts one back). */
+export function stillRemoved(removed: readonly string[], doc: ReportNode): string[] {
+  const onPage = new Set(removalKeys(placedIn(doc)));
+  return removed.filter((key) => !onPage.has(key));
+}
+
+/** A machine's Also tested list, as `removedEntryIds` records it. */
+const testedKey = (hostId: string) => source.tested(hostId);
+/** The machine a removal key names the Also tested list of, or null for an entry id. */
+const testedKeyHost = (key: string) => {
+  const s = parseSource(key);
+  return s?.kind === "tested" ? s.hostId : null;
+};
 
 /* ------------------------------------------------------------------ Placing an entry */
 
@@ -104,7 +139,7 @@ export function companionStepAt(doc: ReportNode, data: ReportData, target: Repor
   if (!step || step.lead.id === entry.id) return null;
   const others = step.entries.map((e) => e.id).filter((id) => id !== entry.id);
   const content = doc.content ?? [];
-  const index = content.findIndex((n) => isStepList(n) && others.some((id) => entryIdsIn(n).has(id)));
+  const index = content.findIndex((n) => isStepList(n) && others.some((id) => placedIn(n).entries.has(id)));
   if (index === -1) return null;
   return { index, blocks: stepBlocks(data, step).filter((b) => ownIds(b).has(entry.id)) };
 }
@@ -126,32 +161,13 @@ function findingBulletAt(doc: ReportNode, data: ReportData, entry: LogEntry, fin
  */
 export function missingEntries(doc: ReportNode, data: ReportData, target: ReportTarget, removed: readonly string[]): LogEntry[] {
   const { placed } = placementPlan(data, target);
-  const onPage = entryIdsIn(doc);
+  const onPage = placedIn(doc).entries;
   return data.log
     .filter((e) => placed.has(e.id) && !onPage.has(e.id) && !removed.includes(e.id))
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 }
 
 /** What `removedEntryIds` records when the owner deletes a machine's whole Also tested list. */
-export const testedKey = (hostId: string) => source.tested(hostId);
-/** The machine a `removedEntryIds` key names the Also tested list of, or null for an entry id. */
-const testedKeyHost = (key: string) => {
-  const s = parseSource(key);
-  return s?.kind === "tested" ? s.hostId : null;
-};
-
-/** What a page places that its owner can remove and Add new evidence would bring back: its entries (`entryIdsIn`)
- *  and each machine's Also tested list (`testedKey`, from a `tested:<hostId>` block). */
-export function placedIdsIn(doc: ReportNode): Set<string> {
-  const ids = entryIdsIn(doc);
-  const walk = (n: ReportNode) => {
-    const hostId = testedListOf(n);
-    if (hostId !== null) ids.add(testedKey(hostId));
-    n.content?.forEach(walk);
-  };
-  walk(doc);
-  return ids;
-}
 
 /**
  * A draft without what the owner took off the page (`removedEntryIds`), so a rebuild never puts it back: every block of
