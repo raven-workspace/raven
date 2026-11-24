@@ -11,6 +11,7 @@ import {
   missingEntries,
   missingTested,
   PAGE_NODE_TYPES,
+  placedIn,
   sourceBlocks,
   sourceOf,
   type ReportData,
@@ -215,6 +216,67 @@ describe("insertEntry: the rail's + add", () => {
     expect(json(editor())).not.toEqual(before);
     fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
     expect(json(editor())).toEqual(before);
+  });
+});
+
+describe("a flag and the step that prints it, added in either order", () => {
+  const local = entry(garnet, "local");
+  const value = local.content.kind === "flag" ? local.content.value : "";
+  /** How many times the flag's value is on the page outside the Result line (which names every flag on purpose). */
+  const times = (editor: Editor) => {
+    let n = 0;
+    editor.state.doc.forEach((block) => {
+      if (!String(block.attrs.source ?? "").startsWith("result:")) n += block.textContent.split(value).length - 1;
+    });
+    return n;
+  };
+
+  it("the draft itself prints it once", async () => {
+    const { editor } = await ready(draft);
+    expect(times(editor())).toBe(1);
+  });
+
+  const placed = (editor: Editor) => placedIn(json(editor)).entries;
+  const flagStep = (editor: Editor) => json(editor).content!.some((n) => (n.content ?? []).some((c) => c.attrs?.source === `entry:${id("local")}:proof`));
+
+  it("the flag added by hand first, then its lead step: the flag's own step gives way, in one undo step", async () => {
+    expect(value).not.toBe("");
+    const { editor, onRemoveEvidence } = await ready(without("ssh", "local", "local-shot"));
+    expect(times(editor())).toBe(0);
+    act(() => void insertEntry(editor(), garnet, target, local, false));
+    expect(times(editor())).toBe(1);
+    const withFlag = json(editor());
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "ssh"), false));
+    expect(times(editor())).toBe(1);
+    expect(flagStep(editor())).toBe(false);
+    expect([...placed(editor())]).toEqual(expect.arrayContaining([id("local"), id("ssh")]));
+    // Still on the page (in the step's `also`): not the owner's removal.
+    expect(onRemoveEvidence).not.toHaveBeenCalled();
+    fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
+    expect(json(editor())).toEqual(withFlag);
+  });
+
+  it("a flag step the owner edited stays: their words are theirs", async () => {
+    const { editor } = await ready(without("ssh", "local", "local-shot"));
+    act(() => void insertEntry(editor(), garnet, target, local, false));
+    const title = find(editor(), bySource(`entry:${id("local")}:title`));
+    typeAt(editor(), title.pos + title.node.nodeSize - 1, " (by hand)");
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "ssh"), false));
+    expect(flagStep(editor())).toBe(true);
+  });
+
+  it("the lead step first, then the flag: the flag joins the step that prints it", async () => {
+    const { editor } = await ready(without("ssh", "local", "local-shot"));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "ssh"), false));
+    expect(times(editor())).toBe(1);
+    // As the page has it, the step names no flag yet: an owner's earlier page, or the flag logged later.
+    const output = find(editor(), (n) => Array.isArray(n.attrs.also) && (n.attrs.also as string[]).includes(id("local")));
+    act(() => void editor().view.dispatch(editor().state.tr.setNodeAttribute(output.pos, "also", null)));
+    expect(placed(editor()).has(id("local"))).toBe(false);
+    act(() => void insertEntry(editor(), garnet, target, local, false));
+    expect(times(editor())).toBe(1);
+    expect(flagStep(editor())).toBe(false);
+    expect(placed(editor()).has(id("local"))).toBe(true);
   });
 });
 

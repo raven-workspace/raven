@@ -8,7 +8,9 @@ import {
   blockHash,
   blockSource,
   companionStepAt,
+  alsoShows,
   draftedEntryBlocks,
+  isCopiedFrom,
   parseSource,
   phaseInsertAt,
   refreshBlocks,
@@ -219,15 +221,25 @@ export function collectInserted(editor: Editor, run: () => void): PMNode[] {
 }
 
 /** Inserts `made` at `spot` in one transaction, an undo step of its own (never merged with typing before or after
- *  it); returns the nodes as they stand on the page after it. */
-function insertAtSpot(editor: Editor, spot: (doc: PMNode) => Spot, made: PMNode[]): PMNode[] {
+ *  it); returns the nodes as they stand on the page after it. `drop` names ranges of the page as it was that the same
+ *  transaction takes off (blocks the inserted ones now show: `givesWay`). */
+function insertAtSpot(editor: Editor, spot: (doc: PMNode) => Spot, made: PMNode[], drop: Spot[] = []): PMNode[] {
   let at: number | null = null;
   editor.exec((state, dispatch) => {
     const { from, to } = spot(state.doc);
     at = from;
     if (dispatch) {
-      dispatch(closeHistory(state.tr.replaceWith(from, to, made)).scrollIntoView());
+      const tr = state.tr.replaceWith(from, to, made);
       track(editor, from, to, made);
+      const inserted = tr.mapping.maps.length;
+      // Last first, so the ranges before each stay where they were. A range the blocks went into stays: they'd go with it.
+      const keep = (d: Spot) => !(d.from < from && from < d.to);
+      for (const r of drop.filter(keep).map((d) => ({ from: tr.mapping.map(d.from, 1), to: tr.mapping.map(d.to, -1) })).sort((a, b) => b.from - a.from)) {
+        tr.delete(r.from, r.to);
+        track(editor, r.from, r.to, []);
+      }
+      at = tr.mapping.slice(inserted).map(from);
+      dispatch(closeHistory(tr).scrollIntoView());
     }
     return true;
   });
@@ -247,9 +259,60 @@ const topPos = (doc: PMNode, index: number) => {
 };
 
 /** Puts blocks at a top-level index, one undo step; returns them as they stand on the page. */
-export function insertBlocksAt(editor: Editor, index: number, blocks: ReportNode[]): PMNode[] {
+export function insertBlocksAt(editor: Editor, index: number, blocks: ReportNode[], drop: Spot[] = []): PMNode[] {
   const made = blocks.map((n) => editor.state.schema.nodeFromJSON(n));
-  return insertAtSpot(editor, (doc) => ({ from: topPos(doc, index), to: topPos(doc, index) }), made);
+  return insertAtSpot(editor, (doc) => ({ from: topPos(doc, index), to: topPos(doc, index) }), made, drop);
+}
+
+/** A page block as the Page module reads one. */
+const asBlock = (n: PMNode) => ({ type: n.type.name, attrs: n.attrs });
+
+/**
+ * Where an entry's own blocks stand on the page, to give way to blocks that now show it (a flag added by hand as its
+ * own step, then the step whose output prints it): a numbered step holding nothing else goes whole, else each of the
+ * entry's blocks. None when the owner edited one of them: their words stay.
+ */
+function givesWay(doc: PMNode, entryId: string): Spot[] {
+  const out: Spot[] = [];
+  const nodes: PMNode[] = [];
+  doc.forEach((top, pos) => {
+    if (isCopiedFrom(asBlock(top), entryId)) {
+      out.push({ from: pos, to: pos + top.nodeSize });
+      nodes.push(top);
+      return;
+    }
+    if (top.type.name !== "list") return;
+    const mine: { node: PMNode; offset: number }[] = [];
+    top.forEach((child, offset) => void (isCopiedFrom(asBlock(child), entryId) && mine.push({ node: child, offset })));
+    if (mine.length === 0) return;
+    nodes.push(...mine.map((m) => m.node));
+    if (mine.length === top.childCount) out.push({ from: pos, to: pos + top.nodeSize });
+    else for (const m of mine) out.push({ from: pos + 1 + m.offset, to: pos + 1 + m.offset + m.node.nodeSize });
+  });
+  return isEdited(nodes) ? [] : out;
+}
+
+/** The ranges of the page that `blocks` now show instead: the own blocks of each entry their `also` names. */
+const shownInstead = (doc: PMNode, blocks: ReportNode[]): Spot[] =>
+  [...new Set(blocks.flatMap((b) => alsoShows(b)))].flatMap((id) => givesWay(doc, id));
+
+/**
+ * A flag whose value the page already prints, in another entry's block (the output of the step that read it): that
+ * block, to record the flag in its `also` rather than print the value a second time. The Result line, which names every
+ * flag, doesn't count. Null for any other entry, or when no block prints it.
+ */
+function printsValueOf(doc: PMNode, entry: LogEntry): { node: PMNode; pos: number } | null {
+  const value = entry.content.kind === "flag" ? entry.content.value.trim() : "";
+  if (value === "") return null;
+  let found: { node: PMNode; pos: number } | null = null;
+  doc.descendants((node, pos) => {
+    if (found) return false;
+    if (!node.isTextblock) return true;
+    const s = blockSource(asBlock(node));
+    if (s?.kind === "entry" && s.entryId !== entry.id && node.textContent.includes(value)) found = { node, pos };
+    return false;
+  });
+  return found;
 }
 
 /** Whether the cursor is in a heading, or a heading is the selected block: + add then places by phase. */
@@ -277,8 +340,19 @@ export function insertEntry(
   meta: ReportMeta = {},
 ): PMNode[] {
   const schema = editor.state.schema;
+  // A flag the page already prints: placed in that block's `also`, its value not printed twice.
+  const printed = printsValueOf(editor.state.doc, entry);
+  if (printed) {
+    editor.exec((state, dispatch) => {
+      dispatch?.(closeHistory(state.tr.setNodeAttribute(printed.pos, "also", [...alsoShows(asBlock(printed.node)), entry.id])));
+      return true;
+    });
+    endUndoGroup(editor);
+    return [];
+  }
   if (atCursor && !cursorInHeading(editor)) {
-    const made = draftedEntryBlocks(data, target, meta, entry).map((n) => schema.nodeFromJSON(n));
+    const blocks = draftedEntryBlocks(data, target, meta, entry);
+    const made = blocks.map((n) => schema.nodeFromJSON(n));
     return insertAtSpot(
       editor,
       (doc) => {
@@ -286,6 +360,7 @@ export function insertEntry(
         return spotAfter(doc, sel.from, sel instanceof NodeSelection && sel.node.isBlock ? sel.node : null, made);
       },
       made,
+      shownInstead(editor.state.doc, blocks),
     );
   }
   const doc = editor.state.doc.toJSON() as ReportNode;
@@ -302,7 +377,8 @@ export function insertEntry(
     );
   }
   const { index, before } = phaseInsertAt(doc, data, target, entry);
-  return insertBlocksAt(editor, index, [...before, { type: "list", attrs: { kind: "ordered" }, content: draftedEntryBlocks(data, target, meta, entry) }]);
+  const blocks = draftedEntryBlocks(data, target, meta, entry);
+  return insertBlocksAt(editor, index, [...before, { type: "list", attrs: { kind: "ordered" }, content: blocks }], shownInstead(editor.state.doc, blocks));
 }
 
 /**
