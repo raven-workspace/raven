@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "prosekit/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,8 @@ import { GUIDES, guidesOf, sectionGuide, type GuideId } from "../engines/report/
 import { ReportDataContext } from "../features/report/editor/ReportDataContext/ReportDataContext";
 import { GuidePanel } from "../features/report/GuidePanel/GuidePanel";
 import { ReportEditor } from "../features/report/editor/ReportEditor/ReportEditor";
+import { useGuideSettings } from "../features/report/editor/GuideNote/GuideNote";
+import { settingsKey } from "../features/settings/queries";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { SectionKind } from "../types/report";
@@ -293,3 +295,70 @@ describe("guide notes beside the page", () => {
   });
 });
 
+describe("hiding guide notes: saves in order", () => {
+  type Call = { list: string[]; resolve(): void; reject(e: Error): void };
+  let calls: Call[];
+  beforeEach(() => {
+    calls = [];
+    m.settingsUpdate.mockImplementation(
+      (patch) =>
+        new Promise<Settings>((resolve, reject) => {
+          const list = patch.reportGuidesHidden ?? [];
+          calls.push({ list, resolve: () => resolve(settings(list)), reject });
+        }),
+    );
+  });
+  async function mountHook(stored: Settings = settings()) {
+    m.settingsGet.mockResolvedValue(stored);
+    const qc = makeQueryClient();
+    const hook = renderHook(() => useGuideSettings(), { wrapper: ({ children }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+    // Settings loaded, as on a page the owner reads before hiding a note.
+    await waitFor(() => expect(hook.result.current.hidden).not.toBeNull());
+    const cached = () => qc.getQueryData<Settings>(settingsKey)?.reportGuidesHidden;
+    return { ...hook, cached };
+  }
+  /** Settles every save sent so far, the newest first (as a slower reply to an older save lands last), until none waits. */
+  async function settleNewestFirst(how: (c: Call) => void = (c) => c.resolve()) {
+    // Let the first save go out.
+    await act(async () => {});
+    expect(calls.length).toBeGreaterThan(0);
+    for (let done = 0; done < calls.length; ) {
+      const open = calls.slice(done).reverse();
+      done = calls.length;
+      await act(async () => {
+        for (const c of open) how(c);
+      });
+      await act(async () => {});
+    }
+  }
+
+  it("two hides back to back both stay hidden, whatever order the replies land in", async () => {
+    const { result, cached } = await mountHook();
+    act(() => result.current.hide("ports"));
+    act(() => result.current.hide("steps"));
+    expect(cached()).toEqual(["ports", "steps"]);
+    await settleNewestFirst();
+    expect(cached()).toEqual(["ports", "steps"]);
+    // What was stored last holds both.
+    expect(calls.at(-1)!.list).toEqual(["ports", "steps"]);
+  });
+
+  it("a failed save undoes only its own hide, and a later hide that saved stays", async () => {
+    const { result, cached } = await mountHook();
+    act(() => result.current.hide("ports"));
+    act(() => result.current.hide("steps"));
+    // The first save (hiding ports) fails; the next one succeeds.
+    await settleNewestFirst((c) => (c === calls[0] ? c.reject(new Error("db busy")) : c.resolve()));
+    expect(cached()).toEqual(["steps"]);
+    expect(calls.at(-1)!.list).toEqual(["steps"]);
+  });
+
+  it("keeps the same hidden list from one render to the next while Settings doesn't change", async () => {
+    // Settings saved before the list existed: none stored.
+    const { result, rerender } = await mountHook({ machines: ["Kali (VM)"] } as unknown as Settings);
+    expect(result.current.hidden).toEqual([]);
+    const first = result.current.hidden;
+    rerender();
+    expect(result.current.hidden).toBe(first);
+  });
+});
