@@ -347,7 +347,7 @@ export const SCREENS: Screen[] = [
         await page.getByRole("option", { name: /Shells & transfers/ }).click();
       }
       await page.getByRole("option", { name: /Transfer a file/ }).click();
-      await page.getByRole("button", { name: /^(Host |No host$)/ }).click();
+      await page.getByRole("button", { name: /^Fill for host/ }).click();
       await page.getByRole("listbox", { name: "Fill for host" }).getByRole("option").nth(1).click();
     },
   },

@@ -22,14 +22,14 @@ function setup(value: string | null = "h1") {
       <input aria-label="last" />
     </form>,
   );
-  return { onChange, ref, chip: () => screen.getByRole("button", { name: /^(Host |No host)/ }) };
+  return { onChange, ref, chip: () => screen.getByRole("button", { name: /^Fill for host/ }) };
 }
 
 describe("HostChip", () => {
   it("host and credential pickers are tabbable triggers: labelled with the short host name, in the Tab order", async () => {
     const user = userEvent.setup();
     const { chip } = setup();
-    expect(chip()).toHaveAccessibleName("Host dc01");
+    expect(chip()).toHaveAccessibleName("Fill for host dc01");
     expect(chip()).toHaveAttribute("aria-haspopup", "listbox");
     expect(chip()).not.toHaveAttribute("tabindex", "-1");
     expect(chip()).toHaveTextContent(/^Host\s*dc01/);
@@ -40,18 +40,17 @@ describe("HostChip", () => {
     expect(screen.getByLabelText("last")).toHaveFocus();
   });
 
-  it("host chip with no host reads \"No host\" with no Host prefix, and the name starts with the visible text", () => {
+  it("host chip with no host reads \"No host\" with no Host prefix, and is named for what picking does (RAV-21)", () => {
     render(<HostChip hosts={HOSTS} value={null} onChange={vi.fn()} />);
-    const chip = screen.getByRole("button", { name: /^No host/ });
+    const chip = screen.getByRole("button", { name: "Fill for host" });
     expect(chip).toHaveTextContent(/^No host$/);
-    expect(chip).toHaveAccessibleName("No host");
   });
 
-  it("with a host the accessible name starts with the visible text", () => {
+  it("with a host the accessible name says what picking does and holds the visible text (RAV-21)", () => {
     setup("h2");
-    const chip = screen.getByRole("button", { name: /^Host web07/ });
-    expect(chip.textContent!.trim().startsWith("Host")).toBe(true);
-    expect(chip.getAttribute("aria-label")!.startsWith("Host web07")).toBe(true);
+    const chip = screen.getByRole("button", { name: "Fill for host web07" });
+    expect(chip).toHaveTextContent(/^Host\s*web07$/);
+    expect(chip.getAttribute("aria-label")!.toLowerCase()).toContain("host web07");
   });
 
   it("the list is at least as wide as the trigger", async () => {

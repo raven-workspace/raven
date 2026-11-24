@@ -676,7 +676,7 @@ describe("Manual: the host commands fill for", () => {
     await screen.findByRole("tab", { name: "Next" });
     press("m");
     await openNote("Aa Tool");
-    expect(await screen.findByRole("button", { name: "Host zzweb01" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Fill for host zzweb01" })).toBeInTheDocument();
     expect(await pre("zzscan -t 198.51.100.21")).toBeInTheDocument();
   });
 
@@ -686,7 +686,7 @@ describe("Manual: the host commands fill for", () => {
     useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
     mount([`/manual/${TOOL.id}`]);
     await pre("zzscan -t 198.51.100.21");
-    await user.click(screen.getByRole("button", { name: "Host zzweb01" }));
+    await user.click(screen.getByRole("button", { name: "Fill for host zzweb01" }));
     await user.click(await screen.findByRole("option", { name: /zzdb02/ }));
     expect(await pre("zzscan -t 198.51.100.22")).toBeInTheDocument();
     expect(screen.getByTestId("manual-host-ip")).toHaveTextContent("198.51.100.22");
@@ -712,7 +712,7 @@ describe("Manual: the host commands fill for", () => {
     expect(row).toHaveClass("manual-page__host-row");
     expect(screen.getByTestId("manual-host-ip")).toHaveClass("manual-page__host-ip");
     expect(screen.getByText("Copied for zzweb01")).toHaveClass("manual-page__status");
-    await user.click(screen.getByRole("button", { name: "Host zzweb01" }));
+    await user.click(screen.getByRole("button", { name: "Fill for host zzweb01" }));
     await user.click(await screen.findByRole("option", { name: /zzdb02/ }));
     expect(await pre("zzscan -t 198.51.100.22")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Copied for zzweb01")).not.toBeInTheDocument());
@@ -735,18 +735,18 @@ describe("Manual: the host commands fill for", () => {
     await pre("zzscan -t 198.51.100.21");
     act(() => useArsenalStore.setState({ open: true }));
     const drawer = await screen.findByRole("complementary", { name: "Arsenal" });
-    await within(drawer).findByRole("button", { name: /^(Host |No host)/ });
+    await within(drawer).findByRole("button", { name: /^Fill for host/ });
     press("˙", { altKey: true, code: "KeyH" });
     expect(await within(drawer).findByRole("listbox", { name: "Fill for host" })).toBeInTheDocument();
     expect(screen.getAllByRole("listbox", { name: "Fill for host" })).toHaveLength(1);
-    const manualChip = within(screen.getByRole("main", { name: "Manual" })).getByRole("button", { name: /^(Host |No host)/ });
+    const manualChip = within(screen.getByRole("main", { name: "Manual" })).getByRole("button", { name: /^Fill for host/ });
     expect(manualChip).not.toHaveAttribute("aria-expanded", "true");
   });
 
   it("no engagement: says so, and commands keep their placeholders", async () => {
     mount([`/manual/${TOOL.id}`]);
     expect(await screen.findByText("No active engagement")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^(Host |No host)/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Fill for host/ })).toBeNull();
     expect(await screen.findByText((_, el) => el?.tagName === "PRE" && (el.textContent ?? "").includes("{TARGET_IP}"))).toBeInTheDocument();
   });
 
