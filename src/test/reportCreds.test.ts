@@ -81,6 +81,28 @@ describe("targetCredentials: direct logins", () => {
     expect(tied(data([out("ssh bob@10.0.0.5", "Welcome to Ubuntu\nbob@ms01:~$")]))).toEqual([["bob", "used on ms01"]]);
   });
 
+  describe("a spray over several hosts", () => {
+    const spray = (hostIds: string[], output: string) =>
+      ({ id: "e", kind: "command", title: "e", hostIds, private: false, content: { kind: "command", blocks: [{ command: "nxc smb 10.0.0.5 10.0.0.10 -u bob -p 'Spring2026!'", output }] } }) as unknown as LogEntry;
+    const both = (d: ReportData) => targetCredentials(d, [H, "h2"]).credentials.map((c) => [c.username, c.ties.join("; ")]);
+
+    it("ties each host whose line says [+], never one whose line says it failed", () => {
+      const output = "SMB  10.0.0.5   445  MS01  [-] corp.local\\bob:Spring2026! STATUS_LOGON_FAILURE\nSMB  10.0.0.10  445  DC01  [+] corp.local\\bob:Spring2026!";
+      expect(both(data([spray([H, "h2"], output)]))).toEqual([["bob", "used on dc01"]]);
+      // Named by its name, not its IP, and on both.
+      const named = "SMB  ms01  445  [+] corp.local\\bob:Spring2026!\nSMB  dc01  445  [+] corp.local\\bob:Spring2026! (Pwn3d!)";
+      expect(both(data([spray([H, "h2"], named)]))).toEqual([["bob", "used on ms01; used on dc01"]]);
+    });
+
+    it("with no [+] line naming one of its hosts, ties only an entry with one host", () => {
+      const anonymous = "[+] corp.local\\bob:Spring2026!";
+      expect(both(data([spray([H, "h2"], anonymous)]))).toEqual([]);
+      expect(both(data([spray([H], anonymous)]))).toEqual([["bob", "used on ms01"]]);
+      // An IP that only starts like a host's is another host.
+      expect(both(data([spray([H, "h2"], "SMB  10.0.0.50  445  [+] corp.local\\bob:Spring2026!")]))).toEqual([]);
+    });
+  });
+
   it("never ties a login whose credential (or username) failed on that host", () => {
     const failed = (o: Record<string, unknown>) => ({ id: "a", credId: "c1", usernameId: null, hostId: H, service: "ssh", result: "failed", at: 5, ...o });
     const creds = [cred("c1", "bob", "Spring2026!"), cred("c2", "alice", "Other1!"), cred("c3", "svc", "Spring2026!")];
