@@ -8,6 +8,8 @@ use std::collections::HashSet;
 
 pub(crate) const MAX_CONTENT: usize = 1024 * 1024;
 pub(crate) const MAX_REFS: usize = 100;
+/// An exploit's original URL: longer than any real one, short of what a pasted page would be.
+pub(crate) const MAX_URL: usize = 8 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -372,6 +374,9 @@ fn clean_file(i: &FindingFileInput) -> AppResult<(String, Option<String>)> {
     }
     if i.original_content.as_deref().is_some_and(|c| c.len() > MAX_CONTENT) {
         return Err(AppError::validation("originalContent", "original content is too long (1 MiB max)"));
+    }
+    if i.original_url.as_deref().is_some_and(|u| u.trim().len() > MAX_URL) {
+        return Err(AppError::validation("originalUrl", "original URL is too long (8 KiB max)"));
     }
     Ok((name, blank_to_none(i.language.as_deref())))
 }
@@ -757,6 +762,13 @@ mod tests {
         let big = FindingFileInput { name: "a".into(), language: None, content: "x".repeat(1024 * 1024 + 1), modified: None, original_url: None, original_content: None };
         assert!(matches!(file_create(c, &f.id, big.clone()), Err(AppError::Validation { field, .. }) if field == "content"));
         assert!(matches!(file_update(c, &file.id, big), Err(AppError::Validation { .. })));
+        // The original URL: up to 8 KiB stores, a byte more doesn't, on create or update.
+        let url = |n: usize| FindingFileInput { name: "x.py".into(), language: None, content: "".into(), modified: Some(true), original_url: Some(format!("https://e.test/{}", "a".repeat(n - 15))), original_content: None };
+        let long = file_create(c, &f.id, url(MAX_URL)).unwrap();
+        assert_eq!(long.original_url.map(|u| u.len()), Some(MAX_URL));
+        file_delete(c, &long.id).unwrap();
+        assert!(matches!(file_create(c, &f.id, url(MAX_URL + 1)), Err(AppError::Validation { field, .. }) if field == "originalUrl"));
+        assert!(matches!(file_update(c, &file.id, url(MAX_URL + 1)), Err(AppError::Validation { field, .. }) if field == "originalUrl"));
         let blank = FindingFileInput { name: " ".into(), language: None, content: "".into(), modified: None, original_url: None, original_content: None };
         assert!(matches!(file_create(c, &f.id, blank), Err(AppError::Validation { field, .. }) if field == "name"));
         let upd = FindingFileInput { name: "b.sh".into(), language: None, content: "echo".into(), modified: None, original_url: None, original_content: None };
