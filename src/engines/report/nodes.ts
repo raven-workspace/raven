@@ -1,3 +1,4 @@
+import { source as src } from "./page/source";
 import type { ReportNode } from "./types";
 
 /**
@@ -42,7 +43,7 @@ export const listItem = (kind: "ordered" | "bullet", blocks: ReportNode[], sourc
 /** A screenshot with its editable caption (none when blank); `width` only when a positive number. */
 export const figure = (attachmentId: string, caption: string, entryId: string, width: unknown = null): ReportNode => ({
   type: "figure",
-  attrs: { attachmentId, entryId, source: `entry:${entryId}`, ...(typeof width === "number" && width > 0 ? { width: Math.round(width) } : {}) },
+  attrs: { attachmentId, entryId, source: src.entry(entryId), ...(typeof width === "number" && width > 0 ? { width: Math.round(width) } : {}) },
   ...(caption.trim() ? { content: [text(caption.trim())] } : {}),
 });
 

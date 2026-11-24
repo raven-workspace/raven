@@ -11,6 +11,7 @@ import {
   phaseInsertAt,
   refreshBlocks,
   refreshFamily,
+  source,
   stamp,
   type ReportData,
   type ReportMeta,
@@ -268,7 +269,7 @@ export function insertEntry(
  */
 export function insertFigure(editor: Editor, entry: LogEntry, pos: number): PMNode[] {
   if (entry.content.kind !== "screenshot") return [];
-  const [figure] = stamp([{ type: "figure", attrs: { attachmentId: entry.content.attachmentId, entryId: entry.id, source: `entry:${entry.id}` } }]);
+  const [figure] = stamp([{ type: "figure", attrs: { attachmentId: entry.content.attachmentId, entryId: entry.id, source: source.entry(entry.id) } }]);
   const made = [editor.state.schema.nodeFromJSON(figure)];
   return insertAtSpot(editor, (doc) => spotAfter(doc, Math.min(pos, doc.content.size), null, made), made);
 }
