@@ -4,6 +4,7 @@ import { classifyExam } from "../../../engines/fieldManual/classifyExam";
 import type { CardMeta } from "../../../engines/library/store";
 import type { LibraryCommand } from "../../../engines/library/types";
 import type { ManualNote } from "../../../engines/manual/index";
+import { fillsBlock, isOutputBlock } from "../../../engines/manual/commands";
 import { resolveLink } from "../../../engines/manual/links";
 import { isInlineCommand, lookupColumns, plain, shortTitle } from "../../../engines/manual/lookup";
 import { cx } from "../../../lib/cx";
@@ -27,9 +28,6 @@ const isLabel = (parts: Inline[]) => {
   if (!solid.length || !("strong" in solid[0])) return false;
   return solid.slice(1).every((p) => "text" in p && /^[:.]$/.test(p.text.trim()));
 };
-const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
-/** Fence languages that hold output to read, not a command to run: Copy only (no fill, no log, no exam rule). */
-const OUTPUT_LANGS = new Set(["text", "txt", "output", "console", "plaintext", "plain"]);
 /** Inline code up to this length with no space is one token: it keeps to one line (the narrowest line holds 40 characters). */
 const TOKEN_MAX = 40;
 const LINK_CLASS = "note-view__link";
@@ -268,14 +266,14 @@ function BlockView({ block, n, ctx: shared, base, section, tableName, tableAncho
       );
     case "code": {
       const command = commandOf(block, ctx.note, n, section);
-      const output = OUTPUT_LANGS.has(block.lang.toLowerCase());
+      const output = isOutputBlock(block);
       const exam = output ? undefined : classifyExam(block.text);
       if (exam) command.exam = exam;
       const line = firstLine(block.text);
       return (
         <ManualCommand
           command={command} label={section && line ? `${section}: ${line}` : line || command.title} caption={block.title}
-          fill={!output && PLACEHOLDER.test(block.text)} output={output} base={base} highlight={ctx.re}
+          fill={fillsBlock(block)} output={output} base={base} highlight={ctx.re}
         />
       );
     }
