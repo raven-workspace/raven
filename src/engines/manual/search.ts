@@ -1,6 +1,6 @@
-import { FENCE, OUTLINE_HEADING, tableCaption } from "./anchors";
+import { fenceWalk, OUTLINE_HEADING, tableCaption } from "./anchors";
 import { isInlineCommand, lookupRows, plain, type LookupRow } from "./lookup";
-import { lineRuns, type Inline } from "./markdown";
+import { DEEP_HEADING, isTableStart, lineRuns, tableEnd, type Inline } from "./markdown";
 import type { ManualNote } from "./types";
 import { escapeRegExp } from "../regex";
 
@@ -110,24 +110,29 @@ function linesOf(note: ManualNote): Line[] {
   const hit = linesCache.get(note);
   if (hit) return hit;
   const out: Line[] = [];
-  let fence: string | null = null;
+  const walk = fenceWalk();
+  const lines = note.body.split("\n");
   let section = -1;
-  for (const raw of note.body.split("\n")) {
-    const f = FENCE.exec(raw);
-    if (f) {
-      if (fence === null) fence = f[1][0];
-      else if (f[1][0] === fence) fence = null;
-      continue;
-    }
+  // A table's header, separator and rows, as the renderer reads them: [header, end).
+  let table: [number, number] | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i]!;
+    const kind = walk(raw);
+    if (kind === "fence") continue;
     let line: { text: string; pieces: [number, number][] };
-    if (fence !== null) line = lineOf([[raw.trim()]], "");
+    if (kind === "code") line = lineOf([[raw.trim()]], "");
     else {
       const h = OUTLINE_HEADING.exec(raw);
       // The h1 repeats the title: a title hit already covers it.
       if (h?.[1] === "#") continue;
       // Same walk as the outline (`parseNote`): each `##`, `###` and table caption is the next outline entry.
-      if (h || tableCaption(raw)) section++;
-      const { runs, sep } = lineRuns(raw);
+      const caption = tableCaption(raw);
+      if (h || caption) section++;
+      // As in the renderer, a heading or a caption is never a table's header.
+      if (!table || i >= table[1]) table = !h && !caption && !DEEP_HEADING.test(raw) && isTableStart(lines, i) ? [i, tableEnd(lines, i)] : null;
+      // The separator row renders nothing.
+      if (table && i === table[0] + 1) continue;
+      const { runs, sep } = lineRuns(raw, table !== null);
       line = lineOf(runs.map((r) => trimmed(piecesOf(r))), sep);
     }
     if (!line.text) continue;
