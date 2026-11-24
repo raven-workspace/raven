@@ -12,7 +12,7 @@ import {
 import type { AccessGrant, AccessLevel, CredAttempt, Credential, Username } from "../../../../types/credentials";
 import type { Host } from "../../../../types/host";
 import type { Service } from "../../../../types/service";
-import { Button, Chip, Dialog, Field, Input, Select, labelClass } from "../../../../ui/index";
+import { Button, Chip, Dialog, Field, Input, Select, labelClass, queryState } from "../../../../ui/index";
 import { ConfirmDelete } from "../../../checklist/ConfirmDelete/ConfirmDelete";
 import { useEngagementServices } from "../../../services/queries";
 import { LEVEL_LABEL, LEVEL_OPTIONS } from "../../../credentials/AccessGrants/AccessGrants";
@@ -77,7 +77,7 @@ export function HostCredentialsFacts({ engagementId: eid, host, open, onToggle, 
   return (
     <FactGroup title="Host Credentials" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="fact-group__error">Couldn't load credentials: {failed.message}</p>
+        queryState([credsQ, usersQ, grantsQ, attemptsQ, servicesQ, logQ], "credentials")
       ) : !ready ? null : (
         <div className="host-creds">
           <HostResults
