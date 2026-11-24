@@ -119,6 +119,17 @@ describe("stuck view", () => {
     expect(await within(panel).findByText("Import a scan to see service steps")).toBeInTheDocument();
   });
 
+  it("the heading uses the short host name; its tooltip keeps the full one (RAV-22)", async () => {
+    const user = userEvent.setup();
+    mount({ hosts: [host({ name: "web01.zz.example.test" })] });
+    await screen.findByRole("region", { name: "Host" });
+    await user.keyboard("h");
+    const panel = await screen.findByRole("complementary", { name: "Stuck on web01" });
+    const heading = within(panel).getByRole("heading", { level: 2 });
+    expect(heading).toHaveTextContent(/^Stuck on web01$/);
+    expect(heading).toHaveAttribute("title", "Stuck on web01.zz.example.test");
+  });
+
   it("a failed checklist load shows an error, not an empty Skipped list", async () => {
     m.checklistList.mockRejectedValue(new Error("vault locked"));
     const user = userEvent.setup();

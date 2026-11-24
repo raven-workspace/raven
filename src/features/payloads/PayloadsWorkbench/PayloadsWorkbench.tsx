@@ -85,7 +85,7 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
           {engagementId ? (
             // The chip's column never shrinks below 10rem, so a short name (or "No host") still reads as a control.
             <div data-host-chip-cell="" className="payloads-workbench__host-cell">
-              <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={s.setHostId} align="start" className="payloads-workbench__host" />
+              <HostChip ref={hostRef} hosts={fit.d.hosts} loadError={fit.d.hostsError} value={fit.host?.id ?? null} onChange={s.setHostId} align="start" className="payloads-workbench__host" />
             </div>
           ) : (
             <span className="payloads-workbench__no-engagement">No active engagement</span>

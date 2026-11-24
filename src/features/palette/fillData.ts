@@ -32,7 +32,14 @@ export function useEngagementFillData(engagementId: string) {
   const credentials = useQuery({ queryKey: credentialsKey(engagementId), queryFn: () => api.credentialsList(engagementId), enabled });
   const attempts = useQuery({ queryKey: credAttemptsKey(engagementId), queryFn: () => api.credAttemptsList(engagementId), enabled });
   const log = useLog(engagementId, enabled);
-  return { settings: settings.data, engagement: engagement.data, hosts: hosts.data ?? NO_HOSTS, services: services.data, tunnels: tunnels.data, credentials: credentials.data, attempts: attempts.data, log: log.data };
+  // A failed hosts load is not "no hosts": host pickers say so and offer this retry.
+  const hostsError: HostsError | null = hosts.isError ? { retry: () => void hosts.refetch() } : null;
+  return { settings: settings.data, engagement: engagement.data, hosts: hosts.data ?? NO_HOSTS, hostsError, services: services.data, tunnels: tunnels.data, credentials: credentials.data, attempts: attempts.data, log: log.data };
+}
+
+/** The engagement's hosts failed to load; `retry` refetches them. */
+export interface HostsError {
+  retry: () => void;
 }
 
 /**

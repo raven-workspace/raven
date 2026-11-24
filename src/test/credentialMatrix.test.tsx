@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -97,6 +97,15 @@ describe("test grid", () => {
     expect(within(grid).getByRole("button", { name: "CORP\\svc (hash) on dc01 SMB: valid" })).toBeInTheDocument();
     expect(within(grid).getByRole("img", { name: "CORP\\svc (hash) on dc01 SSH: not applicable" })).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Legend" })).toBeInTheDocument();
+  });
+
+  it("a grid cell's state shows in a tooltip on keyboard focus, not a title (RAV-22)", async () => {
+    mount({ creds: [PW], attempts: [attempt({ id: "a1", result: "admin" })] });
+    const grid = await screen.findByRole("table", { name: "Test grid" });
+    const cell = within(grid).getByRole("button", { name: "CORP\\jsmith on dc01 SMB: admin" });
+    expect(cell).not.toHaveAttribute("title");
+    act(() => cell.focus());
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("CORP\\jsmith on dc01 SMB: admin");
   });
 
   it("setting a cell result upserts an attempt marked set by hand", async () => {

@@ -40,7 +40,8 @@
       color: var(--faint);
     }
 
-    &[data-state="active"] {
+    // aria-selected, not data-state: a Tooltip wrapping the trigger sets data-state to its own open state.
+    &[aria-selected="true"] {
       font-weight: 600;
       color: var(--fg);
     }

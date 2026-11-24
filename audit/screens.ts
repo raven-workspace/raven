@@ -27,7 +27,7 @@ const openGroup = (name: string) => async (page: Page) => {
   // The host page measures itself first; groups fold (stacked) or stay open (two columns) only after that.
   // With no data (the `empty` state run) there is no host to measure, only "Host not found".
   await page.locator("[data-host-layout]").or(page.getByText("Host not found")).first().waitFor();
-  const toggle = page.locator(`button[title^='Open ${name}']`);
+  const toggle = page.getByRole("region", { name, exact: true }).locator("button.fact-group__toggle[aria-expanded='false']");
   if ((await toggle.count()) > 0) await toggle.first().click();
 };
 const FS01 = `${E}/h/${AUDIT_IDS.fileHost}`;

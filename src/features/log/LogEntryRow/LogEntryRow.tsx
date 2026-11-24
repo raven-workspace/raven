@@ -4,7 +4,7 @@ import { HOST_IP } from "../../../engines/attribution";
 import { shortHostName } from "../../../lib/hostName";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
-import { Button, CARET_TURN, Chip, Collapse, Dialog, IconButton, Toolbar } from "../../../ui/index";
+import { Button, CARET_TURN, Chip, Collapse, Dialog, IconButton, Toolbar, Tooltip } from "../../../ui/index";
 import { cx } from "../../../lib/cx";
 import { EditEntryDialog } from "../EditEntryDialog/EditEntryDialog";
 import { KIND_LABELS } from "../kindLabels";
@@ -63,12 +63,11 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
   // pane (the `ctx` container), and the extras shrink and clip instead of squeezing the title out.
   const cols = picking ? "log-entry-row__row--pick" : hasExtras ? "log-entry-row__row--extras" : undefined;
 
-  const row = (
+  const rowButton = (
     <button
       type="button"
       aria-expanded={picking ? undefined : open}
       aria-label={picking ? (stepNumber ? `${entry.title}, step ${stepNumber}` : `Add ${entry.title} as a step`) : undefined}
-      title={picking ? (stepNumber ? `Step ${stepNumber}` : "Add as a step (Enter)") : undefined}
       onClick={() => {
         if (!picking) setOpen((o) => !o);
         else if (!stepNumber) onPick(entry.id);
@@ -112,6 +111,10 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
       )}
     </button>
   );
+  // While picking steps, the row says what a click does: on hover and on keyboard focus.
+  const row = picking ? (
+    <Tooltip content={stepNumber ? `Step ${stepNumber}` : <span>Add as a step<span className="tooltip__key">↵</span></span>}>{rowButton}</Tooltip>
+  ) : rowButton;
 
   return (
     <li className="log-entry-row">

@@ -127,7 +127,8 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
 
   const hosts = hostsQ.data;
   const eng = engagement.data;
-  const title = `Stuck on ${host.name}`;
+  // The short host name, as in the command lists below; the heading's tooltip keeps the full one.
+  const title = `Stuck on ${shortHostName(host.name)}`;
   // Every query the body reads: a failed checklist would otherwise look like "nothing skipped", and failed tunnels
   // would quietly change the filled commands.
   const queries = [hostsQ, engagement, settings, servicesQ, log, note, credsQ, checklistQ, tunnelsQ];
@@ -243,7 +244,7 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
       className={cx("stuck-view", BELOW_TITLE_BAR)}
     >
       <header className="stuck-view__header">
-        <h2 className="stuck-view__title" title={title}>{title}</h2>
+        <h2 className="stuck-view__title" title={`Stuck on ${host.name}`}>{title}</h2>
         <IconButton icon={XIcon} label="Close" shortcut="Esc" onClick={onClose} />
       </header>
       <div className="stuck-view__body">{content}</div>

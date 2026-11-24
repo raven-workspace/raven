@@ -1,5 +1,6 @@
 import type { ChecklistState } from "../../types/checklist";
 import type { CredAttempt, Credential, Username } from "../../types/credentials";
+import { credName } from "../credentials/labels";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
@@ -8,6 +9,9 @@ import { applicableGoals, adHosts } from "../checklist";
 import type { LibraryCommand } from "../library/types";
 import { hasFoothold, hasLegalCommand } from "./shared";
 import { ROUTINE_STEPS, accessFlags, cellFor, hostSprayServices, isSprayable, routineStepApplies } from "../credentials";
+
+/** A credential as a Stuck subject: its name with the domain (`CORP\\admin` and a local `admin` read apart). */
+const credSubject = (cred: Credential): string => (cred.username ? credName(cred) : "secret with no owner");
 
 export interface StuckLine {
   area: "foothold" | "credentials" | "privesc" | "lateral";
@@ -99,7 +103,7 @@ export function engagementStuck(input: {
     if (cells > 0 && firstHost) {
       out.push({
         area: "credentials",
-        subject: cred.username,
+        subject: credSubject(cred),
         text: `${cells} host/service cell${cells === 1 ? "" : "s"} untested`,
         hostId: firstHost.id,
       });
@@ -110,7 +114,7 @@ export function engagementStuck(input: {
       if (!routineStepApplies("spray-users", cred, hosts, servicesByHost, usernames)) continue;
       out.push({
         area: "credentials",
-        subject: cred.username || "secret with no owner",
+        subject: credSubject(cred),
         text: "never sprayed at the usernames",
         hostId: null,
         goalId: SPRAY_USERS_ITEM,

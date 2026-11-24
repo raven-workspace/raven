@@ -491,7 +491,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
           {engagementId ? (
             <>
               <div data-host-chip-cell="" className="manual-page__host-cell">
-                <HostChip ref={hostRef} hosts={base.d.hosts} value={base.host?.id ?? null} onChange={setHostId} align="start" className="manual-page__host-chip" />
+                <HostChip ref={hostRef} hosts={base.d.hosts} loadError={base.d.hostsError} value={base.host?.id ?? null} onChange={setHostId} align="start" className="manual-page__host-chip" />
               </div>
               <span data-testid="manual-host-ip" className="manual-page__host-ip">{base.host?.ip ?? ""}</span>
             </>

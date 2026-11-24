@@ -157,6 +157,22 @@ describe("capture panel", () => {
     expect(within(dialog).getByRole("radio", { name: "Other" })).toBeChecked();
   });
 
+  it("hosts that fail to load: the Hosts field says so, and Retry brings the picker back (RAV-22)", async () => {
+    const user = userEvent.setup();
+    const hosts = await m.hostsList("e1");
+    m.hostsList.mockRejectedValue(new Error("vault busy"));
+    mount();
+    await screen.findByRole("navigation", { name: "Engagement" });
+    await user.keyboard("l");
+    const dialog = within(await screen.findByRole("dialog", { name: "Add to log" }));
+    expect(await dialog.findByText("Couldn't load hosts")).toBeInTheDocument();
+    expect(dialog.queryByText("No host")).toBeNull();
+    m.hostsList.mockResolvedValue(hosts);
+    await user.click(dialog.getByRole("button", { name: "Retry" }));
+    expect(await dialog.findByText("No host")).toBeInTheDocument();
+    expect(dialog.queryByText("Couldn't load hosts")).toBeNull();
+  });
+
   it("pasting nmap output fills title, host and services line", async () => {
     const user = userEvent.setup();
     mount();

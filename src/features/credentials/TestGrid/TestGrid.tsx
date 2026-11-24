@@ -4,7 +4,7 @@ import type { Cell } from "../../../engines/credentials/index";
 import type { CredAttempt, Credential, TriedPair } from "../../../types/credentials";
 import type { Host } from "../../../types/host";
 import type { Service } from "../../../types/service";
-import { ChipSet, IconButton, labelClass } from "../../../ui/index";
+import { ChipSet, IconButton, Tooltip, labelClass } from "../../../ui/index";
 import { Trash } from "@phosphor-icons/react";
 import { ConfirmDelete } from "../../checklist/ConfirmDelete/ConfirmDelete";
 import { useForgetTried } from "../queries";
@@ -272,18 +272,19 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
                           {cell.state === "na" ? (
                             <span role="img" aria-label={label} title={label} className="test-grid__static"><Glyph state="na" /></span>
                           ) : (
-                            <button
-                              type="button"
-                              aria-label={label}
-                              title={label}
-                              aria-haspopup="dialog"
-                              onClick={() => setOpen({ credId: cred.id, hostId: host.id, service })}
-                              className="test-grid__open"
-                            >
-                              <Glyph state={cell.state} />
-                              {partial && <span data-testid="untried-marker" aria-hidden="true" className="test-grid__untried test-grid__untried--cell" />}
-                              {cell.modesDiffer && <span aria-hidden="true" className="test-grid__differ" />}
-                            </button>
+                            <Tooltip content={label}>
+                              <button
+                                type="button"
+                                aria-label={label}
+                                aria-haspopup="dialog"
+                                onClick={() => setOpen({ credId: cred.id, hostId: host.id, service })}
+                                className="test-grid__open"
+                              >
+                                <Glyph state={cell.state} />
+                                {partial && <span data-testid="untried-marker" aria-hidden="true" className="test-grid__untried test-grid__untried--cell" />}
+                                {cell.modesDiffer && <span aria-hidden="true" className="test-grid__differ" />}
+                              </button>
+                            </Tooltip>
                           )}
                         </td>
                       );

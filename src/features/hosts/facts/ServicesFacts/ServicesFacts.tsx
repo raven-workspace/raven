@@ -6,7 +6,7 @@ import { isFreeKey } from "../../../../lib/keys";
 import type { ServiceVerdict } from "../../../../types/hostFacts";
 import type { LogEntry } from "../../../../types/log";
 import type { Service } from "../../../../types/service";
-import { Button, Chip, Collapse, DisclosureCaret, Input, Tooltip, type ChipVariant } from "../../../../ui/index";
+import { Button, Chip, Collapse, DisclosureCaret, Input, queryState, Tooltip, type ChipVariant } from "../../../../ui/index";
 import { ToggleGroup, ToggleGroupItem } from "../../../../ui/shadcn/toggle-group";
 import { useServiceMutations, useServices } from "../../../services/queries";
 import { ConfirmServiceDialog } from "../../ConfirmServiceDialog/ConfirmServiceDialog";
@@ -217,16 +217,17 @@ export function FoldedRows({ label, services, render, defaultOpen = false }: {
   return (
     <>
       <li className={ROW}>
-        <button
-          type="button"
-          aria-expanded={open}
-          title={open ? `Fold ${label}` : `Show ${label}`}
-          onClick={() => setOpen(!open)}
-          className="services-facts__fold"
-        >
-          <DisclosureCaret open={open} />
-          <span className="services-facts__fold-label">{label}</span>
-        </button>
+        <Tooltip content={open ? `Fold ${label}` : `Show ${label}`}>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+            className="services-facts__fold"
+          >
+            <DisclosureCaret open={open} />
+            <span className="services-facts__fold-label">{label}</span>
+          </button>
+        </Tooltip>
       </li>
       {/* The folded rows sit in their own list item so they can open and close as one; subgrid keeps the columns. */}
       <Collapse open={open} as="li" className="services-facts__folded">
@@ -294,7 +295,7 @@ export function ServicesFacts({ engagementId, hostId, entries, open, onToggle }:
       }
     >
       {services.isError ? (
-        <p role="alert" className="fact-group__error">Couldn't load services: {services.error.message}</p>
+        queryState([services], "services")
       ) : services.data?.length === 0 ? (
         <p className="fact-group__note">No services yet. Paste an nmap scan to capture them.</p>
       ) : (
