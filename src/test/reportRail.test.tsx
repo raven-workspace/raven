@@ -366,6 +366,27 @@ describe("Evidence rail: the log column", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(drawerOpen()).toBe(false));
   });
+
+  it("one Esc closes the drawer while a tooltip shows: a tooltip is no popup", async () => {
+    await seed();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const w = this.getAttribute("aria-label") === "Report" ? 900 : 0;
+      return { width: w, height: 0, top: 0, left: 0, right: w, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
+    mount();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("button", { name: "Evidence" }));
+    expect(await screen.findByRole("tab", { name: /Unused/ })).toBeInTheDocument();
+    const drawerOpen = () => screen.queryByRole("complementary", { name: "Evidence" }) !== null;
+    // A showing Radix tooltip: its popper wrapper holds the tooltip's content.
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("data-radix-popper-content-wrapper", "");
+    wrapper.innerHTML = '<div data-state="delayed-open">Close<span role="tooltip">Close</span></div>';
+    document.body.append(wrapper);
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(drawerOpen()).toBe(false));
+    wrapper.remove();
+  });
 });
 
 describe("Evidence rail: the log column on a plain page", () => {
