@@ -330,7 +330,7 @@ Checks never block export outright; export shows the open gaps in its confirm st
 
 ### 10.4 Appendices and free pages (replaces §5.6's "one letter per target" and §5.5's "no generated appendices")
 
-- **Move to appendix** is visible: in an open chip's bar, and in every block's ⋯ menu (the block handle). It works as §5.6 describes (moved / split, live references).
+- **Move to appendix** (on plain pages, RAV-34, 2026-11-23) is in every block's ⋯ menu (the block handle) on any page except an appendix page. It turns the menu into the report's appendix pages, by letter and title, and **New appendix page**. Picking one moves the block, attrs and all (its source, a figure's entry), to the end of that page. A new page takes the default title and the next letter. Both pages are written in one backend transaction (`report_sections_save`): if either write fails, neither page changes and a notice says why. The block's entries stay in the report: the move is not the owner's removal, and the evidence column, the slash menu and Add new evidence read the appendix pages too, so the page the block left doesn't offer its entries again. A notice ("Moved to Appendix C") offers **Undo** while that page stays open. Undo puts the block back where it stood and takes it off the appendix page, again in one transaction, and deletes a page the move created. The move stays out of the page's ⌘Z, since that can't reach the other page. No reference is left in the block's place, and nothing is split.
 - **Appendix tabs:** a target's moved content is its appendix (as built). Each appears as a tab, lettered in report order.
 - **+ Page** offers **Appendix page** or **Free page**. Both are owner-written pages with an editable title. An appendix page is lettered with the other appendices (after the targets' appendices, in creation order, reorderable with ⌥←/⌥→). A free page sits after the targets and before the appendices, numbered as a body section. Stored as `report_sections` kind `page`, with `target_key` = a fresh id (keeps the unique index), and meta `{ title, placement: "appendix" | "body" }`. No migration, since `kind` is free text in the table; the Rust side adds `page` to its kind list (a key is required) and gains a section delete command. Delete is in the tab's ⋯ menu, with confirm and undo for the session.
 - Auto appendices (proof table, tools list) do **not** return (owner, 2026-11-12).
@@ -398,7 +398,7 @@ The To do panel (checks), the log column, Export, and the **guide notes** (dismi
 
 ### 11.5 Appendices are manual
 
-Appendix pages (+ Page → Appendix page) stay. Moving blocks into automatic per-target appendices is gone: no Move to appendix, no "+ to appendix", no lettered target appendices. A code block over 60 lines gets a soft check suggesting the owner move it to an appendix page by hand.
+Appendix pages (+ Page → Appendix page) stay. Moving blocks into automatic per-target appendices is gone: no "+ to appendix", no lettered target appendices. A block moves to an appendix page the owner picks with the block menu's Move to appendix (§10.4). A code block over 60 lines gets a soft check suggesting the owner move it to an appendix page.
 
 ### 11.6 Checks read the plain page
 
