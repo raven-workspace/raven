@@ -112,7 +112,8 @@ export const GUIDES: Record<GuideId, { title: string; body: string }> = {
   },
 };
 
-/** Sub-section headings that carry a guide, by the page they're drafted on (named in frontMatter.ts). */
+/** Sub-section headings that carry a guide, by the page they're drafted on (named in frontMatter.ts), by their text:
+ *  how a report saved before headings carried a `heading:` source finds them. */
 const HEADING_GUIDES: Partial<Record<SectionKind, Record<string, GuideId>>> = {
   introduction: { [INTRODUCTION.toLowerCase()]: "introduction", [SCOPE.toLowerCase()]: "scope" },
   summary: { [RECOMMENDATIONS.toLowerCase()]: "recommendations" },
@@ -151,6 +152,8 @@ function sourceGuide(source: BlockSource, kind: SectionKind): GuideId | null {
       return "exploit";
     case "attack-path":
       return "attack-path";
+    case "heading":
+      return source.name;
     case "phase":
       return source.findingId === null && Object.hasOwn(PHASE_GUIDES, source.phase) ? PHASE_GUIDES[source.phase]! : null;
     case "table":
@@ -181,7 +184,8 @@ export function guidesOf(doc: ReportNode, kind: SectionKind, placement?: PageMet
   const walk = (node: ReportNode) => {
     const source = blockSource(node);
     if (source) add(sourceGuide(source, kind));
-    if (node.type === "heading") add(HEADING_GUIDES[kind]?.[textOf(node).trim().toLowerCase()]);
+    // A heading with no source (saved before headings carried one) is still found by its text.
+    else if (node.type === "heading") add(HEADING_GUIDES[kind]?.[textOf(node).trim().toLowerCase()]);
     node.content?.forEach(walk);
   };
   doc.content?.forEach(walk);

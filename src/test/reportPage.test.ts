@@ -56,6 +56,10 @@ const GOLDEN: [string, BlockSource][] = [
   ["phase:h1:initial", { kind: "phase", hostId: "h1", phase: "initial", findingId: null }],
   ["phase:h1:initial:f1", { kind: "phase", hostId: "h1", phase: "initial", findingId: "f1" }],
   ["table:findings", { kind: "table", table: "findings" }],
+  ["heading:introduction", { kind: "heading", name: "introduction" }],
+  ["heading:scope", { kind: "heading", name: "scope" }],
+  ["heading:recommendations", { kind: "heading", name: "recommendations" }],
+  ["heading:house-cleaning", { kind: "heading", name: "house-cleaning" }],
   ["msf", { kind: "msf" }],
   ["attack-path", { kind: "attack-path" }],
 ];
@@ -93,6 +97,10 @@ describe("Block source format", () => {
       source.phase("h1", "initial"),
       source.phase("h1", "initial", "f1"),
       source.table("findings"),
+      source.heading("introduction"),
+      source.heading("scope"),
+      source.heading("recommendations"),
+      source.heading("house-cleaning"),
       source.msf,
       source.attackPath,
     ]).toEqual(GOLDEN.map(([raw]) => raw));
@@ -107,7 +115,7 @@ describe("Block source format", () => {
   });
 
   it("reads anything that is no known kind, or lacks its ids, as no source", () => {
-    for (const raw of ["", "entry:", "finding:", "file:", "facts:", "facts:h1:x", "phase:h1", "phase:h1:a:b:c", "table:", "table:a:b", "notes:h1", "msf:x", "attack-path:x", "whatever"]) {
+    for (const raw of ["", "entry:", "finding:", "file:", "facts:", "facts:h1:x", "phase:h1", "phase:h1:a:b:c", "table:", "table:a:b", "heading:", "heading:objective", "heading:scope:x", "notes:h1", "msf:x", "attack-path:x", "whatever"]) {
       expect([raw, parseSource(raw)]).toEqual([raw, null]);
     }
     expect(parseSource(null)).toBeNull();

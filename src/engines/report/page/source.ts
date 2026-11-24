@@ -14,6 +14,10 @@ export type EntryPart = { run: number; side: "command" | "output" } | { name: En
 /** The parts of a finding a block can show. */
 export type FindingPart = "explanation" | "fix" | "severity" | "affected" | "exploit";
 
+/** The report-level sub-section headings a guide note belongs to: Introduction and Scope (section 1), Recommendations
+ *  (the summary), House Cleaning (methodologies). */
+export type HeadingName = "introduction" | "scope" | "recommendations" | "house-cleaning";
+
 /** A machine's blocks, one source per machine. */
 export type HostSourceKind = "facts" | "result" | "ports" | "tested" | "phase-steps";
 
@@ -30,6 +34,8 @@ export type BlockSource =
   | { kind: "phase"; hostId: string; phase: string; findingId: string | null }
   /** A report-level table. */
   | { kind: "table"; table: string }
+  /** A drafted sub-section heading of a report-level page, so it keeps its guide note through a rename. */
+  | { kind: "heading"; name: HeadingName }
   /** The Metasploit line, and the AD set's attack path. */
   | { kind: "msf" }
   | { kind: "attack-path" };
@@ -37,6 +43,7 @@ export type BlockSource =
 const ENTRY_PARTS: readonly string[] = ["title", "observations", "request", "response", "note", "proof", "value"];
 const FINDING_PARTS: readonly string[] = ["explanation", "fix", "severity", "affected", "exploit"];
 const HOST_KINDS: readonly string[] = ["facts", "result", "ports", "tested", "phase-steps"];
+const HEADING_NAMES: readonly string[] = ["introduction", "scope", "recommendations", "house-cleaning"];
 
 /** The source strings, built. */
 export const source = {
@@ -54,6 +61,7 @@ export const source = {
   phaseSteps: (hostId: string) => `phase-steps:${hostId}`,
   phase: (hostId: string, phase: string, findingId?: string | null) => `phase:${hostId}:${phase}${findingId ? `:${findingId}` : ""}`,
   table: (table: string) => `table:${table}`,
+  heading: (name: HeadingName) => `heading:${name}`,
   msf: "msf",
   attackPath: "attack-path",
 } as const;
@@ -76,6 +84,8 @@ export function sourceString(s: BlockSource): string {
       return source.phase(s.hostId, s.phase, s.findingId);
     case "table":
       return source.table(s.table);
+    case "heading":
+      return source.heading(s.name);
     case "msf":
       return source.msf;
     case "attack-path":
@@ -122,6 +132,8 @@ export function parseSource(raw: string | null | undefined): BlockSource | null 
       return { kind, hostId: id, phase: parts[1], findingId: parts[2] || null };
     case "table":
       return rest && parts.length === 1 ? { kind, table: rest } : null;
+    case "heading":
+      return HEADING_NAMES.includes(rest) ? { kind, name: rest as HeadingName } : null;
     default:
       if (!HOST_KINDS.includes(kind) || !id || parts.length !== 1) return null;
       return { kind: kind as HostSourceKind, hostId: id };

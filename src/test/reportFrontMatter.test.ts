@@ -28,7 +28,7 @@ describe("buildSectionDraft", () => {
   it("lays section 1 out as Introduction, Objective and Requirements, hint paragraphs without a Settings default", () => {
     const doc = buildSectionDraft("introduction", data, settings());
     expect(headings(doc)).toEqual(["Introduction", "Objective", "Requirements", "Scope"]);
-    expect(kinds(doc)).toEqual(["heading", "paragraph", "heading", "paragraph", "heading", "paragraph", "heading", "paragraph@table:scope-table"]);
+    expect(kinds(doc)).toEqual(["heading@heading:introduction", "paragraph", "heading", "paragraph", "heading", "paragraph", "heading@heading:scope", "paragraph@table:scope-table"]);
   });
 
   it("fills section 1 from the Settings default, split on its part lines, bullets as a list", () => {
@@ -44,7 +44,7 @@ describe("buildSectionDraft", () => {
       "  screenshots",
     ].join("\n");
     const doc = buildSectionDraft("introduction", data, settings("", text));
-    expect(kinds(doc)).toEqual(["heading", "paragraph", "heading", "paragraph", "heading", "paragraph", "list", "list", "heading", "paragraph@table:scope-table"]);
+    expect(kinds(doc)).toEqual(["heading@heading:introduction", "paragraph", "heading", "paragraph", "heading", "paragraph", "list", "list", "heading@heading:scope", "paragraph@table:scope-table"]);
     expect(doc.content?.[1].content?.[0].text).toBe("The exam report contains all efforts that were conducted.");
     expect(doc.content?.[3].content?.[0].text).toBe("Perform an internal penetration test.");
     expect(doc.content?.[6]).toEqual({
@@ -82,12 +82,12 @@ describe("buildSectionDraft", () => {
     const doc = buildSectionDraft("summary", data, settings());
     expect(hints(doc)).toEqual(["What the engagement was", "What the targets did well", "Vulnerabilities and trends", "Wrap-up", "No findings recorded yet", "Recommendations"]);
     expect(headings(doc)).toEqual(["Recommendations"]);
-    expect(kinds(doc)).toEqual(["paragraph", "paragraph", "paragraph", "paragraph", "paragraph@table:findings", "heading", "paragraph"]);
+    expect(kinds(doc)).toEqual(["paragraph", "paragraph", "paragraph", "paragraph", "paragraph@table:findings", "heading@heading:recommendations", "paragraph"]);
   });
 
   it("ends the introduction with a Scope subheading and the scope table, numbered 1.4", () => {
     const doc = buildSectionDraft("introduction", data, settings());
-    expect(kinds(doc).slice(-2)).toEqual(["heading", "paragraph@table:scope-table"]);
+    expect(kinds(doc).slice(-2)).toEqual(["heading@heading:scope", "paragraph@table:scope-table"]);
     expect(headings(doc).at(-1)).toBe("Scope");
     expect(subsectionNumbers("introduction", "1", doc).get((doc.content?.length ?? 0) - 2)).toBe("1.4");
   });
@@ -101,7 +101,7 @@ describe("buildSectionDraft", () => {
       "heading", "paragraph",
       "heading", "paragraph", "paragraph@msf",
       "heading", "paragraph",
-      "heading", "paragraph", "paragraph@table:cleanup",
+      "heading@heading:house-cleaning", "paragraph", "paragraph@table:cleanup",
     ]);
     expect(kinds(buildSectionDraft("methodology", data, settings()))[0]).toBe("heading");
   });

@@ -1,14 +1,16 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "prosekit/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
-import { buildPlainTarget, buildSectionDraft, type ReportData, type ReportNode } from "../engines/report";
+import { buildPlainTarget, buildSectionDraft, refreshBlocks, type ReportData, type ReportNode } from "../engines/report";
 import { GUIDES, guidesOf, sectionGuide, type GuideId } from "../engines/report/guides";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext/ReportDataContext";
 import { GuidePanel } from "../features/report/GuidePanel/GuidePanel";
 import { ReportEditor } from "../features/report/editor/ReportEditor/ReportEditor";
+import { useGuideSettings } from "../features/report/editor/GuideNote/GuideNote";
+import { settingsKey } from "../features/settings/queries";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { SectionKind } from "../types/report";
@@ -131,6 +133,39 @@ describe("guidesOf", () => {
     expect(guidesOf(page, "target")).toEqual(["result", "ports", "vuln", "exploit", "steps", "post", "additional", "tested", "attack-path", "findings-table", "scope", "house-cleaning"]);
     // The report-level Also tested table has its guide only on its own page.
     expect(guidesOf(page, "engagement-tested")).toContain("tested");
+  });
+
+  it("keeps a drafted heading's guide through a rename: it follows the heading's source", () => {
+    const rename = (doc: ReportNode, from: string, to: string): ReportNode => ({
+      ...doc,
+      content: doc.content!.map((n) => (n.type === "heading" && n.content?.[0]?.text === from ? { ...n, content: [{ type: "text", text: to }] } : n)),
+    });
+    const draft = (kind: "introduction" | "summary" | "methodology") => buildSectionDraft(kind, data, settings(), {});
+    expect(guidesOf(rename(draft("summary"), "Recommendations", "Remediation"), "summary")).toContain("recommendations");
+    expect(guidesOf(rename(draft("introduction"), "Introduction", "About this report"), "introduction")).toContain("introduction");
+    // Scope and House Cleaning without the tables that carry the same guide: the heading alone keeps it.
+    const headingsOnly = (d: ReportNode) => ({ ...d, content: d.content!.filter((n) => n.type === "heading") });
+    expect(guidesOf(headingsOnly(rename(draft("introduction"), "Scope", "Targets")), "introduction")).toContain("scope");
+    expect(guidesOf(headingsOnly(rename(draft("methodology"), "House Cleaning", "Clean-up")), "methodology")).toContain("house-cleaning");
+  });
+
+  it("a drafted heading's source says nothing when renamed: no Refresh, no generated-block hash to mark it edited", () => {
+    for (const kind of ["introduction", "summary", "methodology"] as const) {
+      for (const n of buildSectionDraft(kind, data, settings(), {}).content!.filter((x) => String(x.attrs?.source ?? "").startsWith("heading:"))) {
+        expect(n.attrs?.gen).toBeUndefined();
+        expect(refreshBlocks(String(n.attrs!.source), data, null, {})).toBeNull();
+      }
+    }
+  });
+
+  it("finds a heading with no source (a report saved before headings carried one) by its text", () => {
+    const old = (d: ReportNode): ReportNode => ({
+      ...d,
+      content: d.content!.map((n) => (n.type === "heading" ? { ...n, attrs: { level: n.attrs?.level } } : n)).filter((n) => n.type === "heading"),
+    });
+    expect(guidesOf(old(buildSectionDraft("summary", data, settings(), {})), "summary")).toEqual(["summary", "recommendations"]);
+    expect(guidesOf(old(buildSectionDraft("introduction", data, settings(), {})), "introduction")).toEqual(["introduction", "scope"]);
+    expect(guidesOf(old(buildSectionDraft("methodology", data, settings(), {})), "methodology")).toEqual(["methodology", "house-cleaning"]);
   });
 
   it("starts with the page's own guide, then takes a heading's from the page kind", () => {
@@ -257,5 +292,73 @@ describe("guide notes beside the page", () => {
     await user.keyboard("{Enter}");
     await waitFor(() => expect(screen.queryByRole("list", { name: "Guide notes" })).not.toBeInTheDocument());
     expect(document.activeElement).not.toBe(document.body);
+  });
+});
+
+describe("hiding guide notes: saves in order", () => {
+  type Call = { list: string[]; resolve(): void; reject(e: Error): void };
+  let calls: Call[];
+  beforeEach(() => {
+    calls = [];
+    m.settingsUpdate.mockImplementation(
+      (patch) =>
+        new Promise<Settings>((resolve, reject) => {
+          const list = patch.reportGuidesHidden ?? [];
+          calls.push({ list, resolve: () => resolve(settings(list)), reject });
+        }),
+    );
+  });
+  async function mountHook(stored: Settings = settings()) {
+    m.settingsGet.mockResolvedValue(stored);
+    const qc = makeQueryClient();
+    const hook = renderHook(() => useGuideSettings(), { wrapper: ({ children }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+    // Settings loaded, as on a page the owner reads before hiding a note.
+    await waitFor(() => expect(hook.result.current.hidden).not.toBeNull());
+    const cached = () => qc.getQueryData<Settings>(settingsKey)?.reportGuidesHidden;
+    return { ...hook, cached };
+  }
+  /** Settles every save sent so far, the newest first (as a slower reply to an older save lands last), until none waits. */
+  async function settleNewestFirst(how: (c: Call) => void = (c) => c.resolve()) {
+    // Let the first save go out.
+    await act(async () => {});
+    expect(calls.length).toBeGreaterThan(0);
+    for (let done = 0; done < calls.length; ) {
+      const open = calls.slice(done).reverse();
+      done = calls.length;
+      await act(async () => {
+        for (const c of open) how(c);
+      });
+      await act(async () => {});
+    }
+  }
+
+  it("two hides back to back both stay hidden, whatever order the replies land in", async () => {
+    const { result, cached } = await mountHook();
+    act(() => result.current.hide("ports"));
+    act(() => result.current.hide("steps"));
+    expect(cached()).toEqual(["ports", "steps"]);
+    await settleNewestFirst();
+    expect(cached()).toEqual(["ports", "steps"]);
+    // What was stored last holds both.
+    expect(calls.at(-1)!.list).toEqual(["ports", "steps"]);
+  });
+
+  it("a failed save undoes only its own hide, and a later hide that saved stays", async () => {
+    const { result, cached } = await mountHook();
+    act(() => result.current.hide("ports"));
+    act(() => result.current.hide("steps"));
+    // The first save (hiding ports) fails; the next one succeeds.
+    await settleNewestFirst((c) => (c === calls[0] ? c.reject(new Error("db busy")) : c.resolve()));
+    expect(cached()).toEqual(["steps"]);
+    expect(calls.at(-1)!.list).toEqual(["steps"]);
+  });
+
+  it("keeps the same hidden list from one render to the next while Settings doesn't change", async () => {
+    // Settings saved before the list existed: none stored.
+    const { result, rerender } = await mountHook({ machines: ["Kali (VM)"] } as unknown as Settings);
+    expect(result.current.hidden).toEqual([]);
+    const first = result.current.hidden;
+    rerender();
+    expect(result.current.hidden).toBe(first);
   });
 });
