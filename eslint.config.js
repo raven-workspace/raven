@@ -3,6 +3,8 @@ import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
+const TOOLTIP_MESSAGE = "Use Raven's Tooltip from src/ui: it carries the app's tooltip provider and opens on keyboard focus.";
+
 export default tseslint.config(
   { ignores: ["dist", "src-tauri", "node_modules", "test-results", "playwright-report", "audit-output"] },
   {
@@ -19,6 +21,11 @@ export default tseslint.config(
       "no-restricted-imports": [
         "error",
         {
+          // Radix's own tooltip, too: Raven's Tooltip wraps it with the shared provider and keyboard focus.
+          paths: [
+            { name: "@radix-ui/react-tooltip", message: TOOLTIP_MESSAGE },
+            { name: "radix-ui", importNames: ["Tooltip"], message: TOOLTIP_MESSAGE },
+          ],
           patterns: [
             {
               regex: "(^@/|/)ui/shadcn/(button|input|skeleton|sheet|toggle|tooltip)$",
