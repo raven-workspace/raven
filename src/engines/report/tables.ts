@@ -59,12 +59,16 @@ export function resultLine(data: ReportData, target: ReportTarget, hostId: strin
     const firstWord = levelWord(data, hostId, first.level);
     // A machine entered already elevated names its level: "shell as `x` (root)", "WinRM as `x` (local administrator)".
     parts.push(`${hop ? hop.via : "shell"} as \`${userName(data, first.usernameId)}\`${firstWord ? ` (${lineWord(firstWord)})` : ""}`);
-    // Each later grant adds its level once: a level the line already ends on (the first grant's own included) is not
-    // repeated, whoever it was granted to.
+    // Each later grant adds its level once. Root and SYSTEM name no account: a level the line already ends on (the
+    // first grant's own included) is not repeated. Local administrator names one: each account gets one clause, so a
+    // second account made local administrator is told, the same account again is not.
     let last = firstWord;
+    const admins = new Set(firstWord === "Administrator" ? [first.usernameId] : []);
     for (const g of grants.slice(1)) {
       const w = levelWord(data, hostId, g.level);
-      if (!w || w === last) continue;
+      if (!w) continue;
+      if (w === "Administrator" ? admins.has(g.usernameId) : w === last) continue;
+      if (w === "Administrator") admins.add(g.usernameId);
       last = w;
       parts.push(w === "Administrator" ? `${lineWord(w)} as \`${userName(data, g.usernameId)}\`` : lineWord(w));
     }
