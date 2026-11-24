@@ -114,10 +114,11 @@ function resultOf(data: ReportData, target: ReportTarget, hostId: string, phase:
   }
 }
 
-/** Every finding on a report target's machines, once, most severe first, then in the targets' grading order. */
+/** Every finding on a report target's machines, once, most severe first, then in the targets' grading order, then in
+ *  machine order (an AD set's attack path). */
 export function findingRows(data: ReportData, targets: ReportTarget[]): FindingRow[] {
   const seen = new Set<string>();
-  const rows: (Omit<FindingRow, "n"> & { rank: number; targetIndex: number; created: number })[] = [];
+  const rows: (Omit<FindingRow, "n"> & { rank: number; targetIndex: number; machine: number; created: number })[] = [];
   targets.forEach((target, targetIndex) => {
     const machines = machinesInOrder(data, target);
     for (const [findingId, { hostId, phase }] of placementPlan(data, target).findings) {
@@ -133,11 +134,13 @@ export function findingRows(data: ReportData, targets: ReportTarget[]): FindingR
         result: resultOf(data, target, hostId, phase),
         rank: severityRank(f),
         targetIndex,
+        // An AD set's findings follow its machines (attack-path order); a standalone target has one.
+        machine: machines.indexOf(hostId),
         created: f.createdAt,
       });
     }
   });
-  rows.sort((a, b) => a.rank - b.rank || a.targetIndex - b.targetIndex || a.created - b.created || a.title.localeCompare(b.title));
+  rows.sort((a, b) => a.rank - b.rank || a.targetIndex - b.targetIndex || a.machine - b.machine || a.created - b.created || a.title.localeCompare(b.title));
   return rows.map((r, i) => ({ n: i + 1, findingId: r.findingId, host: r.host, title: r.title, severity: r.severity, result: r.result }));
 }
 
