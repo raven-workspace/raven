@@ -597,6 +597,71 @@ describe("removal tracking", () => {
     expect(onRemoveEvidence).toHaveBeenCalledWith(id("local"));
   });
 
+  describe("a note's paragraphs", () => {
+    const note = (text: string): ReportNode => ({ type: "paragraph", attrs: { source: "entry:n1:note" }, content: [{ type: "text", text }] });
+    const notePage: ReportNode = {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Before." }] }, note("First thought."), note("Second thought."), note("Third thought."), { type: "paragraph", content: [{ type: "text", text: "After." }] }],
+    };
+    /** Where the note's paragraphs start and end: around them (`outside`), or their text only. */
+    const span = (editor: Editor, outside: boolean) => {
+      const doc = editor.state.doc;
+      let from = -1;
+      let to = -1;
+      doc.forEach((n, offset) => {
+        if (n.attrs.source !== "entry:n1:note") return;
+        if (from === -1) from = outside ? offset : offset + 1;
+        to = outside ? offset + n.nodeSize : offset + n.nodeSize - 1;
+      });
+      return { from, to };
+    };
+    const select = (editor: Editor, { from, to }: { from: number; to: number }) =>
+      act(() => void editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, from, to))));
+
+    it("deleting them whole records the note as removed", async () => {
+      const { editor, onRemoveEvidence } = await ready(notePage);
+      act(() => {
+        const { from, to } = span(editor(), true);
+        editor().view.dispatch(editor().state.tr.delete(from, to));
+      });
+      expect(onRemoveEvidence).toHaveBeenCalledWith("n1");
+    });
+
+    it("selecting all their text and pressing ⌫ records the note as removed, and leaves no block named for it", async () => {
+      const { editor, onRemoveEvidence } = await ready(notePage);
+      select(editor(), span(editor(), false));
+      fireEvent.keyDown(editor().view.dom, { key: "Backspace", code: "Backspace", keyCode: 8 });
+      expect(editor().state.doc.textContent).toBe("Before.After.");
+      expect(json(editor()).content!.flatMap((n) => (n.attrs?.source ? [n.attrs.source] : []))).toEqual([]);
+      expect(onRemoveEvidence).toHaveBeenCalledWith("n1");
+    });
+
+    it("undo brings the note's words and its link back", async () => {
+      const { editor } = await ready(notePage);
+      const before = json(editor());
+      select(editor(), span(editor(), false));
+      fireEvent.keyDown(editor().view.dom, { key: "Backspace", code: "Backspace", keyCode: 8 });
+      fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
+      expect(json(editor())).toEqual(before);
+    });
+
+    it("clearing one paragraph's words keeps its link: the owner may be retyping it", async () => {
+      const { editor, onRemoveEvidence } = await ready(notePage);
+      const { from } = span(editor(), false);
+      select(editor(), { from, to: from + "First thought.".length });
+      fireEvent.keyDown(editor().view.dom, { key: "Backspace", code: "Backspace", keyCode: 8 });
+      expect(json(editor()).content![1].attrs).toMatchObject({ source: "entry:n1:note" });
+      expect(onRemoveEvidence).not.toHaveBeenCalled();
+    });
+
+    it("deleting only some of them records nothing", async () => {
+      const { editor, onRemoveEvidence } = await ready(notePage);
+      const { from } = span(editor(), true);
+      act(() => void editor().view.dispatch(editor().state.tr.delete(from, from + editor().state.doc.nodeAt(from)!.nodeSize)));
+      expect(onRemoveEvidence).not.toHaveBeenCalled();
+    });
+  });
+
   it("a Refresh that swaps an entry's blocks is not the owner's removal", async () => {
     const data = withEntry("head", (e) => ({ ...e, observations: "Seen." }));
     const { editor, onRemoveEvidence } = await ready({ type: "doc", content: [{ type: "paragraph", attrs: { source: `entry:${id("head")}:title` }, content: [{ type: "text", text: "x" }] }] }, data);

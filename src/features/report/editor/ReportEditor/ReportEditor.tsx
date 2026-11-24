@@ -6,7 +6,7 @@ import type { Node as PMNode } from "prosekit/pm/model";
 import { isHistoryTransaction } from "prosekit/pm/history";
 import { NodeSelection, Plugin, PluginKey, type Command, type Transaction } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
-import { placedIn, removalKeys, unlinkCopiedFrom, type ReportNode } from "../../../../engines/report/index";
+import { blockSource, placedIn, removalKeys, unlinkCopiedFrom, type ReportNode } from "../../../../engines/report/index";
 import { reportError } from "../../../../lib/lockSignal";
 import { RavenError } from "../../../../types/errors";
 import { BlockHandle } from "../BlockHandle/BlockHandle";
@@ -108,6 +108,46 @@ export function removedByTransaction(tr: Transaction): string[] {
     return gone.size > 0;
   });
   return [...gone];
+}
+
+/**
+ * Words the owner deleted across blocks are no longer an entry's: when a user transaction deletes a range that spans
+ * blocks and the block it leaves there is empty and still sourced from an entry (select a note's paragraphs and ⌫
+ * leaves the first one, emptied), that block drops its source, `gen` and `also`: it shows nothing of them. Then the entry is off the
+ * page when nothing else names it, and its removal is recorded. Appended to the owner's transaction, so one undo brings
+ * both back. Clearing one block's own words keeps its link: the owner may be retyping it.
+ */
+export function emptiedBlocksPlugin() {
+  return new Plugin({
+    appendTransaction: (trs, _before, state) => {
+      const spots: number[] = [];
+      trs.forEach((tr, t) => {
+        if (!tr.docChanged || tr.getMeta(PROGRAMMATIC) === true || isHistoryTransaction(tr)) return;
+        tr.steps.forEach((step, i) => {
+          const doc = tr.docs[i];
+          step.getMap().forEach((oldStart, oldEnd, newStart) => {
+            if (oldEnd <= oldStart || doc.resolve(oldStart).parent === doc.resolve(oldEnd).parent) return;
+            // Where that spot is in the final doc: through the rest of this transaction, then the later ones.
+            let pos = tr.mapping.slice(i + 1).map(newStart);
+            for (const later of trs.slice(t + 1)) pos = later.mapping.map(pos);
+            spots.push(pos);
+          });
+        });
+      });
+      const out = state.tr;
+      for (const pos of spots) {
+        if (pos > state.doc.content.size) continue;
+        const at = state.doc.resolve(pos);
+        const node = at.parent;
+        if (at.depth === 0 || !node.isTextblock || node.content.size > 0) continue;
+        if (blockSource({ type: node.type.name, attrs: node.attrs })?.kind !== "entry") continue;
+        const attrs: Record<string, unknown> = { ...node.attrs };
+        for (const key of ["source", "gen", "also"]) if (key in attrs) attrs[key] = null;
+        out.setNodeMarkup(at.before(), undefined, attrs);
+      }
+      return out.docChanged ? out : null;
+    },
+  });
 }
 
 const removalKey = new PluginKey<{ ids: string[] } | null>("ravenRemovedEvidence");
@@ -218,6 +258,7 @@ function PageHooks({
   );
   // Whatever takes evidence off the page is remembered as removed, so Add new evidence never brings it back.
   useExtension(useMemo(() => definePlugin(removedEvidencePlugin(onRemoveEvidence)), [onRemoveEvidence]));
+  useExtension(useMemo(() => definePlugin(emptiedBlocksPlugin()), []));
   useKeymap(BLOCK_KEYS, { priority: Priority.high });
   return null;
 }
