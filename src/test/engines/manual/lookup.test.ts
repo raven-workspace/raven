@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isInlineCommand, lookupColumns, lookupRows, shortTitle } from "../../../engines/manual";
+import { leftover, plain } from "../../../engines/manual/lookup";
 import { parseNote } from "../../../engines/manual";
 import { parseInline } from "../../../engines/manual/markdown";
 
@@ -77,3 +78,30 @@ describe("shortTitle", () => {
     expect(shortTitle("Zz Scanner")).toBe("Zz Scanner");
   });
 });
+
+describe("leftover (RAV-21)", () => {
+  /** The action cell's text left besides `commands`, as plain text (null when nothing is left). */
+  const left = (cell: string, ...commands: string[]) => {
+    const out = leftover(parseInline(cell), commands);
+    return out && plain(out);
+  };
+
+  it("folds the separators left where commands were taken out", () => {
+    expect(left("or `zz a b`, then go", "zz a b")).toBe("or, then go");
+    expect(left("Restart it: `zz stop x`, then `zz start x`; or retry", "zz stop x", "zz start x")).toBe("Restart it: then; or retry");
+    expect(left("it: `zz a b`, then go", "zz a b")).toBe("it: then go");
+  });
+
+  it("keeps every other comma, semicolon and space as written", () => {
+    expect(left("Scan TCP,UDP;then `zz a b`  twice", "zz a b")).toBe("Scan TCP,UDP;then twice");
+    expect(left("Ports 80,443 then `zz a b`.", "zz a b")).toBe("Ports 80,443 then .");
+    // A stray separator the author wrote, away from any removed command, is theirs.
+    expect(left("Try `zz a b` first; or , then `zz c d`", "zz a b")).toBe("Try first; or , then zz c d");
+  });
+
+  it("drops separators at either end, and gives null for punctuation only", () => {
+    expect(left("`zz a b`, then retry;", "zz a b")).toBe("then retry");
+    expect(left("`zz a b`; `zz c d`.", "zz a b", "zz c d")).toBeNull();
+  });
+});
+
