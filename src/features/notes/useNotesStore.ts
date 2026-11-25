@@ -2,8 +2,10 @@ import type { QueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
+import { storeChanged } from "../../lib/storeChange";
 import { RavenError } from "../../types/errors";
 import type { Note } from "../../types/notes";
+import { noteQueryKey, notesKey } from "./queries";
 import { clearThreadCounts } from "./useThreadCounts";
 import { registerDrawer } from "../drawers";
 
@@ -81,13 +83,13 @@ export function setNotesQueryClient(qc: QueryClient | null) {
  */
 function cacheSaved(note: Note) {
   if (!queryClient) return;
-  queryClient.setQueryData(["note", note.engagementId, note.hostId], note);
-  queryClient.setQueryData<Note[]>(["notes", note.engagementId], (list) => {
+  queryClient.setQueryData(noteQueryKey(note.engagementId, note.hostId), note);
+  queryClient.setQueryData<Note[]>(notesKey(note.engagementId), (list) => {
     if (!list) return list;
     const i = list.findIndex((n) => n.ownerId === note.ownerId);
     return i === -1 ? [...list, note] : list.map((n, j) => (j === i ? note : n));
   });
-  void queryClient.invalidateQueries({ queryKey: ["notes", note.engagementId] });
+  void storeChanged(queryClient, { entity: "note", id: note.ownerId, change: "updated" });
 }
 
 export const useNotesStore = create<NotesState>()((set, get) => ({

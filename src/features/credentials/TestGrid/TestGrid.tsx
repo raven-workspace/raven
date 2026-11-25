@@ -155,7 +155,7 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   const rows = useMemo(() => creds.filter(isSprayable), [creds]);
   const triedList = useMemo(() => triedRows(tried), [tried]);
   const [forgetting, setForgetting] = useState<TriedRow>();
-  const forget = useForgetTried(eid);
+  const forget = useForgetTried();
   const groups = useMemo(
     () => hosts.map((host) => ({ host, services: hostSprayServices(host, servicesByHost.get(host.id) ?? []) })).filter((g) => g.services.length > 0),
     [hosts, servicesByHost],

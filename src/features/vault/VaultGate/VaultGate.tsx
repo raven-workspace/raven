@@ -17,7 +17,7 @@ import { UnlockScreen, type CipherControls } from "../UnlockScreen/UnlockScreen"
 import { CipherBackdrop, type CipherHandle } from "../CipherBackdrop/CipherBackdrop";
 import { freezeCopy, type FrozenCopy } from "../frozenCopy";
 import { setImported } from "../../../engines/library/store";
-import { applySnapshot, FIELD_MANUAL_KEY, useVaultNewer } from "../../fieldManual/queries";
+import { applySnapshot, cacheFieldManual, useVaultNewer } from "../../fieldManual/queries";
 import { useAutoLock } from "../useAutoLock";
 import { clearSecretClipboard } from "../../../lib/clipboard";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../../lib/keys";
@@ -261,7 +261,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
           return;
         }
         applySnapshot(snap);
-        qc.setQueryData(FIELD_MANUAL_KEY, snap);
+        cacheFieldManual(qc, snap);
       } catch {
         /* the built-ins still work; Settings › Field Manual reports import problems */
       }

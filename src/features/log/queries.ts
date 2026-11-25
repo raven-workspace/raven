@@ -1,15 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
+import { registerReads, storeChanged } from "../../lib/storeChange";
 import type { LogEntry, LogEntryInput } from "../../types/log";
-import { cleanupKey } from "../cleanup/queries";
-import { accessGrantsKey, credAttemptsKey } from "../credentials/queries";
 import { afterEntrySaved, deleteEntryWithTicks, FollowUpError } from "../checklist/ticks";
-import { engagementKey } from "../engagements/queries";
-import { hostsKey } from "../hosts/queries";
-import { failedAttemptsKey, findingsKey } from "../findings/queries";
 
 export const logKey = (engagementId: string) => ["log", engagementId] as const;
+
+registerReads(["log"], ["logEntry"]);
 
 export function useLog(engagementId: string, enabled = true) {
   return useQuery({ queryKey: logKey(engagementId), queryFn: () => api.logList(engagementId), enabled });
@@ -27,25 +25,6 @@ async function followUp(engagementId: string, entry: LogEntry | null, entryId: s
 
 export function useLogMutations(engagementId: string) {
   const qc = useQueryClient();
-  // Settled, not success: the entry is saved even when its checklist follow-up failed.
-  const onSettled = () => {
-    void qc.invalidateQueries({ queryKey: logKey(engagementId) });
-    void qc.invalidateQueries({ queryKey: ["progress"] });
-    // A service's confirmation can cite an entry; editing or deleting the entry changes that.
-    void qc.invalidateQueries({ queryKey: ["services"] });
-    void qc.invalidateQueries({ queryKey: ["checklist", engagementId] });
-    void qc.invalidateQueries({ queryKey: hostsKey(engagementId) });
-    void qc.invalidateQueries({ queryKey: engagementKey(engagementId) });
-    // A deleted entry leaves the reproduction steps of any finding that used it.
-    void qc.invalidateQueries({ queryKey: findingsKey(engagementId) });
-    // An attempt that linked the entry loses the link.
-    void qc.invalidateQueries({ queryKey: failedAttemptsKey(engagementId) });
-    // Credential test results and access grants that cited it as proof lose the link.
-    void qc.invalidateQueries({ queryKey: credAttemptsKey(engagementId) });
-    void qc.invalidateQueries({ queryKey: accessGrantsKey(engagementId) });
-    // A cleanup item that came from it loses the link.
-    void qc.invalidateQueries({ queryKey: cleanupKey(engagementId) });
-  };
   return {
     update: useMutation({
       mutationFn: async (v: { id: string; input: LogEntryInput }) => {
@@ -53,7 +32,8 @@ export function useLogMutations(engagementId: string) {
         await followUp(engagementId, entry, entry.id);
         return entry;
       },
-      onSettled,
+      // Settled, not success: the entry is saved even when its checklist follow-up failed.
+      onSettled: (_e, _err, v) => void storeChanged(qc, { entity: "logEntry", id: v.id, change: "updated" }),
     }),
     remove: useMutation({
       mutationFn: async (id: string) => {
@@ -65,7 +45,7 @@ export function useLogMutations(engagementId: string) {
         }
         return null;
       },
-      onSettled,
+      onSettled: (_r, _err, id) => void storeChanged(qc, { entity: "logEntry", id, change: "deleted" }),
     }),
   };
 }

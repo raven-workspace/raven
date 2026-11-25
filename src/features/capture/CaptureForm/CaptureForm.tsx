@@ -7,8 +7,7 @@ import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 import { KeyIcon, XIcon } from "@phosphor-icons/react";
 import { Button, Chip, Field, IconButton, Input, Kbd, Select, Textarea, Toggle, Toolbar } from "../../../ui/index";
-import { hostsKey, useHosts } from "../../hosts/queries";
-import { invalidateAfterSave } from "../../log/extractions";
+import { useHosts } from "../../hosts/queries";
 import { useLog } from "../../log/queries";
 import { HostChips } from "../HostChips/HostChips";
 import { clipboardImage, readImage, releaseImage } from "../imagePaste";
@@ -19,6 +18,7 @@ import { KINDS, resolveCapture } from "../resolve";
 import { useSaveSummaryStore } from "../useSaveSummaryStore";
 import { PartialSaveError, saveCapture } from "../saveCapture";
 import { reportError } from "../../../lib/lockSignal";
+import { storeChanged } from "../../../lib/storeChange";
 import { EMPTY_DRAFT, useCaptureStore, type PanelDraft } from "../useCaptureStore";
 import { useSettings } from "../../settings/queries";
 import { RavenError } from "../../../types/errors";
@@ -81,7 +81,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     }
   }, [pd.image]);
 
-  const refresh = () => invalidateAfterSave(qc, id);
+  const refresh = (entryId: string) => void storeChanged(qc, { entity: "logEntry", id: entryId, change: "saved" });
 
   async function save() {
     if (saving || !r.canSave) return;
@@ -102,7 +102,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           set({ created: [...cur, h] });
         },
       });
-      refresh();
+      refresh(saved.entry.id);
       store.discard(id);
       store.close();
       useSaveSummaryStore.getState().show(saved.entry.id, saved.summary);
@@ -110,13 +110,15 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
       // A `locked` rejection must reach the vault gate, as query and mutation errors do.
       for (const reason of e instanceof PartialSaveError ? e.reasons : [e]) reportError(reason);
       if (e instanceof PartialSaveError) {
-        refresh();
+        refresh(e.entry.id);
         store.discard(id);
         store.setNotice(e.message);
         // The extraction was stored all the same: its summary (and Undo) still shows.
         useSaveSummaryStore.getState().show(e.entry.id, e.summary);
       } else {
-        void qc.invalidateQueries({ queryKey: hostsKey(id) });
+        // Nothing was saved but the hosts made for its new IPs.
+        const created = useCaptureStore.getState().drafts[id]?.created ?? [];
+        void storeChanged(qc, ...created.map((h) => ({ entity: "host" as const, id: h.id, change: "created" as const })));
         setError(RavenError.from(e).message);
       }
     } finally {

@@ -1,21 +1,13 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { credAttemptsKey, credentialsKey, triedPairsKey, usernamesKey } from "../credentials/queries";
+import { registerReads, storeChanged } from "../../lib/storeChange";
 import { afterEntrySaved } from "../checklist/ticks";
 import type { LogEntry } from "../../types/log";
-import { engagementKey, engagementsKey } from "../engagements/queries";
-import { hostsKey } from "../hosts/queries";
 import { logKey } from "./queries";
-import { engagementServicesKey } from "../services/queries";
 
 export const extractionsKey = (engagementId: string) => ["extractions", engagementId] as const;
 
-/** Everything a save (or an undo of one) can change: refetch it all, including what each entry filed. */
-export function invalidateAfterSave(qc: QueryClient, id: string): void {
-  for (const key of [logKey(id), hostsKey(id), ["services"], engagementServicesKey(id), ["checklist", id], ["progress"], engagementKey(id), engagementsKey, credentialsKey(id), usernamesKey(id), credAttemptsKey(id), triedPairsKey(id), ["hostIdentity"], ["vectors"], extractionsKey(id)]) {
-    void qc.invalidateQueries({ queryKey: key });
-  }
-}
+registerReads(["extractions"], ["extraction"]);
 
 /** What each saved entry filed, indexed by entry id. */
 export function useExtractions(engagementId: string) {
@@ -35,6 +27,6 @@ export async function undoExtraction(qc: QueryClient, entryId: string): Promise<
     const entry = qc.getQueryData<LogEntry[]>(logKey(id))?.find((e) => e.id === entryId) ?? null;
     await afterEntrySaved(id, entry, entryId);
   } finally {
-    invalidateAfterSave(qc, id);
+    void storeChanged(qc, { entity: "extraction", id: entryId, change: "undone" });
   }
 }

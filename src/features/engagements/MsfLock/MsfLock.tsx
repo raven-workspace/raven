@@ -6,7 +6,7 @@ import type { Engagement } from "../../../types/engagement";
 import { BrandIcon, Button, Dialog, labelClass } from "../../../ui/index";
 import { ConfirmDelete } from "../../checklist/ConfirmDelete/ConfirmDelete";
 import { useHosts } from "../../hosts/queries";
-import { engagementKey, engagementsKey } from "../queries";
+import { engagementSaved } from "../queries";
 import "./MsfLock.scss";
 
 /** Exam-sim only: the one host allowed to use Metasploit. Click to change or release it. */
@@ -20,8 +20,7 @@ export function MsfLock({ engagement: e, step }: { engagement: Engagement; step?
   const set = useMutation({
     mutationFn: (hostId: string | null) => api.engagementSetMsfHost(e.id, hostId),
     onSuccess: (saved) => {
-      qc.setQueryData(engagementKey(e.id), saved);
-      void qc.invalidateQueries({ queryKey: engagementsKey });
+      void engagementSaved(qc, saved);
       setDialog(null);
     },
     onError: (err) => setError(err.message),

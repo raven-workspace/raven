@@ -18,7 +18,7 @@ import { useHops } from "../network/queries";
 import { useEngagementServices } from "../services/queries";
 import { useCleanup } from "../cleanup/queries";
 import { useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../credentials/queries";
-import { findingFilesKey, useFailedAttempts, useFindings } from "../findings/queries";
+import { findingFilesQuery, useFailedAttempts, useFindings } from "../findings/queries";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { useNotes } from "../notes/queries";
@@ -70,7 +70,7 @@ export function useReportData(eid: string): { data: ReportData | undefined; isLo
   const credentials = useCredentials(eid);
   const credAttempts = useCredAttempts(eid);
   const files = useQueries({
-    queries: (findings.data ?? []).map((f) => ({ queryKey: findingFilesKey(f.id), queryFn: () => api.findingFilesList(f.id) })),
+    queries: (findings.data ?? []).map((f) => findingFilesQuery(f.id)),
     combine: combineFiles,
   });
   const findingFiles = files.data;

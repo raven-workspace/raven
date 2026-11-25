@@ -25,7 +25,7 @@ import {
 } from "../format";
 import { Listener } from "../Listener/Listener";
 import { MsfLock } from "../MsfLock/MsfLock";
-import { engagementKey, engagementsKey } from "../queries";
+import { engagementSaved } from "../queries";
 import "./StatusStrip.scss";
 import "../ActiveCard/ActiveCard.scss";
 
@@ -143,10 +143,7 @@ function TimeboxStatus({ engagement: e, now }: { engagement: Engagement & { time
   const state = timeboxState(e, now);
   const toggle = useMutation({
     mutationFn: (paused: boolean) => api.engagementSetTimeboxPaused(e.id, paused),
-    onSuccess: (saved) => {
-      qc.setQueryData(engagementKey(e.id), saved);
-      void qc.invalidateQueries({ queryKey: engagementsKey });
-    },
+    onSuccess: (saved) => void engagementSaved(qc, saved),
     onError: reportError,
   });
   const paused = state === "paused";

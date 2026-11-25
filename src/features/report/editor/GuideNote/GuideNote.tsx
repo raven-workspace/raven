@@ -4,9 +4,8 @@ import { useCallback } from "react";
 import { ALL_GUIDES, GUIDES, type GuideId } from "../../../../engines/report/index";
 import { api } from "../../../../lib/api";
 import { reportError } from "../../../../lib/lockSignal";
-import type { Settings } from "../../../../types/settings";
 import { IconButton } from "../../../../ui/index";
-import { settingsKey, useSettings } from "../../../settings/queries";
+import { cachedSettings, setCachedSettings, useSettings } from "../../../settings/queries";
 import "./GuideNote.scss";
 
 /**
@@ -47,21 +46,21 @@ export function useGuideSettings() {
   const hidden = settings.data ? (settings.data.reportGuidesHidden ?? NONE) : null;
   const save = useCallback(
     (key: string) => {
-      const before = qc.getQueryData<Settings>(settingsKey);
+      const before = cachedSettings(qc);
       const was = before?.reportGuidesHidden ?? [];
       if (!before || was.includes(key)) return;
-      qc.setQueryData<Settings>(settingsKey, { ...before, reportGuidesHidden: key === ALL_GUIDES ? [ALL_GUIDES] : [...was, key] });
+      setCachedSettings(qc, { ...before, reportGuidesHidden: key === ALL_GUIDES ? [ALL_GUIDES] : [...was, key] });
       const queue = queues.get(qc) ?? { tail: Promise.resolve(), waiting: 0 };
       queues.set(qc, queue);
       queue.waiting++;
       queue.tail = queue.tail.then(async () => {
-        const list = qc.getQueryData<Settings>(settingsKey)?.reportGuidesHidden ?? [];
+        const list = cachedSettings(qc)?.reportGuidesHidden ?? [];
         try {
           const saved = await api.settingsUpdate({ reportGuidesHidden: list });
-          if (queue.waiting === 1) qc.setQueryData(settingsKey, saved);
+          if (queue.waiting === 1) setCachedSettings(qc, saved);
         } catch (e: unknown) {
           // Only this change goes back: hides that saved, or wait to, stay.
-          qc.setQueryData<Settings>(settingsKey, (now) => {
+          setCachedSettings(qc, (now) => {
             if (!now) return now;
             const list = now.reportGuidesHidden ?? [];
             return { ...now, reportGuidesHidden: key === ALL_GUIDES ? was : list.filter((x) => x !== key) };

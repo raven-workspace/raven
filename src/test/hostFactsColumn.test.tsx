@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FactsColumn } from "../features/hosts/facts/FactsColumn/FactsColumn";
 import { hostCredentialCounts } from "../features/hosts/facts/HostCredentialsFacts/HostCredentialsFacts";
+import { useRuledOut } from "../features/notes/queries";
 import { useServiceMutations } from "../features/services/queries";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -83,14 +84,17 @@ describe("hostCredentialCounts", () => {
 });
 
 describe("service delete refreshes ruled-out items", () => {
-  it("invalidates the ruled-out and notes queries", async () => {
+  it("refetches the ruled-out list its dead-end verdict wrote to", async () => {
     m.serviceDelete.mockResolvedValue(null);
+    m.ruledOutList.mockResolvedValue([]);
     const qc: QueryClient = makeQueryClient();
-    const spy = vi.spyOn(qc, "invalidateQueries");
     const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
-    const { result } = renderHook(() => useServiceMutations("e1", "h1"), { wrapper });
+    const { result } = renderHook(() => {
+      useRuledOut("e1");
+      return useServiceMutations("e1", "h1");
+    }, { wrapper });
+    await waitFor(() => expect(m.ruledOutList).toHaveBeenCalledTimes(1));
     result.current.remove.mutate("s1");
-    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: ["ruledOut", "e1"] }));
-    expect(spy).toHaveBeenCalledWith({ queryKey: ["notes", "e1"] });
+    await waitFor(() => expect(m.ruledOutList).toHaveBeenCalledTimes(2));
   });
 });

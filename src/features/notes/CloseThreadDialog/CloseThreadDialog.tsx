@@ -2,9 +2,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { closeThread, openThreads } from "../../../engines/notes/threads";
 import { api } from "../../../lib/api";
+import { storeChanged } from "../../../lib/storeChange";
 import { RavenError } from "../../../types/errors";
 import { Button, Dialog, Field, Input, Toggle } from "../../../ui/index";
-import { ruledOutKey } from "../queries";
 import { flushNotes, noteKey, sessionGeneration, useNotesStore, type NoteTarget } from "../useNotesStore";
 import "./CloseThreadDialog.scss";
 
@@ -79,14 +79,14 @@ function Body({ thread, target, saved, onClose }: { thread: ClosingThread; targe
       if (gen !== sessionGeneration()) return; // locked meanwhile: nothing more is written
       if (outcome === "dead") {
         try {
-          await api.ruledOutCreate({
+          const item = await api.ruledOutCreate({
             engagementId: target.engagementId,
             hostId: target.hostId,
             text: thread.text,
             reason: reason.trim(),
             private: isPrivate,
           });
-          void qc.invalidateQueries({ queryKey: ruledOutKey(target.engagementId) });
+          void storeChanged(qc, { entity: "ruledOut", id: item.id, change: "created" });
         } catch (e) {
           setError(`The line is already marked ✗ in your notes, but the ruled-out item wasn't created: ${RavenError.from(e).message}`);
           return;

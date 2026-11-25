@@ -6,8 +6,7 @@ import { reportError } from "../../../lib/lockSignal";
 import { isFreeKey, useEscapeTo, useKeydown } from "../../../lib/keys";
 import type { Engagement } from "../../../types/engagement";
 import { Button, EmptyState, queryState } from "../../../ui/index";
-import { checklistKey } from "../../checklist/queries";
-import { resyncAndRefresh } from "../../checklist/resync";
+import { boardsSynced, resyncAndRefresh } from "../../checklist/resync";
 import { autoTickFromLog } from "../../checklist/ticks";
 import { HostView } from "../../hosts/HostView/HostView";
 import { CapturePanel } from "../../capture/CapturePanel/CapturePanel";
@@ -20,7 +19,6 @@ import { Sidebar } from "../Sidebar/Sidebar";
 import { StatusStrip } from "../StatusStrip/StatusStrip";
 import { SECTIONS, SectionView, sectionPath, type SectionId } from "../sections/sections";
 import { engagementKey, engagementsKey } from "../queries";
-import { hostsKey } from "../../hosts/queries";
 import "./EngagementShell.scss";
 
 /** Layout for `/e/:id/*`: sidebar, header, status strip and the routed section. */
@@ -42,9 +40,7 @@ export function EngagementShell() {
     autoTickFromLog(id)
       .then((ran) => {
         if (!ran) return;
-        void qc.invalidateQueries({ queryKey: checklistKey(id) });
-        void qc.invalidateQueries({ queryKey: hostsKey(id) });
-        void qc.invalidateQueries({ queryKey: ["progress"] });
+        void boardsSynced(qc, id);
       })
       // Then once more, so an imported or older engagement gets the domain admin cover. Runs whether the tick ran or not.
       .then(() => resyncAndRefresh(qc, id), reportError);

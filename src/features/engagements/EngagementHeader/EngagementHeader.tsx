@@ -6,7 +6,7 @@ import type { Engagement, EngagementStatus } from "../../../types/engagement";
 import { Chip, ChipSet, IconButton } from "../../../ui/index";
 import { EngagementDialog } from "../EngagementDialog/EngagementDialog";
 import { KIND_LABEL, scopeSummary } from "../format";
-import { engagementKey, engagementsKey } from "../queries";
+import { engagementSaved } from "../queries";
 import "./EngagementHeader.scss";
 
 export function EngagementHeader({ engagement: e }: { engagement: Engagement }) {
@@ -21,8 +21,7 @@ export function EngagementHeader({ engagement: e }: { engagement: Engagement }) 
     mutationFn: (status: EngagementStatus) => api.engagementSetStatus(e.id, status),
     onSuccess: (saved) => {
       setError(null);
-      qc.setQueryData(engagementKey(saved.id), saved);
-      void qc.invalidateQueries({ queryKey: engagementsKey });
+      void engagementSaved(qc, saved);
     },
     onError: (err) => setError(err.message),
   });

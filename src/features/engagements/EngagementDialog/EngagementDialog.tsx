@@ -13,8 +13,7 @@ import {
   toDateInput,
   toDateTimeInput,
 } from "../format";
-import { engagementKey, engagementsKey } from "../queries";
-import { hostsKey } from "../../hosts/queries";
+import { engagementDeleted, engagementSaved } from "../queries";
 import { RavenError } from "../../../types/errors";
 import "./EngagementDialog.scss";
 
@@ -191,12 +190,8 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
     mutationFn: (input: EngagementInput) =>
       engagement ? api.engagementUpdate(engagement.id, input) : api.engagementCreate(input),
     onSuccess: (saved) => {
-      qc.setQueryData(engagementKey(saved.id), saved);
-      void qc.invalidateQueries({ queryKey: engagementsKey });
-      void qc.invalidateQueries({ queryKey: engagementKey(saved.id) });
-      // The scope may add hosts.
-      void qc.invalidateQueries({ queryKey: hostsKey(saved.id) });
-      void qc.invalidateQueries({ queryKey: ["progress"] });
+      // The scope may add hosts: the staleness map knows.
+      void engagementSaved(qc, saved, engagement ? "saved" : "created");
       onClose();
     },
     onError: (err) => {
@@ -363,9 +358,8 @@ function DeleteDialog({ engagement: e, onClose }: { engagement: Engagement; onCl
     onSuccess: () => {
       // Its notes are gone: unsaved text for them can never be saved.
       dropPendingNotes(e.id);
-      qc.removeQueries({ queryKey: engagementKey(e.id) });
-      void qc.invalidateQueries({ queryKey: engagementsKey });
       void navigate("/");
+      void engagementDeleted(qc, e.id);
     },
   });
   const match = typed === e.name;

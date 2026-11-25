@@ -5,8 +5,6 @@ import { SaveSummary } from "../../../features/capture/SaveSummary/SaveSummary";
 import { useSaveSummaryStore } from "../../../features/capture/useSaveSummaryStore";
 import { afterEntrySaved } from "../../../features/checklist/ticks";
 import { ExtractedLine } from "../../../features/log/ExtractedLine/ExtractedLine";
-import { extractionsKey, invalidateAfterSave } from "../../../features/log/extractions";
-import { triedPairsKey } from "../../../features/credentials/queries";
 import { api } from "../../../lib/api";
 import type { Extraction, ExtractionSummary, LogEntry } from "../../../types/log";
 
@@ -142,17 +140,5 @@ describe("ExtractedLine", () => {
     wrap(<ExtractedLine entry={entry} />);
     expect(await screen.findByText("Extracted (undone)")).toHaveClass("extracted-line__undone");
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
-  });
-});
-
-describe("invalidateAfterSave", () => {
-  it("invalidates the extractions and tried-pairs keys with the rest", () => {
-    const qc = new QueryClient();
-    const spy = vi.spyOn(qc, "invalidateQueries");
-    invalidateAfterSave(qc, "e1");
-    const keys = spy.mock.calls.map((c) => c[0]?.queryKey);
-    expect(keys).toContainEqual(extractionsKey("e1"));
-    expect(keys).toContainEqual(triedPairsKey("e1"));
-    expect(keys).toContainEqual(["log", "e1"]);
   });
 });

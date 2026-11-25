@@ -90,7 +90,7 @@ export function NoteEditor({ target, textRef, className }: {
       {(openThreads(body).length > 0 || ruledOut.length > 0) && (
         <div className="note-editor__lists">
           <ThreadsList body={body} onClose={(line, text) => setClosing({ line, text })} />
-          <RuledOutList engagementId={target.engagementId} items={ruledOut} />
+          <RuledOutList items={ruledOut} />
         </div>
       )}
       <Textarea

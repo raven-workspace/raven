@@ -17,7 +17,7 @@ import type { Host } from "../../../types/host";
 import { Button, labelClass, queryState } from "../../../ui/index";
 import { CleanupPanel } from "../../cleanup/CleanupPanel/CleanupPanel";
 import { EngagementStuckCheck } from "../../stuck/StuckView/StuckView";
-import { hostsKey, useHosts } from "../../hosts/queries";
+import { useHosts } from "../../hosts/queries";
 import { sectionPath } from "../../engagements/sections/sections";
 import { useCredAttempts, useCredentials } from "../../credentials/queries";
 import { useLog } from "../../log/queries";
@@ -30,7 +30,8 @@ import { goalCommands } from "../goalCommands";
 import { shortHostName } from "../../../lib/hostName";
 import { GoalRow } from "../GoalRow/GoalRow";
 import { PlaybookSection } from "../PlaybookSection/PlaybookSection";
-import { checklistKey, useChecklist, useChecklistMutations } from "../queries";
+import { useChecklist, useChecklistMutations } from "../queries";
+import { boardsSynced } from "../resync";
 import { useHops, useTunnels } from "../../network/queries";
 import { useEngagementServices } from "../../services/queries";
 import { loadTickContext, tickFromLog } from "../ticks";
@@ -132,9 +133,7 @@ export function EngagementChecklist() {
     try {
       const r = await tickFromLog(id, await loadTickContext(id));
       setTick({ ticking: false, message: r.message });
-      void qc.invalidateQueries({ queryKey: checklistKey(id) });
-      void qc.invalidateQueries({ queryKey: hostsKey(id) });
-      void qc.invalidateQueries({ queryKey: ["progress"] });
+      void boardsSynced(qc, id);
     } catch (e) {
       setTick({ ticking: false, error: RavenError.from(e).message });
     }

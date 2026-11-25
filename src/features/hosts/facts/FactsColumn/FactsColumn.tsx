@@ -45,7 +45,7 @@ export function FactsColumn({ engagementId, host, variant, onOpenEntry }: {
     services: <ServicesFacts key="services" engagementId={engagementId} hostId={host.id} entries={entries} {...props("services")} />,
     credentials: <HostCredentialsFacts key="credentials" engagementId={engagementId} host={host} onOpenEntry={onOpenEntry} {...props("credentials")} />,
     identity: <IdentityFacts key="identity" engagementId={engagementId} host={host} onOpenEntry={onOpenEntry} {...props("identity")} />,
-    vectors: <VectorsFacts key="vectors" engagementId={engagementId} host={host} {...props("vectors")} />,
+    vectors: <VectorsFacts key="vectors" host={host} {...props("vectors")} />,
     accounts: <OtherAccountsFacts key="accounts" engagementId={engagementId} host={host} {...props("accounts")} />,
   };
   // After a foothold the earlier groups follow in the order they mattered: Services, Coverage, Credentials.
