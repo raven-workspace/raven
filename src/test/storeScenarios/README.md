@@ -64,4 +64,5 @@ IDs and timestamps differ between the two stores, so check them through bound na
 | `ad-set.json` | The AD set: the switch, else open 88 and 389. |
 | `msf-lock.json` | The Metasploit lock holds only its own engagement's host, and clears when the host goes. |
 | `checklist-conditional-writes.json` | The cover and fact writes only touch untouched items, and only revert their own marks. |
+| `extraction-undo.json` | Undoing a save restores the tried pairs its new credential took over, and removes what it filed. |
 | `error-codes.json` | Missing records are `not_found`; bad input is `validation` on its field. |

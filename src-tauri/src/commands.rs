@@ -9,7 +9,7 @@ use crate::payload_builds::{self, PayloadBuild};
 use crate::export::{self, ExportInput, ExportResult};
 use crate::reports::{self, Report, ReportDefaults, ReportPatch, ReportSection, SectionInput};
 use crate::tried_pairs::{self, TriedPair, TriedPairInput};
-use crate::extractions::{self, Extraction, ExtractionRecord, ExtractionSummary};
+use crate::extractions::{self, Extraction, ExtractionProofs, ExtractionRecord, ExtractionSummary, Filed, OutputTick};
 use crate::backup::{self, BackupInfo};
 use crate::cleanup::{self, CleanupInput, CleanupItem};
 use crate::findings::{
@@ -754,6 +754,27 @@ pub async fn extraction_save(
     record: ExtractionRecord,
 ) -> AppResult<Extraction> {
     with_vault(app, move |v| extractions::save(v.conn()?, &log_entry_id, &engagement_id, &summary, &record)).await
+}
+
+/// Files what a saved entry's output proved and stores its extraction, all in one transaction.
+#[tauri::command]
+pub async fn extraction_file(
+    app: AppHandle,
+    engagement_id: String,
+    log_entry_id: String,
+    proofs: ExtractionProofs,
+) -> AppResult<Filed> {
+    with_vault(app, move |v| extractions::file(v.conn()?, &engagement_id, &log_entry_id, &proofs)).await
+}
+
+#[tauri::command]
+pub async fn extraction_finish(
+    app: AppHandle,
+    log_entry_id: String,
+    summary: ExtractionSummary,
+    output_ticks: Vec<OutputTick>,
+) -> AppResult<Extraction> {
+    with_vault(app, move |v| extractions::finish(v.conn()?, &log_entry_id, &summary, &output_ticks)).await
 }
 
 #[tauri::command]

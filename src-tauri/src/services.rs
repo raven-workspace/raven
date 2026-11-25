@@ -133,7 +133,7 @@ pub fn upsert_scan(conn: &Connection, host_id: &str, ports: &[ScanPort]) -> AppR
         let state = blank_to_none(Some(&p.state)).unwrap_or_else(|| "open".into());
         clean.push((p.port, check_protocol(&p.protocol)?, state, blank_to_none(Some(&p.service)), blank_to_none(Some(&p.version))));
     }
-    let tx = conn.unchecked_transaction()?;
+    let tx = crate::db::atomic(conn)?;
     let now = now_ms();
     for (port, protocol, state, svc, ver) in clean {
         tx.execute(

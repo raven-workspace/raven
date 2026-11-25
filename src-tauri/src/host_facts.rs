@@ -42,7 +42,7 @@ fn host_engagement(conn: &Connection, host_id: &str) -> AppResult<String> {
     conn.query_row("SELECT engagement_id FROM hosts WHERE id = ?1", [host_id], |r| r.get(0)).optional()?.ok_or(AppError::NotFound)
 }
 
-fn clean_list(items: &[String]) -> Vec<String> {
+pub(crate) fn clean_list(items: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for i in items.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
         if !out.iter().any(|o| o == i) {

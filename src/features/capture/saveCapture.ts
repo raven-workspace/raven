@@ -1,13 +1,10 @@
-import { identityBlocksOf, isIdentityBlockFor, mergeIdentity, usableIdentity, vectorsFromIdentity, type IdentityFields } from "../../engines/facts";
-import { buildDraft, type CaptureDraft, type DraftInput, OPEN_STATES } from "../../engines/capture";
+import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { api } from "../../lib/api";
-import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError } from "../checklist/ticks";
+import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError, outputTicksOf } from "../checklist/ticks";
 import type { Host } from "../../types/host";
-import type { HostIdentity } from "../../types/hostFacts";
-import type { ExtractionSummary, LogContent, LogEntry, LogKind, NewAttachment } from "../../types/log";
-import type { Service } from "../../types/service";
+import type { ExtractionSummary, Filed, LogContent, LogEntry, LogKind, NewAttachment, OutputTick } from "../../types/log";
 import type { ResolvedInterpretation } from "../../engines/interpret/resolve";
-import { applyInterpretation, ExtractionError, interpretEntry, type Applied, type FiledBySave } from "./applyInterpretation";
+import { identityOf, interpretEntry, outputTicks, proveEntry, summarize, type IdentityProved, type Ticked } from "./extraction";
 import { newHostScans } from "./resolve";
 import { RavenError } from "../../types/errors";
 
@@ -61,36 +58,7 @@ export function pastedCredentials(list: CapturedCredential[]): ResolvedInterpret
 export const IDENTITY_FAILED = "Saved the entry, but the host's identity didn't update. Paste the output again to retry.";
 export const EXTRACTION_FAILED = "Saved the entry, but Raven couldn't file what it found. Paste the output again to retry.";
 
-/**
- * Records who the user is on the host from its whoami/id output, merged by kind into what is stored (`whoami /priv`
- * changes only the privileges, and so on). Returns the host, the identity before (for Undo), whether it changed, and
- * the privesc vectors the output points to; null when the entry holds no identity output for one host.
- */
-async function recordIdentity(entry: LogEntry, hosts: Host[]): Promise<FiledBySave["identity"]> {
-  const host = hosts.find((h) => h.id === entry.hostIds[0]);
-  if (!host) return null;
-  const parsedBlocks = identityBlocksOf(entry).flatMap((block) => {
-    const parsed = isIdentityBlockFor(entry, host, block) ? usableIdentity(block) : null;
-    return parsed ? [{ parsed, command: block.command }] : [];
-  });
-  if (parsedBlocks.length === 0) return null;
-  const before: HostIdentity | null = (await api.hostIdentityGet(host.id)) ?? null;
-  let stored: IdentityFields | null = before;
-  const vectors: string[] = [];
-  for (const { parsed, command } of parsedBlocks) {
-    stored = mergeIdentity(stored, parsed, command);
-    for (const title of vectorsFromIdentity(parsed)) if (!vectors.includes(title)) vectors.push(title);
-  }
-  const fields = (i: IdentityFields | null) =>
-    i && JSON.stringify([i.username ?? "unknown", i.privileges, i.groups]);
-  const changed = fields(before) !== fields(stored);
-  if (changed && stored) {
-    await api.hostIdentitySet({ hostId: host.id, username: stored.username ?? "unknown", privileges: stored.privileges, groups: stored.groups, entryId: entry.id });
-  }
-  return { hostId: host.id, before, changed, vectors };
-}
-
-/** The entry was saved, but a follow-up step (services, OS, identity, extraction, checklist, Metasploit lock) failed. */
+/** The entry was saved, but a follow-up step (reading the identity, filing, checklist, Metasploit lock) failed. */
 export class PartialSaveError extends Error {
   readonly entry: LogEntry;
   /** What made the (first) follow-up step fail. */
@@ -130,36 +98,18 @@ export interface SaveCaptureResult {
 
 type Scan = NonNullable<CaptureDraft["scan"]>;
 
-/** Upserts a scan's open ports as services and fills the OS of a host that has none; returns what changed. */
-async function applyScan(scan: Scan, hosts: Host[]): Promise<FiledBySave["scans"][number]> {
-  const { hostId } = scan;
-  // Closed and filtered ports are not services.
-  const open = scan.ports.filter((p) => OPEN_STATES.has(p.state.toLowerCase()));
-  const was: Service[] = (await api.servicesList(hostId)) ?? [];
-  const now: Service[] = (await api.servicesUpsertScan(hostId, open)) ?? [];
-  const wasById = new Map(was.map((s) => [s.id, s]));
-  const filed: FiledBySave["scans"][number] = {
-    hostId,
-    createdServiceIds: now.filter((s) => !wasById.has(s.id)).map((s) => s.id),
-    servicesBefore: now.flatMap((s) => {
-      const old = wasById.get(s.id);
-      return old && JSON.stringify(old) !== JSON.stringify(s) ? [old] : [];
-    }),
-    hostOsBefore: null,
-  };
-  const h = hosts.find((x) => x.id === hostId);
-  if (h && !h.os && scan.os) {
-    await api.hostUpdate(h.id, { name: h.name, ip: h.ip, os: scan.os, access: h.access });
-    filed.hostOsBefore = { hostId: h.id, os: null };
-  }
-  return filed;
+/** What the store filed for the entry, and how it is summarised. */
+interface Filing {
+  filed: Filed;
+  summary: ExtractionSummary;
+  ticks: OutputTick[];
 }
 
 /**
- * Saves a capture: creates the hosts a scan of new IPs proves, then the entry, then applies the nmap scans (services,
- * and the OS when the host has none) and the identity, then files what the output proved (`applyInterpretation`),
- * then the checklist ticks, board and Metasploit lock, and last stores the extraction (its time must follow the
- * board sync, which Undo compares against).
+ * Saves a capture: creates the hosts a scan of new IPs proves, then the entry. Then the store files what the output
+ * proved (the nmap scans, the identity, and what the interpreters found: `proveEntry`) with its extraction, all or
+ * nothing; then the checklist ticks, board and Metasploit lock run, and last the extraction gets its summary and
+ * output ticks, stamped after the board sync, which Undo compares against.
  * A failure after the entry exists throws `PartialSaveError` carrying the saved entry.
  */
 export async function saveCapture(args: SaveCaptureArgs): Promise<SaveCaptureResult> {
@@ -203,38 +153,43 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<SaveCaptureRes
   // Each follow-up step runs even when an earlier one failed; the first failure is reported first.
   const failures: { reason: unknown; message: string; also: string }[] = [];
   const extractionAlso = "Raven couldn't file what it found either: paste the output again to retry.";
-  const filedScans: FiledBySave["scans"] = [];
-  for (const scan of scans) {
-    if (!hostIds.includes(scan.hostId)) continue;
-    try {
-      filedScans.push(await applyScan(scan, hosts));
-    } catch (e) {
-      const message = new PartialSaveError(entry, e).message;
-      failures.push({ reason: e, message, also: message });
-    }
-  }
-  let identity: FiledBySave["identity"] = null;
+  let identity: IdentityProved | null = null;
   try {
-    identity = await recordIdentity(entry, hosts);
+    identity = await identityOf(entry, hosts);
   } catch (e) {
     failures.push({ reason: e, message: IDENTITY_FAILED, also: "The host's identity didn't update either: paste the output again to retry." });
   }
 
-  let applied: Applied | null = null;
+  let filing: Filing | null = null;
   try {
-    const resolved = interpretEntry(entry, hosts, draftInput?.domain ?? "", draftInput?.scope ?? []);
+    const r = interpretEntry(entry, hosts, draftInput?.domain ?? "", draftInput?.scope ?? []);
     if (edits.credentials?.length) {
-      resolved.parsers.push("paste");
-      resolved.credentials.push(...pastedCredentials(edits.credentials));
+      r.parsers.push("paste");
+      r.credentials.push(...pastedCredentials(edits.credentials));
     }
-    applied = await applyInterpretation(engagementId, entry, resolved, { hosts, createdHostIds, scans: filedScans, identity });
+    const linked = scans.filter((s) => hostIds.includes(s.hostId));
+    const proved = await proveEntry(engagementId, entry, r, { hosts, createdHostIds, scans: linked, identity });
+    if (proved) {
+      const filed = await api.extractionFile(engagementId, entry.id, proved.proofs);
+      // Filed and undoable: from here a failure costs only the summary's tick lines.
+      const names = new Map(hosts.map((h) => [h.id, h.name || h.ip || ""]));
+      for (const h of proved.proofs.newHosts) if (filed.hostIds[h.key]) names.set(filed.hostIds[h.key]!, h.ip);
+      let ticked: Ticked = { ticks: [], lines: [], dcNames: new Set() };
+      try {
+        ticked = await outputTicks(engagementId, r, (p) => proved.hostOf(p, filed));
+      } catch (e) {
+        failures.push({ reason: e, message: EXTRACTION_FAILED, also: extractionAlso });
+      }
+      const hostName = (id: string | null | undefined) => names.get(id ?? "") ?? "";
+      const summary = summarize({ r, plan: proved.plan, filed, identityHostId: identity?.hostId ?? null, hostName, ticked });
+      filing = { filed, summary, ticks: ticked.ticks };
+    }
   } catch (e) {
-    if (e instanceof ExtractionError) applied = e.applied;
-    failures.push({ reason: e instanceof ExtractionError ? e.reason : e, message: EXTRACTION_FAILED, also: extractionAlso });
+    failures.push({ reason: e, message: EXTRACTION_FAILED, also: extractionAlso });
   }
 
   try {
-    await afterEntrySaved(engagementId, entry, entry.id, applied?.outputTicks ?? []);
+    await afterEntrySaved(engagementId, entry, entry.id, outputTicksOf(entry.id, filing?.ticks ?? []));
   } catch (e) {
     const checklistAlso = "The checklist didn't update either: use Tick from log on the Engagement checklist.";
     if (e instanceof FollowUpError) {
@@ -244,22 +199,20 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<SaveCaptureRes
     }
   }
 
-  // R7/R8: stored once, on create, after the board sync.
-  const summary = applied?.summary ?? null;
-  let stored = false;
-  if (applied && summary) {
+  // R7/R8: the summary and output ticks, after the board sync.
+  if (filing) {
     try {
-      await api.extractionSave(entry.id, engagementId, summary, applied.record);
-      stored = true;
+      await api.extractionFinish(entry.id, filing.summary, filing.ticks);
     } catch (e) {
       failures.push({ reason: e, message: EXTRACTION_FAILED, also: extractionAlso });
     }
   }
 
+  const summary = filing?.summary ?? null;
   if (failures.length) {
     const [first, ...rest] = failures;
     const message = rest.reduce((acc, f) => `${acc}${acc.endsWith(".") ? "" : "."} ${f.also}`, first!.message);
-    throw new PartialSaveError(entry, first!.reason, message, failures.map((f) => f.reason), stored ? summary : null);
+    throw new PartialSaveError(entry, first!.reason, message, failures.map((f) => f.reason), summary);
   }
   return { entry, summary };
 }

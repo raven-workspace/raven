@@ -10,10 +10,13 @@ import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
 import type {
   Attachment,
   Extraction,
+  ExtractionProofs,
   ExtractionRecord,
   ExtractionSummary,
+  Filed,
   LogEntry,
   LogEntryInput,
+  OutputTick,
   Progress,
 } from "../types/log";
 import type {
@@ -258,6 +261,12 @@ export const api = {
     call<number>("tried_pair_promote", { engagementId, username, domain, secret }),
   extractionSave: (logEntryId: string, engagementId: string, summary: ExtractionSummary, record: ExtractionRecord) =>
     call<Extraction>("extraction_save", { logEntryId, engagementId, summary, record }),
+  /** Files what a saved entry's output proved and stores its extraction, all or nothing. */
+  extractionFile: (engagementId: string, logEntryId: string, proofs: ExtractionProofs) =>
+    call<Filed>("extraction_file", { engagementId, logEntryId, proofs }),
+  /** The filed extraction's summary and output ticks, once the save's checklist and board follow-ups ran. */
+  extractionFinish: (logEntryId: string, summary: ExtractionSummary, outputTicks: OutputTick[]) =>
+    call<Extraction>("extraction_finish", { logEntryId, summary, outputTicks }),
   extractionGet: (logEntryId: string) => call<Extraction | null>("extraction_get", { logEntryId }),
   extractionsList: (engagementId: string) => call<Extraction[]>("extractions_list", { engagementId }),
   extractionUndo: (logEntryId: string) => call<Extraction>("extraction_undo", { logEntryId }),

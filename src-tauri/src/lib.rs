@@ -138,6 +138,8 @@ pub fn run() {
             commands::tried_pair_delete,
             commands::tried_pair_promote,
             commands::extraction_save,
+            commands::extraction_file,
+            commands::extraction_finish,
             commands::extraction_get,
             commands::extractions_list,
             commands::extraction_undo,

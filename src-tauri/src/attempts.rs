@@ -215,7 +215,7 @@ fn upsert_clean(conn: &Connection, engagement_id: &str, c: &Clean, id: Option<&s
 pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[CredAttemptInput]) -> AppResult<Vec<CredAttempt>> {
     check_scope(conn, engagement_id, None)?;
     let now = now_ms();
-    let tx = conn.unchecked_transaction()?;
+    let tx = crate::db::atomic(conn)?;
     let mut out = Vec::with_capacity(inputs.len());
     for i in inputs {
         let c = clean(&tx, engagement_id, i, now)?;
@@ -249,7 +249,7 @@ pub fn rekey_username_attempts(
     for s in secret_cred_ids {
         check_in_engagement(conn, "credentials", &engagement_id, s)?;
     }
-    let tx = conn.unchecked_transaction()?;
+    let tx = crate::db::atomic(conn)?;
     let moving: Vec<CredAttempt> = {
         let mut st = tx.prepare(&format!(
             "SELECT {COLS} FROM cred_attempts WHERE username_id = ?1 ORDER BY at, id"

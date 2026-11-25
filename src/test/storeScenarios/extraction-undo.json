@@ -1,0 +1,47 @@
+{
+  "name": "Undoing a save puts back the tried pairs its new credential took over, and leaves the store as it was",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Lab A", "kind": "lab" }], "as": "eng" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "files01", "ip": "192.0.2.40" }], "as": "files" },
+    {
+      "do": "logCreate",
+      "args": ["$eng", {
+        "title": "spray", "ranOn": null, "hostIds": ["$files"], "observations": null,
+        "returnedNothing": false, "private": false, "content": { "kind": "note", "text": "dina failed on ssh" }
+      }],
+      "as": "spray"
+    },
+    {
+      "do": "triedPairsUpsert",
+      "args": ["$eng", [{ "username": "dina", "secret": "Synth01!", "secretKind": "password", "hostId": "$files", "service": "ssh", "logEntryId": "$spray", "at": 5 }]]
+    },
+    {
+      "do": "logCreate",
+      "args": ["$eng", {
+        "title": "dump", "ranOn": null, "hostIds": ["$files"], "observations": null,
+        "returnedNothing": false, "private": false, "content": { "kind": "note", "text": "dina:Synth01!" }
+      }],
+      "as": "dump"
+    },
+    {
+      "do": "extractionFile",
+      "args": ["$eng", "$dump", {
+        "createdHostIds": [], "newHosts": [], "scans": [], "identity": null,
+        "credentials": [{ "type": "password", "username": "dina", "secret": "Synth01!", "sourceHostId": "$files" }],
+        "cracks": [], "usernames": [], "intake": null, "triedPairs": [], "vectors": []
+      }]
+    },
+    { "do": "triedPairsList", "args": ["$eng"], "expect": [] },
+    { "do": "credentialsList", "args": ["$eng"], "expect": [{ "username": "dina", "secret": "Synth01!" }] },
+    { "do": "credAttemptsList", "args": ["$eng"], "expect": [{ "hostId": "$files", "service": "ssh", "result": "failed", "logEntryId": "$spray" }] },
+
+    { "do": "extractionUndo", "args": ["$dump"] },
+    { "do": "credentialsList", "args": ["$eng"], "expect": [] },
+    { "do": "credAttemptsList", "args": ["$eng"], "expect": [] },
+    {
+      "do": "triedPairsList",
+      "args": ["$eng"],
+      "expect": [{ "username": "dina", "secret": "Synth01!", "hostId": "$files", "service": "ssh", "logEntryId": "$spray", "at": 5 }]
+    }
+  ]
+}

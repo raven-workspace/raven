@@ -468,7 +468,7 @@ pub fn crack(conn: &Connection, hash_id: &str, plaintext: &str) -> AppResult<Cre
     if plaintext.trim().is_empty() {
         return Err(AppError::validation("plaintext", "plaintext is required"));
     }
-    let tx = conn.unchecked_transaction()?;
+    let tx = crate::db::atomic(conn)?;
     let now = now_ms();
     let pw = Credential {
         id: uuid::Uuid::new_v4().to_string(),

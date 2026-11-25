@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENTITY_TABLES, staleAfter, type Change, type Entity } from "../../engines/staleness";
+import { ALSO_WRITES, ENTITY_TABLES, staleAfter, type Change, type Entity } from "../../engines/staleness";
 
 const stale = (entity: Entity, change: Change) => [...staleAfter({ entity, change })].sort();
 const ALL = (Object.keys(ENTITY_TABLES) as Entity[]).sort();
@@ -72,6 +72,8 @@ describe("staleness map", () => {
     }
     // The gaps the old hand list left: a filed host's undo takes its findings link, attempts, grants and cleanup.
     for (const e of ["finding", "failedAttempt", "accessGrant", "cleanupItem"] as const) expect(s).toContain(e);
+    // Undo puts back the tried pairs the save promoted into a credential it created.
+    expect(ALSO_WRITES.extraction?.undone).toContainEqual({ entity: "triedPair", change: "created" });
   });
 
   it("credential writes refresh tried pairs (a stored credential's tried pairs are promoted away)", () => {
