@@ -6,10 +6,10 @@ import {
   ENGAGEMENT_SETUP,
   HOST_GOALS,
   HOST_STAGES,
-  adHosts,
+  adSetHosts,
   applicableGoals,
   engagementFacts,
-  findDcHost,
+  findDc,
   goalApplies,
   hostViewStages,
   hostFacts,
@@ -107,7 +107,7 @@ describe('applicableGoals', () => {
   });
 
   it('domain steps appear only on a domain-joined host', () => {
-    const joined = ids(goalsFor(host({ os: 'windows' }), onPorts(88, 389)), 'information-gathering');
+    const joined = ids(goalsFor(host({ os: 'windows', adSetEffective: true }), onPorts(88, 389)), 'information-gathering');
     expect(joined).toContain('h-enum-ad-users');
     expect(ids(goalsFor(host({ os: 'windows' }), onPorts(445)), 'information-gathering')).not.toContain('h-enum-ad-users');
   });
@@ -217,15 +217,15 @@ describe('applicableGoals', () => {
   });
 
   it('domain goal h-loot-domain only on domain-joined Windows', () => {
-    const win = goalsFor(host({ os: 'windows' }), onPorts(88, 389));
+    const win = goalsFor(host({ os: 'windows', adSetEffective: true }), onPorts(88, 389));
     expect(ids(win, 'post-exploitation')).toContain('h-loot-domain');
-    const lin = goalsFor(host({ os: 'linux' }), onPorts(88, 389));
+    const lin = goalsFor(host({ os: 'linux', adSetEffective: true }), onPorts(88, 389));
     expect(ids(lin, 'post-exploitation')).not.toContain('h-loot-domain');
     expect(ids(goalsFor(host({ os: 'windows' }), onPorts(445)), 'post-exploitation')).not.toContain('h-loot-domain');
   });
 
   it('a Windows member server is domain-joined when the engagement has a DC', () => {
-    const dc = host({ id: 'dc', os: 'windows' });
+    const dc = host({ id: 'dc', os: 'windows', adSetEffective: true });
     const member = host({ id: 'm', os: 'windows' });
     const map = new Map([['dc', onPorts(88, 389)], ['m', onPorts(445)]]);
     expect(hostFacts(member, null, [dc, member], map).domainJoined).toBe(true);
@@ -233,12 +233,12 @@ describe('applicableGoals', () => {
   });
 
   it('two DCs: no single DC, but a Windows member server is still domain-joined', () => {
-    const dc1 = host({ id: 'dc1', os: 'windows' });
-    const dc2 = host({ id: 'dc2', os: 'windows' });
+    const dc1 = host({ id: 'dc1', os: 'windows', adSetEffective: true });
+    const dc2 = host({ id: 'dc2', os: 'windows', adSetEffective: true });
     const member = host({ id: 'm', os: 'windows' });
     const lin = host({ id: 'l', os: 'linux' });
     const map = new Map([['dc1', onPorts(88, 389, 445)], ['dc2', onPorts(88, 389, 445)], ['m', onPorts(445)], ['l', onPorts(22)]]);
-    expect(findDcHost([dc1, dc2, member], map)).toBeNull();
+    expect(findDc([dc1, dc2, member], map)).toBeNull();
     expect(hostFacts(member, null, [dc1, dc2, member], map).domainJoined).toBe(true);
     expect(ids(applicableGoals(member, null, [dc1, dc2, member], map), 'post-exploitation')).toContain('h-loot-domain');
     // a Linux host next to them is not joined
@@ -260,16 +260,16 @@ describe('applicableGoals', () => {
   });
 });
 
-describe('findDcHost', () => {
-  const dc = host({ id: 'dc' });
-  const other = host({ id: 'o' });
+describe('findDc', () => {
+  const dc = host({ id: 'dc', adSetEffective: true });
+  const other = host({ id: 'o', adSetEffective: true });
   const x = host({ id: 'x' });
-  it('returns the only 88+389 host, else null', () => {
+  it('returns the only AD set member with 88+389 open, else null', () => {
     const map = new Map([['dc', onPorts(88, 389)], ['o', onPorts(88, 389)], ['x', onPorts(80)]]);
-    expect(findDcHost([dc, x], map)?.id).toBe('dc');
-    expect(findDcHost([dc, other], map)).toBeNull();
-    expect(findDcHost([x], map)).toBeNull();
-    expect(adHosts([dc, other, x], map).map((h) => h.id)).toEqual(['dc', 'o']);
+    expect(findDc([dc, x], map)?.id).toBe('dc');
+    expect(findDc([dc, other], map)).toBeNull();
+    expect(findDc([x], map)).toBeNull();
+    expect(adSetHosts([dc, other, x]).map((h) => h.id)).toEqual(['dc', 'o']);
   });
 });
 
@@ -284,14 +284,13 @@ describe('facts', () => {
     expect([...serviceNames([svc(5432, 'ppp', { confirmedProduct: 'PostgreSQL 15' })])]).toEqual(['postgresql']);
   });
 
-  it('engagementFacts has no OS and is domain-joined when any host is AD', () => {
-    const dc = host({ id: 'dc' });
-    const map = new Map([['dc', onPorts(88, 389)]]);
-    const f = engagementFacts({ kind: 'client' }, [dc], map);
+  it('engagementFacts has no OS and is domain-joined when the AD set has a member', () => {
+    const dc = host({ id: 'dc', adSetEffective: true });
+    const f = engagementFacts({ kind: 'client' }, [dc]);
     expect(f.os).toBeNull();
     expect(f.domainJoined).toBe(true);
     expect(f.kind).toBe('client');
-    expect(engagementFacts({ kind: 'lab' }, [], new Map()).domainJoined).toBe(false);
+    expect(engagementFacts({ kind: 'lab' }, []).domainJoined).toBe(false);
   });
 });
 

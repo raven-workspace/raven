@@ -53,6 +53,16 @@ const AUDIT_FIELD_MANUAL: FieldManualSnapshot = {
 
 const clone = <T>(v: T): T => structuredClone(v);
 
+type FakeHost = AuditFixtures["hosts"][number];
+/**
+ * A host as the store returns it: `adSetEffective` derived on every read, as `ad_effective_sql` does, so it follows the
+ * switch and every service change. The switch if set, else 88 and 389 both in state exactly `open`.
+ */
+function hostOut(h: FakeHost): FakeHost {
+  const open = (port: number) => db.services.some((s) => s.hostId === h.id && s.port === port && s.state === "open");
+  return clone({ ...h, adSetEffective: h.adSet ?? (open(88) && open(389)) });
+}
+
 function find<T extends { id: string }>(rows: T[], id: string): T {
   const row = rows.find((r) => r.id === id);
   if (!row) throw new RavenError("not_found", `No record ${id}`);
@@ -178,27 +188,24 @@ const base = {
   },
   engagementDelete: async (id: string) => remove(db.engagements, id),
 
-  hostsList: async (engagementId: string) => clone(db.hosts.filter((h) => h.engagementId === engagementId)),
+  hostsList: async (engagementId: string) => db.hosts.filter((h) => h.engagementId === engagementId).map(hostOut),
   hostCreate: async (engagementId: string, input) => {
     const h = assign(
       { id: nid("h"), engagementId, ip: null, os: null, boardColumn: "information-gathering", boardManual: false, access: "none", createdAt: now(), updatedAt: now(), dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } as unknown as (typeof db.hosts)[number],
       input,
     );
-    h.adSetEffective = h.adSet === true;
     db.hosts.push(h);
-    return clone(h);
+    return hostOut(h);
   },
   hostUpdate: async (id: string, input) => {
-    const h = assign(find(db.hosts, id), input, { updatedAt: now() });
-    if (input.adSet !== undefined) h.adSetEffective = input.adSet === true;
-    return clone(h);
+    return hostOut(assign(find(db.hosts, id), input, { updatedAt: now() }));
   },
-  hostMove: async (id: string, column) => clone(assign(find(db.hosts, id), {}, { boardColumn: column, boardManual: true, updatedAt: now() })),
+  hostMove: async (id: string, column) => hostOut(assign(find(db.hosts, id), {}, { boardColumn: column, boardManual: true, updatedAt: now() })),
   hostSyncBoard: async (hostId: string, derived) => {
     const h = find(db.hosts, hostId);
     if (!h.boardManual) h.boardColumn = derived;
     h.boardDerived = derived;
-    return clone(h);
+    return hostOut(h);
   },
   hostDelete: async (id: string) => {
     db.services = db.services.filter((x) => x.hostId !== id);
@@ -377,7 +384,7 @@ const base = {
   },
   hopUpdate: async (id: string, input) => clone(assign(find(db.hops, id), input, { updatedAt: now() })),
   hopDelete: async (id: string) => remove(db.hops, id),
-  hostMarkAccessReviewed: async (hostId: string) => clone(assign(find(db.hosts, hostId), {}, { accessReviewedAt: now() })),
+  hostMarkAccessReviewed: async (hostId: string) => hostOut(assign(find(db.hosts, hostId), {}, { accessReviewedAt: now() })),
 
   credentialsList: async (engagementId: string) => clone(db.credentials.filter((c) => c.engagementId === engagementId)),
   credentialCreate: async (engagementId: string, input) => {

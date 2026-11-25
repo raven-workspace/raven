@@ -100,7 +100,7 @@ describe("engagementStuck lines", () => {
   });
 
   it("usernames not AS-REP-checked", () => {
-    const hosts = [host("DC", { os: "windows" })];
+    const hosts = [host("DC", { os: "windows", adSetEffective: true })];
     const base = { hosts, byOwner: { DC: FOOT_DONE }, services: { DC: [svc("DC", 88, "kerberos-sec"), svc("DC", 389, "ldap")] }, usernames: [uname("u1"), uname("u2")] };
     const l = run(base).filter((x) => x.text.includes("AS-REP"));
     expect(l).toEqual([{ area: "credentials", subject: null, text: "2 usernames not yet AS-REP-checked", hostId: null, goalId: "e-ad-user-asrep" }]);

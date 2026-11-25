@@ -9,7 +9,7 @@ import { matchLine } from '../library/matcher';
 import { HOST_GOALS } from './data/hostChecklist';
 import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, LATERAL_MOVEMENT_GOALS } from './data/engagementChecklist';
 import { isCoverMarked } from './daCover';
-import { adHosts, engagementFacts, goalApplies, hostFacts, type HostFacts } from './facts';
+import { adSetHosts, engagementFacts, goalApplies, hostFacts, type HostFacts } from './facts';
 import { scanProvenanceLines } from './scanImport';
 import type { ChecklistGoal } from './types';
 
@@ -40,7 +40,7 @@ export const FLAG_COMMAND_ID = 'flag';
 /**
  * The goals a log entry achieved, attributed conservatively (foundation spec §6.4): attacker commands tick the hosts named in
  * that line; target commands tick the host the shell is on. `e-ad-*` goals tick on the engagement only when the
- * line is attributed to an AD host (the DC, or any host with 88 and 389 open); `e-setup-*` goals tick on any line.
+ * line is attributed to an AD set member (GLOSSARY.md); `e-setup-*` goals tick on any line.
  * Goals that don't apply to the owner never tick. De-duplicated by owner and goal (first command wins).
  * Flag entries tick `h-orient-proof` / `h-pe-proof` on their hosts; other kinds tick nothing.
  */
@@ -74,8 +74,8 @@ export function ticksForEntry(entry: LogEntry, ctx: TickContext): Tick[] {
   if (entry.content.kind !== 'command') return out;
 
   const domain = (engagement.domain ?? '').trim().toLowerCase();
-  const adHostIds = new Set(adHosts(hosts, servicesByHost).map((h) => h.id));
-  const engFacts = engagementFacts(engagement, hosts, servicesByHost);
+  const adHostIds = new Set(adSetHosts(hosts).map((h) => h.id));
+  const engFacts = engagementFacts(engagement, hosts);
   const refOf = (r: HostRef) => hostById.get(r.id)!;
 
   /** `scanLine`: a command read from pasted output; no shell context, so only attacker commands, only host goals. */

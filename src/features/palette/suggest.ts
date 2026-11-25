@@ -1,4 +1,4 @@
-import { adHosts, dcForFill, openPorts } from "../../engines/checklist";
+import { adSetHosts, dcForFill, openPorts } from "../../engines/checklist";
 import type { ToolkitEntry } from "../../engines/fieldManual/parseToolkit";
 import type { Credential } from "../../types/credentials";
 import type { Engagement } from "../../types/engagement";
@@ -65,7 +65,7 @@ export function tokenSuggestions(token: string, ctx: SuggestContext): Suggestion
     out = [...(domain ? [{ value: domain }] : []), ...(ctx.credentials ?? []).map((c) => ({ value: c.domain?.trim() ?? "" }))];
   } else if (t === "DC_IP") {
     const dc = dcForFill(ctx.hosts, servicesByHost);
-    const ad = adHosts(ctx.hosts, servicesByHost);
+    const ad = adSetHosts(ctx.hosts);
     out = [
       ...(dc?.ip?.trim() ? [{ value: dc.ip.trim(), hint: dc.name, role: "DC" }] : []),
       ...ad.filter((h) => h.ip?.trim()).map((h) => ({ value: h.ip!.trim(), hint: h.name, role: "AD" })),

@@ -28,7 +28,7 @@ const host = (id: string, name: string, ip: string): Host => ({
   id, engagementId: "e1", name, ip, os: "windows", boardColumn: "information-gathering", boardManual: false,
   dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 });
-const DC = host("dc", "dc01", "10.10.10.5");
+const DC = { ...host("dc", "dc01", "10.10.10.5"), adSetEffective: true };
 const WS = host("ws", "ws01", "10.10.10.6");
 const svc = (id: string, hostId: string, port: number, nmapService: string): Service => ({
   id, hostId, port, protocol: "tcp", state: "open", nmapService, nmapVersion: null, confirmedProduct: null,

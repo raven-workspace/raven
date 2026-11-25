@@ -56,7 +56,10 @@ function mount(opts: { services?: Service[]; hops?: Hop[]; log?: LogEntry[]; tun
   m.credentialsList.mockResolvedValue(opts.creds ?? []);
   m.credAttemptsList.mockResolvedValue(opts.attempts ?? []);
   m.engagementGet.mockResolvedValue(opts.eng ?? E1);
-  m.hostsList.mockResolvedValue(opts.hosts ?? [H1, H2]);
+  // As the store derives it: the AD set switch, else 88 and 389 both open.
+  const open = (hostId: string, port: number) => (opts.services ?? []).some((s) => s.hostId === hostId && s.port === port && s.state === "open");
+  const hosts = (opts.hosts ?? [H1, H2]).map((h) => ({ ...h, adSetEffective: h.adSet ?? (open(h.id, 88) && open(h.id, 389)) }));
+  m.hostsList.mockResolvedValue(hosts);
   m.checklistList.mockResolvedValue(opts.items ?? []);
   m.checklistApplyFacts.mockResolvedValue(opts.items ?? []);
   m.checklistApplyCover.mockResolvedValue(opts.items ?? []);

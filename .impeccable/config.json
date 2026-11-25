@@ -50,6 +50,15 @@
         ],
         "createdAt": "2026-11-25T03:24:16.669Z",
         "reason": "agent: audit self-test fixture of deliberately broken layout cases (data-expect), read by audit/selftest.spec.ts; not shipped UI"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "roboto",
+        "files": [
+          "src/styles/base.scss"
+        ],
+        "createdAt": "2026-11-25T03:41:39.175Z",
+        "reason": "agent: Roboto is a platform fallback in the reset's default system stack (from the Tailwind preflight); every element's typeface comes from DESIGN.md type roles"
       }
     ]
   }

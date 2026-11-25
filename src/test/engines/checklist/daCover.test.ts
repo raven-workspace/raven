@@ -31,7 +31,7 @@ const attempt = (hostId: string, result: CredAttempt['result']): CredAttempt => 
 });
 const engagement = { id: 'e1', kind: 'lab' } as Engagement;
 
-const DC = host('DC', 'windows');
+const DC = host('DC', 'windows', { adSetEffective: true });
 const WS01 = host('WS01', 'windows');
 const LIN01 = host('LIN01', 'linux');
 const WS02 = host('WS02', 'windows');
