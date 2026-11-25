@@ -191,15 +191,25 @@ fn call(c: &Connection, cmd: &str, a: &[Value]) -> AppResult<Value> {
     }
 }
 
-/// Replaces every `"$name"` string with the value bound to `name`.
+/// Replaces every `"$name"` string, and every `"$name"` object key (for maps keyed by id), with the value bound to `name`.
 fn resolve(v: &Value, refs: &HashMap<String, Value>, at: &str) -> Value {
     match v {
         Value::String(s) if s.starts_with('$') => {
             refs.get(&s[1..]).cloned().unwrap_or_else(|| panic!("{at}: `{s}` is not bound by an earlier step"))
         }
         Value::Array(xs) => Value::Array(xs.iter().map(|x| resolve(x, refs, at)).collect()),
-        Value::Object(m) => Value::Object(m.iter().map(|(k, x)| (k.clone(), resolve(x, refs, at))).collect()),
+        Value::Object(m) => Value::Object(m.iter().map(|(k, x)| (resolve_key(k, refs, at), resolve(x, refs, at))).collect()),
         other => other.clone(),
+    }
+}
+
+fn resolve_key(k: &str, refs: &HashMap<String, Value>, at: &str) -> String {
+    if !k.starts_with('$') {
+        return k.to_string();
+    }
+    match resolve(&Value::String(k.to_string()), refs, at) {
+        Value::String(s) => s,
+        other => panic!("{at}: the key `{k}` is bound to {other}, not a string"),
     }
 }
 

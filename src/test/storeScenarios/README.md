@@ -35,7 +35,7 @@ Each step runs one command:
 | `as` | Binds the result's `id` to a name. |
 | `bind` | Binds other parts of the result: `{ "name": "dotted.path" }`, where a number picks a list item (`"0.id"`). |
 
-A step with neither `expect` nor `error` only has to succeed. Any string starting with `$` is a name bound by an earlier step, in `args`, `expect` and `error` alike.
+A step with neither `expect` nor `error` only has to succeed. Any string starting with `$` is a name bound by an earlier step, in `args`, `expect` and `error` alike. So is an object key starting with `$`, for a result keyed by id (`engagementsProgress` expects `{ "$exam": { … } }`).
 
 Matching:
 
@@ -61,7 +61,9 @@ IDs and timestamps differ between the two stores, so check them through bound na
 | `record-delete-cascades.json` | Deleting a service, log entry, credential, username or finding cleans up what refers to it. |
 | `scope-hosts.json` | Single IPs in the scope become hosts on create, and only newly added ones on save. |
 | `duplicate-ip.json` | A host's IP is one IPv4 address, unique in its engagement. |
+| `service-duplicate-port.json` | Editing a service can't give it the port and protocol of another service on its host. |
 | `ad-set.json` | The AD set: the switch, else open 88 and 389. |
+| `exam-progress.json` | Exam-sim progress: two flags per host outside the AD set, and the AD set as one target with one flag, its proof; a lab counts every host. |
 | `msf-lock.json` | The Metasploit lock holds only its own engagement's host, and clears when the host goes. |
 | `checklist-conditional-writes.json` | The cover and fact writes only touch untouched items, and only revert their own marks. |
 | `checklist-entry-ticks.json` | Entry ticks are re-derived on the rows as the store holds them, so a status set by hand is never overwritten. |

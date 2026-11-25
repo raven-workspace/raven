@@ -1,0 +1,36 @@
+{
+  "name": "Editing a service can't give it a port and protocol another service on its host already has",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Port lab", "kind": "lab" }], "as": "eng" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "web11", "ip": "203.0.113.11" }], "as": "web" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "web12", "ip": "203.0.113.12" }], "as": "other" },
+    { "do": "serviceCreate", "args": ["$web", { "port": 80, "nmapService": "http" }], "as": "http" },
+    { "do": "serviceCreate", "args": ["$web", { "port": 8443, "nmapService": "https-alt" }], "as": "alt" },
+    { "do": "serviceCreate", "args": ["$web", { "port": 161, "protocol": "udp", "nmapService": "snmp" }], "as": "snmp" },
+    { "do": "serviceCreate", "args": ["$other", { "port": 8080 }], "as": "proxy" },
+    { "do": "serviceUpdate", "args": ["$alt", { "port": 80, "nmapService": "http" }], "error": { "code": "validation", "field": "port" } },
+    { "do": "serviceUpdate", "args": ["$snmp", { "port": 8443, "protocol": "TCP" }], "error": { "code": "validation", "field": "port" } },
+    {
+      "do": "servicesList",
+      "args": ["$web"],
+      "expect": [
+        { "id": "$http", "port": 80, "protocol": "tcp", "nmapService": "http" },
+        { "id": "$alt", "port": 8443, "protocol": "tcp", "nmapService": "https-alt" },
+        { "id": "$snmp", "port": 161, "protocol": "udp", "nmapService": "snmp" }
+      ]
+    },
+    { "do": "serviceUpdate", "args": ["$snmp", { "port": 80, "protocol": "udp" }], "expect": { "id": "$snmp", "port": 80, "protocol": "udp", "nmapService": null } },
+    { "do": "serviceUpdate", "args": ["$http", { "port": 80, "nmapService": "http", "nmapVersion": "nginx 1.24" }], "expect": { "id": "$http", "port": 80, "nmapVersion": "nginx 1.24" } },
+    { "do": "serviceUpdate", "args": ["$proxy", { "port": 80 }], "expect": { "id": "$proxy", "port": 80, "protocol": "tcp" } },
+    {
+      "do": "servicesListEngagement",
+      "args": ["$eng"],
+      "expect": [
+        { "id": "$http", "hostId": "$web", "port": 80, "protocol": "tcp" },
+        { "id": "$alt", "hostId": "$web", "port": 8443, "protocol": "tcp" },
+        { "id": "$snmp", "hostId": "$web", "port": 80, "protocol": "udp" },
+        { "id": "$proxy", "hostId": "$other", "port": 80, "protocol": "tcp" }
+      ]
+    }
+  ]
+}

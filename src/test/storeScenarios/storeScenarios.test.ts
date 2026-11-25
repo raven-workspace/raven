@@ -24,14 +24,23 @@ interface Scenario {
 
 const files = import.meta.glob<Scenario>("./*.json", { eager: true, import: "default" });
 
-/** Replaces every `"$name"` string with the value bound to `name`. */
+/** Replaces every `"$name"` string, and every `"$name"` object key (for maps keyed by id), with the value bound to `name`. */
 function resolve(v: Json, refs: Map<string, Json>, at: string): Json {
   if (typeof v === "string" && v.startsWith("$")) {
     if (!refs.has(v.slice(1))) throw new Error(`${at}: \`${v}\` is not bound by an earlier step`);
     return refs.get(v.slice(1))!;
   }
   if (Array.isArray(v)) return v.map((x) => resolve(x, refs, at));
-  if (v !== null && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, resolve(x, refs, at)]));
+  if (v !== null && typeof v === "object") {
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [resolveKey(k, refs, at), resolve(x, refs, at)]));
+  }
+  return v;
+}
+
+function resolveKey(k: string, refs: Map<string, Json>, at: string): string {
+  if (!k.startsWith("$")) return k;
+  const v = resolve(k, refs, at);
+  if (typeof v !== "string") throw new Error(`${at}: the key \`${k}\` is bound to ${JSON.stringify(v)}, not a string`);
   return v;
 }
 
