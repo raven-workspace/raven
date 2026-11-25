@@ -296,8 +296,9 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<Credential> {
     conn.query_row(&format!("SELECT {CRED_COLS} FROM credentials WHERE id = ?1"), [id], cred_row).optional()?.ok_or(AppError::NotFound)
 }
 
-/// Validates and normalises an input into a Credential (id and timestamps filled by the caller).
-fn build(conn: &Connection, engagement_id: &str, i: CredentialInput) -> AppResult<Credential> {
+/// Validates and normalises an input into a Credential (id and timestamps filled by the caller). `current` is the
+/// stored credential on update, None on create.
+fn build(conn: &Connection, engagement_id: &str, i: CredentialInput, current: Option<&Credential>) -> AppResult<Credential> {
     if !matches!(i.kind.as_str(), "password" | "hash" | "ticket" | "key" | "token" | "other") {
         return Err(AppError::validation("type", "type must be password, hash, ticket, key, token or other"));
     }
@@ -306,8 +307,13 @@ fn build(conn: &Connection, engagement_id: &str, i: CredentialInput) -> AppResul
         return Err(AppError::validation("scope", "scope must be domain, local or app"));
     }
     let local_host_id = blank_to_none(i.local_host_id.as_deref());
+    // A local credential needs its host only when scope or host is being set or changed: deleting a host leaves its
+    // local credentials with none (the schema's set-null), and an edit that keeps scope and host stays allowed.
+    let keeps_scope_and_host = current.is_some_and(|c| c.scope == scope && c.local_host_id == local_host_id);
     match (scope == "local", &local_host_id) {
-        (true, None) => return Err(AppError::validation("localHostId", "a local credential needs its host")),
+        (true, None) if !keeps_scope_and_host => {
+            return Err(AppError::validation("localHostId", "a local credential needs its host"))
+        }
         (false, Some(_)) => return Err(AppError::validation("localHostId", "only a local credential has a host")),
         _ => {}
     }
@@ -385,7 +391,7 @@ pub struct CreatedCredential {
 /// Creates a credential, or returns the stored one that is the same credential (never an error for a duplicate).
 pub fn create(conn: &Connection, engagement_id: &str, input: CredentialInput) -> AppResult<CreatedCredential> {
     check_scope(conn, engagement_id, None)?;
-    let mut c = build(conn, engagement_id, input)?;
+    let mut c = build(conn, engagement_id, input, None)?;
     if c.kind == "hash" && c.crack_status.is_none() {
         c.crack_status = Some("uncracked".into());
     }
@@ -404,7 +410,7 @@ pub fn create(conn: &Connection, engagement_id: &str, input: CredentialInput) ->
 /// when absent.
 pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<Credential> {
     let current = get(conn, id)?;
-    let c = build(conn, &current.engagement_id, input)?;
+    let c = build(conn, &current.engagement_id, input, Some(&current))?;
     // An edit that keeps the credential's identity is always allowed, so a duplicate stored before the store owned
     // identity stays editable; one that makes it another stored credential is refused.
     let anchor = engagement_domain(conn, &current.engagement_id)?;
@@ -655,6 +661,7 @@ pub fn convert_to_access(conn: &Connection, cred_id: &str, grant: AccessGrantInp
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::attempts;
     use crate::engagements::{self, EngagementInput};
     use crate::hosts::{self, HostInput};
     use crate::paths::DataPaths;
@@ -1208,6 +1215,83 @@ mod tests {
         let after = get(c, &cred.id).unwrap();
         assert_eq!((after.local_host_id, after.source_host_id), (None, None));
         assert_eq!(usernames_list(c, &e).unwrap()[0].source_host_id, None);
+    }
+
+    fn local_on(host_id: Option<&str>, user: &str, secret: &str) -> CredentialInput {
+        let mut i = cin("password", user, secret);
+        i.scope = Some("local".into());
+        i.local_host_id = host_id.map(Into::into);
+        i
+    }
+
+    #[test]
+    fn deleting_its_host_keeps_a_local_credential_editable() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let (gone, other) = (host(c, &e, "192.0.2.20"), host(c, &e, "192.0.2.21"));
+        let cred = create(c, &e, local_on(Some(&gone), "administrator", "Local-1")).unwrap();
+        attempts::upsert(
+            c,
+            &e,
+            &[attempts::CredAttemptInput {
+                cred_id: cred.id.clone(),
+                username_id: None,
+                host_id: other.clone(),
+                service: "smb".into(),
+                port: None,
+                result: "valid".into(),
+                auth_mode: Some("local".into()),
+                detail: None,
+                log_entry_id: None,
+                at: Some(1),
+            }],
+        )
+        .unwrap();
+        hosts::delete(c, &gone).unwrap();
+
+        // The credential and its attempts elsewhere stay; only its host link is gone.
+        let kept = get(c, &cred.id).unwrap();
+        assert_eq!((kept.scope.as_str(), kept.local_host_id.as_deref()), ("local", None));
+        assert_eq!(attempts::list(c, &e).unwrap().len(), 1);
+
+        // An edit that leaves scope and host as they are is allowed: its notes, then its secret.
+        let mut notes = local_on(None, "administrator", "Local-1");
+        notes.notes = Some("reused on files01".into());
+        let noted = update(c, &cred.id, notes).unwrap();
+        assert_eq!((noted.notes.as_deref(), noted.local_host_id.as_deref()), (Some("reused on files01"), None));
+        let resecret = update(c, &cred.id, local_on(None, "administrator", "Local-2")).unwrap();
+        assert_eq!((resecret.secret.as_str(), resecret.scope.as_str()), ("Local-2", "local"));
+
+        // A new local credential still needs its host.
+        assert_eq!(field(create(c, &e, local_on(None, "guest", "Guest-1"))), ("localHostId".into(), "a local credential needs its host".into()));
+    }
+
+    #[test]
+    fn setting_or_changing_scope_or_host_still_needs_a_host() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let (gone, live) = (host(c, &e, "192.0.2.30"), host(c, &e, "192.0.2.31"));
+        let orphan = create(c, &e, local_on(Some(&gone), "administrator", "Local-1")).unwrap();
+        hosts::delete(c, &gone).unwrap();
+
+        // A domain credential made local with no host is refused.
+        let dom = create(c, &e, cin("password", "alice", "Winter2026!")).unwrap();
+        assert_eq!(field(update(c, &dom.id, local_on(None, "alice", "Winter2026!"))).0, "localHostId");
+        // A local credential that has a host can't drop it.
+        let held = create(c, &e, local_on(Some(&live), "backup", "Backup-1")).unwrap();
+        assert_eq!(field(update(c, &held.id, local_on(None, "backup", "Backup-1"))).0, "localHostId");
+        // Only a local credential has a host, orphaned or not.
+        let mut hosted_domain = cin("password", "administrator", "Local-1");
+        hosted_domain.local_host_id = Some(live.clone());
+        assert_eq!(field(update(c, &orphan.id, hosted_domain)), ("localHostId".into(), "only a local credential has a host".into()));
+        // An orphaned local credential can be given a new host...
+        assert_eq!(update(c, &orphan.id, local_on(Some(&live), "administrator", "Local-1")).unwrap().local_host_id.as_deref(), Some(live.as_str()));
+        // ...or, orphaned again, made a domain credential.
+        hosts::delete(c, &live).unwrap();
+        let domain = update(c, &orphan.id, cin("password", "administrator", "Local-1")).unwrap();
+        assert_eq!((domain.scope.as_str(), domain.local_host_id), ("domain", None));
     }
 
     #[test]

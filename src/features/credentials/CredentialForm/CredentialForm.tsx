@@ -3,6 +3,7 @@ import {
   credLabel,
   identifyHash,
   defaultHashType,
+  isHostDeleted,
   parseCredentialPaste,
 } from "../../../engines/credentials/index";
 import type { Credential, CredentialInput, CredentialScope, CredentialType } from "../../../types/credentials";
@@ -59,6 +60,8 @@ export function CredentialForm({ eid, hosts, edit, onClose, onSaved }: {
   const [busy, setBusy] = useState(false);
 
   const ownerless = mode === "secret";
+  // Editing a local credential whose host was deleted, leaving scope and host as they are: the store allows it.
+  const hostStillDeleted = edit !== undefined && isHostDeleted(edit) && scope === "local" && localHostId === "";
   const candidates = type === "hash" ? identifyHash(secret, "windows") : [];
 
   async function submit(e: FormEvent) {
@@ -73,7 +76,7 @@ export function CredentialForm({ eid, hosts, edit, onClose, onSaved }: {
     } else {
       if (mode === "credential" && username.trim() === "") errs.username = "Give it a username";
       if (mode === "secret" && secret.trim() === "") errs.secret = "Enter the secret";
-      if (scope === "local" && localHostId === "") errs.localHostId = "Pick the host this local account belongs to";
+      if (scope === "local" && localHostId === "" && !hostStillDeleted) errs.localHostId = "Pick the host this local account belongs to";
     }
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -196,7 +199,7 @@ export function CredentialForm({ eid, hosts, edit, onClose, onSaved }: {
             {scope === "local" && (
               <Field label="Local host" error={errors.localHostId}>
                 <Select
-                  placeholder="Pick a host"
+                  placeholder={hostStillDeleted ? "Host deleted" : "Pick a host"}
                   options={hosts.map((h) => ({ value: h.id, label: hostLabel(h) }))}
                   value={localHostId || undefined}
                   onValueChange={setLocalHostId}

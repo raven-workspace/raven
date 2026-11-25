@@ -182,6 +182,13 @@ describe("InventoryList", () => {
     expect(host).toHaveClass("inventory-list__scope-host"); // display: block
   });
 
+  it("a local credential whose host was deleted reads local (host deleted), with no empty host name", () => {
+    mount({ creds: [cred({ id: "l2", username: "administrator", scope: "local", localHostId: null, secret: "Local-1" })] });
+    const row = screen.getByTitle("administrator").closest("tr")!;
+    expect(within(row).getByText("local (host deleted)")).toHaveClass("inventory-list__scope-value");
+    expect(row.querySelector(".inventory-list__scope-host")).toBeNull();
+  });
+
   it("a 60-character name truncates with a title", () => {
     const long = "a".repeat(60);
     mount({ creds: [cred({ id: "p9", username: long, secret: "x" })] });

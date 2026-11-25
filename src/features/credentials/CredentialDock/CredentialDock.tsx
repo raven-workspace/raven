@@ -8,6 +8,7 @@ import {
   hostSprayServices,
   isPlaceholderSecret,
   overallState,
+  scopeLabel,
   usernameLabel,
 } from "../../../engines/credentials/index";
 import { isDialogOpen, isTypingTarget } from "../../../lib/keys";
@@ -99,7 +100,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
     >
       <Fact label="Source">{cred.source || <span className="credential-dock__muted">unknown</span>}</Fact>
       <Fact label="Scope">
-        {cred.scope}
+        {scopeLabel(cred)}
         {scopeHost && <span className="credential-dock__scope-host" title={scopeHost}>{scopeHost}</span>}
       </Fact>
       <Fact label="Works on">
@@ -133,7 +134,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
         <div className="credential-dock__title">
           <span className="credential-dock__name" title={name}>{name}</span>
           <span className="credential-dock__type">{cred.type}</span>
-          <span className="credential-dock__scope">{cred.scope}</span>
+          <span className="credential-dock__scope">{scopeLabel(cred)}</span>
           {works.length > 0 ? (
             // Only the best level: where it works is listed once, under Works on.
             <Chip variant="accent" className="credential-dock__level">{works[0].level}</Chip>

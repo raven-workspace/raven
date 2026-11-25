@@ -56,7 +56,7 @@ IDs and timestamps differ between the two stores, so check them through bound na
 
 | File | The rule |
 |---|---|
-| `host-delete-cascade.json` | A host delete removes or unlinks everything that refers to the host, across every table. |
+| `host-delete-cascade.json` | A host delete removes or unlinks everything that refers to the host, across every table; a local credential left with no host stays editable. |
 | `engagement-delete-cascade.json` | An engagement delete removes everything in it, and nothing in another engagement. |
 | `record-delete-cascades.json` | Deleting a service, log entry, credential, username or finding cleans up what refers to it. |
 | `scope-hosts.json` | Single IPs in the scope become hosts on create, and only newly added ones on save. |

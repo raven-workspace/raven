@@ -10,3 +10,9 @@ export const credName = (c: Pick<Credential, "domain" | "username">): string =>
 
 export const usernameLabel = (u: Pick<Username, "domain" | "username">): string =>
   `${u.domain ? `${u.domain}\\` : ""}${u.username}`;
+
+/** A local credential whose host was deleted (the store keeps it, with no host). */
+export const isHostDeleted = (c: Pick<Credential, "scope" | "localHostId">): boolean => c.scope === "local" && !c.localHostId;
+
+/** A credential's scope as shown: "local (host deleted)" once its host is gone, never an empty host name. */
+export const scopeLabel = (c: Pick<Credential, "scope" | "localHostId">): string => (isHostDeleted(c) ? "local (host deleted)" : c.scope);

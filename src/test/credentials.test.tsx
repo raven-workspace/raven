@@ -541,6 +541,19 @@ describe("credentials section", () => {
     expect(dlg.textContent).not.toContain("Winter2024!");
   });
 
+  it("a local credential whose host was deleted saves an edit that keeps its scope and host", async () => {
+    const user = userEvent.setup();
+    m.credentialUpdate.mockImplementation(async (id, input) => ({ ...creds.find((c) => c.id === id)!, notes: input.notes ?? null }));
+    mount({ creds: [cred({ id: "c1", username: "administrator", secret: "Local-1", scope: "local", localHostId: null })] });
+    await user.click(await within(await findDock()).findByRole("button", { name: "Edit administrator" }));
+    const dlg = await screen.findByRole("dialog");
+    expect(within(dlg).getByLabelText("Local host")).toHaveTextContent("Host deleted");
+    await user.type(within(dlg).getByLabelText("Notes"), "reused on files01");
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.credentialUpdate).toHaveBeenCalledWith("c1", expect.objectContaining({ scope: "local", notes: "reused on files01" })));
+    expect(within(dlg).queryByText("Pick the host this local account belongs to")).not.toBeInTheDocument();
+  });
+
   it("editing into another credential shows the store's refusal instead of saving", async () => {
     const user = userEvent.setup();
     // Rust `update` refuses an edit that makes it another stored credential.

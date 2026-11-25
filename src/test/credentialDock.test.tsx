@@ -129,6 +129,14 @@ describe("credential dock", () => {
     expect(screen.getByText("nothing yet")).toBeInTheDocument();
   });
 
+  it("a local credential whose host was deleted reads local (host deleted) in the header and the facts", () => {
+    mount({ cred: cred({ id: "l1", username: "administrator", secret: "Local-1", scope: "local", localHostId: null }) });
+    expect(within(screen.getByTestId("dock-header")).getByText("local (host deleted)")).toBeInTheDocument();
+    const facts = screen.getByTestId("dock-facts");
+    expect(within(facts).getByText("local (host deleted)")).toBeInTheDocument();
+    expect(facts.querySelector(".credential-dock__scope-host")).toBeNull();
+  });
+
   it("a credential with no work tabs lays its facts out across the dock", () => {
     mount({ cred: cred({ id: "m1", type: "ticket", username: "admin", domain: "CORP", secret: "ticket-data", source: "rubeus" }) });
     const facts = screen.getByTestId("dock-facts");
