@@ -128,6 +128,7 @@ export const FOREIGN_KEYS: readonly ForeignKey[] = [
   fk("credentials", "from_secret_id", "credentials", "set null"),
   fk("usernames", "engagement_id", "engagements", "cascade"),
   fk("usernames", "source_host_id", "hosts", "set null"),
+  fk("usernames", "local_host_id", "hosts", "set null"),
   fk("access_grants", "engagement_id", "engagements", "cascade"),
   fk("access_grants", "username_id", "usernames", "cascade"),
   fk("access_grants", "host_id", "hosts", "cascade"),

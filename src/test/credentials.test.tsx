@@ -102,7 +102,7 @@ function mount(seed: { creds?: Credential[]; users?: Username[]; services?: Serv
   m.credentialConvertToAccess.mockImplementation(async (credId, grant) => {
     const c = creds.find((x) => x.id === credId)!;
     creds = creds.filter((x) => x.id !== credId);
-    const u: Username = { id: "u9", engagementId: "e1", username: c.username, domain: c.domain, sourceHostId: null, source: null, createdAt: 1 };
+    const u: Username = { id: "u9", engagementId: "e1", username: c.username, domain: c.domain, sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null };
     users.push(u);
     grants.push({ id: "g1", engagementId: "e1", usernameId: u.id, hostId: grant.hostId, level: grant.level, via: grant.via, logEntryId: null, at: 1 });
     return u;
@@ -111,7 +111,7 @@ function mount(seed: { creds?: Credential[]; users?: Username[]; services?: Serv
     const lc = (s: string | null | undefined) => (s ?? "").toLowerCase();
     const stored = users.find((x) => lc(x.username) === lc(input.username) && lc(x.domain) === lc(input.domain));
     if (stored) return stored;
-    const u: Username = { id: `u${++seq}`, engagementId: "e1", username: input.username, domain: input.domain ?? null, sourceHostId: null, source: null, createdAt: 1 };
+    const u: Username = { id: `u${++seq}`, engagementId: "e1", username: input.username, domain: input.domain ?? null, sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null };
     users.push(u);
     return u;
   });
@@ -435,7 +435,7 @@ describe("credentials section", () => {
 
   it("username delete confirm says its results and grants go with it", async () => {
     const user = userEvent.setup();
-    mount({ users: [{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1 }] });
+    mount({ users: [{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null }] });
     await openInventory(user);
     await user.click(await screen.findByRole("button", { name: "Delete username CORP\\alice" }));
     const dlg = await screen.findByRole("dialog", { name: "Delete username CORP\\alice?" });
@@ -577,7 +577,7 @@ describe("credentials section", () => {
 
 const pw = (i: number) => cred({ id: `c${i}`, username: `u${i}`, secret: `Pass${i}!`, createdAt: i });
 const TEN = Array.from({ length: 10 }, (_, i) => pw(i + 1));
-const TWO_USERS: Username[] = ["alice", "bob"].map((u, i) => ({ id: `u-${u}`, engagementId: "e1", username: u, domain: null, sourceHostId: null, source: null, createdAt: i }));
+const TWO_USERS: Username[] = ["alice", "bob"].map((u, i) => ({ id: `u-${u}`, engagementId: "e1", username: u, domain: null, sourceHostId: null, source: null, createdAt: i, scope: "unknown", localHostId: null }));
 const dock = () => screen.getByRole("region", { name: "Credential" });
 const NT_HASH = cred({ id: "h", type: "hash", username: "jsmith", domain: "CORP", secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "NTLM", crackStatus: "uncracked", createdAt: 20 });
 

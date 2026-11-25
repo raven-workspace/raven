@@ -23,7 +23,7 @@ const cred = (p: Partial<Credential> = {}): Credential => ({
   id: "c1", engagementId: "e1", type: "password", username: "alice", domain: null, secret: "pw", hashType: null, scope: "domain",
   localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null, createdAt: 0, updatedAt: 0, ...p,
 });
-const uname = (id: string): Username => ({ id, engagementId: "e1", username: `u-${id}`, domain: null, sourceHostId: null, source: null, createdAt: 0 });
+const uname = (id: string): Username => ({ id, engagementId: "e1", username: `u-${id}`, domain: null, sourceHostId: null, source: null, createdAt: 0, scope: "unknown", localHostId: null });
 const attempt = (p: Partial<CredAttempt>): CredAttempt => ({
   id: `a${n++}`, engagementId: "e1", credId: "c1", usernameId: null, hostId: "A", service: "ssh", port: 22, result: "valid", authMode: "domain",
   detail: null, logEntryId: null, at: 10, ...p,

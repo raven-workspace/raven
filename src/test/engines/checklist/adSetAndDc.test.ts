@@ -141,7 +141,7 @@ describe('domainJoined', () => {
 });
 
 describe('callers that ask "is there AD here" use membership', () => {
-  const uname = (id: string): Username => ({ id, engagementId: 'e1', username: `u-${id}`, domain: null, sourceHostId: null, source: null, createdAt: 0 });
+  const uname = (id: string): Username => ({ id, engagementId: 'e1', username: `u-${id}`, domain: null, sourceHostId: null, source: null, createdAt: 0, scope: "unknown", localHostId: null });
 
   it('the credentials state opens nocreds for an AD set member with no open 88 or 389, not for a UDP-only host', () => {
     const t = (hosts: Host[], services: Map<string, Service[]>) =>

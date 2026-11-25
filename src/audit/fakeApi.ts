@@ -2,13 +2,14 @@
 // writes mutate a private copy and return the resulting record. Reloading the page restores the fixtures.
 // It must pass the same store scenarios as the real store (src/test/storeScenarios), and throw only the app's error codes.
 import { credKey, stripLineBreaks } from "../engines/credentials/keys";
+import { hashCaptureKind } from "../engines/credentials/matrix";
 import type { CommandOverlay, FieldManualSnapshot } from "../engines/fieldManual/merge";
 import { BUILTIN_LIBRARY } from "../engines/library/data";
 import { FIELD_MANUAL_CARDS } from "../engines/library/data/fieldManual";
 import { parseNote } from "../engines/manual";
 import type { Api } from "../lib/api";
 import type { ChecklistItem } from "../types/checklist";
-import type { AttemptService, Credential, CredentialInput, TriedPair } from "../types/credentials";
+import type { AttemptService, Credential, CredentialInput, TriedPair, Username, UsernameInput } from "../types/credentials";
 import type { GoalRef } from "../engines/checklist";
 import type { EngagementInput } from "../types/engagement";
 import { BOARD_COLUMNS, type Host, type HostInput } from "../types/host";
@@ -260,7 +261,10 @@ function dropHosts(ids: Set<string>): void {
     if (has(c.localHostId)) c.localHostId = null;
     if (has(c.sourceHostId)) c.sourceHostId = null;
   }
-  for (const u of db.usernames) if (has(u.sourceHostId)) u.sourceHostId = null;
+  for (const u of db.usernames) {
+    if (has(u.localHostId)) u.localHostId = null;
+    if (has(u.sourceHostId)) u.sourceHostId = null;
+  }
   for (const a of db.failedAttempts) if (has(a.hostId)) a.hostId = null;
   for (const c of db.cleanup) if (has(c.hostId)) c.hostId = null;
   for (const f of db.findings) f.hostIds = f.hostIds.filter((id) => !ids.has(id));
@@ -364,6 +368,52 @@ function scopeAndHost(input: CredentialInput, current?: Credential): Pick<Creden
   return { scope, localHostId };
 }
 
+/**
+ * A username input's scope and host, checked as credentials.rs `username_scope` does: absent scope is `unknown`; a
+ * local username has a host in the engagement, and only a local one has.
+ */
+function usernameScope(engagementId: string, input: UsernameInput): Pick<Username, "scope" | "localHostId"> {
+  const scope = input.scope?.trim() || "unknown";
+  if (scope !== "domain" && scope !== "local" && scope !== "unknown") throw invalid("scope", "scope must be domain, local or unknown");
+  const localHostId = input.localHostId?.trim() || null;
+  if (scope === "local" && !localHostId) throw invalid("localHostId", "a local username needs its host");
+  if (scope !== "local" && localHostId) throw invalid("localHostId", "only a local username has a host");
+  if (localHostId && !db.hosts.some((h) => h.id === localHostId && h.engagementId === engagementId)) throw notFound();
+  return { scope, localHostId };
+}
+
+/**
+ * The stored username that is the same username (credentials.rs `username_find`): the name ignoring case, the same
+ * scope, and for unknown the same domain (blank only blank), for domain the same domain with a blank one standing for
+ * the engagement's own, for local the same host. Of duplicates, the one spelled the same wins.
+ */
+function storedUsername(engagementId: string, u: Pick<Username, "username" | "domain" | "scope" | "localHostId">): Username | undefined {
+  const lc = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+  const same = db.usernames
+    .filter((x) => x.engagementId === engagementId && x.scope === u.scope && lc(x.username) === lc(u.username))
+    .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+  if (u.scope === "local") return same.find((x) => u.localHostId !== null && x.localHostId === u.localHostId);
+  const anchor = db.engagements.find((e) => e.id === engagementId)?.domain?.trim() || null;
+  const own = (d: string | null) => (u.scope === "domain" ? d?.trim() || anchor : d);
+  return same.find((x) => lc(own(x.domain)) === lc(own(u.domain))) ?? same.find((x) => sameDomainIn(engagementId, own(x.domain), own(u.domain)));
+}
+
+/**
+ * Password reuse (credentials.rs `find_reused_local`): for a new local credential, the stored local credential for
+ * another host with the same account and secret. Never a captured hash, nor one whose host was deleted.
+ */
+function reusedLocal(engagementId: string, input: CredentialInput): Credential | undefined {
+  type Account = Pick<Credential, "type" | "username" | "secret" | "hashType">;
+  const probe: Account = { type: input.type, username: input.username ?? "", secret: input.secret ?? "", hashType: input.hashType ?? null };
+  const reusable = (c: Account, scope: string | undefined, host: string | null | undefined) =>
+    scope === "local" && !!host && (c.type === "password" || c.type === "hash") && !hashCaptureKind(c) &&
+    !!(c.type === "hash" ? c.secret.trim() : stripLineBreaks(c.secret));
+  if (!reusable(probe, input.scope, input.localHostId)) return undefined;
+  const account = (c: Account) => credKey({ ...c, domain: null });
+  return db.credentials.find((c) =>
+    c.engagementId === engagementId && reusable(c, c.scope, c.localHostId) && c.localHostId !== input.localHostId && account(c) === account(probe));
+}
+
 function listChecklist(engagementId: string): ChecklistItem[] {
   const owners = new Set([engagementId, ...db.hosts.filter((h) => h.engagementId === engagementId).map((h) => h.id)]);
   // The store always sends `statusManual`; a fixture row may leave it out.
@@ -440,13 +490,26 @@ async function fileExtraction(engagementId: string, logEntryId: string, p: Extra
       identityChanged = true;
     }
   }
-  const create = async (c: CredentialInput) => {
-    const { credential, existed } = await base.credentialCreate(engagementId, { ...c, localHostId: host(c.localHostId), sourceHostId: host(c.sourceHostId) });
+  // filing.rs `create_credential`: a local account stored for another host with the same secret is password reuse,
+  // the stored credential, found again on this one.
+  const createOrReuse = async (c: CredentialInput) => {
+    const input = { ...c, localHostId: host(c.localHostId), sourceHostId: host(c.sourceHostId) };
+    const reused = reusedLocal(engagementId, input);
+    const { credential, existed } = reused ? { credential: reused, existed: true } : await base.credentialCreate(engagementId, input);
     if (existed) reprove(record.reprovedCredentialIds, was.credentials, credential.id);
-    return credential.id;
+    return { id: credential.id, reusedOn: reused ? input.localHostId : null };
   };
+  const create = async (c: CredentialInput) => (await createOrReuse(c)).id;
   const proofIds: string[] = [];
-  for (const c of p.credentials) proofIds.push(await create(c));
+  for (const c of p.credentials) {
+    const { id, reusedOn: on } = await createOrReuse(c);
+    proofIds.push(id);
+    if (on) {
+      await base.credAttemptsUpsert(engagementId, [
+        { credId: id, hostId: on, service: "other", result: "valid", authMode: "local", detail: "password reuse", logEntryId, at },
+      ]);
+    }
+  }
   const cracked: Filed["cracked"] = [];
   for (const k of p.cracks) {
     for (const id of new Set([...k.credentialIds, ...k.proofCredentials.map((i) => proofIds[i]!)])) {
@@ -457,13 +520,54 @@ async function fileExtraction(engagementId: string, logEntryId: string, p: Extra
       }
     }
   }
+  // filing.rs `scoped`: the scope capture output gives a username, unless the proof sets one.
+  const scoped = (u: UsernameInput): UsernameInput => {
+    const out = { ...u, sourceHostId: host(u.sourceHostId), localHostId: host(u.localHostId) };
+    if (out.scope) return out;
+    const domain = (out.domain ?? "").trim();
+    const named = (label: string) => {
+      const hits = db.hosts.filter((h) => h.engagementId === engagementId && !/^\d{1,3}(\.\d{1,3}){3}$/.test(h.name.trim()) && !h.name.includes(":") &&
+        h.name.trim().split(".")[0]!.toLowerCase() === label.toLowerCase());
+      return hits.length === 1 ? hits[0]!.id : null;
+    };
+    const local = domain === "" ? null : domain === "." ? out.sourceHostId : named(domain);
+    const anchor = db.engagements.find((e) => e.id === engagementId)?.domain?.trim() || null;
+    if (local) return { ...out, scope: "local", localHostId: local, domain: null };
+    return { ...out, scope: domain && anchor && sameDomainIn(engagementId, domain, anchor) ? "domain" : "unknown" };
+  };
   for (const u of p.usernames) {
-    reprove(record.reprovedUsernameIds, was.usernames, (await base.usernameCreate(engagementId, { ...u, sourceHostId: host(u.sourceHostId) })).id);
+    reprove(record.reprovedUsernameIds, was.usernames, (await base.usernameCreate(engagementId, scoped(u))).id);
   }
   if (p.intake) {
     const plan = p.intake;
+    // filing.rs `reuse_only`: a planned local account that is only password reuse files no username.
+    const lc = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+    const reused = new Set<string>();
+    const otherSecret = new Set<string>();
+    for (const a of plan.attempts) {
+      if (a.usernameId || a.usernameKey) continue;
+      const c = was.credentials.find((x) => x.id === a.credId);
+      const on = host(a.hostId)!;
+      if (c?.scope === "local" && c.localHostId && c.localHostId !== on) reused.add(`${on}|${lc(c.username)}`);
+    }
+    for (const c of plan.credentials) {
+      const on = c.input.scope === "local" ? host(c.input.localHostId) : null;
+      if (!on) continue;
+      const account = `${on}|${lc(c.input.username)}`;
+      if (c.accepted && reusedLocal(engagementId, { ...c.input, localHostId: on })) reused.add(account);
+      else otherSecret.add(account);
+    }
+    const needed = new Set([
+      ...[...plan.attempts, ...plan.credentials.flatMap((c) => [...c.attempts, ...c.ifDeclined])].flatMap((a) => (a.usernameKey ? [a.usernameKey] : [])),
+      ...plan.credentials.flatMap((c) => (c.fromUsername?.usernameKey ? [c.fromUsername.usernameKey] : [])),
+    ]);
     const userIds = new Map<string, string>();
-    for (const u of plan.usernames) userIds.set(u.key, (await base.usernameCreate(engagementId, { ...u.input, sourceHostId: host(u.input.sourceHostId) })).id);
+    for (const u of plan.usernames) {
+      const input = scoped(u.input);
+      const account = `${input.localHostId}|${lc(input.username)}`;
+      if (input.localHostId && reused.has(account) && !otherSecret.has(account) && !needed.has(u.key)) continue;
+      userIds.set(u.key, (await base.usernameCreate(engagementId, input)).id);
+    }
     const upsert = async (rows: PlannedAttemptProof[], credId?: string) => {
       const inputs = rows.flatMap((a) => {
         const usernameId = a.usernameId ?? (a.usernameKey ? userIds.get(a.usernameKey) : undefined);
@@ -931,16 +1035,26 @@ const base = {
   credentialConvertToAccess: async (credId: string, grant) => {
     const c = find(db.credentials, credId);
     let u = db.usernames.find((x) => x.engagementId === c.engagementId && x.username === c.username && x.domain === c.domain);
-    if (!u) db.usernames.push((u = { id: nid("u"), engagementId: c.engagementId, username: c.username, domain: c.domain, sourceHostId: c.sourceHostId, source: c.source, createdAt: now() }));
+    if (!u) {
+      u = { id: nid("u"), engagementId: c.engagementId, username: c.username, domain: c.domain, sourceHostId: c.sourceHostId, source: c.source, createdAt: now(), scope: "unknown", localHostId: null };
+      db.usernames.push(u);
+    }
     db.accessGrants.push({ id: nid("ag"), engagementId: c.engagementId, usernameId: u.id, hostId: grant.hostId, level: grant.level, via: grant.via, logEntryId: grant.logEntryId ?? null, at: grant.at ?? now() });
     return clone(u);
   },
   usernamesList: async (engagementId: string) => clone(db.usernames.filter((u) => u.engagementId === engagementId)),
+  // credentials.rs `username_create`: a local username keeps no domain, its host says whose account it is.
   usernameCreate: async (engagementId: string, input) => {
-    const stored = db.usernames.find((x) =>
-      x.engagementId === engagementId && x.username.trim().toLowerCase() === input.username.trim().toLowerCase() && sameDomainIn(engagementId, x.domain, input.domain));
+    const username = input.username.trim();
+    if (!username) throw invalid("username", "username is required");
+    const { scope, localHostId } = usernameScope(engagementId, input);
+    const domain = scope === "local" ? null : input.domain?.trim() || null;
+    const stored = storedUsername(engagementId, { username, domain, scope, localHostId });
     if (stored) return clone(stored);
-    const u ={ domain: null, sourceHostId: null, source: null, ...input, id: nid("u"), engagementId, createdAt: now() };
+    const u: Username = {
+      id: nid("u"), engagementId, username, domain, sourceHostId: input.sourceHostId || null, source: input.source?.trim() || null, createdAt: now(),
+      scope, localHostId,
+    };
     db.usernames.push(u);
     return clone(u);
   },

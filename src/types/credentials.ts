@@ -60,6 +60,12 @@ export interface CredentialInput {
   fromSecretId?: string | null;
 }
 
+/**
+ * A username's scope: a domain account, a local account on one host, or unknown (either; usernames stored before
+ * scope existed are unknown). The store decides identity by it.
+ */
+export type UsernameScope = "domain" | "local" | "unknown";
+
 /** Mirrors the Rust `Username`. */
 export interface Username {
   id: string;
@@ -69,6 +75,9 @@ export interface Username {
   sourceHostId: string | null;
   source: string | null;
   createdAt: number;
+  scope: UsernameScope;
+  /** The host of a local username; null otherwise, and once that host is deleted. */
+  localHostId: string | null;
 }
 
 /** Mirrors the Rust `UsernameInput`. */
@@ -77,6 +86,10 @@ export interface UsernameInput {
   domain?: string | null;
   sourceHostId?: string | null;
   source?: string | null;
+  /** Absent means "unknown". */
+  scope?: UsernameScope;
+  /** Required iff scope is "local". */
+  localHostId?: string | null;
 }
 
 /** Mirrors the Rust `AccessGrant`. `logEntryId` is null when the proof entry was deleted. */

@@ -585,7 +585,7 @@ describe("who am I and privesc vectors", () => {
     mount({
       host: after(),
       identity: IDENTITY,
-      usernames: [{ id: "u1", engagementId: "e1", username: "iis_apppool", domain: "ms01", sourceHostId: null, source: null, createdAt: 1 }],
+      usernames: [{ id: "u1", engagementId: "e1", username: "iis_apppool", domain: "ms01", sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null }],
       grants: [{ id: "g1", engagementId: "e1", usernameId: "u1", hostId: "h1", level: "user", via: "webshell", logEntryId: null, at: 1 }],
     });
     const who = await group("Who am I");

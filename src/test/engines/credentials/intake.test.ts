@@ -26,7 +26,7 @@ const hosts = [
 ];
 const cred = (o: Partial<Credential>): Credential => baseCred({ id: 'c', username: 'u', secret: 's', ...o });
 const uname = (o: Partial<Username>): Username => ({
-  id: 'u', engagementId: 'eng1', username: 'u', domain: null, sourceHostId: null, source: null, createdAt: 0, ...o,
+  id: 'u', engagementId: 'eng1', username: 'u', domain: null, sourceHostId: null, source: null, createdAt: 0, scope: "unknown", localHostId: null, ...o,
 });
 const eric = cred({ id: 'cEric', username: 'Sam.doe', secret: 'SyntheticPasswd001', domain: 'zone2.test' });
 const run = (output: string, command = 'nxc smb 10.10.60.0/24 -u Sam.doe -p SyntheticPasswd001', credentials: Credential[] = [eric], usernames: Username[] = []) =>
@@ -317,7 +317,32 @@ describe('planCredentialIntake', () => {
     const plan = run('SMB  10.10.60.95  445  SRV21  [+] SRV21\\alice:Pass', "nxc smb x -u users.txt -p 'Pass' --local-auth", [bob], [alice])!;
     expect(plan.newCredentials[0].input).toMatchObject({ username: 'alice', scope: 'local', localHostId: 'h95' });
     expect(plan.newCredentials[0].input.domain).toBeUndefined();
-    expect(plan.newCredentials[0].fromUsername).toEqual({ usernameId: 'uAlice', secretCredIds: ['cBob'], hostId: 'h95' });
+    // The listed alice is an unknown username; the result is SRV21's own account (`.\alice`), another username.
+    expect(plan.newUsernames).toEqual([{ username: 'alice', domain: '.', engagementId: 'eng1', sourceHostId: 'h95', source: 'nxc' }]);
+    expect(plan.newCredentials[0].fromUsername).toEqual({ usernameKey: 'eng1|alice|.|local:h95', secretCredIds: ['cBob'], hostId: 'h95' });
+  });
+
+  it('a local result names the host\'s own account, one per host, and lists only that host\'s local username', () => {
+    const bob = cred({ id: 'cBob', username: 'bob', secret: 'Pass' });
+    const local = uname({ id: 'uLocal', username: 'Alice', scope: 'local', localHostId: 'h95' });
+    const out = [
+      'SMB  10.10.60.95  445  SRV21  [+] SRV21\\alice:Pass',
+      'SMB  10.10.60.96  445  SRV22  [-] SRV22\\alice:Pass STATUS_LOGON_FAILURE',
+    ].join('\n');
+    const plan = run(out, "nxc smb x -u users.txt -p 'Pass' --local-auth", [bob], [local])!;
+    expect(plan.reproved.usernameIds).toEqual(['uLocal']);
+    expect(plan.newUsernames).toEqual([{ username: 'alice', domain: '.', engagementId: 'eng1', sourceHostId: 'h96', source: 'nxc' }]);
+    expect(plan.newCredentials[0].fromUsername).toEqual({ usernameId: 'uLocal', secretCredIds: ['cBob'], hostId: 'h95' });
+    expect(plan.attempts).toEqual([
+      { engagementId: 'eng1', credId: 'cBob', usernameKey: 'eng1|alice|.|local:h96', hostId: 'h96', service: 'smb', port: 445, result: 'failed', authMode: 'local' },
+    ]);
+  });
+
+  it('a domain result never lists a local username of the same name', () => {
+    const local = uname({ id: 'uLocal', username: 'alice', scope: 'local', localHostId: 'h95' });
+    const plan = run('SMB  10.10.60.95  445  SRV21  [-] alice:Nope STATUS_LOGON_FAILURE', 'nxc smb x -u alice -p Nope', [], [local])!;
+    expect(plan.reproved.usernameIds).toEqual([]);
+    expect(plan.newUsernames.map(u => u.username)).toEqual(['alice']);
   });
 
   it('I3: the first username-list spray records failures of usernames added by the same plan', () => {

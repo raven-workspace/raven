@@ -62,6 +62,15 @@ export interface CredentialIntakePlan {
   summary: { admin: number; valid: number; failed: number; errored: number };
 }
 
+/**
+ * A planned username's key (`usernameKey`), which its attempts name until it is stored. A host's own account (`.\user`)
+ * is one per host.
+ */
+export function plannedUsernameKey(u: Pick<PlannedUsername, 'engagementId' | 'username' | 'domain' | 'sourceHostId'>): string {
+  const key = usernameKey({ engagementId: u.engagementId, username: u.username, domain: u.domain ?? null });
+  return u.domain?.trim() === '.' ? `${key}|local:${u.sourceHostId ?? ''}` : key;
+}
+
 /** An nxc result's auth mode: local when the command passed --local-auth or the protocol has no domain auth. */
 export function nxcAuthMode(command: string, protocol: SprayService): CredAuthMode {
   return /--local-auth/.test(command) || LOCAL_ONLY_SERVICES.has(protocol) ? 'local' : 'domain';
@@ -243,13 +252,18 @@ export function planCredentialIntake(input: {
       };
 
       // Username seen in output but not listed in that spelling: planned, and treated as listed for the rest of this
-      // plan. Whether another spelling is the same username is the store's call, when the plan is applied.
-      const nuKey = usernameKey({ engagementId: engagement.id, username: r.username, domain: domain ?? null });
-      const listed = engUsernames.find(u => usernameKey(u) === nuKey);
+      // plan. Whether another spelling is the same username is the store's call, when the plan is applied. A local
+      // result's username is the host's own account (`.\user`), which the store files as local to the host it answered
+      // from; it is listed only as that host's local username.
+      const userDomain = authMode === 'local' ? '.' : domain;
+      const nuKey = plannedUsernameKey({ engagementId: engagement.id, username: r.username, domain: userDomain ?? null, sourceHostId: host.id });
+      const listed = authMode === 'local'
+        ? engUsernames.find(u => u.scope === 'local' && u.localHostId === host.id && lc(u.username) === lc(r.username))
+        : engUsernames.find(u => u.scope !== 'local' && usernameKey(u) === nuKey);
       if (listed && !reproved.usernameIds.includes(listed.id)) reproved.usernameIds.push(listed.id);
       if (!listed && !newUsernames.has(nuKey)) {
         newUsernames.set(nuKey, {
-          username: r.username, ...(domain ? { domain } : {}), engagementId: engagement.id,
+          username: r.username, ...(userDomain ? { domain: userDomain } : {}), engagementId: engagement.id,
           sourceHostId: host.id, source: 'nxc',
         });
       }

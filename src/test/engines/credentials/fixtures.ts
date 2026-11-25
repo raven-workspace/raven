@@ -37,5 +37,5 @@ export const att = (extra: Partial<CredAttempt> = {}): CredAttempt => ({
 });
 
 export const user = (id: string, username: string, extra: Partial<Username> = {}): Username => ({
-  id, engagementId: "eng1", username, domain: null, sourceHostId: null, source: null, createdAt: 0, ...extra,
+  id, engagementId: "eng1", username, domain: null, sourceHostId: null, source: null, createdAt: 0, scope: "unknown", localHostId: null, ...extra,
 });

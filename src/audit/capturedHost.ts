@@ -228,7 +228,12 @@ export function capturedHost(now: number, hosts: Host[]) {
     const plan = planCredentialIntake({ blocks: content.blocks, engagement: { id: E }, hosts, credentials, usernames });
     if (!plan) continue;
     for (const u of plan.newUsernames) {
-      usernames.push({ id: `u-exam-xfer-${u.username}`, engagementId: E, username: u.username, domain: u.domain ?? null, sourceHostId: u.sourceHostId ?? null, source: u.source ?? null, createdAt: at });
+      // As the store files it: `.\user` is the answering host's own account.
+      const local = u.domain === "." && u.sourceHostId ? u.sourceHostId : null;
+      usernames.push({
+        id: `u-exam-xfer-${u.username}`, engagementId: E, username: u.username, domain: local ? null : (u.domain ?? null),
+        sourceHostId: u.sourceHostId ?? null, source: u.source ?? null, createdAt: at, scope: local ? "local" : "unknown", localHostId: local,
+      });
     }
     for (const a of plan.attempts) {
       credAttempts.push({

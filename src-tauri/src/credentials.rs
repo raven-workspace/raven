@@ -65,6 +65,9 @@ pub struct CredentialInput {
     pub from_secret_id: Option<String>,
 }
 
+/// A username: a name, an optional domain, and its scope. `domain` is a domain account, `local` an account on one host
+/// (`local_host_id`, cleared when that host is deleted), `unknown` either; usernames stored before scope existed are
+/// unknown. Scope decides identity (`username_find`).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Username {
@@ -75,6 +78,8 @@ pub struct Username {
     pub source_host_id: Option<String>,
     pub source: Option<String>,
     pub created_at: i64,
+    pub scope: String,
+    pub local_host_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -87,6 +92,12 @@ pub struct UsernameInput {
     pub source_host_id: Option<String>,
     #[serde(default)]
     pub source: Option<String>,
+    /// `domain`, `local` or `unknown`; absent means `unknown`.
+    #[serde(default)]
+    pub scope: Option<String>,
+    /// Required iff scope is `local`.
+    #[serde(default)]
+    pub local_host_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -278,6 +289,32 @@ pub(crate) fn find_duplicate(conn: &Connection, probe: &Credential, except_id: &
         .filter(|c| c.id != except_id && !clean_secret(&c.kind, &c.secret).is_empty() && cred_key(c) == key)
         .collect();
     Ok(pick_same_domain(candidates, |c| c.domain.as_deref(), anchor.as_deref(), probe.domain.as_deref()))
+}
+
+/// Password reuse: for a new local credential (`input`), the stored local credential for another host with the same
+/// account and secret. The name matches ignoring case and the secret by the credential identity rule: exactly for a
+/// password, the hash value ignoring case for a hash. A captured hash (Kerberoast, AS-REP, NetNTLM) is never reuse, and
+/// neither is a stored local credential whose host was deleted.
+pub(crate) fn find_reused_local(conn: &Connection, engagement_id: &str, input: &CredentialInput) -> AppResult<Option<Credential>> {
+    let probe = build(conn, engagement_id, input.clone(), None)?;
+    let reusable = |c: &Credential| {
+        c.scope == "local"
+            && c.local_host_id.is_some()
+            && matches!(c.kind.as_str(), "password" | "hash")
+            && capture_kind(c).is_none()
+            && !clean_secret(&c.kind, &c.secret).is_empty()
+    };
+    if !reusable(&probe) {
+        return Ok(None);
+    }
+    // The credential's key without its host.
+    let account = |c: &Credential| {
+        let (kind, user, secret, _) = cred_key(c);
+        (kind, user, secret)
+    };
+    Ok(list(conn, engagement_id)?
+        .into_iter()
+        .find(|c| reusable(c) && c.local_host_id != probe.local_host_id && account(c) == account(&probe)))
 }
 
 /// Whether two credentials are the same credential, in an engagement whose domain is `anchor`.
@@ -515,7 +552,7 @@ pub fn crack(conn: &Connection, hash_id: &str, plaintext: &str) -> AppResult<Cre
 
 // ---------------------------------------------------------------- usernames
 
-const USER_COLS: &str = "id, engagement_id, username, domain, source_host_id, source, created_at";
+const USER_COLS: &str = "id, engagement_id, username, domain, source_host_id, source, created_at, scope, local_host_id";
 
 fn user_row(r: &Row) -> rusqlite::Result<Username> {
     Ok(Username {
@@ -526,6 +563,8 @@ fn user_row(r: &Row) -> rusqlite::Result<Username> {
         source_host_id: r.get(4)?,
         source: r.get(5)?,
         created_at: r.get(6)?,
+        scope: r.get(7)?,
+        local_host_id: r.get(8)?,
     })
 }
 
@@ -540,33 +579,76 @@ fn username_get(conn: &Connection, id: &str) -> AppResult<Username> {
     conn.query_row(&format!("SELECT {USER_COLS} FROM usernames WHERE id = ?1"), [id], user_row).optional()?.ok_or(AppError::NotFound)
 }
 
-/// The stored username that is the same username: equal ignoring case, and the same domain.
-fn username_find(conn: &Connection, engagement_id: &str, username: &str, domain: Option<&str>) -> AppResult<Option<Username>> {
-    let mut st = conn.prepare(&format!(
-        "SELECT {USER_COLS} FROM usernames WHERE engagement_id = ?1 AND lower(username) = lower(?2) ORDER BY created_at, id"
-    ))?;
-    let rows = st.query_map(params![engagement_id, username], user_row)?.collect::<Result<Vec<_>, _>>()?;
-    let anchor = engagement_domain(conn, engagement_id)?;
-    Ok(pick_same_domain(rows, |u| u.domain.as_deref(), anchor.as_deref(), domain))
+/// A username input's scope and host, checked: absent scope is `unknown`; a local username has a host, and only a
+/// local one has.
+fn username_scope(i: &UsernameInput) -> AppResult<(String, Option<String>)> {
+    let scope = blank_to_none(i.scope.as_deref()).unwrap_or_else(|| "unknown".into());
+    if !matches!(scope.as_str(), "domain" | "local" | "unknown") {
+        return Err(AppError::validation("scope", "scope must be domain, local or unknown"));
+    }
+    let local_host_id = blank_to_none(i.local_host_id.as_deref());
+    match (scope == "local", &local_host_id) {
+        (true, None) => Err(AppError::validation("localHostId", "a local username needs its host")),
+        (false, Some(_)) => Err(AppError::validation("localHostId", "only a local username has a host")),
+        _ => Ok((scope, local_host_id)),
+    }
 }
 
-/// Creates a username, or returns the stored one that is the same username (`username_find`).
+/// The stored username that is the same username: the name equal ignoring case, the same scope, and
+/// - unknown: the same domain, where a blank domain matches only a blank one;
+/// - domain: the same domain, where a blank domain stands for the engagement's own (and is only blank with none set);
+/// - local: the same host.
+///
+/// Unknown and domain usernames never match each other, and a local one matches neither.
+fn username_find(
+    conn: &Connection,
+    engagement_id: &str,
+    username: &str,
+    domain: Option<&str>,
+    scope: &str,
+    local_host_id: Option<&str>,
+) -> AppResult<Option<Username>> {
+    let mut st = conn.prepare(&format!(
+        "SELECT {USER_COLS} FROM usernames WHERE engagement_id = ?1 AND lower(username) = lower(?2) AND scope = ?3 \
+         ORDER BY created_at, id"
+    ))?;
+    let rows = st.query_map(params![engagement_id, username, scope], user_row)?.collect::<Result<Vec<_>, _>>()?;
+    if scope == "local" {
+        return Ok(rows.into_iter().find(|u| local_host_id.is_some() && u.local_host_id.as_deref() == local_host_id));
+    }
+    let anchor = engagement_domain(conn, engagement_id)?;
+    if scope == "unknown" {
+        return Ok(pick_same_domain(rows, |u| u.domain.as_deref(), anchor.as_deref(), domain));
+    }
+    // A domain username with no domain written is in the engagement's domain.
+    let own = |d: Option<&str>| blank_to_none(d).or_else(|| blank_to_none(anchor.as_deref()));
+    let keyed: Vec<(Option<String>, Username)> = rows.into_iter().map(|u| (own(u.domain.as_deref()), u)).collect();
+    Ok(pick_same_domain(keyed, |(d, _)| d.as_deref(), anchor.as_deref(), own(domain).as_deref()).map(|(_, u)| u))
+}
+
+/// Creates a username, or returns the stored one that is the same username (`username_find`). A local username keeps
+/// no domain: its host says whose account it is.
 pub fn username_create(conn: &Connection, engagement_id: &str, input: UsernameInput) -> AppResult<Username> {
     check_scope(conn, engagement_id, None)?;
     let username = input.username.trim().to_string();
     if username.is_empty() {
         return Err(AppError::validation("username", "username is required"));
     }
-    let domain = blank_to_none(input.domain.as_deref());
+    let (scope, local_host_id) = username_scope(&input)?;
+    check_scope(conn, engagement_id, local_host_id.as_deref())?;
+    let domain = if scope == "local" { None } else { blank_to_none(input.domain.as_deref()) };
     let source_host_id = blank_to_none(input.source_host_id.as_deref());
     check_scope(conn, engagement_id, source_host_id.as_deref())?;
-    if let Some(u) = username_find(conn, engagement_id, &username, domain.as_deref())? {
+    if let Some(u) = username_find(conn, engagement_id, &username, domain.as_deref(), &scope, local_host_id.as_deref())? {
         return Ok(u);
     }
     let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
-        &format!("INSERT INTO usernames ({USER_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7)"),
-        params![id, engagement_id, username, domain, source_host_id, blank_to_none(input.source.as_deref()), now_ms()],
+        &format!("INSERT INTO usernames ({USER_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"),
+        params![
+            id, engagement_id, username, domain, source_host_id, blank_to_none(input.source.as_deref()), now_ms(), scope,
+            local_host_id
+        ],
     )?;
     username_get(conn, &id)
 }
@@ -650,6 +732,8 @@ pub fn convert_to_access(conn: &Connection, cred_id: &str, grant: AccessGrantInp
             domain: cred.domain.clone(),
             source_host_id: cred.source_host_id.clone(),
             source: cred.source.clone(),
+            scope: None,
+            local_host_id: None,
         },
     )?;
     grant_insert(&tx, &cred.engagement_id, &user.id, &grant)?;
@@ -868,7 +952,7 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let e = eng_on(c, "a", Some("corp.lan"));
-        let mk = |u: &str, d: &str| UsernameInput { username: u.into(), domain: Some(d.into()), source_host_id: None, source: None };
+        let mk = |u: &str, d: &str| UsernameInput { username: u.into(), domain: Some(d.into()), source_host_id: None, source: None, scope: None, local_host_id: None };
         let a = username_create(c, &e, mk("alice", "CORP")).unwrap();
         assert_eq!(username_create(c, &e, mk("Alice", "corp.lan")).unwrap().id, a.id);
         assert_ne!(username_create(c, &e, mk("alice", "corp.local")).unwrap().id, a.id);
@@ -1148,7 +1232,7 @@ mod tests {
         let existing = username_create(
             c,
             &e,
-            UsernameInput { username: "alice".into(), domain: Some("CORP".into()), source_host_id: None, source: None },
+            UsernameInput { username: "alice".into(), domain: Some("CORP".into()), source_host_id: None, source: None, scope: None, local_host_id: None },
         )
         .unwrap();
         let u = convert_to_access(c, &cred.id, ginput(&h)).unwrap();
@@ -1203,7 +1287,7 @@ mod tests {
         let c = v.conn().unwrap();
         let e = eng(c, "a");
         let h = host(c, &e, "10.0.0.5");
-        let u = username_create(c, &e, UsernameInput { username: "a".into(), domain: None, source_host_id: Some(h.clone()), source: None }).unwrap();
+        let u = username_create(c, &e, UsernameInput { username: "a".into(), domain: None, source_host_id: Some(h.clone()), source: None, scope: None, local_host_id: None }).unwrap();
         grant_create(c, &e, AccessGrantInput { username_id: u.id.clone(), ..ginput(&h) }).unwrap();
         let mut li = cin("password", "root", "toor");
         li.scope = Some("local".into());
@@ -1305,7 +1389,7 @@ mod tests {
             [&e],
         )
         .unwrap();
-        let u = username_create(c, &e, UsernameInput { username: "a".into(), domain: None, source_host_id: None, source: None }).unwrap();
+        let u = username_create(c, &e, UsernameInput { username: "a".into(), domain: None, source_host_id: None, source: None, scope: None, local_host_id: None }).unwrap();
         let mut gi = ginput(&h);
         gi.username_id = u.id.clone();
         gi.log_entry_id = Some("l1".into());
@@ -1336,6 +1420,8 @@ mod tests {
             domain: d.map(str::to_string),
             source_host_id: None,
             source: None,
+            scope: None,
+            local_host_id: None,
         };
         let a = username_create(c, &e, mk("Alice", Some("CORP"))).unwrap();
         assert_eq!(username_create(c, &e, mk("alice", Some("corp"))).unwrap().id, a.id);
@@ -1351,6 +1437,106 @@ mod tests {
         assert!(raw.is_err());
         username_delete(c, &a.id).unwrap();
         assert_eq!(username_delete(c, &a.id), Err(AppError::NotFound));
+    }
+
+    fn uin(user: &str, domain: Option<&str>, scope: Option<&str>, host: Option<&str>) -> UsernameInput {
+        UsernameInput {
+            username: user.into(),
+            domain: domain.map(str::to_string),
+            scope: scope.map(str::to_string),
+            local_host_id: host.map(str::to_string),
+            source_host_id: None,
+            source: None,
+        }
+    }
+
+    #[test]
+    fn username_identity_follows_its_scope() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        let (web, sql) = (host(c, &e, "192.0.2.10"), host(c, &e, "192.0.2.11"));
+        let mk = |user: &str, domain: Option<&str>, scope: Option<&str>, host: Option<&str>| {
+            username_create(c, &e, uin(user, domain, scope, host)).unwrap()
+        };
+
+        // Domain: a blank domain is the engagement's own, in either spelling.
+        let dom = mk("jay", None, Some("domain"), None);
+        assert_eq!((dom.scope.as_str(), dom.local_host_id.as_deref()), ("domain", None));
+        assert_eq!(mk("JAY", Some("CORP"), Some("domain"), None).id, dom.id);
+        assert_eq!(mk("jay", Some("corp.lan"), Some("domain"), None).id, dom.id);
+        assert_ne!(mk("jay", Some("corp.local"), Some("domain"), None).id, dom.id);
+
+        // Unknown keeps today's rule, and never merges with a domain username.
+        let unknown = mk("jay", None, None, None);
+        assert_eq!(unknown.scope, "unknown");
+        assert_ne!(unknown.id, dom.id);
+        let unknown_corp = mk("jay", Some("CORP"), None, None);
+        assert_ne!(unknown_corp.id, dom.id);
+        assert_ne!(unknown_corp.id, unknown.id);
+        assert_eq!(mk("jay", Some("corp.lan"), Some("unknown"), None).id, unknown_corp.id);
+        assert_eq!(mk("Jay", None, Some("unknown"), None).id, unknown.id);
+
+        // Local: one per name on each host, never a domain or unknown one. Its domain is its host, so none is kept.
+        let on_web = mk("jay", Some("WEB01"), Some("local"), Some(&web));
+        assert_eq!((on_web.scope.as_str(), on_web.local_host_id.as_deref(), on_web.domain.as_deref()), ("local", Some(web.as_str()), None));
+        assert_eq!(mk("JAY", None, Some("local"), Some(&web)).id, on_web.id);
+        let on_sql = mk("jay", None, Some("local"), Some(&sql));
+        assert_ne!(on_sql.id, on_web.id);
+        for other in [&dom.id, &unknown.id, &unknown_corp.id] {
+            assert_ne!(&on_web.id, other);
+            assert_ne!(&on_sql.id, other);
+        }
+        assert_eq!(usernames_list(c, &e).unwrap().len(), 6);
+
+        // With no engagement domain, a blank domain is only blank.
+        let e2 = eng_on(c, "b", None);
+        let blank = username_create(c, &e2, uin("jay", None, Some("domain"), None)).unwrap();
+        assert_ne!(username_create(c, &e2, uin("jay", Some("CORP"), Some("domain"), None)).unwrap().id, blank.id);
+        assert_eq!(username_create(c, &e2, uin("jay", Some(" "), Some("domain"), None)).unwrap().id, blank.id);
+    }
+
+    #[test]
+    fn a_username_scope_and_host_are_checked() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let e2 = eng(c, "b");
+        let (h, foreign) = (host(c, &e, "192.0.2.10"), host(c, &e2, "192.0.2.20"));
+        let err = |i: UsernameInput| field(username_create(c, &e, i));
+        assert_eq!(err(uin("jay", None, Some("local"), None)), ("localHostId".into(), "a local username needs its host".into()));
+        assert_eq!(err(uin("jay", None, Some("domain"), Some(&h))), ("localHostId".into(), "only a local username has a host".into()));
+        assert_eq!(err(uin("jay", None, None, Some(&h))).0, "localHostId");
+        assert_eq!(err(uin("jay", None, Some("app"), None)), ("scope".into(), "scope must be domain, local or unknown".into()));
+        assert_eq!(username_create(c, &e, uin("jay", None, Some("local"), Some(&foreign))), Err(AppError::NotFound));
+        assert!(usernames_list(c, &e).unwrap().is_empty());
+    }
+
+    #[test]
+    fn deleting_its_host_keeps_a_local_username() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let (web, sql, files) = (host(c, &e, "192.0.2.10"), host(c, &e, "192.0.2.11"), host(c, &e, "192.0.2.12"));
+        let on_web = username_create(c, &e, uin("jay", None, Some("local"), Some(&web))).unwrap();
+        let on_sql = username_create(c, &e, uin("jay", None, Some("local"), Some(&sql))).unwrap();
+        grant_create(c, &e, AccessGrantInput { username_id: on_web.id.clone(), ..ginput(&files) }).unwrap();
+        hosts::delete(c, &web).unwrap();
+        hosts::delete(c, &sql).unwrap();
+
+        // Both stay local, with no host; two that lost their hosts never collide; their grants elsewhere stay.
+        let left = usernames_list(c, &e).unwrap();
+        assert_eq!(left.len(), 2);
+        for u in &left {
+            assert_eq!((u.scope.as_str(), u.local_host_id.as_deref()), ("local", None));
+        }
+        assert!(left.iter().any(|u| u.id == on_web.id) && left.iter().any(|u| u.id == on_sql.id));
+        assert_eq!(grants_list(c, &e).unwrap().len(), 1);
+
+        // A new local username still needs its host, and is a new username on that host.
+        assert_eq!(field(username_create(c, &e, uin("jay", None, Some("local"), None))).0, "localHostId");
+        let on_files = username_create(c, &e, uin("jay", None, Some("local"), Some(&files))).unwrap();
+        assert!(on_files.id != on_web.id && on_files.id != on_sql.id);
     }
 
     #[test]
