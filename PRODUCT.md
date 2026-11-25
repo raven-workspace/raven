@@ -129,7 +129,7 @@ The checklist (what they've done, what their options are next) and the host fact
 
 **Exam sims**
 - **Timebox:** shown on the status strip and the dashboard card.
-- **Metasploit lock:** one host only. Only Meterpreter counts (binding): msfvenom, multi/handler and raw shells, staged or stageless, are unrestricted and never warned about. A Meterpreter payload with no lock yet says "Using Metasploit here makes this your Metasploit machine"; locked to another host, it warns "Metasploit is locked to <host>" and copying goes through the copy guard.
+- **Metasploit lock:** one host only. Metasploit modules (exploit, auxiliary and post: any module but `multi/handler`) and Meterpreter payloads count. msfvenom, multi/handler and raw shells, staged or stageless, are unrestricted and never warned about (binding). A command that counts, with no lock yet, says "Using Metasploit here makes this your Metasploit machine"; locked to another host, it warns "Metasploit is locked to <host>" and copying goes through the copy guard.
 - **Banned techniques:** hidden.
 
 **Arsenal and search**
