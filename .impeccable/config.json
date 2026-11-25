@@ -32,6 +32,24 @@
         "value": "instrument sans fallback",
         "createdAt": "2026-11-23T18:21:05.235Z",
         "reason": "agent: metric-adjusted @font-face stand-in (local Arial) for DESIGN.md's Instrument Sans while it loads; not a separate font choice"
+      },
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          "audit/fixtures/selftest-layout.html"
+        ],
+        "createdAt": "2026-11-25T03:24:16.629Z",
+        "reason": "agent: audit self-test fixture of deliberately broken layout cases (data-expect), read by audit/selftest.spec.ts; not shipped UI"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "audit/fixtures/selftest-layout.html"
+        ],
+        "createdAt": "2026-11-25T03:24:16.669Z",
+        "reason": "agent: audit self-test fixture of deliberately broken layout cases (data-expect), read by audit/selftest.spec.ts; not shipped UI"
       }
     ]
   }
