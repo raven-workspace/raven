@@ -12,6 +12,7 @@
 // attacker 192.0.2.10).
 import { buildDraft, credentialsInPaste, findFlagInPaste, flagTitle, noteTitle, screenshotFileName, type DraftInput } from "../engines/capture";
 import { planCredentialIntake } from "../engines/credentials";
+import { BUILTIN_LIBRARY } from "../engines/library/data";
 import type { ChecklistItem } from "../types/checklist";
 import type { CredAttempt, Credential, TriedPair, Username } from "../types/credentials";
 import type { Finding } from "../types/findings";
@@ -147,6 +148,7 @@ export function draftInputOf(c: Capture, hosts: Host[]): DraftInput {
     domain: XFER_DOMAIN,
     machines: XFER_MACHINES,
     lastRanOn: "Kali (VM)",
+    library: BUILTIN_LIBRARY,
   };
 }
 
@@ -170,7 +172,7 @@ export function editsOf(c: Capture, hosts: Host[], hostId = XFER) {
     const fileName = screenshotFileName({ ip: host?.ip ?? null, hostName: host?.name ?? null, column: host?.boardColumn ?? null, caption: c.text, mime: "image/png" });
     content = { ...content, fileName };
   }
-  const credentials = draft.kind === "note" ? credentialsInPaste(c.text, hosts.map((h) => h.name)) : [];
+  const credentials = draft.kind === "note" ? credentialsInPaste(c.text, BUILTIN_LIBRARY, hosts.map((h) => h.name)) : [];
   if (credentials.length > 0) title = `${credentials.length === 1 ? "Credential" : "Credentials"} for ${credentials.map((p) => p.username).join(", ")}`;
   return {
     draft,

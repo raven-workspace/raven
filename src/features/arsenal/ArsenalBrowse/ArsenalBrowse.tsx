@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { examList } from "../../../engines/exam";
 import { searchArsenal, type ArsenalHit } from "../../../engines/library/arsenalSearch";
 import { allCategories, categoryLabel, categoryOf } from "../../../engines/library/categories";
-import { getCards, getLibrary, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary } from "../../../engines/library/store";
+import type { CardMeta } from "../../../engines/library/types";
 import { isDialogOpen, isTypingTarget, useEscapeBack, useKeydown } from "../../../lib/keys";
 import { Button, HintLine, Select, type Hint } from "../../../ui/index";
 import { useCredPickStore } from "../../checklist/credPick";
@@ -36,14 +37,14 @@ const hitRow = (hit: ArsenalHit, searching: boolean, withTool = searching): Row 
   stack: withTool && hit.type === "command",
 });
 const sameHit = (h: ArsenalHit, p: Pick | null): boolean => p !== null && h.type === p.kind && h.id === p.id;
-const hitCategory = (h: ArsenalHit, cards: ReturnType<typeof getCards>): string =>
+const hitCategory = (h: ArsenalHit, cards: CardMeta[]): string =>
   h.type === "card" ? h.card.category : h.type === "generator" ? h.category : categoryOf(h.command, cards);
 const SEARCH_ID = "arsenal-search";
 const READING_ID = "arsenal-reading";
 
 /** `/arsenal`: categories | the category's list | the open item in full. Fills for the engagement and host you came from. */
 export function ArsenalBrowse() {
-  const version = useLibraryVersion();
+  const lib = useLibrary();
   const [params] = useSearchParams();
   const [query, setQuery] = useState(() => params.get("q") ?? "");
   const { engagementId, hostId } = useFillScope();
@@ -86,18 +87,17 @@ export function ArsenalBrowse() {
   });
 
   // A list under the exam rules: what they leave (until the engagement's kind is known, no command that needs a verdict).
-  /* eslint-disable react-hooks/exhaustive-deps */
   const { cards, library } = useMemo(() => {
-    const all = getLibrary();
+    const all = lib.commands;
     return {
       library: examList(all, exam).shown,
-      cards: getCards().filter((c) => {
+      cards: lib.cards.filter((c) => {
         // A card whose every command the exam rules hide has nothing to show.
         const cmds = all.filter((x) => x.cardId === c.id);
         return cmds.length === 0 || examList(cmds, exam).shown.length > 0;
       }),
     };
-  }, [exam, version]);
+  }, [exam, lib]);
   const lists = useMemo(() => {
     const out = new Map<string, BrowseSection[]>();
     for (const c of allCategories(cards)) {
@@ -107,10 +107,9 @@ export function ArsenalBrowse() {
     return out;
   }, [cards, library]);
   const groups = useMemo(
-    () => (query.trim() !== "" ? searchArsenal(query, { library: getLibrary(), cards: getCards(), generators: GENERATORS, exam }) : []),
-    [query, exam, version],
+    () => (query.trim() !== "" ? searchArsenal(query, { library: lib.commands, cards: lib.cards, generators: GENERATORS, exam }) : []),
+    [query, exam, lib],
   );
-  /* eslint-enable react-hooks/exhaustive-deps */
   const searching = query.trim() !== "";
 
   const counts = new Map<string, number>([...lists].map(([c, s]) => [c, s.reduce((n, x) => n + x.rows.length, 0)]));
@@ -144,7 +143,7 @@ export function ArsenalBrowse() {
   };
   const clearSearch = () => {
     // The category of what was open stays listed.
-    if (open) setCategory(hitCategory(open, getCards()));
+    if (open) setCategory(hitCategory(open, lib.cards));
     setQuery("");
   };
   // Esc clears a typed search first; registered before the leave-Esc, which then sees it handled.

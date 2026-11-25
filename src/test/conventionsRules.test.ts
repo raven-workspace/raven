@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { breaks, files, placeholderRegexes } from "./conventionsRules";
+import { breaks, files, importsLibraryStore, placeholderRegexes } from "./conventionsRules";
 
 const F = "src/features/x/X.tsx";
 const U = "src/ui/X.tsx";
@@ -228,5 +228,30 @@ describe("placeholder regexes (RAV-48)", () => {
       "// was /\\{[A-Z]+\\}/",
       "const css = /\\.a \\{[^}]*gap/;",
     ]) expect(placeholderRegexes(line), line).toEqual([]);
+  });
+});
+
+describe("library store imports (RAV-49)", () => {
+  const KIND = "src/engines/capture/kind.ts";
+  it("finds every way an engine can import the store", () => {
+    for (const line of [
+      "import { useLibrary } from '../library/store';",
+      'import type { LibrarySnapshot } from "../library/store";',
+      'import { currentLibrary } from "@/engines/library/store";',
+      "import { currentLibrary } from '../library/store.ts';",
+      'export { useLibrary } from "../library/store";',
+      'const s = await import("../library/store");',
+      'import "../library/store";',
+    ]) expect(importsLibraryStore(KIND, line), line).toBe(true);
+    expect(importsLibraryStore("src/engines/library/categories.ts", 'import { useLibrary } from "./store";')).toBe(true);
+  });
+
+  it("leaves other modules, other stores and comments alone", () => {
+    for (const line of [
+      "import type { LibraryCommand } from '../library/types';",
+      'import { create } from "zustand";',
+      'import { useStore } from "../capture/store";',
+      "// the library comes from '../library/store' in the caller",
+    ]) expect(importsLibraryStore(KIND, line), line).toBe(false);
   });
 });

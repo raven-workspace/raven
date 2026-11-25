@@ -5,6 +5,7 @@ import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { Service } from "../../../types/service";
 import type { LibraryCommand } from "../../../engines/library/types";
+import { TEST_LIBRARY } from "../../support/library";
 import { applicableGoals } from "../../../engines/checklist";
 import type { Tunnel } from "../../../types/network";
 import { engagementStuck } from "../../../engines/stuck";
@@ -38,7 +39,7 @@ const run = (o: {
     engagement: o.engagement ?? engagement, hosts,
     servicesByHost: new Map(hosts.map((h) => [h.id, o.services?.[h.id] ?? []])),
     byOwner: new Map(Object.entries(o.byOwner ?? {})), credentials: o.credentials ?? [], attempts: o.attempts ?? [],
-    usernames: o.usernames ?? [], tunnels: o.tunnels ?? [], ...(o.library ? { library: o.library } : {}),
+    usernames: o.usernames ?? [], tunnels: o.tunnels ?? [], library: o.library ?? TEST_LIBRARY,
   });
 };
 const FOOT_DONE: ChecklistState = { "h-foot-shell": { status: "done" } };

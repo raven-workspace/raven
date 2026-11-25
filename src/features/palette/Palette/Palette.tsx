@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { useLocation, useNavigate } from "react-router";
 import { fillCommand } from "../../../engines/checklist/index";
 import { credLabel } from "../../../engines/credentials/labels";
-import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary, useToolkit } from "../../../engines/library/store";
 import { copyPlain, copySecret } from "../../../lib/clipboard";
 import { reportError } from "../../../lib/lockSignal";
 import { Dialog, HintLine, type Hint } from "../../../ui/index";
@@ -49,7 +49,8 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const navigate = useNavigate();
   const location = useLocation();
   const { notes } = useManualNotes();
-  const libraryVersion = useLibraryVersion();
+  const library = useLibrary();
+  const { toolkit } = useToolkit();
   // The chip picks another host for this search only; typed values never carry over to it.
   const [hostId, setHostId] = useState(openedHostId);
   const { d, host, cred, credOwnerId, makeInput, exam } = useFillBase(engagementId, hostId);
@@ -84,12 +85,10 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const found = useMemo(
     () =>
       searchPalette(query, {
-        library: getLibrary(), cards: getCards(), generators: GENERATORS, engagementItems: items, notes,
+        library: library.commands, cards: library.cards, generators: GENERATORS, engagementItems: items, notes,
         exam,
       }),
-    // getLibrary()/getCards() change only with the library version.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query, items, notes, exam, libraryVersion],
+    [query, items, notes, exam, library],
   );
   // Lookup rows first (the answer, its commands ready to fill), then Arsenal categories (the drawer's rows), then one
   // group for the engagement, then the Manual. Each list stops at MAX_RESULTS; Lookup rows never count against the Arsenal's.
@@ -111,8 +110,8 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const current: PaletteResult | undefined = results[index];
 
   const filled = useMemo(
-    () => (current?.type === "command" ? fillPreview(current.command, current.msfMarker, makeInput, overrides, toolPrefill(query, host?.os ?? null)) : null),
-    [current, host, makeInput, query, overrides],
+    () => (current?.type === "command" ? fillPreview(current.command, current.msfMarker, makeInput, overrides, toolPrefill(query, host?.os ?? null, toolkit)) : null),
+    [current, host, makeInput, query, overrides, toolkit],
   );
 
   useEffect(() => searchRef.current?.focus(), []);
@@ -186,7 +185,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     }
   };
 
-  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
+  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit };
 
   // Tab goes to the first field still empty. With every value filled there is nothing to jump to: Tab moves on as usual,
   // to the host picker. Only tokens that have a field count (a credential's USER and PASS have none once it is picked).

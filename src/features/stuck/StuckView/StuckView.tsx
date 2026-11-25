@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { PIVOT_GOALS, type FillInput } from "../../../engines/checklist/index";
+import { useLibrary } from "../../../engines/library/store";
 import { engagementStuck, hostStuck, type StuckLine } from "../../../engines/stuck/index";
 import { cx } from "../../../lib/cx";
 import { isDialogOpen } from "../../../lib/keys";
@@ -100,6 +101,7 @@ export function StuckView({
 function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }: { root: React.RefObject<HTMLElement | null>; engagementId: string; host: Host; onClose: () => void; onOpenGoal: (goalId: string) => void; skipRestoreRef: React.RefObject<boolean> }) {
   const hostsQ = useHosts(engagementId);
   const engagement = useEngagement(engagementId);
+  const library = useLibrary();
   const settings = useSettings();
   const log = useLog(engagementId);
   const { byOwner, query: checklistQ } = useChecklist(engagementId);
@@ -142,13 +144,14 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
     const s = hostStuck({
       host, engagement: eng, hosts, servicesByHost, state: byOwner.get(host.id) ?? {},
       entries: log.data ?? [], hostNote: pending?.body ?? note.data?.body ?? "",
+      library: library.commands,
     });
     const input: FillInput = {
       host, engagement: eng, hosts, servicesByHost, tunnels,
       ...settingsFill(settings.data), cred: creds.cred,
     };
     const filled = s.commands
-      .map((c) => ({ ...c, commands: goalCommands(c.goalId, input, eng).commands }))
+      .map((c) => ({ ...c, commands: goalCommands(c.goalId, input, eng, library.commands).commands }))
       .filter((c) => c.commands.length > 0);
     const after = s.phase === "after-foothold";
     const empty =
@@ -268,6 +271,7 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   const [open, setOpen] = useState(false);
   const hostsQ = useHosts(engagementId);
   const engagement = useEngagement(engagementId);
+  const library = useLibrary();
   const { byOwner, query: checklistQ } = useChecklist(engagementId);
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
   const { tunnels, query: tunnelsQ } = useTunnels(engagementId);
@@ -289,9 +293,9 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   const lines = useMemo(
     () =>
       loaded && hosts && eng && credentials && attempts && usernames
-        ? engagementStuck({ engagement: eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels })
+        ? engagementStuck({ engagement: eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels, library: library.commands })
         : [],
-    [loaded, eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels],
+    [loaded, eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels, library],
   );
   if (state) return state;
   if (!loaded || !hosts || !eng || !credentials || !attempts || !usernames) return <LoadingState label="the stuck check" />;

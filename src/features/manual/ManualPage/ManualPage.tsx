@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ManualNote } from "../../../engines/manual/index";
 import { isInlineCommand, lookupRows, type LookupRow } from "../../../engines/manual/lookup";
-import { getCards, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary } from "../../../engines/library/store";
 import { isFreeKey, isTypingTarget, useKeydown } from "../../../lib/keys";
 import { RavenError } from "../../../types/errors";
 import { Button, Disclosure, EmptyState, ErrorState, HintLine, labelClass, useFadeOnChange, type Hint } from "../../../ui/index";
@@ -194,8 +194,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const base = useFillBase(engagementId, hostId);
   const hostRef = useRef<HostChipHandle>(null);
   const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
-  useLibraryVersion();
-  const cards = getCards();
+  const { cards } = useLibrary();
   const noteKey = note?.id;
   useEffect(() => useManualStatus.getState().clear(), [noteKey]);
   // What a copy said was about the host it filled for: another host clears it.

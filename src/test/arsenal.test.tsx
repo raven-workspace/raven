@@ -6,7 +6,8 @@ import { useEffect } from "react";
 import { MemoryRouter, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { setImported, type CardMeta } from "../engines/library/store";
+import { setImported } from "../engines/library/store";
+import type { CardMeta } from "../engines/library/types";
 import type { LibraryCommand } from "../engines/library/types";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
@@ -453,6 +454,19 @@ describe("Arsenal after a Field Manual import (B2)", () => {
     await user.keyboard("{Escape}");
     await user.click(await d.findByRole("option", { name: /^Aa Filler/ }));
     expect(await d.findAllByRole("option")).toHaveLength(filler.length * 2);
+  });
+
+  it("an import while the drawer is open updates what a search finds", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    act(() => useArsenalStore.getState().openCard());
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "Zzlate");
+    expect(d.queryByRole("option", { name: /Zzlate card/ })).toBeNull();
+    const late: CardMeta = { id: "zz-late", title: "Zzlate card", stage: "reporting", category: "Qq-Misc", os: "any", file: "02-Cards/Zz/Late.md" };
+    act(() => setImported({ commands: [...cmds, cmd("zz-late-cmd", { title: "Zzlate cmd", cardId: late.id })], cards: [...filler, ...perStage, late] }));
+    expect(await d.findByRole("option", { name: /Zzlate card/ })).toBeInTheDocument();
   });
 
   it.each(STAGES)("searching the drawer for stage %s finds its card", async (id, title) => {

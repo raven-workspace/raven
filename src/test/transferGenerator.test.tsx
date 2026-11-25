@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { getLibrary, setImported } from "../engines/library/store";
+import { currentLibrary, setImported } from "../engines/library/store";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useNotesStore } from "../features/notes/useNotesStore";
@@ -141,7 +141,7 @@ describe("Transfer a file", () => {
   });
 
   it("the generator hides banned methods in exam-sim", async () => {
-    const certutil = getLibrary().find((c) => c.title === "Download with certutil" && c.cardId === "shell-file-transfer-to-windows")!;
+    const certutil = currentLibrary().commands.find((c) => c.title === "Download with certutil" && c.cardId === "shell-file-transfer-to-windows")!;
     setImported({ commands: [{ ...certutil, exam: "banned" }], cards: [], toolkit: TOOLKIT });
     const user = userEvent.setup();
     const { unmount } = mount("/payloads?generator=transfer", EXAM);

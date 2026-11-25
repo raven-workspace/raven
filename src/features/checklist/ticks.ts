@@ -10,7 +10,7 @@ import {
   type Tick,
   type TickContext,
 } from "../../engines/checklist";
-import { getLibrary } from "../../engines/library/store";
+import { currentLibrary } from "../../engines/library/store";
 import { api } from "../../lib/api";
 import type { ChecklistItemInput, ChecklistState } from "../../types/checklist";
 import type { LogEntry, OutputTick } from "../../types/log";
@@ -22,14 +22,17 @@ const PUT_LIMIT = 500;
 
 export const CHECKLIST_FAILED = "Saved the entry, but the checklist didn't update. Use Tick from log on the Engagement checklist.";
 
-/** Reads the engagement, its hosts and services from the store, so ticks see what was just saved. */
+/**
+ * Reads the engagement, its hosts and services from the store, so ticks see what was just saved. The command library
+ * comes from the library store as it is now: the one place ticks read it.
+ */
 export async function loadTickContext(engagementId: string): Promise<TickContext> {
   const [engagement, hosts, services] = await Promise.all([
     api.engagementGet(engagementId),
     api.hostsList(engagementId),
     api.servicesListEngagement(engagementId),
   ]);
-  return { engagement, hosts, servicesByHost: servicesByHostOf(services), library: getLibrary() };
+  return { engagement, hosts, servicesByHost: servicesByHostOf(services), library: currentLibrary().commands };
 }
 
 const hasEvidenceFrom = (state: ChecklistState | undefined, entryId: string) =>

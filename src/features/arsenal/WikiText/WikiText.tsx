@@ -1,4 +1,4 @@
-import { getCards } from "../../../engines/library/store";
+import { useLibrary } from "../../../engines/library/store";
 import { cardForLink, splitWikilinks } from "../../../engines/library/wikilinks";
 import "./WikiText.scss";
 
@@ -7,7 +7,7 @@ import "./WikiText.scss";
  * where nothing can open a card, shows as its plain label.
  */
 export function WikiText({ text, onOpenCard }: { text: string; onOpenCard?: (cardId: string) => void }) {
-  const cards = getCards();
+  const { cards } = useLibrary();
   return (
     <>
       {splitWikilinks(text).map((p, i) => {

@@ -5,6 +5,7 @@ import type { Host } from '../../../types/host';
 import type { Hop } from '../../../types/network';
 import type { Service } from '../../../types/service';
 import type { ReportData } from '../../../engines/report/types';
+import { TEST_LIBRARY } from '../../support/library';
 import {
   adSetHosts,
   daCoverChanges,
@@ -153,7 +154,7 @@ describe('callers that ask "is there AD here" use membership', () => {
     const stuck = (hosts: Host[], services: Map<string, Service[]>) =>
       engagementStuck({
         engagement, hosts, servicesByHost: services, byOwner: new Map(), credentials: [], attempts: [],
-        usernames: [uname('u1')], tunnels: [],
+        usernames: [uname('u1')], tunnels: [], library: TEST_LIBRARY,
       }).filter((l) => l.text.includes('AS-REP'));
     expect(stuck([ms01], byHost([['ms01', [svc('ms01', 445)]]]))).toHaveLength(1);
     expect(stuck([udp], byHost([udpServices]))).toEqual([]);

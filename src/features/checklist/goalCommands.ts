@@ -12,7 +12,6 @@ import {
 } from "../../engines/checklist";
 import { canonicalToken, findPlaceholders, resolveTemplate } from "../../engines/checklist/template";
 import { examList, examScope } from "../../engines/exam";
-import { getLibrary } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import type { Engagement } from "../../types/engagement";
 import { MASK } from "../credentials/MaskedSecret/MaskedSecret";
@@ -55,9 +54,9 @@ export function fillLibraryCommand(c: LibraryCommand, input: FillInput, msfMarke
   return out;
 }
 
-/** The library commands for a goal, filled for this host and filtered by the engagement's exam rules. */
-export function goalCommands(goalId: string, input: FillInput, eng: Engagement): { commands: FilledCommand[]; hadAny: boolean } {
-  const all = getLibrary().filter((c) => c.goals.includes(goalId));
+/** The `library` commands for a goal, filled for this host and filtered by the engagement's exam rules. */
+export function goalCommands(goalId: string, input: FillInput, eng: Engagement, library: LibraryCommand[]): { commands: FilledCommand[]; hadAny: boolean } {
+  const all = library.filter((c) => c.goals.includes(goalId));
   // The step's {FILE} chip (per host) fills FILE and SCRIPT; without a pick the input is untouched.
   const pick = pickOverrides(filePickFor(input.host.id));
   if (Object.keys(pick).length > 0) input = { ...input, overrides: { ...pick, ...input.overrides } };

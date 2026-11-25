@@ -1,15 +1,18 @@
 import type { BoardColumn } from '../../types/host';
 import type { CommandBlock, FlagKind } from '../../types/log';
 import { matchLine } from '../library/matcher';
-import { getLibrary } from '../library/store';
+import type { LibraryCommand } from '../library/types';
 
 const collapse = (s: string) => s.replace(/\s+/g, ' ').trim();
 
-/** What the command is, never where: the host is its own field, so the title never repeats it. */
-export function commandTitle(blocks: CommandBlock[]): string {
+/**
+ * What the command is (the title of the `library` command its first line matches), never where: the host is its own
+ * field, so the title never repeats it.
+ */
+export function commandTitle(blocks: CommandBlock[], library: LibraryCommand[]): string {
   const command = blocks[0]?.command ?? '';
   const line = command.split('\n').find((l) => l.trim()) ?? '';
-  const match = matchLine(line, getLibrary())[0];
+  const match = matchLine(line, library)[0];
   if (!match) return collapse(line).slice(0, 200);
   return match.title;
 }

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { fillCommand } from "../../../engines/checklist/index";
 import { examList } from "../../../engines/exam";
 import { isHttp, transferMethods, TRANSFER_CARD, withToolsDirs } from "../../../engines/generators/transfer";
-import { getCards, getLibrary, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary } from "../../../engines/library/store";
 import { copyPlain } from "../../../lib/clipboard";
 import { isDialogOpen, useKeydown } from "../../../lib/keys";
 import { shortHostName } from "../../../lib/hostName";
@@ -61,7 +61,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
   autoFocus?: boolean;
 }) {
   const qc = useQueryClient();
-  const version = useLibraryVersion();
+  const library = useLibrary();
   // The host is the screen's own (the browse bar's HostChip); there is no second host control here.
   const hostId = viewHostId;
   const { d, host, makeInput, exam } = useFillBase(engagementId, hostId);
@@ -80,17 +80,14 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
     if (startFocused) fileRef.current?.focus();
   }, [startFocused]);
 
-  // getLibrary()/getCards() change only with the library version.
-  /* eslint-disable react-hooks/exhaustive-deps */
   const methods = useMemo(() => {
     const cardId = TRANSFER_CARD[os];
     // A list under the exam rules (until the engagement's kind is known, no command that needs a verdict).
-    const pool = examList(getLibrary().filter((c) => c.cardId === cardId), exam).shown;
+    const pool = examList(library.commands.filter((c) => c.cardId === cardId), exam).shown;
     // HTTP first, so arrow keys follow the order the pills are drawn in.
-    const all = transferMethods(getCards(), pool, os).filter((m) => m.kali.length + m.target.length > 0);
+    const all = transferMethods(library.cards, pool, os).filter((m) => m.kali.length + m.target.length > 0);
     return [...all.filter((m) => isHttp(m.group)), ...all.filter((m) => !isHttp(m.group))];
-  }, [os, exam, version]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+  }, [os, exam, library]);
   const method = methods.find((m) => m.id === methodId) ?? methods[0];
 
   const effectiveDir = dir.trim() || DEFAULT_DIR[os];

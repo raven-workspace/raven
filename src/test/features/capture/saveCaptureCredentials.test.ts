@@ -8,6 +8,7 @@ import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry, LogEntryInput } from "../../../types/log";
 import { filed } from "./filed";
+import { TEST_LIBRARY } from "../../support/library";
 
 vi.mock("../../../lib/api");
 const m = vi.mocked(api, true);
@@ -61,7 +62,7 @@ const pasted = () => m.extractionFile.mock.calls.flatMap(([, , proofs]) => proof
 /** Pastes `text` into capture opened from web01's view, then saves it as the panel would. */
 function save(text: string, asNote = false) {
   const r = resolveCapture({ ...EMPTY_DRAFT, text, asNote }, {
-    hosts: [WEB], scope: [], domain: "", machines: [], lastRanOn: null, presetHostId: "h1",
+    hosts: [WEB], scope: [], domain: "", machines: [], lastRanOn: null, library: TEST_LIBRARY, presetHostId: "h1",
   });
   return saveCapture({ engagementId: "e1", draft: r.draft, draftInput: r.draftInput, edits: r.edits, image: null, hosts: [WEB] });
 }

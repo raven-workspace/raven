@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FieldManualSection } from "../features/settings/FieldManualSection/FieldManualSection";
 import { useVaultNewer } from "../features/fieldManual/queries";
-import { getLibrary, setImported } from "../engines/library/store";
+import { currentLibrary, setImported } from "../engines/library/store";
 import { api } from "../lib/api";
 
 vi.mock("../lib/api");
@@ -58,7 +58,7 @@ describe("Field Manual import", () => {
     expect(await screen.findByText(/1 cards, /)).toBeInTheDocument();
     expect(m.fieldManualScan).toHaveBeenCalledWith("~/fm");
     expect(m.fieldManualSave).toHaveBeenCalledTimes(1);
-    expect(getLibrary().some((c) => c.id === "fm-zz-new-card-v0")).toBe(true);
+    expect(currentLibrary().commands.some((c) => c.id === "fm-zz-new-card-v0")).toBe(true);
   });
 
   it("the report counts the imported notes", async () => {
@@ -99,18 +99,18 @@ describe("Field Manual import", () => {
 
   it("a failed scan shows an error and leaves the library and snapshot unchanged", async () => {
     const user = userEvent.setup();
-    const before = getLibrary();
+    const before = currentLibrary();
     m.fieldManualScan.mockRejectedValue(new Error("not found"));
     mount(<FieldManualSection />);
     await user.click(await screen.findByRole("button", { name: "Import now" }));
     expect(await screen.findByText(/not found/)).toBeInTheDocument();
     expect(m.fieldManualSave).not.toHaveBeenCalled();
-    expect(getLibrary()).toBe(before);
+    expect(currentLibrary()).toBe(before);
   });
 
   it("an import that finds no cards shows an error and saves nothing", async () => {
     const user = userEvent.setup();
-    const before = getLibrary();
+    const before = currentLibrary();
     // A wrong folder or an evicted iCloud vault: files come back, but no card parses.
     m.fieldManualScan.mockResolvedValue([{ relPath: "01-Playbook/00 - Off-the-Bat.md", mtimeMs: 5, text: "# Off\n- [ ] x" }]);
     m.fieldManualSave.mockResolvedValue(null);
@@ -118,7 +118,7 @@ describe("Field Manual import", () => {
     await user.click(await screen.findByRole("button", { name: "Import now" }));
     expect(await screen.findByText(/No cards found/)).toBeInTheDocument();
     expect(m.fieldManualSave).not.toHaveBeenCalled();
-    expect(getLibrary()).toBe(before);
+    expect(currentLibrary()).toBe(before);
   });
 
   it("the Settings link shows a dot when the vault is newer than the last import", async () => {

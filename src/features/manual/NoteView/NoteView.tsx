@@ -1,6 +1,6 @@
 import { Fragment, memo, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
-import type { CardMeta } from "../../../engines/library/store";
+import type { CardMeta } from "../../../engines/library/types";
 import type { ManualNote } from "../../../engines/manual/index";
 import { fillsBlock, isOutputBlock, manualCommand } from "../../../engines/manual/commands";
 import { resolveLink } from "../../../engines/manual/links";

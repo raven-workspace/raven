@@ -1,4 +1,4 @@
-import type { CardMeta } from '../store';
+import type { CardMeta } from '../types';
 import type { LibraryCommand } from '../types';
 
 /**

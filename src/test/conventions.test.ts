@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PENDING, type RuleId } from "./conventionsPending";
-import { PLACEHOLDER_GRAMMAR, ROOT, breaks, files, placeholderRegexes, sourceFiles } from "./conventionsRules";
+import { PLACEHOLDER_GRAMMAR, ROOT, breaks, engineFiles, files, importsLibraryStore, placeholderRegexes, sourceFiles } from "./conventionsRules";
 
 const RULES: RuleId[] = [
   "tiny-type",
@@ -37,6 +37,11 @@ describe("conventions", () => {
       .flatMap((f) => placeholderRegexes(read(f)).map((line) => `${f}: ${line}`));
     expect(bad).toEqual([]);
     expect(placeholderRegexes(read(PLACEHOLDER_GRAMMAR)).length).toBeGreaterThan(0);
+  });
+
+  it("library as an input: no engine imports the library store (RAV-49)", () => {
+    expect(engineFiles.length).toBeGreaterThan(0);
+    expect(engineFiles.filter((f) => importsLibraryStore(f, read(f)))).toEqual([]);
   });
 
   it("PENDING is empty", () => {

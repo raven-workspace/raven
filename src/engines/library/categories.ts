@@ -1,5 +1,5 @@
 import type { LibraryCommand } from './types';
-import type { CardMeta } from './store';
+import type { CardMeta } from './types';
 
 /** The vault's category folders, in the order the Arsenal lists them. */
 export const CATEGORIES: readonly string[] = [

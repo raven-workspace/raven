@@ -2,6 +2,7 @@ import * as RD from "@radix-ui/react-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
 import { metasploitHostIds, metasploitWarning } from "../../../engines/checklist/index";
+import { useLibrary } from "../../../engines/library/store";
 import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
@@ -33,6 +34,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
   const hostsQ = useHosts(id);
   const listed = hostsQ.data ?? NO_HOSTS;
   const machines = useSettings().data?.machines ?? NO_MACHINES;
+  const library = useLibrary();
   const pd = useCaptureStore((s) => s.drafts[id]) ?? EMPTY_DRAFT;
   // Hosts a failed save already created count as known, even before the list refetches.
   const hosts = useMemo(
@@ -55,10 +57,11 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         domain: engagement.domain ?? "",
         machines,
         lastRanOn: engagement.lastRanOn,
+        library: library.commands,
         presetHostId,
         log,
       }),
-    [pd, hosts, machines, engagement, presetHostId, log],
+    [pd, hosts, machines, engagement, presetHostId, log, library],
   );
   const kind = r.edits.kind;
   // Exam sims: warn (without blocking) when this entry uses Metasploit off the locked host.

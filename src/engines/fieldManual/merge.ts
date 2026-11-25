@@ -1,5 +1,5 @@
 import { FIELD_MANUAL_CARDS } from '../library/data/fieldManual';
-import type { CardMeta } from '../library/store';
+import type { CardMeta } from '../library/types';
 import type { ExamRule, LibraryCommand } from '../library/types';
 import { classifyExam } from './classifyExam';
 import type { Drift } from './drift';

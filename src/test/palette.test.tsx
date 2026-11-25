@@ -217,6 +217,22 @@ describe("⌘K palette", () => {
     expect(await navigator.clipboard.readText()).toBe("zzfetch http://10.10.14.9/x.exe");
   });
 
+  it("an import while ⌘K is open refreshes its commands and the Toolkit pre-fill", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    const box = await screen.findByRole("combobox", { name: "Search" });
+    await user.type(box, "fetch winpeas");
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzfetch http://10.10.14.9/winPEASx64.exe")).toBeInTheDocument();
+    act(() => setImported({
+      commands: [PROBE, { ...FETCH, template: "zzpull http://{LHOST}/{FILE}" }],
+      cards: [],
+      toolkit: [{ os: "windows", purpose: "Enumeration", file: "winPEASany.exe", note: "", where: "", staged: true }],
+    }));
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzpull http://10.10.14.9/winPEASany.exe")).toBeInTheDocument();
+  });
+
   it("Escape closes and returns focus", async () => {
     const user = userEvent.setup();
     mount("/");

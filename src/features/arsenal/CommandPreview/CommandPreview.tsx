@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FillInput } from "../../../engines/checklist/index";
-import { getToolkit } from "../../../engines/library/store";
+import type { ToolkitEntry } from "../../../engines/fieldManual/parseToolkit";
 import type { LibraryCommand } from "../../../engines/library/types";
 import type { Host } from "../../../types/host";
 import { Chip } from "../../../ui/index";
@@ -30,11 +30,11 @@ export function fillPreview(
   return { cmd: fillLibraryCommand(command, input, msfMarker), input, tokens, auto: autoFill(tokens, makeInput(prefill)) };
 }
 
-/** The best staged Toolkit file whose name contains a query word: it pre-fills {FILE}. */
-export function toolPrefill(query: string, os: Host["os"]): Record<string, string> {
+/** The best staged `toolkit` file whose name contains a query word: it pre-fills {FILE}. */
+export function toolPrefill(query: string, os: Host["os"], toolkit: ToolkitEntry[]): Record<string, string> {
   const words = query.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
   if (words.length === 0) return {};
-  const hits = getToolkit()
+  const hits = toolkit
     .filter((t) => t.staged && words.some((w) => t.file.toLowerCase().includes(w)))
     .sort((a, b) => Number(b.os === os) - Number(a.os === os));
   return hits[0] ? { FILE: hits[0].file } : {};
