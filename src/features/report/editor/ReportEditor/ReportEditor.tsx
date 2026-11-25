@@ -358,7 +358,9 @@ export function ReportEditor({
       const hostId = hostAtPos(editor, spot.pos, target);
       setImageError(null);
       saveScreenshot(qc, data.engagement.id, hostId ? [hostId] : [], file)
-        .then((entry) => {
+        .then(({ entry, failed }) => {
+          // Saved even when a step after the save failed: the figure goes in, and the step's message shows.
+          if (failed) setImageError(failed.message);
           if (!editor.mounted) return;
           // The caption is the page's to write.
           insertFigure(editor, entry, spot.pos);
@@ -366,7 +368,7 @@ export function ReportEditor({
         .finally(() => held?.delete(spot))
         .catch((e: unknown) => {
           reportError(e);
-          setImageError(RavenError.from(e).message);
+          setImageError(`Couldn't save the image as a screenshot: ${RavenError.from(e).message}`);
         });
     };
     return { addImage, pickImage: () => fileInput.current?.click() };
@@ -410,7 +412,7 @@ export function ReportEditor({
         {notices}
         {imageError && (
           <p role="alert" className="report-editor__alert">
-            Couldn't save the image as a screenshot: {imageError}
+            {imageError}
           </p>
         )}
         <input

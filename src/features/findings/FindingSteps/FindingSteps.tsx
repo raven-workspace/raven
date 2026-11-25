@@ -41,7 +41,12 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
   const log = useLog(eid);
   const [adding, setAdding] = useState<Adding>(null);
   const picking = adding === "entry" || adding === "screenshot-link";
-  const toggle = (what: Exclude<Adding, null>) => setAdding((a) => (a === what ? null : what));
+  // A screenshot saved, but a step after the save failed: said under the steps until the next add.
+  const [failed, setFailed] = useState<string | null>(null);
+  const toggle = (what: Exclude<Adding, null>) => {
+    setFailed(null);
+    setAdding((a) => (a === what ? null : what));
+  };
   const [query, setQuery] = useState("");
   const [allHosts, setAllHosts] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -157,13 +162,20 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
         <AddScreenshot
           eid={eid}
           hostIds={hostIds}
-          onAdded={(id) => {
+          onAdded={(id, why) => {
             onChange([...ids, id]);
             setAdding(null);
+            setFailed(why);
           }}
           onLink={() => setAdding("screenshot-link")}
           onClose={() => setAdding(null)}
         />
+      )}
+
+      {failed && (
+        <p role="alert" className="finding-steps__error">
+          {failed}
+        </p>
       )}
 
       {picking && (
