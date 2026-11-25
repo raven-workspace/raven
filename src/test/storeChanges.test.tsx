@@ -2,14 +2,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { logCommand } from "../features/capture/logCommand";
-import { saveCapture } from "../features/capture/saveCapture";
 import { syncChecklist, type SyncChange } from "../features/checklist/sync";
 import { useCleanup } from "../features/cleanup/queries";
 import { useAccessGrantMutations, useAccessGrants, useCredentialMutations, useTriedPairs } from "../features/credentials/queries";
 import { useEngagements } from "../features/engagements/queries";
 import { useFailedAttempts, useFindings } from "../features/findings/queries";
 import { useHostIdentity, useHostMutations, useHosts, useProgress } from "../features/hosts/queries";
+import { entryChanged } from "../features/log/entryChange";
 import { undoExtraction, useExtractions } from "../features/log/extractions";
 import { useLog, useLogMutations } from "../features/log/queries";
 import { useNotesStore } from "../features/notes/useNotesStore";
@@ -29,10 +28,6 @@ vi.mock("../lib/api");
 vi.mock("../features/checklist/sync", async (orig) => ({
   ...(await orig<typeof import("../features/checklist/sync")>()),
   syncChecklist: vi.fn(),
-}));
-vi.mock("../features/capture/saveCapture", async (orig) => ({
-  ...(await orig<typeof import("../features/capture/saveCapture")>()),
-  saveCapture: vi.fn(),
 }));
 const m = vi.mocked(api, true);
 
@@ -115,7 +110,6 @@ describe("views refetch after a write", () => {
   });
 
   it("a capture save refetches what it filed: tried pairs, extractions, identity", async () => {
-    vi.mocked(saveCapture).mockResolvedValue({ entry: { id: "l1" } as LogEntry, summary: null } as Awaited<ReturnType<typeof saveCapture>>);
     const { qc, wrapper } = setup();
     renderHook(() => {
       useTriedPairs("e1");
@@ -124,8 +118,8 @@ describe("views refetch after a write", () => {
     }, { wrapper });
     const lists = [m.triedPairsList, m.extractionsList, m.hostIdentityGet];
     await waitFor(() => lists.forEach((l) => expect(l).toHaveBeenCalledTimes(1)));
-    const host = { id: "h1", name: "DC01" } as Host;
-    await act(() => logCommand(qc, { engagementId: "e1", host, hosts: [host], title: "t", command: "id", ranOn: "" }).then(() => undefined));
+    const entry = { id: "l1", hostIds: ["h1"], content: { kind: "command", blocks: [{ command: "id", output: "" }] } } as unknown as LogEntry;
+    await act(() => entryChanged({ qc, engagementId: "e1", change: { change: "saved", entry, filing: null, failures: [] } }).then(() => undefined));
     await waitFor(() => lists.forEach((l) => expect(l).toHaveBeenCalledTimes(2)));
   });
 

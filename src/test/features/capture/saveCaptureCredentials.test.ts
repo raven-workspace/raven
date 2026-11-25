@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveCapture } from "../../../features/capture/resolve";
 import { saveCapture } from "../../../features/capture/saveCapture";
@@ -65,7 +66,7 @@ function save(text: string, asNote = false) {
   const r = resolveCapture({ ...EMPTY_DRAFT, text, asNote }, {
     hosts: [WEB], scope: [], domain: "", machines: [], lastRanOn: null, library: TEST_LIBRARY, presetHostId: "h1",
   });
-  return saveCapture({ engagementId: "e1", draft: r.draft, draftInput: r.draftInput, edits: r.edits, image: null, hosts: [WEB] });
+  return saveCapture(new QueryClient(), { engagementId: "e1", draft: r.draft, draftInput: r.draftInput, edits: r.edits, image: null, hosts: [WEB] });
 }
 
 describe("saveCapture with pasted credentials", () => {

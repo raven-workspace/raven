@@ -16,10 +16,8 @@ import { KindChips } from "../KindChips/KindChips";
 import { KindFields } from "../KindFields/KindFields";
 import { PasteArea } from "../PasteArea/PasteArea";
 import { KINDS, resolveCapture } from "../resolve";
-import { useSaveSummaryStore } from "../useSaveSummaryStore";
-import { PartialSaveError, saveCapture } from "../saveCapture";
-import { reportError } from "../../../lib/lockSignal";
-import { storeChanged } from "../../../lib/storeChange";
+import { saveCapture } from "../saveCapture";
+import { EntryChangeError } from "../../log/entryChange";
 import { EMPTY_DRAFT, useCaptureStore, type PanelDraft } from "../useCaptureStore";
 import { useSettings } from "../../settings/queries";
 import { RavenError } from "../../../types/errors";
@@ -84,16 +82,15 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     }
   }, [pd.image]);
 
-  const refresh = (entryId: string) => void storeChanged(qc, { entity: "logEntry", id: entryId, change: "saved" });
-
   async function save() {
     if (saving || !r.canSave) return;
     setSaving(true);
     setError(null);
     const store = useCaptureStore.getState();
     const image = pd.image && (kind === "screenshot" || kind === "flag") ? { mime: pd.image.mime, dataBase64: pd.image.dataBase64 } : null;
+    // The save reports its own store change, summary and errors (the entry change); this form shows what's left.
     try {
-      const saved = await saveCapture({
+      await saveCapture(qc, {
         engagementId: id,
         draft: r.draft,
         draftInput: r.draftInput,
@@ -105,23 +102,15 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           set({ created: [...cur, h] });
         },
       });
-      refresh(saved.entry.id);
       store.discard(id);
       store.close();
-      useSaveSummaryStore.getState().show(saved.entry.id, saved.summary);
     } catch (e) {
-      // A `locked` rejection must reach the vault gate, as query and mutation errors do.
-      for (const reason of e instanceof PartialSaveError ? e.reasons : [e]) reportError(reason);
-      if (e instanceof PartialSaveError) {
-        refresh(e.entry.id);
+      if (e instanceof EntryChangeError) {
+        // The entry is saved: the draft goes, so Save does not create it twice.
         store.discard(id);
         store.setNotice(e.message);
-        // The extraction was stored all the same: its summary (and Undo) still shows.
-        useSaveSummaryStore.getState().show(e.entry.id, e.summary);
       } else {
-        // Nothing was saved but the hosts made for its new IPs.
-        const created = useCaptureStore.getState().drafts[id]?.created ?? [];
-        void storeChanged(qc, ...created.map((h) => ({ entity: "host" as const, id: h.id, change: "created" as const })));
+        // Nothing was saved; the draft stays for a retry.
         setError(RavenError.from(e).message);
       }
     } finally {

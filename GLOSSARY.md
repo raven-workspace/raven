@@ -62,6 +62,9 @@ _Avoid_: invalidation list, cache keys
 Bringing the checklist and the board up to date after a store change: ticks from log entries, then fact ticks, then domain admin cover, then each host's board column, always in that order and from one read of the checklist.
 _Avoid_: resync (one step of it), board sync (the last step)
 
+**Entry change**:
+What happened to one log entry: saved by a capture, edited, deleted, or its extraction undone. Every way an entry changes reports one, and one module (`src/features/log/entryChange.ts`) runs what follows, in order: the checklist sync, the exam-sim Metasploit lock, a capture save's extraction summary, then the store change, the save summary and one error after a partial save.
+_Avoid_: after-save, follow-up (a follow-up is one step of it)
 
 **Same domain**:
 Two domain spellings that name one Windows domain, anchored to the engagement's own domain (an FQDN): equal ignoring case and surrounding whitespace, or the engagement's domain and its first label (`corp.lan` and `CORP`). With no engagement domain only equal spellings match, and a NetBIOS name never matches any other FQDN (`CORP` is not `corp.local`, and `WEB01` is not `web01.corp.lan`). A blank domain matches only a blank one. Decided by the store; credential, username and tried-pair identity, tried-pair promotion and undo all use it.
