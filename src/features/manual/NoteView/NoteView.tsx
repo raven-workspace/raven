@@ -10,7 +10,7 @@ import { parseMarkdown, type Block, type Inline } from "../../../engines/manual/
 import { maskPlaceholders, matchRanges, matchRegex } from "../../../engines/manual/search";
 import { highlight } from "../../../ui/index";
 import { useArsenalStore } from "../../arsenal/useArsenalStore";
-import { useFillBase } from "../../palette/fillData";
+import { useFillBase } from "../../commands/fillData";
 import { InlineCommand } from "../InlineCommand/InlineCommand";
 import { ManualCommand, type FillBase } from "../ManualCommand/ManualCommand";
 import { NoteTable } from "../NoteTable/NoteTable";

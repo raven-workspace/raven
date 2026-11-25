@@ -2,7 +2,7 @@ import type { Host } from "../../../types/host";
 import { X } from "@phosphor-icons/react";
 import { Chip, ChipSet, IconButton, Select } from "../../../ui/index";
 import { HostsLoadError } from "../../arsenal/HostChip/HostChip";
-import type { HostsError } from "../../palette/fillData";
+import type { HostsError } from "../../commands/fillData";
 import "./HostChips.scss";
 
 export interface HostChipsProps {

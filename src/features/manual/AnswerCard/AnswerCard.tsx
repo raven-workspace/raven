@@ -37,14 +37,13 @@ function CardCommand({ command, base }: { command: LibraryCommand; base: FillBas
   };
   return (
     <div
-      ref={root} role="group" aria-label={`Answer command: ${cmd.text}`} tabIndex={0} onKeyDown={onKeyDown} data-card-stop=""
+      ref={root} role="group" aria-label={`Answer command: ${cmd.shown}`} tabIndex={0} onKeyDown={onKeyDown} data-card-stop=""
       className="manual-command manual-command--tight"
     >
       <CommandBlock
-        text={cmd.text}
-        {...(cmd.copyText !== undefined ? { copyText: cmd.copyText } : {})}
+        text={cmd.shown}
         tokens={cmd.tokens ?? []}
-        copyLabel={`Copy command: ${cmd.text}`}
+        copyLabel={`Copy command: ${cmd.shown}`}
         onCopyAction={(button) =>
           copy().then((r) => {
             if (r === "guarded" && (document.activeElement === document.body || document.activeElement === button)) button.focus();

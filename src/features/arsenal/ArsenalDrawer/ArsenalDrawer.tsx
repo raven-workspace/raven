@@ -1,23 +1,19 @@
 import { ArrowsOut } from "@phosphor-icons/react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useMatch, useNavigate } from "react-router";
-import { fillCommand } from "../../../engines/checklist/index";
 import { searchArsenal, type ArsenalHit } from "../../../engines/library/arsenalSearch";
 import { useLibrary, useToolkit } from "../../../engines/library/store";
-import { copyPlain, copySecret } from "../../../lib/clipboard";
-import { shortHostName } from "../../../lib/hostName";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../../lib/keys";
 import { reportError } from "../../../lib/lockSignal";
 import { BELOW_TITLE_BAR, Button, HintLine, useDrawerPresence, useFadeOnChange, type Hint } from "../../../ui/index";
-import { logCommand } from "../../capture/logCommand";
 import { useCredPickStore } from "../../checklist/credPick";
-import { useFillBase } from "../../palette/fillData";
+import { useFillBase } from "../../commands/fillData";
 import { GENERATORS } from "../../palette/generators";
 import type { SuggestContext } from "../../palette/suggest";
 import { CardView, CommandPane } from "../CardView/CardView";
 import { CommandPreview, fillPreview } from "../CommandPreview/CommandPreview";
-import { copyKey, useCopyGuard } from "../copyGuard";
+import { copyKey } from "../../commands/copyCommand";
+import { copyTo, useCommandCopy } from "../../commands/useCommandCopy";
 import { CredChip, isCredPickKey } from "../CredChip/CredChip";
 import type { CredChipHandle } from "../CredChip/CredChip";
 import { HostChip, isHostPickKey } from "../HostChip/HostChip";
@@ -41,7 +37,6 @@ const hitRow = (hit: ArsenalHit): Row => ({
 
 function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: string; hostId: string | null }) {
   const navigate = useNavigate();
-  const qc = useQueryClient();
   const library = useLibrary();
   const { toolkit } = useToolkit();
   const cardId = useArsenalStore((s) => s.cardId);
@@ -121,7 +116,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
 
   const focusToken = useCallback((t: string) => fieldEls.current.get(t)?.focus(), []);
   const focusCred = useCallback(() => credRef.current?.focus(), []);
-  const guard = useCopyGuard({ focusToken, focusCred, hostName: host ? shortHostName(host.name) : null });
+  const guard = useCommandCopy({ to: copyTo({ d, host }), focusToken, focusCred });
   // Moving to another row ends a held-back copy: coming back to the first one holds it back again.
   const { reset: resetGuard } = guard;
   const currentId = current?.id;
@@ -140,31 +135,12 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     setSelected(0);
   };
 
-  /** Copies the filled command through the copy guard; null when it was held back for an unfilled token. */
-  const copy = async (): Promise<string | null> => {
-    if (!filled) return null;
-    const c = filled.cmd;
-    const text = c.copyText ?? c.text;
-    const r = await guard.attempt(c, () => (text !== c.text ? copySecret : copyPlain)(text));
-    return r === "copied" ? text : null;
-  };
-
-  const copyCommand = async (hit: Extract<ArsenalHit, { type: "command" }>, log: boolean) => {
+  /** Copies the command in the preview (and with `log`, logs it); a failure shows in the drawer's own status. */
+  const copyCommand = async (log: boolean) => {
     setStatus(undefined);
     if (!filled) return;
     try {
-      const text = await copy();
-      if (text === null) return;
-      if (log && host && d.engagement) {
-        const c = hit.command;
-        // The real values, as typed at the shell (not shell-escaped, not masked).
-        const typed = fillCommand(c.template, filled.input, { commandOs: c.os }).text;
-        await logCommand(qc, {
-          engagementId, host, hosts: d.hosts, command: typed,
-          title: c.title,
-          ranOn: c.runFrom === "attacker" ? (d.settings?.machines[0] ?? "") : host.name,
-        });
-      }
+      await guard.copy(filled.cmd, { log });
     } catch (e) {
       reportError(e);
       setStatus(RavenError.from(e).message);
@@ -222,7 +198,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
       if (!current) return;
       e.preventDefault();
       if (current.kind === "category") openCategory(current.category);
-      else if (current.hit.type === "command") void copyCommand(current.hit, e.metaKey || e.ctrlKey);
+      else if (current.hit.type === "command") void copyCommand(e.metaKey || e.ctrlKey);
       else openHit(current.hit, false);
     } else if (e.key === "ArrowRight" && onList && current && e.currentTarget.selectionStart === e.currentTarget.value.length) {
       // → goes in: a category lists its hits, a card or generator opens, a command opens at its block.
@@ -239,7 +215,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     if (current?.kind !== "hit" || current.hit.type !== "command") return;
     e.preventDefault();
     e.stopPropagation();
-    void copyCommand(current.hit, e.metaKey || e.ctrlKey);
+    void copyCommand(e.metaKey || e.ctrlKey);
   };
   // Enter in one of the preview's fields copies too; Enter on a chip chooses, never copies.
   const onPreviewKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -247,11 +223,11 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     if (e.target instanceof HTMLElement && e.target.getAttribute("aria-haspopup") === "listbox") return;
     if (current?.kind !== "hit" || current.hit.type !== "command") return;
     e.preventDefault();
-    void copyCommand(current.hit, e.metaKey || e.ctrlKey);
+    void copyCommand(e.metaKey || e.ctrlKey);
   };
 
   const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit };
-  const note = guard.forKey === (filled ? copyKey(filled.cmd) : null) ? (guard.hint ?? guard.confirm) : null;
+  const note = guard.noteFor(filled?.cmd ?? null);
   const activate = (r: Row, i: number) => {
     setSelected(i);
     if (r.kind === "category") openCategory(r.category);

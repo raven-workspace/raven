@@ -1,32 +1,25 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { fillCommand } from "../../engines/checklist";
 import type { LibraryCommand } from "../../engines/library/types";
 import { examReading } from "../../engines/exam";
-import { copyPlain, copySecret } from "../../lib/clipboard";
 import { shortHostName } from "../../lib/hostName";
 import { reportError } from "../../lib/lockSignal";
-import { useCopyGuard } from "../arsenal/copyGuard";
-import { logCommand } from "../capture/logCommand";
-import type { FilledCommand } from "../checklist/CommandList/CommandList";
-import { fillLibraryCommand } from "../checklist/goalCommands";
-import type { useFillBase } from "../palette/fillData";
+import type { FillBase } from "../commands/fillData";
+import { commandText, fillLibraryCommand, type FilledCommand } from "../commands/filledCommand";
+import { copyTo, useCommandCopy } from "../commands/useCommandCopy";
 import { useManualStatus } from "./useManualStatus";
 
-export type FillBase = ReturnType<typeof useFillBase>;
+export type { FillBase };
 
-const noop = () => {};
 const note = (text: string, tone: "ok" | "warn") => useManualStatus.getState().set(text, tone);
 
 /**
- * A Manual command's fill, exam rules, copy guard and log, shared by a code block and an inline command. With `fill`,
- * its `{PLACEHOLDERS}` fill for the host in view exactly as an Arsenal card's do (`fillLibraryCommand`); without, the
- * text copies as written. Copy goes through the copy guard (an unfilled token holds the first copy back). Every
- * outcome is written to the Manual's one status line.
+ * A Manual command, copied through the command-copying module. With `fill`, its `{PLACEHOLDERS}` fill for the host in
+ * view exactly as an Arsenal card's do; without, the text copies as written. What stays here is the Manual's own: every
+ * outcome is written to its one status line, and nothing takes focus.
  *
  * The exam rules read it as a reading surface (`examReading`): the text is never hidden, `examLine` is its exam
  * verdict's line, and a banned command, a Metasploit command locked to another host, or one whose verdict waits on the
- * engagement's kind is held back on its first copy.
+ * engagement's kind is held back on its first copy with the verdict's warning.
  */
 export function useNoteCommand(command: LibraryCommand, { fill, output, base }: { fill: boolean; output: boolean; base: FillBase }): {
   cmd: FilledCommand;
@@ -35,35 +28,25 @@ export function useNoteCommand(command: LibraryCommand, { fill, output, base }: 
   examLine: { text: string; breach: boolean } | null;
 } {
   const { d, host, makeInput, exam } = base;
-  const qc = useQueryClient();
-  const hostName = host ? shortHostName(host.name) : null;
-  const guard = useCopyGuard({ focusToken: noop, focusCred: noop, hostName, onNote: note });
+  const copier = useCommandCopy({ to: copyTo({ d, host }), onNote: note });
   const input = useMemo(() => makeInput({}), [makeInput]);
 
-  const cmd: FilledCommand = useMemo(
-    () => (fill ? fillLibraryCommand(command, input, false) : { id: command.id, title: command.title, text: command.template, unresolved: [], msfMarker: false }),
+  const cmd = useMemo(
+    () => (fill ? fillLibraryCommand(command, input) : commandText({ id: command.id, title: command.title, text: command.template, runFrom: command.runFrom })),
     [fill, command, input],
   );
 
-  // A reading surface: the command always shows, with its verdict's line; a forbidden or pending one is held back once.
   const reading = examReading(command, exam, (id) => shortHostName(d.hosts.find((h) => h.id === id)?.name ?? id));
-  const warn = reading.holdBack;
+  const warning = reading.holdBack;
 
-  const copy = (): Promise<"copied" | "guarded"> => {
-    const text = cmd.copyText ?? cmd.text;
-    return guard.attempt(cmd, () => (text !== cmd.text ? copySecret : copyPlain)(text), warn);
-  };
+  const copy = () => copier.copy(cmd, { warning });
 
   const copyAndLog = async () => {
     try {
-      if ((await copy()) !== "copied" || output || !host || !d.engagement) return;
-      // The real values, as typed at the shell (not shell-escaped, not masked).
-      const typed = fill ? fillCommand(command.template, input, { commandOs: command.os }).text : command.template;
-      await logCommand(qc, {
-        engagementId: d.engagement.id, host, hosts: d.hosts, command: typed, title: command.title,
-        ranOn: command.runFrom === "attacker" ? (d.settings?.machines[0] ?? "") : host.name,
-      });
-      note(`Copied and logged to ${hostName ?? host.name}`, cmd.unresolved.length > 0 ? "warn" : "ok");
+      // Output to read is copied, never logged.
+      const log = !output && copier.canLog;
+      if ((await copier.copy(cmd, { warning, log })) !== "copied" || !log || !host) return;
+      note(`Copied and logged to ${shortHostName(host.name)}`, cmd.unresolved.length > 0 ? "warn" : "ok");
     } catch (e) {
       reportError(e);
     }

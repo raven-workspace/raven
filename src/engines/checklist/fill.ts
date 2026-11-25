@@ -8,7 +8,7 @@ import { isNtlmHash, isOwnerless, ntHalf } from '../credentials/matrix';
 import { dcFillChoice, dcForFill, hostFacts, serviceNames } from './facts';
 import type { ChecklistGoal } from './types';
 import { quoteContextAt, shellEscape } from './shellQuote';
-import { canonicalToken, CREDENTIAL_TOKENS, resolveTemplate, type SubstitutionContext } from './template';
+import { canonicalToken, CREDENTIAL_TOKENS, resolveTemplate, SECRET_TOKENS, type SubstitutionContext } from './template';
 
 export interface FillInput {
   host: Host;
@@ -228,27 +228,54 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
   };
 }
 
-export function fillCommand(template: string, input: FillInput, opts: FillOptions = {}): FillResult {
-  const ctx = commandContext(input, opts);
+/** One fill of a template in the three forms a filled command needs, from one context and one resolve. */
+export interface FillForms extends Omit<FillResult, 'text'> {
+  /** What is shown: secret tokens masked. */
+  shown: string;
+  /** What is copied: the real values, credential values shell-escaped when `shellSafe` (the Kali shell). */
+  copied: string;
+  /** What is typed at the shell and logged: the real values, neither masked nor escaped. */
+  typed: string;
+  /** Whether a secret token was filled, so the copied text carries a secret. */
+  secret: boolean;
+  /** The unresolved placeholders as written that still show in `shown` (INTERFACE aside), to mark. */
+  marks: string[];
+}
+
+/** Fills `template` once into all three forms. `secretMask` replaces each filled secret in `shown`. */
+export function fillForms(
+  template: string, input: FillInput, opts: { secretMask: string; shellSafe?: boolean; commandOs?: string },
+): FillForms {
+  const ctx = commandContext(input, opts.commandOs ? { commandOs: opts.commandOs } : {});
   const { unresolved, ranges } = resolveTemplate(template, ctx);
   // The engine shows display defaults (10.10.14.X, 4444) for empty known fields; never present those as real.
   // INTERFACE alone keeps its tun0 default and is not reported.
-  let text = '';
+  let shown = '';
+  let copied = '';
+  let typed = '';
+  let secret = false;
+  const marks = new Set<string>();
   let last = 0;
   for (const r of ranges) {
-    text += template.slice(last, r.start);
+    const between = template.slice(last, r.start);
     const token = template.slice(r.start, r.end);
-    let piece = r.resolved || r.canonical === 'interface' ? resolveTemplate(token, ctx).text : token;
-    if (opts.shellSafe && r.resolved && CREDENTIAL_TOKENS.has(canonicalToken(r.raw))) {
-      piece = shellEscape(piece, quoteContextAt(template, r.start));
-    }
-    text += piece;
+    const name = canonicalToken(r.raw);
+    const piece = r.resolved || r.canonical === 'interface' ? resolveTemplate(token, ctx).text : token;
+    const masked = r.resolved && SECRET_TOKENS.has(name);
+    if (masked) secret = true;
+    if (!r.resolved && r.canonical !== 'interface' && piece === token) marks.add(token);
+    shown += between + (masked ? opts.secretMask : piece);
+    copied += between + (opts.shellSafe && r.resolved && CREDENTIAL_TOKENS.has(name) ? shellEscape(piece, quoteContextAt(template, r.start)) : piece);
+    typed += between + piece;
     last = r.end;
   }
-  text += template.slice(last);
+  const tail = template.slice(last);
+  const result: FillForms = {
+    shown: shown + tail, copied: copied + tail, typed: typed + tail, secret, marks: [...marks],
+    unresolved: unresolved.filter((u) => u !== 'INTERFACE'),
+  };
 
   const tunnel = tunnelFor(input.host, input.tunnels);
-  const result: FillResult = { text, unresolved: unresolved.filter((u) => u !== 'INTERFACE') };
   const usesDc = ranges.some((r) => r.resolved && ['DC_IP', 'DC_HOST'].includes(canonicalToken(r.raw)));
   if (usesDc && !input.overrides?.DC_IP && dcFillChoice(input.hosts, input.servicesByHost).byName) result.dcByName = true;
   if (tunnel) {
@@ -258,5 +285,16 @@ export function fillCommand(template: string, input: FillInput, opts: FillOption
       down: tunnel.status === 'down',
     };
   }
+  return result;
+}
+
+/** One form of a fill: masked with `secretMask`, shell-escaped with `shellSafe`, else as typed. */
+export function fillCommand(template: string, input: FillInput, opts: FillOptions = {}): FillResult {
+  const f = fillForms(template, input, {
+    secretMask: opts.secretMask ?? '', shellSafe: opts.shellSafe ?? false, ...(opts.commandOs ? { commandOs: opts.commandOs } : {}),
+  });
+  const result: FillResult = { text: opts.secretMask !== undefined ? f.shown : opts.shellSafe ? f.copied : f.typed, unresolved: f.unresolved };
+  if (f.dcByName) result.dcByName = true;
+  if (f.viaTunnel) result.viaTunnel = f.viaTunnel;
   return result;
 }

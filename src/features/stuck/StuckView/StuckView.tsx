@@ -10,7 +10,8 @@ import { shortHostName } from "../../../lib/hostName";
 import { XIcon } from "@phosphor-icons/react";
 import { BELOW_TITLE_BAR, Disclosure, HintLine, IconButton, LoadingState, labelClass, queryState, useDrawerPresence, type Hint } from "../../../ui/index";
 import { useCredFill } from "../../checklist/credPick";
-import { CommandList, type FilledCommand } from "../../checklist/CommandList/CommandList";
+import { CommandList } from "../../checklist/CommandList/CommandList";
+import { commandText, type FilledCommand } from "../../commands/filledCommand";
 import { goalCommands } from "../../checklist/goalCommands";
 import { useChecklist } from "../../checklist/queries";
 import { useTunnels } from "../../network/queries";
@@ -42,9 +43,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 const nudgeCommands = (prefix: string, nudges: { label: string; command: string }[]): FilledCommand[] =>
-  nudges.map((n, i) => ({
-    id: `${prefix}:${i}`, title: n.label, text: n.command, copyText: n.command, unresolved: [], msfMarker: false,
-  }));
+  nudges.map((n, i) => commandText({ id: `${prefix}:${i}`, title: n.label, text: n.command }));
 
 /**
  * Stuck view (`H`): a slide-over on the host view with what to try next, all on one screen. Open or closed is the

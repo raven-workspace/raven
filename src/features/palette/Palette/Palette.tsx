@@ -1,15 +1,11 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { fillCommand } from "../../../engines/checklist/index";
 import { credLabel } from "../../../engines/credentials/labels";
 import { useLibrary, useToolkit } from "../../../engines/library/store";
-import { copyPlain, copySecret } from "../../../lib/clipboard";
 import { reportError } from "../../../lib/lockSignal";
 import { Dialog, HintLine, type Hint } from "../../../ui/index";
-import { logCommand } from "../../capture/logCommand";
-import { copyKey, useCopyGuard } from "../../arsenal/copyGuard";
-import { shortHostName } from "../../../lib/hostName";
+import { copyKey } from "../../commands/copyCommand";
+import { copyTo, useCommandCopy } from "../../commands/useCommandCopy";
 import { useArsenalStore } from "../../arsenal/useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "../../arsenal/useFillScope";
 import { CredChip, isCredPickKey } from "../../arsenal/CredChip/CredChip";
@@ -21,7 +17,7 @@ import { useCredPickStore } from "../../checklist/credPick";
 import { ResultList } from "../../arsenal/ResultList/ResultList";
 import type { ResultGroup, ResultRow } from "../../arsenal/ResultList/ResultList";
 import { SearchBar } from "../../arsenal/SearchBar/SearchBar";
-import { useFillBase } from "../fillData";
+import { useFillBase } from "../../commands/fillData";
 import { GENERATORS } from "../generators";
 import type { GeneratorId } from "../../../engines/payloads/types";
 import { usePayloadsStore } from "../../payloads/usePayloadsStore";
@@ -45,7 +41,6 @@ const paletteRow = (result: PaletteResult): PaletteRow => ({
 });
 
 function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: (opts?: { handOff?: boolean }) => void }) {
-  const qc = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
   const { notes } = useManualNotes();
@@ -121,20 +116,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
   const focusToken = useCallback((t: string) => fieldEls.current.get(t)?.focus(), []);
   const focusCred = useCallback(() => credRef.current?.focus(), []);
-  const guard = useCopyGuard({ focusToken, focusCred, hostName: host ? shortHostName(host.name) : null });
+  const guard = useCommandCopy({ to: copyTo({ d, host }), focusToken, focusCred });
   // Moving to another row ends a held-back copy: coming back to the first one holds it back again.
   const { reset: resetGuard } = guard;
   const currentKey = current ? `${current.type}-${current.id}` : "";
   useEffect(() => resetGuard(), [currentKey, resetGuard]);
-
-  /** Copies the filled command through the copy guard: null when it was held back for an unfilled token. */
-  const copy = async (): Promise<string | null> => {
-    if (!filled) return null;
-    const c = filled.cmd;
-    const text = c.copyText ?? c.text;
-    const r = await guard.attempt(c, () => (text !== c.text ? copySecret : copyPlain)(text));
-    return r === "copied" ? text : null;
-  };
 
   const run = async (log: boolean) => {
     setStatus(undefined);
@@ -165,19 +151,8 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     }
     if (!filled || current?.type !== "command") return;
     try {
-      const text = await copy();
       // Held back for an unfilled token: the field has focus and the hint says why. Nothing is copied, logged or closed.
-      if (text === null) return;
-      if (log && host && d.engagement) {
-        const c = current.command;
-        // The real values, as typed at the shell (not shell-escaped, not masked).
-        const typed = fillCommand(c.template, filled.input, { commandOs: c.os }).text;
-        await logCommand(qc, {
-          engagementId, host, hosts: d.hosts, command: typed,
-          title: c.title,
-          ranOn: c.runFrom === "attacker" ? (d.settings?.machines[0] ?? "") : host.name,
-        });
-      }
+      if ((await guard.copy(filled.cmd, { log })) === "guarded") return;
       onClose();
     } catch (e) {
       reportError(e);

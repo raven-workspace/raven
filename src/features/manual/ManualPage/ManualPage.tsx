@@ -9,7 +9,7 @@ import { RavenError } from "../../../types/errors";
 import { Button, Disclosure, EmptyState, ErrorState, HintLine, labelClass, useFadeOnChange, type Hint } from "../../../ui/index";
 import { HostChip, isHostPickKey, type HostChipHandle } from "../../arsenal/HostChip/HostChip";
 import { useFillScope, useLastEngagementStore } from "../../arsenal/useFillScope";
-import { useFillBase } from "../../palette/fillData";
+import { useFillBase } from "../../commands/fillData";
 import { AnswerCard } from "../AnswerCard/AnswerCard";
 import { MANUAL_NOTE_ID, manualKeysBlocked } from "../keys";
 import { MANUAL_QUERY, MANUAL_ROW } from "../searchPath";

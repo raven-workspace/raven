@@ -85,3 +85,9 @@ export function useFillBase(engagementId: string, hostId: string | null) {
   );
   return { d, host, engagement, cred, credOwnerId, loaded: d.engagement !== undefined, examReady, exam, makeInput };
 }
+
+/** The fill data for the host in view, as `useFillBase` gives it. */
+export type FillBase = ReturnType<typeof useFillBase>;
+
+/** One engagement's data a fill reads, as `useEngagementFillData` gives it. */
+export type EngagementFillData = ReturnType<typeof useEngagementFillData>;

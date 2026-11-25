@@ -3,7 +3,7 @@ import { cx } from "../../../lib/cx";
 import { shortHostName } from "../../../lib/hostName";
 import type { Host } from "../../../types/host";
 import { Button } from "../../../ui/index";
-import type { HostsError } from "../../palette/fillData";
+import type { HostsError } from "../../commands/fillData";
 import { ChipPicker } from "../ChipPicker/ChipPicker";
 import type { ChipOption, ChipPickerHandle } from "../ChipPicker/ChipPicker";
 import "./HostChip.scss";

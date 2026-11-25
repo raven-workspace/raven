@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CONFIRM_MS } from "../../../features/arsenal/copyGuard";
+import { CONFIRM_MS } from "../../../features/commands/copyCommand";
 import { useManualStatus } from "../../../features/manual/useManualStatus";
 
 const status = () => useManualStatus.getState();

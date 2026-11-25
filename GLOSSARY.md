@@ -74,7 +74,7 @@ _Avoid_: duplicate key
 ## Commands
 
 **Filled command**:
-A command with its placeholders filled for the host in view, in three forms: the text shown (secrets masked), the text copied (secrets in) and the text typed into a terminal (shell-safe). Filled once, used for all three.
+A command with its placeholders filled for the host in view, in three forms: the text shown (secrets masked), the text copied (secrets in, shell-safe where it runs in the Kali shell) and the text typed (the real values as you would type them, which is what a log entry records). Filled once, used for all three. One module copies it (`src/features/commands`): it picks the clipboard mode, runs the copy guard and logs it with its "ran on" machine.
 _Avoid_: resolved command, rendered command
 
 **Exam verdict**:

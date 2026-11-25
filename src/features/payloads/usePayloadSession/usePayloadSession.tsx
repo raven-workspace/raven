@@ -5,17 +5,15 @@ import { encodePs } from "../../../engines/payloads/encodePs";
 import { LISTENERS, placeholderNames } from "../../../engines/payloads/listeners";
 import type { BuiltPayload, GeneratorId, ListenerId, PayloadDef } from "../../../engines/payloads/types";
 import { api } from "../../../lib/api";
-import { copyPlain } from "../../../lib/clipboard";
-import { shortHostName } from "../../../lib/hostName";
 import { isDialogOpen } from "../../../lib/keys";
 import { reportError } from "../../../lib/lockSignal";
 import { storeChanged } from "../../../lib/storeChange";
 import type { PayloadBuild } from "../../../types/payloadBuild";
 import { Input, type Hint } from "../../../ui/index";
 import type { ChipPickerHandle } from "../../arsenal/ChipPicker/ChipPicker";
-import { copyKey, useCopyGuard } from "../../arsenal/copyGuard";
+import { commandText, type FilledCommand } from "../../commands/filledCommand";
+import { copyTo, useCommandCopy, type CommandCopy } from "../../commands/useCommandCopy";
 import { isHostPickKey, type HostChipHandle } from "../../arsenal/HostChip/HostChip";
-import { logCommand } from "../../capture/logCommand";
 import { contextLabel, hasToggles, isRanked, OS_LABEL, showsFilter, usePayloadFit } from "../usePayloadFit";
 import { usePayloadsStore } from "../usePayloadsStore";
 import { RavenError } from "../../../types/errors";
@@ -146,8 +144,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
   const psRef = useRef<HTMLInputElement>(null);
   const fieldEls = useRef(new Map<string, HTMLInputElement>());
   const focusToken = useCallback((t: string) => (t === "LPORT" && portRef.current ? portRef.current.open() : fieldEls.current.get(t)?.focus()), []);
-  const focusNothing = useCallback(() => {}, []);
-  const guard = useCopyGuard({ focusToken, focusCred: focusNothing, hostName: host ? shortHostName(host.name) : null });
+  const guard = useCommandCopy({ to: copyTo({ d, host }), focusToken });
   const { reset: resetGuard } = guard;
   const builtId = built?.def.id;
   useEffect(() => resetGuard(), [builtId, generator, resetGuard]);
@@ -188,49 +185,51 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     }
   };
 
-  /** The prepare step's own copy key: its id and the placeholders still showing in it. */
+  /**
+   * The payload's generated text as commands for the copying module, each with its own copy key. The payload itself
+   * runs on your machine for msfvenom, a file made on Kali or a step run in your own terminal, else on the target.
+   */
+  const runFrom = (d: PayloadDef) => (d.generator === "msfvenom" || d.upload?.kali || d.runsOn === "kali" ? "attacker" as const : "target" as const);
+  const payloadCmd = built ? commandText({ id: built.def.id, title: built.def.title, text: built.text, unresolved: built.unresolved, runFrom: runFrom(built.def) }) : null;
+  /** The prepare step: the placeholders still showing in it. */
   const prepareCmd = built?.prepare
-    ? { id: `${built.def.id}:prepare`, unresolved: built.unresolved.filter((t) => built.prepare!.includes(`{${t}}`)) }
+    ? commandText({ id: `${built.def.id}:prepare`, title: built.def.title, text: built.prepare, unresolved: built.unresolved.filter((t) => built.prepare!.includes(`{${t}}`)) })
     : null;
-  /** The listener's own copy key: a placeholder still showing in it ({TARGET_IP} on a host with no IP) holds it back once. */
-  const listenerCmd = built?.listener ? { id: `${built.def.id}:listener`, unresolved: [...new Set(placeholderNames(built.listener))] } : null;
+  /** The listener: a placeholder still showing in it ({TARGET_IP} on a host with no IP) holds it back once. */
+  const listenerCmd = built?.listener
+    ? commandText({ id: `${built.def.id}:listener`, title: built.def.title, text: built.listener, unresolved: [...new Set(placeholderNames(built.listener))] })
+    : null;
   /** The trigger copies as is (its placeholders are highlighted, not held back); only "Rebuild first" holds it. */
-  const triggerCmd = built?.trigger ? { id: `${built.def.id}:trigger`, unresolved: [] as string[] } : null;
+  const triggerCmd = built?.trigger ? commandText({ id: `${built.def.id}:trigger`, title: built.def.title, text: built.trigger.text }) : null;
 
-  /** Copies the prepare step through the copy guard; it is a build step, so a copy records the build. */
-  const copyPrepare = async (): Promise<"copied" | "guarded"> => {
-    if (!built?.prepare || !prepareCmd) return "guarded";
+  /** Copies one of the payload's steps through the copying module; a failed copy shows in `status`. */
+  const copyStep = async (cmd: FilledCommand, opts: Parameters<CommandCopy["copy"]>[1] = {}): Promise<"copied" | "guarded"> => {
     setStatus(undefined);
-    const b = built;
-    const text = b.prepare!;
     try {
-      const r = await guard.attempt({ ...prepareCmd, title: b.def.title, text, msfMarker: false }, () => copyPlain(text));
-      if (r !== "copied") return "guarded";
+      return await guard.copy(cmd, opts);
     } catch (e) {
       reportError(e);
       setStatus(RavenError.from(e).message);
       return "guarded";
     }
-    await record(b.def);
+  };
+
+  /** Copies the prepare step; it is a build step, so a copy records the build. */
+  const copyPrepare = async (): Promise<"copied" | "guarded"> => {
+    if (!built || !prepareCmd) return "guarded";
+    const def = built.def;
+    if ((await copyStep(prepareCmd)) !== "copied") return "guarded";
+    await record(def);
     return "copied";
   };
 
   /** Copies an uploaded file's trigger; held back once while its build is stale, and records only while it is not. */
   const copyTrigger = async (): Promise<"copied" | "guarded"> => {
-    if (!built?.trigger || !triggerCmd) return "guarded";
-    setStatus(undefined);
-    const b = built;
-    const text = b.trigger!.text;
+    if (!built || !triggerCmd) return "guarded";
+    const def = built.def;
     const mayRecord = stale === null && !unknownBuild;
-    try {
-      const r = await guard.attempt({ ...triggerCmd, title: b.def.title, text, msfMarker: false }, () => copyPlain(text), triggerWarn);
-      if (r !== "copied") return "guarded";
-    } catch (e) {
-      reportError(e);
-      setStatus(RavenError.from(e).message);
-      return "guarded";
-    }
-    if (mayRecord) await record(b.def);
+    if ((await copyStep(triggerCmd, { warning: triggerWarn })) !== "copied") return "guarded";
+    if (mayRecord) await record(def);
     return "copied";
   };
 
@@ -241,39 +240,25 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
    */
   const copy = async (log: boolean): Promise<"copied" | "guarded"> => {
     // A key to press (Ctrl-Z) has nothing to copy or log.
-    if (!built || built.def.keypress) return "guarded";
-    setStatus(undefined);
-    const b = built;
-    const cmd = { id: b.def.id, title: b.def.title, text: b.text, unresolved: b.unresolved, msfMarker: false };
+    if (!built || !payloadCmd || built.def.keypress) return "guarded";
+    const def = built.def;
     const isBuild = buildStep === "payload";
     const mayRecord = isBuild || (stale === null && !unknownBuild);
-    try {
-      // A trigger's "rebuild first" (or "checking") hold comes before the lock; no Meterpreter def has a prepare step,
-      // so the two never meet today.
-      const r = await guard.attempt(cmd, () => copyPlain(b.text), (!isBuild ? triggerWarn : undefined) ?? lockWarn);
-      if (r !== "copied") return "guarded";
-      if (mayRecord) await record(b.def);
-      if (!log || !host || !d.engagement) return "copied";
-      await logCommand(qc, {
-        engagementId, host, hosts: d.hosts, command: b.text, title: b.def.title,
-        // msfvenom, a file made on Kali and a step run in your own terminal run on your machine; the rest on the target.
-        ranOn: b.def.generator === "msfvenom" || b.def.upload?.kali || b.def.runsOn === "kali" ? (d.settings?.machines[0] ?? "") : host.name,
-        // An encoded command has no LHOST or LPORT in it: nothing to remember for it.
-        payloadId: b.def.id, ...(b.def.generator === "encode" ? {} : { payloadValues: { LHOST: fit.lhost, LPORT: fit.port } }),
-      });
-      return "copied";
-    } catch (e) {
-      reportError(e);
-      setStatus(RavenError.from(e).message);
-      return "guarded";
-    }
+    // A trigger's "rebuild first" (or "checking") hold comes before the lock; no Meterpreter def has a prepare step,
+    // so the two never meet today.
+    return copyStep(payloadCmd, {
+      warning: (!isBuild ? triggerWarn : undefined) ?? lockWarn,
+      ...(mayRecord ? { afterCopy: () => record(def) } : {}),
+      log,
+      // An encoded command has no LHOST or LPORT in it: nothing to remember for it.
+      logAs: { payloadId: def.id, ...(def.generator === "encode" ? {} : { payloadValues: { LHOST: fit.lhost, LPORT: fit.port } }) },
+    });
   };
-  /** Copies the listener (⌥L, its Copy) through the copy guard: an unresolved placeholder focuses its field first. */
+  /** Copies the listener (⌥L, its Copy): an unresolved placeholder focuses its field first. A failure only reports. */
   const copyListener = async (): Promise<"copied" | "guarded"> => {
-    if (!built?.listener || !listenerCmd) return "guarded";
-    const text = built.listener;
+    if (!listenerCmd) return "guarded";
     try {
-      return await guard.attempt({ ...listenerCmd, title: built.def.title, text, msfMarker: false }, () => copyPlain(text));
+      return await guard.copy(listenerCmd);
     } catch (e) {
       reportError(e);
       return "guarded";
@@ -337,8 +322,8 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     }
   };
 
-  const noteFor = (c: { id: string; unresolved: string[] } | null) => (c && guard.forKey === copyKey(c) ? (guard.hint ?? guard.confirm) : null);
-  const note = noteFor(built ? { id: built.def.id, unresolved: built.unresolved } : null);
+  const { noteFor } = guard;
+  const note = noteFor(payloadCmd);
   const pasteContext = built ? (fit.context && built.def.contexts.includes(fit.context) ? fit.context : built.def.contexts[0]!) : null;
   // An uploaded file is saved as (or made on Kali into) its FILE, then triggered.
   const uploadFile = def?.upload ? (extra.FILE?.trim() || def.defaults?.FILE || "{FILE}") : null;

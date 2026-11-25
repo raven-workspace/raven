@@ -11,7 +11,7 @@ import { SHELLS } from "../../engines/payloads/shells";
 import type { BuiltPayload, GeneratorId, PayloadDef } from "../../engines/payloads/types";
 import { UPGRADE } from "../../engines/payloads/upgrade";
 import { api } from "../../lib/api";
-import { useFillBase } from "../palette/fillData";
+import { useFillBase } from "../commands/fillData";
 import { payloadBuildsKey } from "./queries";
 import { usePayloadsStore } from "./usePayloadsStore";
 

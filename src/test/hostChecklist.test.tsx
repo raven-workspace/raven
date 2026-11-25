@@ -17,6 +17,7 @@ import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
 import type { Service } from "../types/service";
+import { commandText as filled } from "../features/commands/filledCommand";
 
 vi.mock("../lib/api");
 vi.mock("../features/checklist/ticks", async (orig) => ({
@@ -372,7 +373,7 @@ describe("GoalRow", () => {
       <GoalRow
         goal={{ id: "g", title: "Do it" }}
         state={undefined}
-        commands={[{ id: "c", title: "C", text: "zz", unresolved: [], msfMarker: false, tokens: [], cardId: "zz-card" }]}
+        commands={[{ ...filled({ id: "c", title: "C", text: "zz" }), tokens: [], cardId: "zz-card" }]}
         evidence={[]}
         onStatus={() => {}}
         onNotes={() => {}}
