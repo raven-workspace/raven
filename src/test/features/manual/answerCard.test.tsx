@@ -276,3 +276,52 @@ describe("answer card", () => {
     expect(vi.mocked(logCommand).mock.calls[0]![1]).toMatchObject({ command: "zzrelay sign 198.51.100.21", title: "Zz login errors: STATUS_ZZ_RELAY" });
   });
 });
+
+describe("answer card Metasploit lock", () => {
+  const H2: Host = { ...H1, id: "h2", name: "zzws02", ip: "198.51.100.22" };
+  const MSF_LOOKUP = parseNote("04-Foundations/Zz-Msf-Lookup.md", [
+    "---", "id: fnd-zz-msf-lookup", "title: Zz Msf Lookup", "type: foundation", "---",
+    "# Zz Msf Lookup",
+    "**Table 1 — Zz msf errors**",
+    "| Error | Means | Do this |",
+    "| - | - | - |",
+    "| `ZZ_SMB_OPEN` | The share answers unsigned. | Try the module: `use exploit/windows/smb/ms17_010_eternalblue` |",
+    "| `ZZ_CALLBACK` | A shell is calling back. | Catch it: `use exploit/multi/handler` |",
+    "",
+  ].join("\n"))!;
+  const LOCKED = "Metasploit is locked to zzws02";
+  const msfAt = (q: string) => `/manual/fnd-zz-msf-lookup?q=${encodeURIComponent(q)}`;
+
+  beforeEach(() => {
+    m.hostsList.mockResolvedValue([H1, H2]);
+    m.fieldManualLoad.mockResolvedValue(snapshot([MSF_LOOKUP]));
+  });
+
+  it("in an exam sim locked to another host, a module command shows the lock line and its first copy is held", async () => {
+    const exam = { ...E1, kind: "exam-sim" as const, msfHostId: "h2" };
+    m.engagementsList.mockResolvedValue([exam]);
+    m.engagementGet.mockResolvedValue(exam);
+    const user = userEvent.setup();
+    mount([msfAt("ZZ_SMB_OPEN")]);
+    const c = await card();
+    await waitFor(() => expect(rows(c)).toHaveLength(1));
+    const line = await within(c).findByText(LOCKED);
+    expect(line).toHaveClass("manual-command__rule--warn");
+    await navigator.clipboard.writeText("untouched");
+    const copy = within(rows(c)[0]!).getByRole("button", { name: "Copy command: use exploit/windows/smb/ms17_010_eternalblue" });
+    await user.click(copy);
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("untouched"));
+    await user.click(copy);
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("use exploit/windows/smb/ms17_010_eternalblue"));
+  });
+
+  it("in an exam sim a multi/handler command gets no lock line", async () => {
+    const exam = { ...E1, kind: "exam-sim" as const, msfHostId: "h2" };
+    m.engagementsList.mockResolvedValue([exam]);
+    m.engagementGet.mockResolvedValue(exam);
+    mount([msfAt("ZZ_CALLBACK")]);
+    const c = await card();
+    await waitFor(() => expect(rows(c)).toHaveLength(1));
+    expect(c.querySelector(".manual-command__rule")).toBeNull();
+  });
+});
