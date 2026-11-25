@@ -3,11 +3,11 @@ import { useMemo } from "react";
 import { accessFlags } from "../../../engines/credentials/state";
 import { credLabel, usernameLabel } from "../../../engines/credentials/labels";
 import { api } from "../../../lib/api";
+import { storeChanged } from "../../../lib/storeChange";
 import type { CredAttempt, Credential } from "../../../types/credentials";
 import type { Host } from "../../../types/host";
 import { Button, labelClass } from "../../../ui/index";
 import { useUsernames } from "../../credentials/queries";
-import { hostsKey } from "../../hosts/queries";
 import "./AccessFlags.scss";
 
 /** Hosts with valid or admin access newer than their last review, each with a Reviewed button. */
@@ -18,7 +18,7 @@ export function AccessFlags({ engagementId, hosts, attempts, credentials }: { en
   const usernames = useUsernames(engagementId, { enabled: flags.some((f) => f.usernameId) }).data ?? [];
   const reviewed = useMutation({
     mutationFn: (hostId: string) => api.hostMarkAccessReviewed(hostId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: hostsKey(engagementId) }),
+    onSuccess: (_h, hostId) => void storeChanged(qc, { entity: "host", id: hostId, change: "updated" }),
   });
   if (flags.length === 0) return null;
   const who = (f: (typeof flags)[number]) => {

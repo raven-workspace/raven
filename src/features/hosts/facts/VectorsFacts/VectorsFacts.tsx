@@ -47,8 +47,8 @@ function LineInput({ label, placeholder, pending, onSave, onCancel }: {
   );
 }
 
-function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId: string; hostId: string }) {
-  const { setVectorStatus, removeVector } = useHostFactsMutations(engagementId, hostId);
+function VectorRow({ v, hostId }: { v: PrivescVector; hostId: string }) {
+  const { setVectorStatus, removeVector } = useHostFactsMutations(hostId);
   const [ruling, setRuling] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const ruledOut = v.status === "ruled_out";
@@ -121,14 +121,13 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
 }
 
 /** Privesc vectors on this host: exploited first, then worth trying; ruled out ones stay listed, struck through. */
-export function VectorsFacts({ engagementId, host, open, onToggle }: {
-  engagementId: string;
+export function VectorsFacts({ host, open, onToggle }: {
   host: Host;
   open: boolean;
   onToggle: () => void;
 }) {
   const vectorsQ = useVectors(host.id);
-  const { upsertVector } = useHostFactsMutations(engagementId, host.id);
+  const { upsertVector } = useHostFactsMutations(host.id);
   const [adding, setAdding] = useState(false);
   const vectors = [...(vectorsQ.data ?? [])].sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.createdAt - b.createdAt);
   const count = (s: VectorStatus) => vectors.filter((v) => v.status === s).length;
@@ -160,7 +159,7 @@ export function VectorsFacts({ engagementId, host, open, onToggle }: {
         queryState([vectorsQ], "the vectors")
       ) : (
         <ul className="vectors-facts">
-          {vectors.map((v) => <VectorRow key={v.id} v={v} engagementId={engagementId} hostId={host.id} />)}
+          {vectors.map((v) => <VectorRow key={v.id} v={v} hostId={host.id} />)}
           {adding && (
             <li className="vectors-facts__adding">
               <LineInput

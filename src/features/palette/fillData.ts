@@ -1,13 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { portChoices, resolveCred, type FillInput } from "../../engines/checklist";
-import { api } from "../../lib/api";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import { useCredPickStore } from "../checklist/credPick";
-import { tunnelsKey } from "../network/queries";
-import { engagementServicesKey } from "../services/queries";
-import { credAttemptsKey, credentialsKey } from "../credentials/queries";
+import { useTunnels } from "../network/queries";
+import { useEngagementServices } from "../services/queries";
+import { useCredAttempts, useCredentials } from "../credentials/queries";
 import { useFillScope } from "../arsenal/useFillScope";
 import { useSettings, settingsFill } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
@@ -27,10 +25,10 @@ export function useEngagementFillData(engagementId: string) {
   const settings = useSettings();
   const engagement = useEngagement(engagementId, enabled);
   const hosts = useHosts(engagementId, enabled);
-  const services = useQuery({ queryKey: engagementServicesKey(engagementId), queryFn: () => api.servicesListEngagement(engagementId), enabled });
-  const tunnels = useQuery({ queryKey: tunnelsKey(engagementId), queryFn: () => api.tunnelsList(engagementId), enabled });
-  const credentials = useQuery({ queryKey: credentialsKey(engagementId), queryFn: () => api.credentialsList(engagementId), enabled });
-  const attempts = useQuery({ queryKey: credAttemptsKey(engagementId), queryFn: () => api.credAttemptsList(engagementId), enabled });
+  const services = useEngagementServices(engagementId, enabled).query;
+  const tunnels = useTunnels(engagementId, enabled).query;
+  const credentials = useCredentials(engagementId, { enabled });
+  const attempts = useCredAttempts(engagementId, { enabled });
   const log = useLog(engagementId, enabled);
   // A failed hosts load is not "no hosts": host pickers say so and offer this retry.
   const hostsError: HostsError | null = hosts.isError ? { retry: () => void hosts.refetch() } : null;

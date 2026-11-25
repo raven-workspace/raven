@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
+import { storeChanged } from "../../lib/storeChange";
 import type { LogEntry } from "../../types/log";
 import { readImage, releaseImage } from "../capture/imagePaste";
 import { logKey } from "./queries";
@@ -25,6 +26,6 @@ export async function saveScreenshot(qc: QueryClient, engagementId: string, host
     attachment: { mime: image.mime, dataBase64: image.dataBase64 },
   });
   qc.setQueryData<LogEntry[]>(logKey(engagementId), (list) => (list ? [...list, entry] : list));
-  void qc.invalidateQueries({ queryKey: logKey(engagementId) });
+  void storeChanged(qc, { entity: "logEntry", id: entry.id, change: "created" });
   return entry;
 }

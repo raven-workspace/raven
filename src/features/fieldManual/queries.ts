@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS, LATERAL_MOVEMENT_GOALS } from "../../engines/checklist";
 import { computeDrift } from "../../engines/fieldManual/drift";
 import { applyOverlay, mergeImport, normalizeSnapshot, type FieldManualSnapshot } from "../../engines/fieldManual/merge";
@@ -21,6 +21,11 @@ export function useFieldManual(enabled = true) {
     queryKey: FIELD_MANUAL_KEY,
     queryFn: async () => (await api.fieldManualLoad()) ?? null,
   });
+}
+
+/** Puts a snapshot loaded elsewhere (the vault gate's unlock) in the cache. */
+export function cacheFieldManual(qc: QueryClient, s: FieldManualSnapshot): void {
+  qc.setQueryData(FIELD_MANUAL_KEY, s);
 }
 
 /** Applies a stored snapshot to the runtime library. */

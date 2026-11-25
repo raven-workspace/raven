@@ -9,13 +9,13 @@ import { copyPlain } from "../../../lib/clipboard";
 import { shortHostName } from "../../../lib/hostName";
 import { isDialogOpen } from "../../../lib/keys";
 import { reportError } from "../../../lib/lockSignal";
+import { storeChanged } from "../../../lib/storeChange";
 import type { PayloadBuild } from "../../../types/payloadBuild";
 import { Input, type Hint } from "../../../ui/index";
 import type { ChipPickerHandle } from "../../arsenal/ChipPicker/ChipPicker";
 import { copyKey, useCopyGuard } from "../../arsenal/copyGuard";
 import { isHostPickKey, type HostChipHandle } from "../../arsenal/HostChip/HostChip";
 import { logCommand } from "../../capture/logCommand";
-import { payloadBuildsKey } from "../queries";
 import { contextLabel, hasToggles, isRanked, OS_LABEL, showsFilter, usePayloadFit } from "../usePayloadFit";
 import { usePayloadsStore } from "../usePayloadsStore";
 import { RavenError } from "../../../types/errors";
@@ -88,7 +88,8 @@ const CHECKING_BUILD = "Checking the last build";
 /** Saves what a baked payload was built with, stamped now, and refetches the build memory. */
 async function recordBuild(qc: QueryClient, build: Omit<PayloadBuild, "at">) {
   await api.payloadBuildRecord({ ...build, at: Date.now() });
-  await qc.invalidateQueries({ queryKey: payloadBuildsKey(build.engagementId) });
+  // One row per host and payload: a rebuild replaces it.
+  await storeChanged(qc, { entity: "payloadBuild", id: `${build.hostId}:${build.payloadId}`, change: "updated" });
 }
 /** ⌥ chords by physical key: on a Mac ⌥L types "¬" and ⌥1 "¡". */
 const altCode = (e: KeyboardEvent) => (e.altKey && !e.metaKey && !e.ctrlKey ? e.code : null);

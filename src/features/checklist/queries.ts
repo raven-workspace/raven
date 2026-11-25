@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { api } from "../../lib/api";
+import { registerReads, storeChanged } from "../../lib/storeChange";
 import { resyncAndRefresh } from "./resync";
 import { byOwnerOf, checklistKey, itemToState, servicesByHostOf, stateToInput } from "./state";
 import type { ChecklistItem, ChecklistItemInput, ChecklistState, ChecklistStatus, ItemState } from "../../types/checklist";
@@ -8,6 +9,8 @@ import type { ChecklistItem, ChecklistItemInput, ChecklistState, ChecklistStatus
 const NO_ITEMS: ChecklistItem[] = [];
 
 export { byOwnerOf, checklistKey, itemToState, servicesByHostOf, stateToInput };
+
+registerReads(["checklist"], ["checklistItem"]);
 
 export function useChecklist(engagementId: string) {
   const query = useQuery({ queryKey: checklistKey(engagementId), queryFn: () => api.checklistList(engagementId) });
@@ -27,7 +30,7 @@ export function useChecklistMutations(engagementId: string) {
   const put = (items: ChecklistItemInput[]) => api.checklistPut(engagementId, items);
   const onSuccess = (items: ChecklistItem[]) => {
     qc.setQueryData(checklistKey(engagementId), items);
-    void qc.invalidateQueries({ queryKey: checklistKey(engagementId) });
+    void storeChanged(qc, { entity: "checklistItem", id: engagementId, change: "updated" });
   };
   return {
     /** A manual status: no longer auto, no remembered status, completed now when done. Evidence and notes stay. */

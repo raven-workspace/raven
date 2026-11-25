@@ -132,7 +132,13 @@ describe("status strip and title bar", () => {
     const running: Engagement = { ...E1, timeboxStart: Date.now() - 60 * 60_000, timeboxMinutes: 1425 };
     m.engagementGet.mockResolvedValue(running);
     m.engagementsList.mockResolvedValue([running]);
-    m.engagementSetTimeboxPaused.mockResolvedValue({ ...running, timeboxPausedAt: Date.now() });
+    // As the store does: once paused, reading the engagement back gives the paused one.
+    m.engagementSetTimeboxPaused.mockImplementation(async () => {
+      const paused = { ...running, timeboxPausedAt: Date.now() };
+      m.engagementGet.mockResolvedValue(paused);
+      m.engagementsList.mockResolvedValue([paused]);
+      return paused;
+    });
     const strip = await mountStrip();
     const pause = await within(strip).findByRole("button", { name: "Pause timebox" });
     expect(within(strip).getByText(/left$/)).toHaveClass("timebox-text--running");
