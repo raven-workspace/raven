@@ -1,9 +1,8 @@
-import { metasploitHostIds, ticksForEntry, type Tick, type TickContext } from "../../engines/checklist";
+import { ticksForEntry, type Tick, type TickContext } from "../../engines/checklist";
 import { currentLibrary } from "../../engines/library/store";
 import { api } from "../../lib/api";
 import type { EntryTicks } from "../../types/checklist";
 import type { LogEntry, OutputTick } from "../../types/log";
-import { RavenError } from "../../types/errors";
 import { servicesByHostOf } from "./state";
 
 /**
@@ -49,32 +48,4 @@ export function ticksOfEntry(entry: LogEntry, ctx: TickContext, outputTicks: Out
 /** An entry's ticks as the store's conditional write takes them: newly ticked goals are stamped `at`. */
 export function entryTicksOf(entryId: string, at: number, ticks: Tick[]): EntryTicks {
   return { entryId, at, ticks: ticks.map((t) => ({ ownerId: t.ownerId, goalId: t.goalId, commandId: t.commandId })) };
-}
-
-export const MSF_LOCK_FAILED = "Saved the entry, but the Metasploit lock didn't update.";
-
-/** The exam-sim Metasploit lock failed after an entry was saved. `reason` is what made it fail. */
-export class MsfLockError extends RavenError {
-  readonly reason: unknown;
-  constructor(reason: unknown) {
-    super(RavenError.from(reason).code, MSF_LOCK_FAILED);
-    this.name = "MsfLockError";
-    this.reason = reason;
-  }
-}
-
-/**
- * Exam sims: the first entry that uses a Metasploit module on exactly one host locks Metasploit to that host.
- * Does nothing once a lock exists, outside exam sims, or when the entry names no single host. A failure is thrown as
- * an `MsfLockError`.
- */
-export async function lockMetasploit(engagementId: string, entry: LogEntry): Promise<void> {
-  try {
-    const [engagement, hosts] = await Promise.all([api.engagementGet(engagementId), api.hostsList(engagementId)]);
-    if (engagement.kind !== "exam-sim" || engagement.msfHostId) return;
-    const ids = metasploitHostIds(entry, engagement, hosts);
-    if (ids.length === 1) await api.engagementSetMsfHost(engagement.id, ids[0]!);
-  } catch (e) {
-    throw new MsfLockError(e);
-  }
 }

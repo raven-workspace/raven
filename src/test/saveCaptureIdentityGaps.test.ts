@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CaptureDraft } from "../engines/capture";
 import { saveCapture, type CaptureEdits } from "../features/capture/saveCapture";
@@ -45,7 +46,7 @@ function capture(command: string, output: string, ranOn = "dc01", hostIds = ["h1
   const edits: CaptureEdits = {
     kind: "command", title: "t", titleEdited: false, hostIds, ranOn, observations: "", returnedNothing: false, private: false, content,
   };
-  return saveCapture({ engagementId: "e1", draft, edits, image: null, hosts: [DC] });
+  return saveCapture(new QueryClient(), { engagementId: "e1", draft, edits, image: null, hosts: [DC] });
 }
 
 describe("identity capture gaps", () => {

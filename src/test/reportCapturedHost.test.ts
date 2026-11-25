@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { capturedHost, editsOf, XFER, XFER_CAPTURES, XFER_DOMAIN, XFER_MACHINES, XFER_SCOPE } from "../audit/capturedHost";
@@ -76,7 +77,7 @@ describe("xfer03, captured through the real pipeline", () => {
       );
       const e = editsOf(c, hosts, host.id);
       expect({ ...r.edits, content: shape(r.edits.content) }, c.key).toMatchObject({ kind: e.kind, title: e.title, hostIds: e.hostIds, ranOn: e.ranOn, content: shape(e.content) });
-      const { entry } = await saveCapture({
+      const { entry } = await saveCapture(new QueryClient(), {
         engagementId: eng.id,
         draft: r.draft,
         edits: r.edits,

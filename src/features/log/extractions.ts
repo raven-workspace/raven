@@ -1,7 +1,7 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { registerReads, storeChanged } from "../../lib/storeChange";
-import { syncChecklist } from "../checklist/sync";
+import { registerReads } from "../../lib/storeChange";
+import { entryChanged } from "./entryChange";
 
 export const extractionsKey = (engagementId: string) => ["extractions", engagementId] as const;
 
@@ -16,14 +16,10 @@ export function useExtractions(engagementId: string) {
 }
 
 /**
- * Reverses what one save filed. The ticks follow: an entry whose extraction is undone ticks nothing, so the checklist
- * sync removes its ticks and the fact ticks revert on their own.
+ * Reverses what one save filed, then reports the entry change. The ticks follow: an entry whose extraction is undone
+ * ticks nothing, so the checklist sync removes its ticks and the fact ticks revert on their own.
  */
 export async function undoExtraction(qc: QueryClient, entryId: string): Promise<void> {
   const { engagementId } = await api.extractionUndo(entryId);
-  try {
-    await syncChecklist({ engagementId, change: { entity: "extraction", id: entryId, change: "undone" }, qc });
-  } finally {
-    void storeChanged(qc, { entity: "extraction", id: entryId, change: "undone" });
-  }
+  await entryChanged({ qc, engagementId, change: { change: "undone", id: entryId } });
 }
