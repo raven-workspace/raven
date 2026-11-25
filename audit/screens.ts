@@ -52,7 +52,8 @@ const MANUAL_LONG = `/manual/${AUDIT_NOTE_IDS.long}`;
 const REPORT = `/e/${AUDIT_IDS.examEngagement}/s/report`;
 /** A tab of the report's tab row, by its label: a target is numbered ("2 ms01"), the rest read as named ("Appendix A"). */
 export const reportTab = (page: Page, label: string) => {
-  const exact = new RegExp(`^(\\d+ )?${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+  // A target's tab leads with its count ("1 ms01"), a free page's with its section number ("§6 Tools and versions").
+  const exact = new RegExp(`^(§?\\d+ )?${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
   return page.getByRole("tablist", { name: "Report pages" }).getByRole("tab").filter({ has: page.locator("[data-tab-label]", { hasText: exact }) });
 };
 /**

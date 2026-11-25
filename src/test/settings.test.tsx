@@ -30,6 +30,11 @@ beforeEach(() => {
 });
 
 describe("settings", () => {
+  it("the report text note says new reports copy it and started ones keep theirs (RAV-32)", async () => {
+    mount();
+    expect(await screen.findByText("Raven copies these into each new report. Changing them here doesn't change reports you've already started.")).toHaveClass("settings-page__note");
+  });
+
   it("lists backups with human-readable size and reason chip", async () => {
     mount();
     expect(await screen.findByText("1.2 MB")).toBeInTheDocument();

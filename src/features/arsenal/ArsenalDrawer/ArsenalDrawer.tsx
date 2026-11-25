@@ -271,7 +271,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     return onList
       ? [
           { keys: "↵", label: "copy", priority: 1 },
-          { keys: "⌘↵", label: host ? "copy and log" : "log (no host)", priority: 1 },
+          { keys: "⌘↵", label: host ? "copy and log" : "copy and log, no host", priority: 1 },
           { keys: "→", label: "in card", priority: 2 },
           ...pickers,
           { keys: "Esc", label: inCategory ? "back" : "close", priority: 1 },
