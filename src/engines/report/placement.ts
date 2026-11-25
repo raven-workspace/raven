@@ -289,6 +289,14 @@ export function domainController(data: ReportData, hostIds: string[]): string | 
 
 const adHostIds = (data: ReportData) => data.hosts.filter((h) => h.adSetEffective).map((h) => h.id);
 
+const adDcs = new WeakMap<ReportData, string | null>();
+
+/** The AD set's domain controller, found once per data: phases ask for it for every entry they place. */
+function adDomainController(data: ReportData): string | null {
+  if (!adDcs.has(data)) adDcs.set(data, domainController(data, adHostIds(data)));
+  return adDcs.get(data) ?? null;
+}
+
 /** A machine was entered by a hop when some hop from another machine reached it. */
 export function hostEntry(data: ReportData, target: ReportTarget, hostId: string): HostEntry {
   if (target.kind === "standalone") return "foothold";
@@ -298,7 +306,7 @@ export function hostEntry(data: ReportData, target: ReportTarget, hostId: string
 /** The two phases a host's steps split into. The DC is all domain compromise. */
 function phaseNames(data: ReportData, hostId: string, entry: HostEntry): [Phase, Phase] {
   const isAd = data.hosts.some((h) => h.id === hostId && h.adSetEffective);
-  if (isAd && domainController(data, adHostIds(data)) === hostId) return ["domain", "domain"];
+  if (isAd && adDomainController(data) === hostId) return ["domain", "domain"];
   return [entry === "hop" ? "lateral" : "foothold", "privesc"];
 }
 
