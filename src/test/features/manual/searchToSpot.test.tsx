@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,7 @@ import { usePayloadsStore } from "../../../features/payloads/usePayloadsStore";
 import { api } from "../../../lib/api";
 import { copyPlain } from "../../../lib/clipboard";
 import { makeQueryClient } from "../../../lib/queryClient";
+import type { Engagement } from "../../../types/engagement";
 
 vi.mock("../../../lib/api");
 vi.mock("../../../lib/clipboard", () => ({ copyPlain: vi.fn(() => Promise.resolve()), copySecret: vi.fn(() => Promise.resolve()) }));
@@ -77,6 +78,24 @@ const marks = () => [...pane().querySelectorAll<HTMLElement>("mark[data-match]")
 const current = () => pane().querySelectorAll<HTMLElement>("mark[data-current]");
 const cmdK = "{Meta>}k{/Meta}";
 
+// RFC 5737 addresses, invented names.
+const E1: Engagement = {
+  id: "e1", name: "Lab Zz", kind: "lab", client: null, subLabel: null, scopeCidrs: ["198.51.100.0/24"],
+  domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
+  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
+};
+
+/** A stand-in for `document.fonts` (jsdom has none): the web fonts start and finish loading when the test says. */
+function fakeFonts() {
+  const set = Object.assign(new EventTarget(), { status: "loaded" as FontFaceSetLoadStatus });
+  Object.defineProperty(document, "fonts", { value: set, configurable: true });
+  const fire = (status: FontFaceSetLoadStatus, type: string) => act(() => {
+    set.status = status;
+    set.dispatchEvent(new Event(type));
+  });
+  return { loading: () => fire("loading", "loading"), done: () => fire("loaded", "loadingdone") };
+}
+
 let scrolled: Element[] = [];
 const scrollSpy = vi.fn(function (this: Element) {
   scrolled.push(this);
@@ -107,8 +126,9 @@ beforeEach(() => {
 });
 afterEach(() => {
   setImported({ commands: [], cards: [] });
-  // jsdom has no scrollIntoView of its own.
+  // jsdom has no scrollIntoView or document.fonts of its own.
   delete (Element.prototype as Partial<Element>).scrollIntoView;
+  delete (document as { fonts?: FontFaceSet }).fonts;
 });
 
 const ready = () => screen.findByRole("button", { name: "Manual" });
@@ -296,6 +316,38 @@ describe("the note at the match", () => {
     expect(marks()).toHaveLength(0);
     press("Escape");
     await waitFor(() => expect(where()).toBe("/"));
+  });
+
+  // RAV-50: late layout moves the match after the landing centred it; the page centres it again once the note settles.
+  it("web fonts that finish loading after the landing put the current match back in the middle", async () => {
+    const fonts = fakeFonts();
+    open();
+    await screen.findByRole("article", { name: "Zz Errors" });
+    await waitFor(() => expect(current()).toHaveLength(1));
+    fonts.loading();
+    scrolled = [];
+    fonts.done();
+    expect(scrolled).toEqual([current()[0]]);
+    expect(screen.getByRole("status", { name: "Search in this note" })).toHaveTextContent("match 2 of 3");
+  });
+
+  it("exam rules and fill data that arrive after the landing put the current match back in the middle", async () => {
+    let release: (v: Engagement[]) => void = () => {};
+    m.engagementsList.mockReturnValue(new Promise((r) => (release = r)));
+    m.engagementGet.mockResolvedValue(E1);
+    m.hostsList.mockResolvedValue([]);
+    m.servicesListEngagement.mockResolvedValue([]);
+    m.tunnelsList.mockResolvedValue([]);
+    m.credentialsList.mockResolvedValue([]);
+    m.credAttemptsList.mockResolvedValue([]);
+    m.logList.mockResolvedValue([]);
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: null });
+    open();
+    await screen.findByRole("article", { name: "Zz Errors" });
+    await waitFor(() => expect(current()).toHaveLength(1));
+    scrolled = [];
+    await act(async () => release([E1]));
+    await waitFor(() => expect(scrolled).toContain(current()[0]));
   });
 
   it("no match in this note says so", async () => {

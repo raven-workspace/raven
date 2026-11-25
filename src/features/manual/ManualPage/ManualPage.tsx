@@ -4,6 +4,7 @@ import type { ManualNote } from "../../../engines/manual/index";
 import { isInlineCommand, lookupRows, type LookupRow } from "../../../engines/manual/lookup";
 import { getCards, useLibraryVersion } from "../../../engines/library/store";
 import { isFreeKey, isTypingTarget, useKeydown } from "../../../lib/keys";
+import { useFontsLoaded } from "../../../lib/useFontsLoaded";
 import { RavenError } from "../../../types/errors";
 import { Button, Disclosure, EmptyState, ErrorState, HintLine, labelClass, useFadeOnChange, type Hint } from "../../../ui/index";
 import { HostChip, isHostPickKey, type HostChipHandle } from "../../arsenal/HostChip/HostChip";
@@ -192,6 +193,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const note = noteId ? notes.find((n) => n.id === noteId) : undefined;
   const { engagementId, hostId, pending: scopePending } = useFillScope();
   const base = useFillBase(engagementId, hostId);
+  const fontsLoaded = useFontsLoaded();
   const hostRef = useRef<HostChipHandle>(null);
   const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
   useLibraryVersion();
@@ -354,13 +356,15 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
       else landRow(target, anchor, Number(rowAt), !inRail);
     } else showMatch(firstAfter(pane, anchor), true, !inRail, !inRail);
   }, [note?.id, query, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Exam lines and filled text arrive late and move the note: bring the current match (or lit row) back into view once.
+  // Exam lines, filled text and web fonts (swapped in once loaded) arrive late and move the note: once they have all
+  // settled, put the current match (or lit row) back in the middle, whichever arrived last.
+  const settled = base.examReady && fontsLoaded;
   useLayoutEffect(() => {
-    if (!base.examReady || !query) return;
+    if (!settled || !query) return;
     const row = lit();
     if (row) row.scrollIntoView?.({ block: "center" });
     else showMatch(matchAt.current, true);
-  }, [base.examReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settled]); // eslint-disable-line react-hooks/exhaustive-deps
   // Fill data and exam lines re-render the note's text: keep the current match marked (and the count right).
   useEffect(() => {
     const pane = paneRef.current;
