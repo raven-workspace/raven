@@ -132,6 +132,54 @@ describe("facts by phase", () => {
     expect(group.querySelector("[data-services-grid]")).not.toBeNull();
   });
 
+  /** A failed load shows the standard error in `name`; Retry, once the query recovers, brings back what `loaded` finds. */
+  const retries = async (name: string, what: string, recover: () => void, loaded: (g: HTMLElement) => Promise<unknown>) => {
+    const user = userEvent.setup();
+    const g = await screen.findByRole("region", { name });
+    const alert = await within(g).findByRole("alert");
+    expect(alert).toHaveTextContent(`Couldn't load ${what}`);
+    expect(g.querySelector(".fact-group__error")).toBeNull();
+    recover();
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(within(g).queryByRole("alert")).toBeNull());
+    await loaded(g);
+  };
+
+  it("a failed load in Host Credentials, even of a later query, shows the standard error, and Retry loads it (RAV-37)", async () => {
+    mount();
+    m.credAttemptsList.mockRejectedValue(new Error("vault busy"));
+    await retries("Host Credentials", "credentials", () => m.credAttemptsList.mockResolvedValue([]), (g) =>
+      waitFor(() => expect(g.querySelector(".host-creds")).not.toBeNull()));
+  });
+
+  it("a failed checklist load in Coverage shows the standard error, and Retry loads it (RAV-37)", async () => {
+    mount();
+    m.checklistList.mockRejectedValue(new Error("vault busy"));
+    await retries("Coverage", "the checklist", () => m.checklistList.mockResolvedValue([]), (g) =>
+      waitFor(() => expect(g.querySelector(".coverage-facts__row")).not.toBeNull()));
+  });
+
+  it("a failed vectors load in Privesc vectors shows the standard error, and Retry loads them (RAV-37)", async () => {
+    mount({ host: host({ access: "user", boardColumn: "initial-foothold" }) });
+    m.vectorsList.mockRejectedValue(new Error("vault busy"));
+    await retries("Privesc vectors", "the vectors", () => m.vectorsList.mockResolvedValue([vector("v1", "SeImpersonatePrivilege abuse", "try")]), (g) =>
+      within(g).findByText("SeImpersonatePrivilege abuse"));
+  });
+
+  it("a failed identity load in Who am I shows the standard error, and Retry loads it (RAV-37)", async () => {
+    mount({ host: host({ access: "user", boardColumn: "initial-foothold" }) });
+    m.hostIdentityGet.mockRejectedValue(new Error("vault busy"));
+    await retries("Who am I", "who you are here", () => m.hostIdentityGet.mockResolvedValue(IDENTITY), (g) =>
+      within(g).findByText("ms01\\iis_apppool"));
+  });
+
+  it("a failed credentials load in Other accounts shows the standard error, and Retry loads them (RAV-37)", async () => {
+    mount({ host: host({ access: "user", boardColumn: "initial-foothold" }) });
+    m.credentialsList.mockRejectedValue(new Error("vault busy"));
+    await retries("Other accounts", "credentials", () => m.credentialsList.mockResolvedValue([]), (g) =>
+      within(g).findByText(/^None yet\./));
+  });
+
   it("before a foothold: Coverage, Services and Host Credentials are open; the after-foothold groups are folded summaries", async () => {
     mount();
     for (const name of ["Coverage", "Services", "Host Credentials"]) expect(await isOpen(name)).toBe(true);

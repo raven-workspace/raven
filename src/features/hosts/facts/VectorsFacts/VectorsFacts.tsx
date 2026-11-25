@@ -3,7 +3,7 @@ import { useState } from "react";
 import { cx } from "../../../../lib/cx";
 import type { PrivescVector, VectorStatus } from "../../../../types/hostFacts";
 import type { Host } from "../../../../types/host";
-import { ActionCell, Button, Chip, IconButton, Input, Tooltip, type ChipVariant } from "../../../../ui/index";
+import { ActionCell, Button, Chip, IconButton, Input, queryState, Tooltip, type ChipVariant } from "../../../../ui/index";
 import { ConfirmDelete } from "../../../checklist/ConfirmDelete/ConfirmDelete";
 import { useHostFactsMutations, useVectors } from "../../queries";
 import { FactGroup, SummaryCell } from "../FactGroup/FactGroup";
@@ -157,7 +157,7 @@ export function VectorsFacts({ engagementId, host, open, onToggle }: {
       }
     >
       {vectorsQ.isError ? (
-        <p role="alert" className="fact-group__error">Couldn't load the vectors: {vectorsQ.error.message}</p>
+        queryState([vectorsQ], "the vectors")
       ) : (
         <ul className="vectors-facts">
           {vectors.map((v) => <VectorRow key={v.id} v={v} engagementId={engagementId} hostId={host.id} />)}

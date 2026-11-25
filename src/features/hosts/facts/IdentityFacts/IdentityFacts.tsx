@@ -4,7 +4,7 @@ import { credLabel, dedupeHashCaptures, foldCrackedHashes, usernameLabel } from 
 import { vectorsFromIdentity } from "../../../../engines/facts/index";
 import type { HostIdentity } from "../../../../types/hostFacts";
 import type { Host } from "../../../../types/host";
-import { Button, ChipSet, IconButton, Input, Toolbar } from "../../../../ui/index";
+import { Button, ChipSet, IconButton, Input, queryState, Toolbar } from "../../../../ui/index";
 import { useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../../../credentials/queries";
 import { useLog } from "../../../log/queries";
 import { useHostFactsMutations, useHostIdentity } from "../../queries";
@@ -150,7 +150,7 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
       {/* Shown whatever the branch: identity can be saved and a vector upsert still fail. */}
       {readError && <p role="alert" className="fact-group__error">{readError}</p>}
       {identityQ.isError ? (
-        <p role="alert" className="fact-group__error">Couldn't load who you are here: {identityQ.error.message}</p>
+        queryState([identityQ], "who you are here")
       ) : editing ? (
         <IdentityForm engagementId={engagementId} host={host} identity={identity} onDone={() => setEditing(false)} />
       ) : !identity ? (
@@ -244,7 +244,8 @@ export function OtherAccountsFacts({ engagementId, host, open, onToggle }: {
   return (
     <FactGroup title="Other accounts" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="fact-group__error">Couldn't load credentials: {failed.message}</p>
+        // Not the identity: Who am I shows its error, and the list does without it.
+        queryState([credsQ, attemptsQ], "credentials")
       ) : !ready ? null : rows.length === 0 ? (
         <p className="fact-group__note">None yet. Uncracked hashes and credentials found on this host show here.</p>
       ) : (
