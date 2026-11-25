@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { resolveTemplate } from '../../../engines/checklist/template';
+import {
+  canonicalToken, CREDENTIAL_TOKENS, findPlaceholders, hasPlaceholders, replacePlaceholders, resolveTemplate, SECRET_TOKENS,
+} from '../../../engines/checklist/template';
+import { tokensOf } from '../../../features/arsenal/fillTokens';
 
 describe('resolveTemplate', () => {
   const ctx = { lhost: '10.10.14.3', lport: '9001', rhost: '10.0.0.5', customVars: {} };
@@ -10,9 +13,9 @@ describe('resolveTemplate', () => {
     expect(r.unresolved).toEqual([]);
   });
 
-  it('substitutes the case-insensitive target, LHOST and LPORT aliases', () => {
+  it('substitutes the case-insensitive target, LHOST and LPORT aliases; <LHOST> is not a placeholder', () => {
     const r = resolveTemplate('{TARGET_IP} {target} {IP} {TARGET-IP} {LHOST} {lport} <LHOST>', ctx);
-    expect(r.text).toBe('10.0.0.5 10.0.0.5 10.0.0.5 10.0.0.5 10.10.14.3 9001 10.10.14.3');
+    expect(r.text).toBe('10.0.0.5 10.0.0.5 10.0.0.5 10.0.0.5 10.10.14.3 9001 <LHOST>');
     expect(r.unresolved).toEqual([]);
   });
 
@@ -60,5 +63,60 @@ describe('resolveTemplate', () => {
 
   it('empty template yields empty result', () => {
     expect(resolveTemplate('', ctx)).toEqual({ text: '', unresolved: [], ranges: [] });
+  });
+});
+
+describe('the placeholder grammar (RAV-48)', () => {
+  it('finds {TOKEN}, any case, with its offsets', () => {
+    expect(findPlaceholders('a {TARGET_IP} <TARGET> {dc-ip}')).toEqual([
+      { start: 2, end: 13, raw: 'TARGET_IP' },
+      { start: 23, end: 30, raw: 'dc-ip' },
+    ]);
+  });
+
+  it('<script>, <TARGET> and XML tags are never placeholders', () => {
+    const t = "zz '<script>alert(1)</script>' <TARGET> <searchConnectorDescriptionList> <Password>";
+    expect(findPlaceholders(t)).toEqual([]);
+    expect(hasPlaceholders(t)).toBe(false);
+    expect(resolveTemplate(t, { lhost: '10.10.14.3', rhost: '10.0.0.5' })).toEqual({ text: t, unresolved: [], ranges: [] });
+  });
+
+  it('${VAR}, %{x}, $(cmd), %VAR% and single-char braces are never placeholders', () => {
+    const t = 'echo ${HOME} -w %{http_code} $(id) %USERNAME% |%{0} <a>';
+    expect(findPlaceholders(t)).toEqual([]);
+    expect(hasPlaceholders(t)).toBe(false);
+  });
+
+  it('agrees with resolveTemplate on every range', () => {
+    const t = 'zz {TARGET_IP} ${ZZ} <LHOST> %{x} {ip} {ZZ_THING}';
+    expect(findPlaceholders(t).map(({ start, end, raw }) => ({ start, end, raw })))
+      .toEqual(resolveTemplate(t, {}).ranges.map(({ start, end, raw }) => ({ start, end, raw })));
+  });
+
+  it('replacePlaceholders keeps the text between', () => {
+    expect(replacePlaceholders('${A} {BB} x <CC>', (p) => p.raw.toLowerCase())).toBe('${A} bb x <CC>');
+  });
+
+  it('canonicalToken folds aliases the way resolveTemplate reads them', () => {
+    expect(['TARGET', 'target', 'IP', 'TARGET-IP', 'TARGET_IP'].map(canonicalToken)).toEqual(Array(5).fill('TARGET_IP'));
+    expect(canonicalToken('DC-IP')).toBe('DC_IP');
+    expect(canonicalToken('ip')).toBe('LHOST');
+    expect(canonicalToken('port')).toBe('LPORT');
+    expect(canonicalToken('shell')).toBe('SHELL');
+    expect(canonicalToken('constructor')).toBe('CONSTRUCTOR');
+    expect(canonicalToken('dest_dir')).toBe('DEST_DIR');
+  });
+
+  it('secret tokens are the secrets among the credential tokens', () => {
+    expect([...SECRET_TOKENS]).toEqual(['PASS', 'HASH', 'CRED']);
+    expect([...CREDENTIAL_TOKENS]).toEqual(['USER', 'DOMAIN', 'PASS', 'HASH', 'DC_HOST']);
+  });
+
+  it("the Arsenal's fill fields read the same grammar: aliases fold; secrets and ${VAR} are not fields", () => {
+    expect(tokensOf(['zz {IP} {DC-IP} -p {PASS} ${ZZ} {ZZ_FILE}'])).toEqual(['TARGET_IP', 'DC_IP', 'ZZ_FILE']);
+  });
+
+  it("<script>, <TARGET> and XML tags are never Arsenal fill fields", () => {
+    expect(tokensOf(["zz '<script>alert(1)</script>' <TARGET> <searchConnectorDescriptionList> <Password>"])).toEqual([]);
   });
 });

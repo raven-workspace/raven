@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseNote } from "../../../engines/manual";
-import { matchRanges, searchLookups, searchManual } from "../../../engines/manual/search";
+import { resolveTemplate } from "../../../engines/checklist/template";
+import { maskPlaceholders, matchRanges, searchLookups, searchManual } from "../../../engines/manual/search";
 import { AUDIT_NOTE_SOURCES } from "../../../audit/fixtures";
 
 // Synthetic note text only (RFC 5737 addresses, invented names).
@@ -150,6 +151,29 @@ describe("searchManual: placeholders never match (RAV-20)", () => {
 
   it("a match never runs from text into an inline command, as the note marks each apart", () => {
     expect(searchManual("then run zzother", [n])).toEqual([]);
+  });
+});
+
+describe("maskPlaceholders agrees with fill (RAV-48)", () => {
+  const text = "zzrun -t {TARGET} -u {user} -p {ZZ_PASS} ${ZZHOME} -w %{http_code} |%{0} {DC-IP} '<script>' <TARGET> <zzConnectorList>";
+  const masked = (t: string) => [...maskPlaceholders(t)].flatMap((c, i) => (c === "\u0000" ? [i] : []));
+  const filled = (t: string) => resolveTemplate(t, {}).ranges.flatMap((r) => Array.from({ length: r.end - r.start }, (_, k) => r.start + k));
+
+  it("blanks exactly the spans fill treats as placeholders", () => {
+    expect(masked(text)).toEqual(filled(text));
+    expect(masked(text).length).toBeGreaterThan(0);
+  });
+
+  it("leaves ${VAR}, %{x}, <script>, <TARGET> and XML tags readable", () => {
+    const out = maskPlaceholders(text);
+    expect(out).not.toContain("{TARGET}");
+    for (const kept of ["${ZZHOME}", "%{http_code}", "'<script>'", "<TARGET>", "<zzConnectorList>"]) expect(out).toContain(kept);
+  });
+
+  it("<TARGET> and XML tags are never placeholders: their names are found", () => {
+    const n = parseNote("03-Tools/Zz Angle.md", ["# Zz Angle", "## Run", "```bash", "zzangle -t <ZZTARGET> <zzConnectorList>", "```"].join("\n"))!;
+    expect(searchManual("zztarget", [n])[0]?.line).toBe("zzangle -t <ZZTARGET> <zzConnectorList>");
+    expect(searchManual("zzconnectorlist", [n])).toHaveLength(1);
   });
 });
 

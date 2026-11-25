@@ -11,7 +11,7 @@ import {
   type ChecklistGoal,
   type FillInput,
 } from "../../engines/checklist";
-import { resolveTemplate } from "../../engines/checklist/template";
+import { canonicalToken, findPlaceholders, resolveTemplate } from "../../engines/checklist/template";
 import { getLibrary } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import type { Engagement } from "../../types/engagement";
@@ -40,12 +40,13 @@ export function fillLibraryCommand(c: LibraryCommand, input: FillInput, msfMarke
     msfMarker, tokens: [...new Set(tokens)],
   };
   if (c.cardId) out.cardId = c.cardId;
-  const fileTok = /(?<![$%])\{(FILE|SCRIPT)\}/.exec(c.template);
-  if (fileTok) out.fileToken = { hostId: input.host.id, os: input.host.os === "windows" || input.host.os === "linux" ? input.host.os : null, token: fileTok[1] as "FILE" | "SCRIPT" };
+  const names = findPlaceholders(c.template).map((p) => canonicalToken(p.raw));
+  const fileTok = names.find((n): n is "FILE" | "SCRIPT" => n === "FILE" || n === "SCRIPT");
+  if (fileTok) out.fileToken = { hostId: input.host.id, os: input.host.os === "windows" || input.host.os === "linux" ? input.host.os : null, token: fileTok };
   if (filled.dcByName) out.dcByName = true;
   if (filled.viaTunnel) out.viaTunnel = { viaHostId: filled.viaTunnel.tunnel.viaHostId, viaHostName: filled.viaTunnel.viaHostName, down: filled.viaTunnel.down };
   // A reverse shell back to {LPORT} clashes with a listener already in the log: name the next free port.
-  if (input.listenerPorts?.size && /(?<![$%])\{LPORT\}/.test(c.template)) {
+  if (input.listenerPorts?.size && names.includes("LPORT")) {
     const port = Number(input.listenerPort.trim());
     if (Number.isInteger(port) && input.listenerPorts.has(port)) {
       out.portClash = { port, suggested: nextFreePort(port, input.listenerPorts) };
@@ -69,7 +70,7 @@ export function goalCommands(goalId: string, input: FillInput, eng: Engagement):
   const { shown, msfMarker } = filterForKind(all, eng.kind, { hostId: input.host.id, msfHostId: eng.msfHostId });
   const commands = shown.map((c) => {
     const f = fillLibraryCommand(c, input, msfMarker.has(c.id));
-    if (choices.length > 1 && /(?<![$%])\{PORT\}/.test(c.template)) f.portToken = { key, choices, picked };
+    if (choices.length > 1 && findPlaceholders(c.template).some((p) => canonicalToken(p.raw) === "PORT")) f.portToken = { key, choices, picked };
     return f;
   });
   return { commands, hadAny: all.length > 0 };

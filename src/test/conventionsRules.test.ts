@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { breaks, files } from "./conventionsRules";
+import { breaks, files, placeholderRegexes } from "./conventionsRules";
 
 const F = "src/features/x/X.tsx";
 const U = "src/ui/X.tsx";
@@ -205,5 +205,28 @@ describe("joined-strings in engines (narrow)", () => {
   it("applies no markup rules to engines", () => {
     for (const r of ["tiny-type", "feature-flex", "hand-hint", "esc-close", "unknown-color", "off-scale-spacing"] as const)
       expect(breaks(r, E, 'const c = ".a { font-size: 9px; display: flex; color: #fff; padding: 6px; }"; <div><Kbd>a</Kbd><Kbd>esc</Kbd></div>'), r).toBe(false);
+  });
+});
+
+describe("placeholder regexes (RAV-48)", () => {
+  it("finds each shape the old copies used", () => {
+    for (const line of [
+      "const PLACEHOLDER = /\\{[A-Za-z][A-Za-z0-9_]*\\}/;",
+      "const TOKEN_RE = /(?<![$%])\\{([A-Z][A-Z0-9_-]+)\\}|<([A-Z][A-Z0-9_]+)>/g;",
+      "const fileTok = /(?<![$%])\\{(FILE|SCRIPT)\\}/.exec(t);",
+      "if (/(?<![$%])\\{LPORT\\}/.test(t)) go();",
+      'const p = ["\\\\{[A-Za-z0-9_]+\\\\}"];',
+      "const w = /\\{(\\w+)\\}/g;",
+      "const a = /<([A-Z_]+)>/g;",
+    ]) expect(placeholderRegexes(line), line).toHaveLength(1);
+  });
+
+  it("leaves Windows paths, template strings and comments alone", () => {
+    for (const line of [
+      'const NOTE = "rundll32 C:\\\\path\\\\to\\\\{FILE_NAME},x";',
+      "const s = `${host}:${port}`;",
+      "// was /\\{[A-Z]+\\}/",
+      "const css = /\\.a \\{[^}]*gap/;",
+    ]) expect(placeholderRegexes(line), line).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SECRET_TOKENS } from "../../engines/checklist/template";
 import type { FilledCommand } from "../checklist/CommandList/CommandList";
 
 export type GuardResult = { action: "copy" } | { action: "focus"; token: string };
@@ -19,8 +20,6 @@ export function guardCopy(cmd: { id: string; unresolved: string[] }, armed: Arme
   return { action: "focus", token: first };
 }
 
-/** These come from the credential chip, not from a fill field (USER and DOMAIN are fields when the credential does not supply them). */
-const CRED_TOKENS = new Set(["PASS", "HASH", "CRED"]);
 /** How long a copy's confirm line stays (the Manual's status line clears after the same wait). */
 export const CONFIRM_MS = 2500;
 
@@ -55,7 +54,8 @@ export function useCopyGuard({ focusToken, focusCred, hostName, repeatKey = "↵
         const hint = `{${r.token}} not filled. Press ${repeatKey} again to copy anyway`;
         setState({ key, hint, confirm: null });
         onNote?.(hint, "warn");
-        if (CRED_TOKENS.has(r.token)) focusCred();
+        // Secret tokens come from the credential chip, not a fill field (USER and DOMAIN are fields when the credential does not supply them).
+        if (SECRET_TOKENS.has(r.token)) focusCred();
         else focusToken(r.token);
         return "guarded";
       }

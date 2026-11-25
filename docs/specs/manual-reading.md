@@ -11,8 +11,9 @@ The owner chose: inline commands first, scope "everything", answer card (A) **an
 
 Inline code in a note that is a command is filled for the host and copyable, like a code block.
 
-- **Which inline code is a command:** it contains a `{PLACEHOLDER}` (`/\{[A-Za-z][A-Za-z0-9_]*\}/`) or it contains a space
-  (`sudo ntpdate {DC_IP}`, `ip -br addr`). A single token (`--local-auth`, `faketime`, `STATUS_LOGON_FAILURE`) is not.
+- **Which inline code is a command:** it contains a `{PLACEHOLDER}` (as the template module's grammar reads one: braces only,
+  never `${VAR}`, `%{x}` or a `<tag>`) or it contains a space (`sudo ntpdate {DC_IP}`, `ip -br addr`). A single
+  token (`--local-auth`, `faketime`, `STATUS_LOGON_FAILURE`) is not.
 - It renders as JetBrains Mono, filled from the host in view, unfilled tokens in `--warn`, masked secrets masked (copied in
   clear), as one focusable unit. ↵ copies, ⌘↵ copies and logs. The copy guard and the exam rules (banned techniques,
   Metasploit lock) apply exactly as they do to code blocks.

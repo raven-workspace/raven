@@ -1,3 +1,4 @@
+import { findPlaceholders, replacePlaceholders } from "../checklist/template";
 import type { ListenerId } from "./types";
 
 export interface ListenerDef {
@@ -27,12 +28,16 @@ export const LISTENERS: Record<ListenerId, ListenerDef> = {
   "connect-penelope": { label: "penelope", template: "penelope -O -c {TARGET_IP} -p {BIND_PORT}", connect: true },
 };
 
-/** A `{NAME}` template placeholder. Global: use it only with `.replace` / `.matchAll`, which ignore and reset `lastIndex`. */
-export const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
+/** The `{NAME}` placeholders' names in a payload text, in order (repeats kept), as the template module's grammar reads them. */
+export const placeholderNames = (text: string): string[] => findPlaceholders(text).map((p) => p.raw);
+
+/** `text` with each `{NAME}` replaced by `fn(name, written)`; `written` is the placeholder as it stands. */
+export const fillPlaceholders = (text: string, fn: (name: string, written: string) => string): string =>
+  replacePlaceholders(text, (p) => fn(p.raw, text.slice(p.start, p.end)));
 
 /** Fills a listener template; a blank or missing value stays visible as its {NAME}. */
 export function fillListener(template: string, values: Record<string, string>): string {
-  return template.replace(PLACEHOLDER, (m, name: string) => {
+  return fillPlaceholders(template, (name, m) => {
     const v = (values[name] ?? "").trim();
     return v === "" ? m : v;
   });

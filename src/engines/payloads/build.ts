@@ -1,7 +1,7 @@
 import { urlEncodeShell, utf16leBase64 } from "./encode";
 import { wrapForContext, type PasteContext } from "./context";
 import { applyFilter, FILTER_CONTEXTS, filterFitsOs, type FilterId } from "./filters";
-import { fillListener, LISTENERS, PLACEHOLDER } from "./listeners";
+import { fillListener, fillPlaceholders, LISTENERS } from "./listeners";
 import { POWERSHELL_TCP } from "./psScripts";
 import type { BuiltPayload, ListenerId, PayloadDef } from "./types";
 
@@ -49,7 +49,7 @@ export function buildPayload(
   const derived: Record<string, string> = { SERVE_PORT: moved ? ALT_SERVE_PORT : "80", WEB_PORT: moved ? `:${ALT_SERVE_PORT}` : "" };
   const filler = (unresolved: string[]) => {
     const miss = (name: string) => { if (!unresolved.includes(name)) unresolved.push(name); };
-    return (template: string) => template.replace(PLACEHOLDER, (m, name: string) => {
+    return (template: string) => fillPlaceholders(template, (name, m) => {
       if (name === "PS_B64") {
         if (psB64 !== null) return psB64;
         if (lhost === null) miss("LHOST");

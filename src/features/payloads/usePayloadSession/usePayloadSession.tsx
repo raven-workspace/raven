@@ -2,7 +2,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { DERIVED_TOKENS } from "../../../engines/payloads/build";
 import { encodePs } from "../../../engines/payloads/encodePs";
-import { LISTENERS, PLACEHOLDER } from "../../../engines/payloads/listeners";
+import { LISTENERS, placeholderNames } from "../../../engines/payloads/listeners";
 import type { BuiltPayload, GeneratorId, ListenerId, PayloadDef } from "../../../engines/payloads/types";
 import { api } from "../../../lib/api";
 import { copyPlain } from "../../../lib/clipboard";
@@ -68,7 +68,6 @@ export const GENERATOR_LIST_ID = "payloads-generators";
 export const inGeneratorList = () => document.activeElement?.closest(`#${GENERATOR_LIST_ID}`) != null;
 export const isGenerator = (g: string | null): g is GeneratorId => GENERATORS.some((x) => x.id === g);
 
-const namesIn = (text: string) => [...text.matchAll(PLACEHOLDER)].map((m) => m[1]!);
 /** The listener placeholders that are fill values; LHOST and LPORT have their own fields, MSF_PAYLOAD comes from the def. */
 const LISTENER_FIELDS = new Set(["TARGET_IP", "BIND_PORT"]);
 /**
@@ -77,8 +76,8 @@ const LISTENER_FIELDS = new Set(["TARGET_IP", "BIND_PORT"]);
  */
 const fieldTokens = (def: PayloadDef) =>
   [...new Set([
-    ...namesIn(`${def.template} ${def.prepare ?? ""} ${def.upload?.trigger ?? ""}`),
-    ...def.listeners.flatMap((l) => namesIn(LISTENERS[l].template)).filter((t) => LISTENER_FIELDS.has(t)),
+    ...placeholderNames(`${def.template} ${def.prepare ?? ""} ${def.upload?.trigger ?? ""}`),
+    ...def.listeners.flatMap((l) => placeholderNames(LISTENERS[l].template)).filter((t) => LISTENER_FIELDS.has(t)),
   ])]
     .filter((t) => t !== "LPORT" && !DERIVED_TOKENS.has(t))
     .sort((a, b) => Number(b === "LHOST") - Number(a === "LHOST"));
@@ -193,7 +192,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     ? { id: `${built.def.id}:prepare`, unresolved: built.unresolved.filter((t) => built.prepare!.includes(`{${t}}`)) }
     : null;
   /** The listener's own copy key: a placeholder still showing in it ({TARGET_IP} on a host with no IP) holds it back once. */
-  const listenerCmd = built?.listener ? { id: `${built.def.id}:listener`, unresolved: [...new Set(namesIn(built.listener))] } : null;
+  const listenerCmd = built?.listener ? { id: `${built.def.id}:listener`, unresolved: [...new Set(placeholderNames(built.listener))] } : null;
   /** The trigger copies as is (its placeholders are highlighted, not held back); only "Rebuild first" holds it. */
   const triggerCmd = built?.trigger ? { id: `${built.def.id}:trigger`, unresolved: [] as string[] } : null;
 
