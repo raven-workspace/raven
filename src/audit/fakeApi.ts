@@ -3,6 +3,7 @@
 // It must pass the same store scenarios as the real store (src/test/storeScenarios), and throw only the app's error codes.
 import { credKey, stripLineBreaks } from "../engines/credentials/keys";
 import { hashCaptureKind } from "../engines/credentials/matrix";
+import { PASSWORD_REUSE_DETAIL, PASSWORD_REUSE_SERVICE } from "../engines/credentials/reuse";
 import type { CommandOverlay, FieldManualSnapshot } from "../engines/fieldManual/merge";
 import { BUILTIN_LIBRARY } from "../engines/library/data";
 import { FIELD_MANUAL_CARDS } from "../engines/library/data/fieldManual";
@@ -596,7 +597,7 @@ async function fileExtraction(engagementId: string, logEntryId: string, p: Extra
     proofIds.push(id);
     if (on) {
       await base.credAttemptsUpsert(engagementId, [
-        { credId: id, hostId: on, service: "other", result: "valid", authMode: "local", detail: "password reuse", logEntryId, at },
+        { credId: id, hostId: on, service: PASSWORD_REUSE_SERVICE, result: "valid", authMode: "local", detail: PASSWORD_REUSE_DETAIL, logEntryId, at },
       ]);
     }
   }

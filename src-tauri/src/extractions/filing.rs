@@ -393,11 +393,11 @@ impl<'c> Filing<'c> {
                     cred_id: created.credential.id.clone(),
                     username_id: None,
                     host_id,
-                    service: "other".into(),
+                    service: attempts::PASSWORD_REUSE_SERVICE.into(),
                     port: None,
                     result: "valid".into(),
                     auth_mode: Some("local".into()),
-                    detail: Some("password reuse".into()),
+                    detail: Some(attempts::PASSWORD_REUSE_DETAIL.into()),
                     log_entry_id: Some(self.entry_id.to_string()),
                     at: Some(self.at),
                 };
@@ -1451,9 +1451,14 @@ mod tests {
         assert!(r.created_credential_ids.is_empty() && r.created_username_ids.is_empty());
         assert_eq!(r.reproved_credential_ids, vec![web.id.clone()]);
         assert_eq!(credentials::list(&c, "e").unwrap().len(), 1);
-        let on_sql: Vec<(String, String)> =
-            attempts::list(&c, "e").unwrap().into_iter().filter(|a| a.host_id == "hS").map(|a| (a.cred_id, a.service)).collect();
-        assert_eq!(on_sql, vec![(web.id.clone(), "other".into()), (web.id.clone(), "smb".into())]);
+        let on_sql: Vec<(String, String, bool)> = attempts::list(&c, "e")
+            .unwrap()
+            .into_iter()
+            .filter(|a| a.host_id == "hS")
+            .map(|a| (a.cred_id, a.service.clone(), attempts::is_reuse(&a.service, a.detail.as_deref())))
+            .collect();
+        // The dump's attempt carries the reuse marker; the nxc result on SMB is a service result, not reuse.
+        assert_eq!(on_sql, vec![(web.id.clone(), "other".into(), true), (web.id.clone(), "smb".into(), false)]);
 
         // Undo takes the dump's attempt away and leaves the credential, which l1 still proves.
         undo(&c, "l0").unwrap();

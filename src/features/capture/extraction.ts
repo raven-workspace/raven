@@ -15,9 +15,11 @@ import {
 import {
   defaultHashType,
   identifyHash,
+  isReuseAttempt,
   ntHalf,
   planCredentialIntake,
   plannedUsernameKey,
+  reuseWording,
   type CredentialIntakePlan,
   type PlannedAttempt,
 } from "../../engines/credentials";
@@ -435,7 +437,9 @@ export function summarize(x: {
     if (!c || a.usernameId) continue;
     winCredIds.add(c.id);
     const shown = c.type === "hash" ? "NT hash" : c.secret;
-    const line = `${c.username}:${shown} works on ${a.service.toUpperCase()}, ${hostName(a.hostId)}${a.result === "admin" ? " (admin)" : ""}`;
+    const line = isReuseAttempt(a)
+      ? `${c.username}:${shown} ${reuseWording(hostName(a.hostId), c.localHostId ? hostName(c.localHostId) : null)}`
+      : `${c.username}:${shown} works on ${a.service.toUpperCase()}, ${hostName(a.hostId)}${a.result === "admin" ? " (admin)" : ""}`;
     if (!wins.includes(line)) wins.push(line);
   }
   // A machine account's hash; its cleartext (an LSA secret) is counted on its own.

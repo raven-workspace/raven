@@ -7,6 +7,7 @@ import {
   isOwnerless,
   hostSprayServices,
   isPlaceholderSecret,
+  isReuseAttempt,
   overallState,
   scopeLabel,
   usernameLabel,
@@ -63,6 +64,15 @@ function worksOn(
   return out.sort((a, b) => Number(b.level === "admin") - Number(a.level === "admin"));
 }
 
+/**
+ * The hosts this credential was found again on by password reuse, in host order. Reuse is no service result, so it is
+ * never a matrix cell nor under Works on.
+ */
+function reusedOn(cred: Credential, hosts: Host[], attempts: CredAttempt[]): string[] {
+  const on = new Set(attempts.filter((a) => a.credId === cred.id && !a.usernameId && isReuseAttempt(a)).map((a) => a.hostId));
+  return hosts.filter((h) => on.has(h.id)).map((h) => hostLabel(h));
+}
+
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="credential-dock__fact">
@@ -79,6 +89,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
   const placeholder = isPlaceholderSecret(cred);
   const ownerless = isOwnerless(cred);
   const works = useMemo(() => worksOn(cred, hosts, servicesByHost, attempts), [cred, hosts, servicesByHost, attempts]);
+  const reused = useMemo(() => reusedOn(cred, hosts, attempts), [cred, hosts, attempts]);
   const tabs = useMemo(() => dockTabs(cred, { hosts, servicesByHost, usernames }), [cred, hosts, servicesByHost, usernames]);
   const matched = ownerless ? all.filter((c) => c.fromSecretId === cred.id) : [];
   const scopeHost = cred.scope === "local" && cred.localHostId ? hostLabel(hosts.find((h) => h.id === cred.localHostId)) : "";
@@ -112,6 +123,13 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
           </ul>
         )}
       </Fact>
+      {reused.length > 0 && (
+        <Fact label="Reused on">
+          <ul className="credential-dock__works">
+            {reused.map((h) => <li key={h} className="credential-dock__work-cell" title={`same password, reused on ${h}`}>{h}</li>)}
+          </ul>
+        </Fact>
+      )}
       {ownerless && (
         <Fact label="Matched users">
           {matched.length > 0 ? matched.map((c) => usernameLabel(c)).join(", ") : <span className="credential-dock__muted">no user matched yet</span>}

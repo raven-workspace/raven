@@ -6,7 +6,9 @@ import {
   dedupeHashCaptures,
   foldCrackedHashes,
   hostSprayServices,
+  isReuseAttempt,
   isSprayable,
+  PASSWORD_REUSE_DETAIL,
   usernameLabel,
 } from "../../../../engines/credentials/index";
 import type { AccessGrant, AccessLevel, CredAttempt, Credential, Username } from "../../../../types/credentials";
@@ -235,11 +237,18 @@ function HostResults({ attempts, creds, usernames, titles, onOpenEntry }: {
               <li key={a.id} className="host-creds__attempt">
                 <span className="host-creds__who" title={who}>{who}</span>
                 <ResultChip result={a.result} />
-                <span className="host-creds__where">
-                  <span className="host-creds__service">{a.service.toUpperCase()}{a.port ? ` ${a.port}` : ""}</span>
-                  {a.authMode === "local" && <span>local</span>}
-                  <span className="host-creds__detail" title={a.detail || undefined}>{a.detail}</span>
-                </span>
+                {isReuseAttempt(a) ? (
+                  // Password reuse is no service result: no service, just what it is.
+                  <span className="host-creds__where">
+                    <span className="host-creds__detail">{PASSWORD_REUSE_DETAIL}</span>
+                  </span>
+                ) : (
+                  <span className="host-creds__where">
+                    <span className="host-creds__service">{a.service.toUpperCase()}{a.port ? ` ${a.port}` : ""}</span>
+                    {a.authMode === "local" && <span>local</span>}
+                    <span className="host-creds__detail" title={a.detail || undefined}>{a.detail}</span>
+                  </span>
+                )}
                 {a.logEntryId && title !== undefined ? (
                   <EntryLink title={title} label={commandName(title)} onClick={() => onOpenEntry?.(a.logEntryId!)} className="host-creds__proof" />
                 ) : (

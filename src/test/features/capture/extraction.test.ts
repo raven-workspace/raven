@@ -254,6 +254,18 @@ describe("the summary of what the store filed", () => {
     });
   });
 
+  it("password reuse from a dump reads as reuse, never as works on OTHER", async () => {
+    const { r, proved } = await prove([{ command: SPRAY_CMD, output: SPRAY }], ["hC"]);
+    // jay's local password, stored for web01, found again in a dump on Srv12.
+    const jay = cred({ id: "cJ", username: "jay", secret: "Synth123!", scope: "local", localHostId: "hW" });
+    const reuse = attempt({ id: "a1", credId: "cJ", service: "other", authMode: "local", detail: "password reuse" });
+    const other = attempt({ id: "a2", credId: "cJ", hostId: "hW", service: "other", authMode: "local" });
+    const f = filed({ credentials: [jay], attempts: [reuse, other], record: { reprovedCredentialIds: ["cJ"] } });
+    const summary = summarize({ r, plan: proved!.plan, filed: f, identityHostId: null, hostName: names([SRV12, WEB01]), ticked: NO_TICKS });
+    // A real result on another service still reads as one.
+    expect(summary.wins).toEqual(["jay:Synth123! reused on Srv12 (same password as web01)", "jay:Synth123! works on OTHER, web01"]);
+  });
+
   it("a DC's machine account hash is a win; other hashes are counted", async () => {
     m.hostsList.mockResolvedValue([{ ...DC01, adSetEffective: true }]);
     m.servicesListEngagement.mockResolvedValue([service("s88", "hD", 88), service("s389", "hD", 389)]);

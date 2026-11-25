@@ -7,6 +7,7 @@ import { domainAdminConfirmed } from "../checklist/daCover";
 import { adSetHosts, findDc } from "../checklist/facts";
 import type { PlaybookId } from "../checklist/types";
 import { hostSprayServices, isSprayable } from "./matrix";
+import { isReuseAttempt } from "./reuse";
 
 const isDomainCred = (c: Credential): boolean => c.scope === "domain";
 const hasAccess = (a: CredAttempt): boolean => a.result === "valid" || a.result === "admin";
@@ -62,6 +63,8 @@ export interface AccessFlag {
   service: string;
   result: "admin" | "valid";
   at: number;
+  /** Password reuse found in a dump, not a result on `service`. */
+  reuse?: true;
 }
 
 /**
@@ -91,6 +94,7 @@ export function accessFlags(input: { hosts: Host[]; attempts: CredAttempt[]; cre
           service: a.service,
           result,
           at: a.at,
+          ...(isReuseAttempt(a) ? { reuse: true as const } : {}),
         });
       }
     }

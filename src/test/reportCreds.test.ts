@@ -118,3 +118,27 @@ describe("targetCredentials: direct logins", () => {
     expect(tied(d(failed({ hostId: "h2" })))).toEqual([["bob", "used on ms01"]]);
   });
 });
+
+describe("targetCredentials: password reuse", () => {
+  // jay's local password, stored for dc01, found again in a dump on ms01: an attempt marked as password reuse.
+  const jay = cred("cj", "jay", "Winter2024!", { localHostId: "h2" });
+  const attempt = (o: Record<string, unknown>) => ({ id: "a", credId: "cj", usernameId: null, hostId: H, port: null, result: "valid", authMode: "local", at: 5, ...o });
+  const reuse = attempt({ service: "other", detail: "password reuse" });
+  const withAttempts = (credAttempts: unknown[]) => ({ ...data([], [jay]), credAttempts }) as unknown as ReportData;
+
+  it("words a reuse attempt as reuse, naming the host the credential is stored for, never as works on OTHER", () => {
+    expect(tied(withAttempts([reuse]))).toEqual([["jay", "reused on ms01 (same password as dc01)"]]);
+    // With the stored host in the target too, it is local there and reused here.
+    const both = targetCredentials(withAttempts([reuse]), [H, "h2"]).credentials.map((c) => c.ties);
+    expect(both).toEqual([["local to dc01", "reused on ms01 (same password as dc01)"]]);
+  });
+
+  it("words reuse without the stored host when it was deleted", () => {
+    const orphan = { ...withAttempts([reuse]), credentials: [{ ...jay, localHostId: null }] } as unknown as ReportData;
+    expect(tied(orphan)).toEqual([["jay", "reused on ms01"]]);
+  });
+
+  it("still words a real result on another service as before", () => {
+    expect(tied(withAttempts([attempt({ service: "other", detail: null })]))).toEqual([["jay", "works on OTHER, ms01"]]);
+  });
+});

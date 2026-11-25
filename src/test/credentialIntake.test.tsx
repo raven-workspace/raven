@@ -490,4 +490,21 @@ describe("Host Credentials fact group", () => {
     expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("button", { name: /nxc smb spray/, expanded: true })).toBeInTheDocument();
   });
+
+  it("a password reuse result reads as reuse, with no OTHER service", async () => {
+    setupBackend({
+      attempts: [
+        {
+          id: "r1", engagementId: "e1", credId: "cBob", usernameId: null, hostId: "h1", service: "other", port: null,
+          result: "valid", authMode: "local", detail: "password reuse", logEntryId: null, at: 5000,
+        },
+      ],
+    });
+    mount("/e/e1/h/h1");
+    const panel = await screen.findByRole("region", { name: "Host Credentials" });
+    const results = await within(panel).findByRole("region", { name: "Results against this host" });
+    const [row] = within(results).getAllByRole("listitem");
+    expect(within(row!).getByText("password reuse")).toBeInTheDocument();
+    expect(row!.textContent).toBe("corp.local\\bobvalidpassword reuseno proof");
+  });
 });
