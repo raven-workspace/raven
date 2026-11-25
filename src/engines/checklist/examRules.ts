@@ -1,37 +1,12 @@
-import type { Engagement, EngagementKind } from '../../types/engagement';
+import type { Engagement } from '../../types/engagement';
 import type { Host } from '../../types/host';
 import type { LogEntry } from '../../types/log';
 import { namedHostsInLine, shellHost } from '../attribution';
-import type { LibraryCommand } from '../library/types';
 import { firstBinary } from '../library/matcher';
 import { MSFVENOM } from '../payloads/msfvenom';
 import { SHELLS } from '../payloads/shells';
 
 const blocksOf = (entry: LogEntry) => (entry.content.kind === 'command' ? entry.content.blocks : []);
-
-/**
- * What the engagement kind lets a host's command list show (foundation spec §6.4 and §6.5). Exam sim removes every `exam: 'banned'`
- * command and shows `exam: 'metasploit'` commands only on the locked host; while no host is locked they stay
- * visible and their ids come back in `msfMarker` ("uses your one Metasploit host"). Other kinds change nothing.
- */
-export function filterForKind(
-  cmds: LibraryCommand[],
-  kind: EngagementKind,
-  ctx: { hostId: string; msfHostId?: string | null },
-): { shown: LibraryCommand[]; msfMarker: Set<string> } {
-  const msfMarker = new Set<string>();
-  if (kind !== 'exam-sim') return { shown: cmds, msfMarker };
-  const shown: LibraryCommand[] = [];
-  for (const cmd of cmds) {
-    if (cmd.exam === 'banned') continue;
-    if (cmd.exam === 'metasploit') {
-      if (ctx.msfHostId && ctx.msfHostId !== ctx.hostId) continue;
-      if (!ctx.msfHostId) msfMarker.add(cmd.id);
-    }
-    shown.push(cmd);
-  }
-  return { shown, msfMarker };
-}
 
 const PROMPT_PREFIX = /^msf\d*(?: \w+\([^)]*\))? >\s*/i;
 /** `use <module>`: long form (exploit/, auxiliary/, post/) or any short-form path like `windows/smb/psexec`. */

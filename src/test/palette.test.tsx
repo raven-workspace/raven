@@ -7,6 +7,7 @@ import App from "../App";
 import { AUDIT_NOTE_IDS, AUDIT_NOTE_SOURCES } from "../audit/fixtures";
 import type { FieldManualSnapshot } from "../engines/fieldManual/merge";
 import { parseNote, type ManualNote } from "../engines/manual";
+import { examScope } from "../engines/exam";
 import { searchPalette } from "../features/palette/search";
 import { setImported } from "../engines/library/store";
 import type { LibraryCommand } from "../engines/library/types";
@@ -894,7 +895,7 @@ describe("⌘K Lookup group", () => {
     expect(keys).toEqual(["STATUS_ZZ_DENIED", "STATUS_ZZ_LOGON"]);
   });
 
-  it("exam rules hold back a banned lookup command; pending rules offer none", () => {
+  it("exam rules hide a banned lookup command; pending rules offer only commands that need no verdict", () => {
     const BANNED = parseNote("04-Foundations/Zz-Banned.md", [
       "# Zz Banned",
       "**Table 1 — Zz web errors**",
@@ -905,8 +906,12 @@ describe("⌘K Lookup group", () => {
     const base = { library: [], cards: [], generators: [], notes: [BANNED] };
     const titles = (r: ReturnType<typeof searchPalette>) => r.lookups.flatMap((g) => g.results.map((x) => x.title));
     expect(titles(searchPalette("ZZ_SQLERR", base))).toEqual(["sqlmap -u {URL}", "zzcurl {URL}"]);
-    expect(titles(searchPalette("ZZ_SQLERR", { ...base, exam: { kind: "exam-sim", hostId: "h1" } }))).toEqual(["zzcurl {URL}"]);
-    expect(searchPalette("ZZ_SQLERR", { ...base, examPending: true }).lookups).toEqual([]);
+    expect(titles(searchPalette("ZZ_SQLERR", { ...base, exam: examScope({ kind: "exam-sim", msfHostId: null }, "h1") }))).toEqual(["zzcurl {URL}"]);
+    expect(titles(searchPalette("ZZ_SQLERR", { ...base, exam: examScope(undefined, "h1") }))).toEqual(["zzcurl {URL}"]);
+    // The row's commands carry the Manual's one id scheme, the ids the answer card gives them.
+    expect(searchPalette("ZZ_SQLERR", base).lookups[0]!.results.map((x) => x.id)).toEqual([
+      `manual:${BANNED.id}:lookup:table-1:0:0`, `manual:${BANNED.id}:lookup:table-1:0:1`,
+    ]);
   });
 
   it("in an exam sim, rows left with no command do not crowd out a later allowed row (RAV-20)", () => {
@@ -922,6 +927,6 @@ describe("⌘K Lookup group", () => {
     const base = { library: [], cards: [], generators: [], notes: [BANNED] };
     const keys = (r: ReturnType<typeof searchPalette>) => r.lookups.map((g) => g.code);
     expect(keys(searchPalette("ZZ_WEB", base))).toEqual(["ZZ_WEB_ONE", "ZZ_WEB_TWO"]);
-    expect(keys(searchPalette("ZZ_WEB", { ...base, exam: { kind: "exam-sim", hostId: "h1" } }))).toEqual(["ZZ_WEB_THREE"]);
+    expect(keys(searchPalette("ZZ_WEB", { ...base, exam: examScope({ kind: "exam-sim", msfHostId: null }, "h1") }))).toEqual(["ZZ_WEB_THREE"]);
   });
 });

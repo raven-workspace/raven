@@ -1,10 +1,8 @@
 import { Fragment, memo, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
-import { classifyExam } from "../../../engines/fieldManual/classifyExam";
 import type { CardMeta } from "../../../engines/library/store";
-import type { LibraryCommand } from "../../../engines/library/types";
 import type { ManualNote } from "../../../engines/manual/index";
-import { fillsBlock, isOutputBlock } from "../../../engines/manual/commands";
+import { fillsBlock, isOutputBlock, manualCommand } from "../../../engines/manual/commands";
 import { resolveLink } from "../../../engines/manual/links";
 import { isInlineCommand, lookupColumns, plain, shortTitle } from "../../../engines/manual/lookup";
 import { cx } from "../../../lib/cx";
@@ -54,6 +52,10 @@ const TRAIL = /^[,.;:!?)\]]+/;
 const OPAQUE = "\u0000";
 
 const isCommand = (code: string, ctx: Ctx) => !ctx.plainCode && isInlineCommand(code);
+
+/** An inline code span as a library command: it logs as its table row, else as its note and section. */
+const inlineCommand = (code: string, { note, section, rowTitle }: Ctx) =>
+  manualCommand({ kind: "inline", note, code, section, ...(rowTitle !== undefined ? { rowTitle } : {}) });
 
 /** Where a link goes and the title it shows: its alias, else the title of what it points at (never its file name). */
 function linkOf(link: { target: string; heading?: string; label: string }, ctx: Ctx) {
@@ -123,7 +125,7 @@ function Run({ parts, ctx, at, ranges }: { parts: Inline[]; ctx: Ctx; at: number
 function InlinePart({ p, ctx, at, ranges }: { p: Exclude<Inline, { text: string }>; ctx: Ctx; at: number; ranges: Ranges }): ReactNode {
   if ("code" in p) {
     // A short single token (a status code, a flag, a path) never breaks inside: not at a backslash or dot either.
-    if (isCommand(p.code, ctx)) return <InlineCommand command={inlineOf(p.code, ctx)} base={ctx.base} highlight={ctx.re} />;
+    if (isCommand(p.code, ctx)) return <InlineCommand command={inlineCommand(p.code, ctx)} base={ctx.base} highlight={ctx.re} />;
     const token = p.code.length <= TOKEN_MAX && !/\s/.test(p.code);
     return <code className={cx("note-view__code", token && "note-view__code--token")}>{marked(p.code, at, ranges)}</code>;
   }
@@ -148,56 +150,11 @@ function InlinePart({ p, ctx, at, ranges }: { p: Exclude<Inline, { text: string 
   return <span className="note-view__unresolved">{marked(title, at, ranges)}</span>;
 }
 
-/** Each note's inline commands, by log title and code: the same object every render, so their fill is not redone. */
-const inlineCache = new WeakMap<ManualNote, Map<string, LibraryCommand>>();
-
-/**
- * An inline code span as a library command: it runs from Kali, and logs as its table row, else as its note and section.
- * Memoized per note, code and log title (a re-render hands `useNoteCommand` the same command, so its fill is kept).
- */
-export function inlineOf(code: string, ctx: Ctx): LibraryCommand {
-  const { note, section, rowTitle } = ctx;
-  const title = rowTitle ?? (section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title));
-  let byNote = inlineCache.get(note);
-  if (!byNote) inlineCache.set(note, (byNote = new Map()));
-  const key = `${title}\u0000${code}`;
-  const known = byNote.get(key);
-  if (known) return known;
-  const command: LibraryCommand = {
-    id: `manual:${note.id}:inline:${code}`, title,
-    tool: code.trim().split(/\s+/)[0] ?? "", template: code, os: "any", runFrom: "attacker", goals: [], source: "field-manual",
-  };
-  const exam = classifyExam(code);
-  if (exam) command.exam = exam;
-  byNote.set(key, command);
-  return command;
-}
-
 /** The first line of a code block, shortened: it names a block that has no title. */
 const firstLine = (text: string) => {
   const line = text.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 };
-
-const WINDOWS_LANGS = new Set(["cmd", "bat", "batch", "powershell", "ps1", "ps", "pwsh"]);
-const LINUX_LANGS = new Set(["bash", "sh", "zsh", "shell"]);
-
-/**
- * A code block as a library command. The fence title is where it runs, as on a card (`parseCard`): `Kali…` is the
- * attacker, any other title (`Target — PowerShell`, `Pivot — bash`) the target. An untitled block runs from Kali,
- * unless its language is a Windows shell (Kali has none): then it runs on the target. The fence language gives the OS
- * (Windows shells, Unix shells off Kali), and the log title is the section it sits in.
- */
-function commandOf(block: Extract<Block, { kind: "code" }>, note: ManualNote, n: number, section: string): LibraryCommand {
-  const lang = block.lang.toLowerCase();
-  const kali = block.title ? /^kali\b/i.test(block.title) : !WINDOWS_LANGS.has(lang);
-  const os = WINDOWS_LANGS.has(lang) ? "windows" : LINUX_LANGS.has(lang) && !kali ? "linux" : "any";
-  return {
-    id: `manual:${note.id}:${n}`,
-    title: section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title), tool: block.text.trim().split(/\s+/)[0] ?? "",
-    template: block.text, os, runFrom: kali ? "attacker" : "target", goals: [], source: "field-manual",
-  };
-}
 
 /** Each block's section: the nearest `##`/`###` heading at or above it, as plain text ("" before the first). */
 function sectionsOf(blocks: Block[]): string[] {
@@ -265,10 +222,8 @@ function BlockView({ block, n, ctx: shared, base, section, tableName, tableAncho
         />
       );
     case "code": {
-      const command = commandOf(block, ctx.note, n, section);
+      const command = manualCommand({ kind: "block", note: ctx.note, block, n, section });
       const output = isOutputBlock(block);
-      const exam = output ? undefined : classifyExam(block.text);
-      if (exam) command.exam = exam;
       const line = firstLine(block.text);
       return (
         <ManualCommand

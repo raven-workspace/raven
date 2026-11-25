@@ -18,7 +18,7 @@ describe("msfLockLine", () => {
   });
   it("is an info line when nothing holds the lock", () => {
     expect(msfLockLine({ exam: true, def: met, hostId: "h1", msfHostId: null, hostName })).toEqual({
-      text: "Using Meterpreter here makes this your Metasploit machine", breach: false,
+      text: "Using Metasploit here makes this your Metasploit machine", breach: false,
     });
   });
   it("is a breach when locked to another host", () => {

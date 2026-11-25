@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { fillCommand, filterForKind } from "../../../engines/checklist/index";
+import { fillCommand } from "../../../engines/checklist/index";
+import { examList } from "../../../engines/exam";
 import { isHttp, transferMethods, TRANSFER_CARD, withToolsDirs } from "../../../engines/generators/transfer";
 import { getCards, getLibrary, useLibraryVersion } from "../../../engines/library/store";
 import { copyPlain } from "../../../lib/clipboard";
@@ -63,7 +64,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
   const version = useLibraryVersion();
   // The host is the screen's own (the browse bar's HostChip); there is no second host control here.
   const hostId = viewHostId;
-  const { d, host, makeInput, examReady } = useFillBase(engagementId, hostId);
+  const { d, host, makeInput, exam } = useFillBase(engagementId, hostId);
   const [osPick, setOsPick] = useState<Os>("windows");
   const os: Os = contextOs ?? osPick;
   const [dirs, setDirs] = useState<Record<Os, string>>(() => ({ windows: readDir("windows"), linux: readDir("linux") }));
@@ -82,16 +83,13 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
   // getLibrary()/getCards() change only with the library version.
   /* eslint-disable react-hooks/exhaustive-deps */
   const methods = useMemo(() => {
-    const kind = d.engagement?.kind;
     const cardId = TRANSFER_CARD[os];
-    // Fail closed: no methods until the engagement's exam rules are known.
-    if (!examReady) return [];
-    let pool = getLibrary().filter((c) => c.cardId === cardId);
-    if (kind) pool = filterForKind(pool, kind, { hostId: host?.id ?? "", msfHostId: d.engagement?.msfHostId ?? null }).shown;
+    // A list under the exam rules (until the engagement's kind is known, no command that needs a verdict).
+    const pool = examList(getLibrary().filter((c) => c.cardId === cardId), exam).shown;
     // HTTP first, so arrow keys follow the order the pills are drawn in.
     const all = transferMethods(getCards(), pool, os).filter((m) => m.kali.length + m.target.length > 0);
     return [...all.filter((m) => isHttp(m.group)), ...all.filter((m) => !isHttp(m.group))];
-  }, [os, d.engagement, examReady, host, version]);
+  }, [os, exam, version]);
   /* eslint-enable react-hooks/exhaustive-deps */
   const method = methods.find((m) => m.id === methodId) ?? methods[0];
 

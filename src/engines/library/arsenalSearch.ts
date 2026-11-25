@@ -1,5 +1,4 @@
-import { filterForKind } from "../checklist";
-import type { EngagementKind } from "../../types/engagement";
+import { examList, type ExamScope } from "../exam";
 import { CATEGORY_ALIASES, categoryLabel, categoryOf } from "./categories";
 import type { CardMeta } from "./store";
 import type { LibraryCommand } from "./types";
@@ -19,10 +18,8 @@ export interface ArsenalContext {
   library: LibraryCommand[];
   cards: CardMeta[];
   generators: { id: string; title: string; category: string }[];
-  /** Exam rules; absent means no engagement kind applies. */
-  exam?: { kind: EngagementKind; hostId: string; msfHostId?: string | null };
-  /** The engagement (so its exam rules) is not known yet: no commands are offered (fail closed). */
-  examPending?: boolean;
+  /** The exam scope the commands are listed in (`examList`); absent means no engagement kind applies. */
+  exam?: ExamScope;
 }
 
 /** Field weights: a hit scores the highest field it matched. */
@@ -61,14 +58,8 @@ const categoryText = (slug: string): string => [slug, categoryLabel(slug), ...(C
 /** One relevance search over commands, cards and generators, grouped by category. */
 export function searchArsenal(query: string, ctx: ArsenalContext): ArsenalGroup[] {
   const q = wordsOf(query);
-  // Pending exam rules fail closed for commands only; cards and generators carry no exam rules.
-  let pool = ctx.examPending ? [] : ctx.library;
-  let msfMarker = new Set<string>();
-  if (ctx.exam) {
-    const f = filterForKind(pool, ctx.exam.kind, { hostId: ctx.exam.hostId, msfHostId: ctx.exam.msfHostId ?? null });
-    pool = f.shown;
-    msfMarker = f.msfMarker;
-  }
+  // A list surface for the exam rules: they apply to commands only; cards and generators carry none.
+  const { shown: pool, msfMarker } = ctx.exam ? examList(ctx.library, ctx.exam) : { shown: ctx.library, msfMarker: new Set<string>() };
   const scored: { category: string; score: number; hit: ArsenalHit }[] = [];
   for (const c of pool) {
     const category = categoryOf(c, ctx.cards);

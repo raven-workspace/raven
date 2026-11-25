@@ -120,7 +120,7 @@ async function openOn(hostId: string, fit: string) {
 describe("Meterpreter copy and log sets the exam's Metasploit lock", () => {
   it("⌘↵ on a Meterpreter payload locks Metasploit to the target (not Kali); another host then shows the amber lock", async () => {
     const first = await openOn("h1", MET);
-    expect(first.d.getByText("Using Meterpreter here makes this your Metasploit machine")).not.toHaveClass("payload-block__lock--breach");
+    expect(first.d.getByText("Using Metasploit here makes this your Metasploit machine")).not.toHaveClass("payload-block__lock--breach");
     await first.user.keyboard("{Meta>}{Enter}{/Meta}");
     await vi.waitFor(() => expect(m.engagementSetMsfHost).toHaveBeenCalledWith("e1", "h1"));
     expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ ranOn: "Kali (VM)", hostIds: ["h1"], payloadId: "msf-win-x64-met-staged" }));

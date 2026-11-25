@@ -78,7 +78,7 @@ A command with its placeholders filled for the host in view, in three forms: the
 _Avoid_: resolved command, rendered command
 
 **Exam verdict**:
-What the exam rules say about one command in one scope (engagement kind, host in view, Metasploit lock): allowed, banned, Metasploit locked to another host, or Metasploit not yet locked. Lists hide a banned or locked-elsewhere command; reading surfaces (Manual notes, the answer card) show it with the warning and hold back its first copy.
+What the exam rules say about one command in one scope (engagement kind, host in view, Metasploit lock): allowed, banned, Metasploit locked to another host, or Metasploit not yet locked. Lists hide a banned or locked-elsewhere command; reading surfaces (Manual notes, the answer card) show it with the warning and hold back its first copy. Until the engagement's kind is known, a command with an exam classification waits (pending): lists hide it and reading surfaces hold back its first copy. Only `src/engines/exam` decides it.
 _Avoid_: exam rule (a rule is the policy; the verdict is its answer for one command)
 
 **Secret tokens**:

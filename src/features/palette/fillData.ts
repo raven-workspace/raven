@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { portChoices, resolveCred, type FillInput } from "../../engines/checklist";
+import { examScope } from "../../engines/exam";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import { useCredPickStore } from "../checklist/credPick";
@@ -76,5 +77,11 @@ export function useFillBase(engagementId: string, hostId: string | null) {
 
   // Exam rules fail closed: until the engagement (so its kind) is known, nothing that could be banned is shown.
   const examReady = !scopePending && (engagementId === "" || d.engagement !== undefined);
-  return { d, host, engagement, cred, credOwnerId, loaded: d.engagement !== undefined, examReady, makeInput };
+  // The one exam scope every surface judges commands in (pending until the engagement's kind is known).
+  const hostKey = host?.id ?? null;
+  const exam = useMemo(
+    () => examScope(examReady ? engagement : undefined, hostKey),
+    [examReady, engagement, hostKey],
+  );
+  return { d, host, engagement, cred, credOwnerId, loaded: d.engagement !== undefined, examReady, exam, makeInput };
 }

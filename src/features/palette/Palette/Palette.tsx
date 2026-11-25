@@ -52,7 +52,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const libraryVersion = useLibraryVersion();
   // The chip picks another host for this search only; typed values never carry over to it.
   const [hostId, setHostId] = useState(openedHostId);
-  const { d, host, cred, credOwnerId, makeInput, examReady } = useFillBase(engagementId, hostId);
+  const { d, host, cred, credOwnerId, makeInput, exam } = useFillBase(engagementId, hostId);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -85,12 +85,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     () =>
       searchPalette(query, {
         library: getLibrary(), cards: getCards(), generators: GENERATORS, engagementItems: items, notes,
-        ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
-        examPending: !examReady,
+        exam,
       }),
     // getLibrary()/getCards() change only with the library version.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query, items, notes, host, d.engagement, examReady, libraryVersion],
+    [query, items, notes, exam, libraryVersion],
   );
   // Lookup rows first (the answer, its commands ready to fill), then Arsenal categories (the drawer's rows), then one
   // group for the engagement, then the Manual. Each list stops at MAX_RESULTS; Lookup rows never count against the Arsenal's.

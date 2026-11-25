@@ -1,12 +1,11 @@
 import { matches, searchArsenal, wordsOf, type ArsenalGroup, type ArsenalHit } from "../../engines/library/arsenalSearch";
 import type { CardMeta } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
-import { filterForKind } from "../../engines/checklist/examRules";
-import { classifyExam } from "../../engines/fieldManual/classifyExam";
+import { examList, type ExamScope } from "../../engines/exam";
 import type { ManualNote } from "../../engines/manual";
+import { lookupCommands } from "../../engines/manual/commands";
 import { plain, type LookupRow } from "../../engines/manual/lookup";
 import { searchLookups, searchManual } from "../../engines/manual/search";
-import type { EngagementKind } from "../../types/engagement";
 import { escapeRegExp } from "../../engines/regex";
 
 /** Something in the open engagement the palette can jump to. Credential items carry a label only, never a secret. */
@@ -23,10 +22,8 @@ export interface PaletteContext {
   cards: CardMeta[];
   generators: { id: string; title: string; category: string }[];
   engagementItems?: EngagementItem[];
-  /** Exam rules; absent means no engagement kind applies. */
-  exam?: { kind: EngagementKind; hostId: string; msfHostId?: string | null };
-  /** The engagement (so its exam rules) is not known yet: no commands are offered (fail closed). */
-  examPending?: boolean;
+  /** The exam scope commands are listed in (`examList`); absent means no engagement kind applies. */
+  exam?: ExamScope;
   /** The Manual's notes: searched in full text, after commands and cards. */
   notes?: ManualNote[];
 }
@@ -89,28 +86,13 @@ export function capGroups(groups: ArsenalGroup[], max: number): ArsenalGroup[] {
 /** How many Manual notes ⌘K lists. */
 export const MANUAL_MAX = 8;
 
-/** A lookup row's commands as library commands: they run from Kali and log as "{table}: {key}", as in the note. */
-function lookupCommands(r: LookupRow): LibraryCommand[] {
-  return r.commands.map((code, i) => {
-    const c: LibraryCommand = {
-      id: `lookup:${r.noteId}:${r.anchor}:${r.row}:${i}`, title: `${r.tableName}: ${r.key}`, tool: code.trim().split(/\s+/)[0] ?? "",
-      template: code, os: "any", runFrom: "attacker", goals: [], source: "field-manual",
-    };
-    const exam = classifyExam(code);
-    if (exam) c.exam = exam;
-    return c;
-  });
-}
-
-/** A lookup row as a ⌘K group, its commands under the same exam rules as the Arsenal's; null when none is left. */
+/**
+ * A lookup row as a ⌘K group: its commands as the answer card has them (`lookupCommands`), listed under the same exam
+ * rules as the Arsenal's; null when none is left.
+ */
 function lookupGroup(r: LookupRow, ctx: PaletteContext): LookupGroup | null {
-  let cmds = lookupCommands(r);
-  let msfMarker = new Set<string>();
-  if (ctx.exam) {
-    const f = filterForKind(cmds, ctx.exam.kind, { hostId: ctx.exam.hostId, msfHostId: ctx.exam.msfHostId ?? null });
-    cmds = f.shown;
-    msfMarker = f.msfMarker;
-  }
+  const all = lookupCommands(r);
+  const { shown: cmds, msfMarker } = ctx.exam ? examList(all, ctx.exam) : { shown: all, msfMarker: new Set<string>() };
   if (cmds.length === 0) return null;
   return {
     key: `lookup-${r.noteId}-${r.anchor}-${r.row}`, code: r.key, text: plain(r.means).trim(),
@@ -119,11 +101,10 @@ function lookupGroup(r: LookupRow, ctx: PaletteContext): LookupGroup | null {
 }
 
 /**
- * Lookup rows matching the query, as groups (pending rules: none). The exam rules drop a row before the row cap counts
- * it, so a row left with no command never hides a later one that has some.
+ * Lookup rows matching the query, as groups. The exam rules drop a row before the row cap counts it, so a row left
+ * with no command never hides a later one that has some.
  */
 function lookupGroups(query: string, ctx: PaletteContext): LookupGroup[] {
-  if (ctx.examPending) return [];
   const groups = new Map<LookupRow, LookupGroup>();
   const keep = (r: LookupRow) => {
     const g = lookupGroup(r, ctx);

@@ -1,7 +1,6 @@
 import {
   commandContext,
   fillCommand,
-  filterForKind,
   portChoices,
   HOST_GOALS,
   ENGAGEMENT_SETUP,
@@ -12,6 +11,7 @@ import {
   type FillInput,
 } from "../../engines/checklist";
 import { canonicalToken, findPlaceholders, resolveTemplate } from "../../engines/checklist/template";
+import { examList, examScope } from "../../engines/exam";
 import { getLibrary } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import type { Engagement } from "../../types/engagement";
@@ -67,7 +67,7 @@ export function goalCommands(goalId: string, input: FillInput, eng: Engagement):
   const pickedPort = usePortPickStore.getState().picks[key];
   const picked = pickedPort !== undefined && choices.includes(pickedPort) ? pickedPort : choices[0];
   if (choices.length > 0) input = { ...input, portHint: [picked, ...choices.filter((p) => p !== picked)] };
-  const { shown, msfMarker } = filterForKind(all, eng.kind, { hostId: input.host.id, msfHostId: eng.msfHostId });
+  const { shown, msfMarker } = examList(all, examScope(eng, input.host.id));
   const commands = shown.map((c) => {
     const f = fillLibraryCommand(c, input, msfMarker.has(c.id));
     if (choices.length > 1 && findPlaceholders(c.template).some((p) => canonicalToken(p.raw) === "PORT")) f.portToken = { key, choices, picked };

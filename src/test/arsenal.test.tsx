@@ -256,17 +256,18 @@ describe("Arsenal", () => {
     expect(d.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
   });
 
-  it("exam filtering fails closed: no commands until the engagement kind is known", async () => {
+  it("exam filtering fails closed: no command that needs a verdict until the engagement kind is known", async () => {
     let release!: (e: Engagement) => void;
     const user = userEvent.setup();
     mount("/e/e1/h/h1", EXAM);
     m.engagementGet.mockImplementation(() => new Promise<Engagement>((r) => (release = r)));
-    // Drawer.
+    // Drawer: a command with no exam classification needs no kind; a banned one waits.
     await user.keyboard("a");
     const d = within(await drawer());
     const search = d.getByRole("textbox", { name: "Search the Arsenal" });
     await user.type(search, "zz");
-    expect(d.queryAllByRole("option")).toHaveLength(0);
+    expect(await d.findByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
+    expect(d.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
     await user.keyboard("{Escape}");
     // Palette.
     await user.keyboard("{Meta>}k{/Meta}");
@@ -275,8 +276,8 @@ describe("Arsenal", () => {
     expect(screen.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
     await user.clear(box);
     await user.type(box, "zzprobe");
-    expect(screen.queryByRole("option", { name: /Zzprobe/ })).not.toBeInTheDocument();
-    // Once the kind is known, allowed commands appear and banned ones stay hidden.
+    expect(await screen.findByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
+    // Once the kind is known, allowed commands stay and banned ones stay hidden.
     await act(async () => release(EXAM));
     expect(await screen.findByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
     await user.clear(box);
@@ -284,18 +285,17 @@ describe("Arsenal", () => {
     expect(screen.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
   });
 
-  it("browse shows no commands until the engagement kind is known", async () => {
+  it("browse shows no command that needs a verdict until the engagement kind is known", async () => {
     let release!: (e: Engagement) => void;
     useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
     useArsenalStore.setState({ cardId: "zz-card" });
     mount("/arsenal", EXAM);
     m.engagementGet.mockImplementation(() => new Promise<Engagement>((r) => (release = r)));
     await screen.findByRole("button", { name: "Fill for host dc01" });
-    // Not even categories or cards until the exam rules are known.
-    expect(screen.queryByRole("heading", { name: "Zz Card" })).not.toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Categories" })).queryAllByRole("button")).toHaveLength(0);
+    // The card and its unclassified command show; the banned one waits for the exam rules.
+    expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
+    expect(await screen.findByText(/zzprobe/)).toBeInTheDocument();
     expect(screen.queryByText(/zzrelay/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/zzprobe/)).not.toBeInTheDocument();
     await act(async () => release(EXAM));
     expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     expect(await block(screen, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
@@ -929,7 +929,7 @@ describe("drawer list grouped by category (U1)", () => {
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
   });
 
-  it("fails closed while the engagement loads", async () => {
+  it("fails closed while the engagement loads: no command that needs a verdict", async () => {
     const user = userEvent.setup();
     m.engagementGet.mockImplementation(() => new Promise<Engagement>(() => {}));
     m.engagementsList.mockResolvedValue([EXAM]);
@@ -942,9 +942,9 @@ describe("drawer list grouped by category (U1)", () => {
     );
     await user.keyboard("a");
     const d = within(await drawer());
-    expect(d.queryAllByRole("option")).toHaveLength(0);
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zz");
-    expect(d.queryAllByRole("option")).toHaveLength(0);
+    expect(await d.findByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
+    expect(d.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
   });
 });
 

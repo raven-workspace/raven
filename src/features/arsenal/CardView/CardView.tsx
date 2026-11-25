@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { filterForKind } from "../../../engines/checklist/index";
+import { examList } from "../../../engines/exam";
 import { categoryLabel } from "../../../engines/library/categories";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../../engines/library/store";
 import type { LibraryCommand } from "../../../engines/library/types";
@@ -45,8 +45,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   /** Opens a card a `[[link]]` in a note points at; without it, links show as plain text. */
   onOpenCard?: (cardId: string) => void;
 }) {
-  const { d, host, cred, makeInput, examReady } = useFillBase(engagementId, hostId);
-  const kind = d.engagement?.kind;
+  const { d, host, cred, makeInput, exam } = useFillBase(engagementId, hostId);
   const fieldEls = useRef(new Map<string, HTMLInputElement>());
   const root = useRef<HTMLDivElement>(null);
   // The block whose copy was held back (focus went to a fill field or the credential chip): Enter there copies it anyway.
@@ -55,14 +54,9 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   const hostName = host ? shortHostName(host.name) : null;
   const blockEl = (id: string) => document.getElementById(`block-${id}`);
 
-  const visible = (list: LibraryCommand[]) => {
-    // Fail closed: nothing until the engagement's exam rules are known.
-    if (!examReady) return { shown: [], msfMarker: new Set<string>() };
-    if (!kind) return { shown: list, msfMarker: new Set<string>() };
-    return filterForKind(list, kind, { hostId: host?.id ?? "", msfHostId: d.engagement?.msfHostId ?? null });
-  };
-  const main = visible(commands);
-  const extra = visible(also);
+  // A list under the exam rules (until the engagement's kind is known, no command that needs a verdict).
+  const main = examList(commands, exam);
+  const extra = examList(also, exam);
   const input = useMemo(() => makeInput(overrides), [makeInput, overrides]);
   const templates = [...main.shown, ...extra.shown].map((c) => c.template);
   const tokens = tokensOf(templates);

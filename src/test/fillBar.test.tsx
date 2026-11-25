@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, useState } from "react";
 import { MemoryRouter } from "react-router";
@@ -171,7 +171,8 @@ describe("credential pick is shared with the host checklist", () => {
     await screen.findByRole("combobox", { name: "Value for TARGET_IP" });
     // The pane has no credential chip of its own: the surface's header holds it.
     expect(screen.queryByRole("button", { name: /Fill with credential/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: /Value for (USER|PASS|HASH|CRED)/ })).not.toBeInTheDocument();
+    // Commands need no exam verdict, so they show before the credential loads: USER goes once it has.
+    await waitFor(() => expect(screen.queryByRole("combobox", { name: /Value for (USER|PASS|HASH|CRED)/ })).not.toBeInTheDocument());
   });
 
   const mountPane = () =>
@@ -203,6 +204,6 @@ describe("credential pick is shared with the host checklist", () => {
       </QueryClientProvider>,
     );
     expect(await screen.findByRole("combobox", { name: "Value for DOMAIN" })).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Value for USER" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("combobox", { name: "Value for USER" })).not.toBeInTheDocument());
   });
 });

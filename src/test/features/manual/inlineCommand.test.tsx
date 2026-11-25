@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useCredPickStore } from "../../../features/checklist/credPick";
 import { logCommand } from "../../../features/capture/logCommand";
-import { inlineOf, NoteView, type Ctx } from "../../../features/manual/NoteView/NoteView";
+import { manualCommand } from "../../../engines/manual/commands";
+import { NoteView } from "../../../features/manual/NoteView/NoteView";
 import { useManualStatus } from "../../../features/manual/useManualStatus";
 import { api } from "../../../lib/api";
 import { makeQueryClient } from "../../../lib/queryClient";
@@ -168,15 +169,16 @@ describe("inline commands", () => {
 describe("inline commands are memoized", () => {
   it("the same note, code and log title give the same command object; another title or note gives another", () => {
     const n = note(["Run `zzscan -t {TARGET_IP}` now."]);
-    const ctx = { note: n, notes: [n], cards: [], re: null, base: {} as Ctx["base"], section: "Shares" } satisfies Ctx;
-    const a = inlineOf("zzscan -t {TARGET_IP}", ctx);
-    expect(inlineOf("zzscan -t {TARGET_IP}", { ...ctx })).toBe(a);
+    const at = { kind: "inline", note: n, code: "zzscan -t {TARGET_IP}", section: "Shares" } as const;
+    const a = manualCommand(at);
+    expect(manualCommand({ ...at })).toBe(a);
     expect(a.title).toBe("Zz Tool: Shares");
-    const row = inlineOf("zzscan -t {TARGET_IP}", { ...ctx, rowTitle: "Zz codes: X" });
+    expect(a.id).toBe(`manual:${n.id}:inline:zzscan -t {TARGET_IP}`);
+    const row = manualCommand({ ...at, rowTitle: "Zz codes: X" });
     expect(row).not.toBe(a);
     expect(row.title).toBe("Zz codes: X");
     const other = note(["Run `zzscan -t {TARGET_IP}` now."]);
-    expect(inlineOf("zzscan -t {TARGET_IP}", { ...ctx, note: other })).not.toBe(a);
+    expect(manualCommand({ ...at, note: other })).not.toBe(a);
   });
 
   it("NoteView is memoized: the same props skip its render", () => {

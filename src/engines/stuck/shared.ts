@@ -1,7 +1,7 @@
 import type { ChecklistState } from "../../types/checklist";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
-import { filterForKind } from "../checklist";
+import { examList, examScope } from "../exam";
 import { getLibrary } from "../library/store";
 import type { LibraryCommand } from "../library/types";
 
@@ -21,5 +21,5 @@ export function hasLegalCommand(
 ): boolean {
   const cmds = library.filter((c) => c.goals.includes(goalId));
   if (cmds.length === 0) return true;
-  return filterForKind(cmds, engagement.kind, { hostId, msfHostId: engagement.msfHostId ?? null }).shown.length > 0;
+  return examList(cmds, examScope({ kind: engagement.kind, msfHostId: engagement.msfHostId ?? null }, hostId)).shown.length > 0;
 }
