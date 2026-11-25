@@ -38,7 +38,11 @@ export function AccessFlags({ engagementId, hosts, attempts, credentials }: { en
           const host = hosts.find((h) => h.id === f.hostId);
           return (
             <li key={`${f.hostId}-${f.credId ?? f.usernameId}-${f.service}`} className="access-flags__item">
-              <span className="access-flags__text">{`${host?.name ?? "unknown host"}: ${f.result} over ${f.service} as ${who(f)}`}</span>
+              <span className="access-flags__text">
+                {f.reuse
+                  ? `${host?.name ?? "unknown host"}: password reused as ${who(f)}`
+                  : `${host?.name ?? "unknown host"}: ${f.result} over ${f.service} as ${who(f)}`}
+              </span>
               <Button size="sm" disabled={reviewed.isPending} onClick={() => reviewed.mutate(f.hostId)}>
                 Reviewed
               </Button>

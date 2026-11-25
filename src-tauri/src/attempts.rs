@@ -48,6 +48,17 @@ pub struct CredAttemptInput {
     pub at: Option<i64>,
 }
 
+/// The stored marker of password reuse (see GLOSSARY.md): an attempt with this service and this detail is a dumped local
+/// account whose name and secret match a local credential stored for another host, not a result on a service. A dump
+/// names no service, so `other` stands in. The frontend's `PASSWORD_REUSE_DETAIL` is the same text.
+pub const PASSWORD_REUSE_SERVICE: &str = "other";
+pub const PASSWORD_REUSE_DETAIL: &str = "password reuse";
+
+/// Whether an attempt is password reuse rather than a service result. The frontend's `isReuseAttempt` is the same rule.
+pub fn is_reuse(service: &str, detail: Option<&str>) -> bool {
+    service == PASSWORD_REUSE_SERVICE && detail == Some(PASSWORD_REUSE_DETAIL)
+}
+
 const COLS: &str = "id, engagement_id, cred_id, username_id, host_id, service, port, result, auth_mode, detail, log_entry_id, at";
 
 const SERVICES: [&str; 13] =
@@ -390,6 +401,15 @@ mod tests {
         )
         .unwrap();
         id
+    }
+
+    #[test]
+    fn only_the_reuse_marker_is_password_reuse() {
+        assert!(is_reuse("other", Some("password reuse")));
+        // A real result on another service, with or without a detail, is not reuse; nor is the detail on a named service.
+        assert!(!is_reuse("other", None));
+        assert!(!is_reuse("other", Some("STATUS_ACCOUNT_DISABLED")));
+        assert!(!is_reuse("smb", Some("password reuse")));
     }
 
     #[test]

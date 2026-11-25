@@ -1,8 +1,12 @@
 import type { AccessGrant, Credential, Username } from "../../types/credentials";
 import type { ReportData } from "./types";
+import { isReuseAttempt, reuseWording } from "../credentials/reuse";
 import { escapeRegExp } from "../regex";
 
-/** A credential tied to a target, with each way it is tied ("works on SSH, files03", "found on web01"). */
+/**
+ * A credential tied to a target, with each way it is tied ("works on SSH, files03", "found on web01", password reuse
+ * as "reused on sql01 (same password as web01)").
+ */
 export interface TargetCredential {
   key: string;
   username: string;
@@ -97,7 +101,10 @@ export function targetCredentials(data: ReportData, hostIds: string[]): { creden
     if (!ids.has(a.hostId) || (a.result !== "valid" && a.result !== "admin")) continue;
     const c = credOf(a.credId);
     if (!c) continue;
-    const why = `${a.result === "admin" ? "admin" : "works"} on ${a.service.toUpperCase()}, ${name(a.hostId)}`;
+    // Password reuse is no service result: it names the host the credential is stored for instead.
+    const why = isReuseAttempt(a)
+      ? reuseWording(name(a.hostId), data.hosts.find((h) => h.id === c.localHostId)?.name ?? null)
+      : `${a.result === "admin" ? "admin" : "works"} on ${a.service.toUpperCase()}, ${name(a.hostId)}`;
     // A username tried with this credential's secret: that username is the one that works.
     const user = a.usernameId ? data.usernames.find((u) => u.id === a.usernameId) : undefined;
     if (user) tie(`${user.id}:${c.id}`, { username: user.username, domain: user.domain, type: c.type, at: a.at }, why);
