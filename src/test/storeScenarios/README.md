@@ -64,6 +64,8 @@ IDs and timestamps differ between the two stores, so check them through bound na
 | `ad-set.json` | The AD set: the switch, else open 88 and 389. |
 | `msf-lock.json` | The Metasploit lock holds only its own engagement's host, and clears when the host goes. |
 | `checklist-conditional-writes.json` | The cover and fact writes only touch untouched items, and only revert their own marks. |
+| `checklist-entry-ticks.json` | Entry ticks are re-derived on the rows as the store holds them, so a status set by hand is never overwritten. |
+| `board-sync.json` | A new derived column moves the card and ends a hand placement, unless the card was placed by hand before any was derived. |
 | `extraction-undo.json` | Undoing a save restores the tried pairs its new credential took over, and removes what it filed. |
 | `error-codes.json` | Missing records are `not_found`; bad input is `validation` on its field. |
 | `username-scope.json` | A username's scope decides its identity: domain, unknown and local never merge. |

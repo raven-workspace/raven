@@ -15,9 +15,12 @@ export function domainAdminConfirmed(hosts: Host[], servicesByHost: ServicesByHo
   return !!dc && attempts.some((a) => a.result === 'admin' && a.hostId === dc.id);
 }
 
-/** Auto-tick never leaves an item `na` with `auto` set, so that pair marks an item the domain admin cover set. */
+/**
+ * Auto-tick never leaves an item `na` with `auto` set, so that pair, on an item not set by hand, marks an item the
+ * domain admin cover set (as the store's revert reads it).
+ */
 export function isCoverMarked(item: ItemState | undefined): boolean {
-  return item?.auto === true && item.status === 'na';
+  return item?.auto === true && item.status === 'na' && !item.statusManual;
 }
 
 const COVERED_STAGES = new Set(['privilege-escalation', 'post-exploitation']);

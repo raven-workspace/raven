@@ -35,6 +35,7 @@ beforeEach(() => {
   m.servicesListEngagement.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
+  m.checklistApplyEntryTicks.mockResolvedValue([]);
   m.credentialsList.mockImplementation(async () => [...stored]);
   // The store files the pasted credentials; whether one is the same credential is its answer, stubbed here with equal
   // spellings only (the rule itself is tested in Rust).

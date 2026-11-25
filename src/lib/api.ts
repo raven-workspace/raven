@@ -6,7 +6,7 @@ import type { VaultFile } from "../types/fieldManual";
 import type { BackupInfo } from "../types/backup";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
 import type { GoalRef } from "../engines/checklist";
-import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
+import type { ChecklistItem, ChecklistItemInput, EntryTicks } from "../types/checklist";
 import type {
   Attachment,
   Extraction,
@@ -174,6 +174,9 @@ export const api = {
   /** Ticks driven by the host's own data (identified ports, OS) as conditional writes. */
   checklistApplyFacts: (engagementId: string, done: GoalRef[], revert: GoalRef[]) =>
     call<ChecklistItem[]>("checklist_apply_facts", { engagementId, done, revert }),
+  /** Log entries' ticks as one conditional write: the store re-derives each entry's ticks on its rows as they are now. */
+  checklistApplyEntryTicks: (engagementId: string, entries: EntryTicks[]) =>
+    call<ChecklistItem[]>("checklist_apply_entry_ticks", { engagementId, entries }),
   notesGet: (engagementId: string, hostId: string | null) =>
     call<Note>("notes_get", { engagementId, hostId }),
   notesList: (engagementId: string) => call<Note[]>("notes_list", { engagementId }),

@@ -32,10 +32,9 @@ import { shortHostName } from "../../../lib/hostName";
 import { GoalRow } from "../GoalRow/GoalRow";
 import { PlaybookSection } from "../PlaybookSection/PlaybookSection";
 import { useChecklist, useChecklistMutations } from "../queries";
-import { boardsSynced } from "../resync";
 import { useHops, useTunnels } from "../../network/queries";
 import { useEngagementServices } from "../../services/queries";
-import { loadTickContext, tickFromLog } from "../ticks";
+import { syncChecklist } from "../sync";
 import { useSettings, settingsFill } from "../../settings/queries";
 import { useEngagement } from "../../engagements/queries";
 import { RavenError } from "../../../types/errors";
@@ -133,9 +132,8 @@ export function EngagementChecklist() {
   const runTick = async () => {
     setTick({ ticking: true });
     try {
-      const r = await tickFromLog(id, await loadTickContext(id));
-      setTick({ ticking: false, message: r.message });
-      void boardsSynced(qc, id);
+      const { rebuilt: n } = await syncChecklist({ engagementId: id, change: { entity: "log", id, change: "rebuilt" }, qc });
+      setTick({ ticking: false, message: `Updated ${n} ${n === 1 ? "goal" : "goals"}` });
     } catch (e) {
       setTick({ ticking: false, error: RavenError.from(e).message });
     }

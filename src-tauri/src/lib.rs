@@ -93,6 +93,7 @@ pub fn run() {
             commands::checklist_put,
             commands::checklist_apply_cover,
             commands::checklist_apply_facts,
+            commands::checklist_apply_entry_ticks,
             commands::notes_get,
             commands::notes_list,
             commands::note_save,

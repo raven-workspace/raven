@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { api } from "../../lib/api";
 import { registerReads, storeChanged } from "../../lib/storeChange";
-import { resyncAndRefresh } from "./resync";
+import { reportError } from "../../lib/lockSignal";
+import { syncChecklist } from "./sync";
 import { byOwnerOf, checklistKey, itemToState, servicesByHostOf, stateToInput } from "./state";
 import type { ChecklistItem, ChecklistItemInput, ChecklistState, ChecklistStatus, ItemState } from "../../types/checklist";
 
@@ -43,10 +44,11 @@ export function useChecklistMutations(engagementId: string) {
         else delete next.completedAt;
         return put([stateToInput(v.ownerId, v.goalId, next)]);
       },
-      onSuccess: (items: ChecklistItem[]) => {
+      onSuccess: (items: ChecklistItem[], v) => {
         onSuccess(items);
         // A manual Done can move the card. Not fatal: a failure goes to the shared error path.
-        void resyncAndRefresh(qc, engagementId);
+        const change = { entity: "checklistItem" as const, id: `${v.ownerId}:${v.goalId}`, change: "updated" as const };
+        void syncChecklist({ engagementId, change, qc }).catch(reportError);
       },
     }),
     setNotes: useMutation({

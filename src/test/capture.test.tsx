@@ -117,6 +117,7 @@ beforeEach(() => {
   m.servicesListEngagement.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
+  m.checklistApplyEntryTicks.mockResolvedValue([]);
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30,
     backupRetention: 14,

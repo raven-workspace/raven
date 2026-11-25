@@ -1,0 +1,59 @@
+{
+  "name": "Entry ticks are re-derived on the rows as they are now, so a status set by hand is never overwritten",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Ticks lab", "kind": "lab" }], "as": "eng" },
+    { "do": "engagementCreate", "args": [{ "name": "Other lab", "kind": "lab" }], "as": "other" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "web07", "ip": "192.0.2.60" }], "as": "h" },
+    { "do": "hostCreate", "args": ["$other", { "name": "ws02", "ip": "192.0.2.61" }], "as": "foreign" },
+    {
+      "do": "checklistPut",
+      "args": ["$eng", [
+        { "ownerId": "$h", "goalId": "na", "status": "na", "notes": "filtered" },
+        { "ownerId": "$h", "goalId": "prog", "status": "in_progress" },
+        { "ownerId": "$h", "goalId": "hand", "status": "done", "completedAt": 5, "statusManual": true }
+      ]]
+    },
+    {
+      "do": "checklistApplyEntryTicks",
+      "args": ["$eng", [{ "entryId": "l1", "at": 1000, "ticks": [
+        { "ownerId": "$h", "goalId": "new", "commandId": "nmap" },
+        { "ownerId": "$h", "goalId": "new", "commandId": "dupe" },
+        { "ownerId": "$h", "goalId": "na", "commandId": "nmap" },
+        { "ownerId": "$h", "goalId": "prog", "commandId": "nmap" },
+        { "ownerId": "$h", "goalId": "hand", "commandId": "nmap" }
+      ] }]],
+      "expect": [
+        { "goalId": "new", "status": "done", "auto": true, "autoFrom": null, "completedAt": 1000, "statusManual": false, "evidence": [{ "entryId": "l1", "commandId": "nmap" }] },
+        { "goalId": "na", "status": "done", "auto": true, "autoFrom": "na", "completedAt": 1000, "notes": "filtered" },
+        { "goalId": "prog", "status": "done", "auto": true, "autoFrom": "in_progress", "completedAt": 1000 },
+        { "goalId": "hand", "status": "done", "auto": false, "completedAt": 5, "statusManual": true, "evidence": [{ "entryId": "l1", "commandId": "nmap" }] }
+      ]
+    },
+    {
+      "do": "checklistPut",
+      "args": ["$eng", [{ "ownerId": "$h", "goalId": "prog", "status": "in_progress", "statusManual": true, "evidence": [{ "entryId": "l1", "commandId": "nmap" }] }]]
+    },
+    {
+      "do": "checklistApplyEntryTicks",
+      "args": ["$eng", [{ "entryId": "l1", "at": 2000, "ticks": [] }]],
+      "expect": [
+        { "goalId": "new", "status": "todo", "auto": false, "autoFrom": null, "completedAt": null, "evidence": [] },
+        { "goalId": "na", "status": "na", "auto": false, "autoFrom": null, "completedAt": null, "notes": "filtered", "evidence": [] },
+        { "goalId": "prog", "status": "in_progress", "auto": false, "statusManual": true, "evidence": [] },
+        { "goalId": "hand", "status": "done", "auto": false, "completedAt": 5, "statusManual": true, "evidence": [] }
+      ]
+    },
+    {
+      "do": "checklistApplyEntryTicks",
+      "args": ["$eng", [{ "entryId": "l2", "at": 3000, "ticks": [{ "ownerId": "$h", "goalId": "new", "commandId": "a" }] }, { "entryId": "l2", "at": 4000, "ticks": [{ "ownerId": "$h", "goalId": "new", "commandId": "b" }] }]],
+      "expect": [
+        { "goalId": "new", "status": "done", "completedAt": 3000, "evidence": [{ "entryId": "l2", "commandId": "b" }] },
+        { "goalId": "na" }, { "goalId": "prog" }, { "goalId": "hand" }
+      ]
+    },
+    { "do": "checklistApplyEntryTicks", "args": ["$eng", [{ "entryId": "l3", "at": 1, "ticks": [{ "ownerId": "$foreign", "goalId": "x" }] }]], "error": { "code": "not_found" } },
+    { "do": "checklistApplyEntryTicks", "args": ["$eng", [{ "entryId": "l3", "at": 1, "ticks": [{ "ownerId": "$h", "goalId": " " }] }]], "error": { "code": "validation", "field": "goalId" } },
+    { "do": "checklistApplyEntryTicks", "args": ["$eng", [{ "entryId": " ", "at": 1, "ticks": [] }]], "error": { "code": "validation", "field": "entryId" } },
+    { "do": "checklistList", "args": ["$other"], "expect": [] }
+  ]
+}

@@ -3,16 +3,11 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
-import { resyncBoards } from "../../features/checklist/ticks";
 import { api } from "../../lib/api";
 import { makeQueryClient } from "../../lib/queryClient";
 import type { Engagement } from "../../types/engagement";
 
 vi.mock("../../lib/api");
-vi.mock("../../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../../features/checklist/ticks")>()),
-  resyncBoards: vi.fn(),
-}));
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
@@ -22,7 +17,6 @@ const E1: Engagement = {
 };
 
 beforeEach(() => {
-  vi.mocked(resyncBoards).mockReset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({ attackerIp: "192.0.2.9", listenerPort: "443", autoLockMinutes: 30 } as never);
   m.engagementGet.mockResolvedValue(E1);

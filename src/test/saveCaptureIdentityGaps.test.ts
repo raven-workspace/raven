@@ -31,6 +31,7 @@ beforeEach(() => {
   m.servicesListEngagement.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
+  m.checklistApplyEntryTicks.mockResolvedValue([]);
   m.extractionFile.mockResolvedValue(filed());
 });
 

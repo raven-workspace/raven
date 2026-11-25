@@ -20,10 +20,6 @@ import type { Service } from "../types/service";
 import { commandText as filled } from "../features/commands/filledCommand";
 
 vi.mock("../lib/api");
-vi.mock("../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../features/checklist/ticks")>()),
-  resyncBoards: vi.fn().mockResolvedValue(undefined),
-}));
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {

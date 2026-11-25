@@ -92,6 +92,7 @@ beforeEach(() => {
   m.servicesListEngagement.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
+  m.checklistApplyEntryTicks.mockResolvedValue([]);
   m.extractionFile.mockResolvedValue(filed());
 });
 
@@ -284,7 +285,7 @@ describe("saveCapture", () => {
 
   it("filing and checklist both failing says both", async () => {
     m.extractionFile.mockRejectedValue(new Error("db busy"));
-    m.checklistList.mockRejectedValue(new Error("db busy"));
+    m.checklistApplyEntryTicks.mockRejectedValue(new Error("db busy"));
     const err = await saveCapture({
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
@@ -344,7 +345,7 @@ describe("saveCapture", () => {
 
   it("checklist failure after the entry saved is a partial save carrying its cause", async () => {
     const cause = new Error("locked");
-    m.checklistPut.mockRejectedValue(cause);
+    m.checklistApplyEntryTicks.mockRejectedValue(cause);
     m.hostsList.mockResolvedValue([DC]);
     const err = await saveCapture({
       engagementId: "e1",
@@ -369,11 +370,11 @@ describe("saveCapture", () => {
     expect(m.extractionFinish).toHaveBeenCalledWith("l1", saved.summary, []);
     const last = (f: { mock: { invocationCallOrder: number[] } }) => Math.max(0, ...f.mock.invocationCallOrder);
     expect(m.extractionFinish.mock.invocationCallOrder[0]).toBeGreaterThan(last(m.checklistApplyCover));
-    expect(m.extractionFile.mock.invocationCallOrder[0]).toBeLessThan(m.checklistPut.mock.invocationCallOrder[0] ?? Infinity);
+    expect(m.extractionFile.mock.invocationCallOrder[0]).toBeLessThan(m.checklistApplyEntryTicks.mock.invocationCallOrder[0] ?? Infinity);
   });
 
   it("a partial save carries the summary of what the store filed, and none when filing failed", async () => {
-    m.checklistList.mockRejectedValue(new Error("locked"));
+    m.checklistApplyEntryTicks.mockRejectedValue(new Error("locked"));
     m.extractionFile.mockResolvedValue(filed({ scans: [{ hostId: "h1", services: 2, osSet: false }] }));
     const run = () =>
       saveCapture({ engagementId: "e1", draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }), edits: edits(), image: null, hosts: [DC] })

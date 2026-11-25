@@ -36,3 +36,18 @@ export interface ItemState {
 }
 
 export type ChecklistState = Record<string, ItemState>;
+
+/** Mirrors the Rust `EntryTick`: one goal a log entry achieves on one owner, by the command (or `out:<parser>`). */
+export interface EntryTick {
+  ownerId: string;
+  goalId: string;
+  commandId?: string | null;
+}
+
+/** Mirrors the Rust `EntryTicks`: every tick one log entry gives now (none once it is deleted), and the completion
+ *  time a goal it newly ticks gets. */
+export interface EntryTicks {
+  entryId: string;
+  at: number;
+  ticks: EntryTick[];
+}

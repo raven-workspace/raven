@@ -191,7 +191,8 @@ describe("Next follows the board column", () => {
 
   it("says so when the current stage has nothing open but an earlier one does", async () => {
     const vd = applicableGoals(H1, E1, [H1], new Map([["h1", [SMB]]])).find((a) => a.stage.id === "vulnerability-detection")!.goals;
-    mount({ host: { ...H1, boardColumn: "vulnerability-detection" }, items: vd.map((g) => item(g.id, "done")) });
+    // Placed there by hand: the derived column is still Information gathering, so the checklist sync leaves it.
+    mount({ host: { ...H1, boardColumn: "vulnerability-detection", boardManual: true, boardDerived: "information-gathering" }, items: vd.map((g) => item(g.id, "done")) });
     expect(await (await next()).findByText("Nothing open in Vulnerability detection. Earlier steps are in the full checklist.")).toBeInTheDocument();
   });
 });

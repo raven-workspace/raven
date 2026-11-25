@@ -19,10 +19,6 @@ import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 
 vi.mock("../../../lib/api");
-vi.mock("../../../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../../../features/checklist/ticks")>()),
-  resyncBoards: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("../../../features/capture/logCommand", () => ({ logCommand: vi.fn() }));
 const m = vi.mocked(api, true);
 

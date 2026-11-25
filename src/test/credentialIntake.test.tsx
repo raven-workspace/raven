@@ -220,6 +220,7 @@ beforeEach(() => {
   m.checklistList.mockResolvedValue([]);
   m.checklistApplyFacts.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
+  m.checklistApplyEntryTicks.mockResolvedValue([]);
   setupBackend();
 });
 
@@ -393,8 +394,7 @@ describe("nxc results on save", () => {
 
   it("a filing failure and a checklist failure read as one message", async () => {
     m.extractionFile.mockRejectedValue(new Error("disk full"));
-    m.checklistPut.mockRejectedValue(new Error("nope"));
-    m.checklistList.mockRejectedValue(new Error("nope"));
+    m.checklistApplyEntryTicks.mockRejectedValue(new Error("nope"));
     const user = userEvent.setup();
     mount();
     const dialog = await pasteAndSave(user, SPRAY);

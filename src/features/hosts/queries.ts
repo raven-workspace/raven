@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { registerReads, storeChanged } from "../../lib/storeChange";
-import { resyncAndRefresh } from "../checklist/resync";
+import { reportError } from "../../lib/lockSignal";
+import { syncChecklist } from "../checklist/sync";
 import { dropPendingNotes } from "../notes/useNotesStore";
 import type { BoardColumn, HostInput } from "../../types/host";
 import type { HostIdentity, VectorInput, VectorStatus } from "../../types/hostFacts";
@@ -31,20 +32,21 @@ export function useHostMutations(engagementId: string) {
   const qc = useQueryClient();
   // OS and dual-homed change which goals apply, so the derived column can move. Not fatal: failures go to the
   // shared error path (a locked vault reaches the gate).
-  const resync = () => void resyncAndRefresh(qc, engagementId);
+  const sync = (id: string, change: "created" | "updated" | "deleted") =>
+    void syncChecklist({ engagementId, change: { entity: "host", id, change }, qc }).catch(reportError);
   return {
     create: useMutation({
       mutationFn: (input: HostInput) => api.hostCreate(engagementId, input),
       onSuccess: (host) => {
         void storeChanged(qc, { entity: "host", id: host.id, change: "created" });
-        resync();
+        sync(host.id, "created");
       },
     }),
     update: useMutation({
       mutationFn: (v: { id: string; input: HostInput }) => api.hostUpdate(v.id, v.input),
       onSuccess: (_h, v) => {
         void storeChanged(qc, { entity: "host", id: v.id, change: "updated" });
-        resync();
+        sync(v.id, "updated");
       },
     }),
     move: useMutation({
@@ -58,7 +60,7 @@ export function useHostMutations(engagementId: string) {
         dropPendingNotes(engagementId, id);
         void storeChanged(qc, { entity: "host", id, change: "deleted" });
         // A deleted DC changes which hosts are AD hosts, and so other hosts' columns.
-        resync();
+        sync(id, "deleted");
       },
     }),
   };

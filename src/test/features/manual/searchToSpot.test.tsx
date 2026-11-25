@@ -22,10 +22,6 @@ import type { Engagement } from "../../../types/engagement";
 
 vi.mock("../../../lib/api");
 vi.mock("../../../lib/clipboard", () => ({ copyPlain: vi.fn(() => Promise.resolve()), copySecret: vi.fn(() => Promise.resolve()) }));
-vi.mock("../../../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../../../features/checklist/ticks")>()),
-  resyncBoards: vi.fn().mockResolvedValue(undefined),
-}));
 const m = vi.mocked(api, true);
 
 // Synthetic fixtures only: invented note names and bodies.

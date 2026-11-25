@@ -21,10 +21,6 @@ import type { Host } from "../types/host";
 
 vi.mock("../lib/api");
 vi.mock("../features/palette/generators", () => ({ GENERATORS: [{ id: "shell", title: "Zzgen reverse shell", category: "Shells-and-Transfers" }] }));
-vi.mock("../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../features/checklist/ticks")>()),
-  resyncBoards: vi.fn().mockResolvedValue(undefined),
-}));
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {

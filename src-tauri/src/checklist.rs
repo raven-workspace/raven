@@ -216,6 +216,149 @@ pub fn apply_facts(
     list(conn, engagement_id)
 }
 
+/// One goal a log entry achieves on one owner, by the command (or output parser) that achieved it.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntryTick {
+    pub owner_id: String,
+    pub goal_id: String,
+    #[serde(default)]
+    pub command_id: Option<String>,
+}
+
+/// Every tick one log entry gives now (none for an entry being deleted, or one whose extraction was undone), and the
+/// completion time a goal it newly ticks gets.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntryTicks {
+    pub entry_id: String,
+    pub at: i64,
+    pub ticks: Vec<EntryTick>,
+}
+
+/// An item the domain admin cover set: `na` with `auto`, not set by hand. Auto-tick never leaves one.
+fn cover_marked(it: &ChecklistItem) -> bool {
+    it.status == "na" && it.auto && !it.status_manual
+}
+
+/// Re-derives one entry's ticks on `rows` (the engagement's items) and returns the indexes of the rows it changed.
+///
+/// - A goal the entry still ticks keeps its link (with the current command id), its status and its completion time.
+/// - A goal it no longer ticks loses the entry's evidence. Only when its status came from auto-tick (`auto`) and no
+///   evidence is left does it go back to its `auto_from` status (else `todo`), so a status set by hand stays.
+/// - A goal it newly ticks gains the evidence and, unless already `done`, becomes `done` with `auto` set, stamped
+///   `at`. It remembers an `in_progress`, or an `na` that isn't a cover mark, in `auto_from`.
+fn replace_entry_ticks(rows: &mut Vec<ChecklistItem>, e: &EntryTicks) -> Vec<usize> {
+    let mut changed = Vec::new();
+    let mut wanted: Vec<&EntryTick> = Vec::new();
+    for t in &e.ticks {
+        if !wanted.iter().any(|w| w.owner_id == t.owner_id && w.goal_id == t.goal_id) {
+            wanted.push(t);
+        }
+    }
+
+    for (i, it) in rows.iter_mut().enumerate() {
+        let Some(idx) = it.evidence.iter().position(|ev| ev.entry_id == e.entry_id) else { continue };
+        if let Some(t) = wanted.iter().find(|t| t.owner_id == it.owner_id && t.goal_id == it.goal_id) {
+            if it.evidence[idx].command_id != t.command_id {
+                it.evidence[idx].command_id = t.command_id.clone();
+                changed.push(i);
+            }
+            continue;
+        }
+        it.evidence.retain(|ev| ev.entry_id != e.entry_id);
+        if it.auto && it.evidence.is_empty() {
+            it.status = match it.auto_from.as_deref() {
+                Some(from @ ("na" | "in_progress")) => from.to_string(),
+                _ => "todo".to_string(),
+            };
+            it.completed_at = None;
+            it.auto = false;
+            it.auto_from = None;
+        }
+        changed.push(i);
+    }
+
+    for t in &wanted {
+        let i = match rows.iter().position(|it| it.owner_id == t.owner_id && it.goal_id == t.goal_id) {
+            Some(i) => i,
+            None => {
+                rows.push(ChecklistItem {
+                    owner_id: t.owner_id.clone(),
+                    goal_id: t.goal_id.clone(),
+                    status: "todo".into(),
+                    notes: None,
+                    completed_at: None,
+                    auto: false,
+                    auto_from: None,
+                    status_manual: false,
+                    evidence: vec![],
+                    updated_at: 0,
+                });
+                rows.len() - 1
+            }
+        };
+        let it = &mut rows[i];
+        if it.evidence.iter().any(|ev| ev.entry_id == e.entry_id) {
+            continue;
+        }
+        it.evidence.push(Evidence { entry_id: e.entry_id.clone(), command_id: t.command_id.clone() });
+        if it.status != "done" {
+            let remembered = it.status == "in_progress" || (it.status == "na" && !cover_marked(it));
+            it.auto_from = if remembered { Some(it.status.clone()) } else { None };
+            it.status = "done".into();
+            it.completed_at = Some(e.at);
+            it.auto = true;
+        }
+        changed.push(i);
+    }
+    changed
+}
+
+/// Log entries' checklist ticks, as a conditional write like `apply_cover` and `apply_facts`: each entry's ticks are
+/// re-derived (`replace_entry_ticks`) on the rows as the store holds them now, in the order given, so a status set by
+/// hand since the caller last read the checklist is never overwritten. Every row holding evidence from an entry is
+/// re-derived, on any owner. Notes and the set-by-hand flag are never changed. At most `MAX_ITEMS` entries and
+/// `MAX_ITEMS * 4` ticks a call (else an `entries` error). One transaction; returns the engagement's items.
+pub fn apply_entry_ticks(conn: &Connection, engagement_id: &str, entries: &[EntryTicks]) -> AppResult<Vec<ChecklistItem>> {
+    if entries.len() > MAX_ITEMS || entries.iter().map(|e| e.ticks.len()).sum::<usize>() > MAX_ITEMS * 4 {
+        return Err(AppError::validation("entries", "too many entries or ticks"));
+    }
+    check_scope(conn, engagement_id, None)?;
+    for e in entries {
+        if e.entry_id.trim().is_empty() {
+            return Err(AppError::validation("entryId", "entry id is required"));
+        }
+        for t in &e.ticks {
+            check_owned(conn, engagement_id, &t.owner_id)?;
+            if t.goal_id.trim().is_empty() {
+                return Err(AppError::validation("goalId", "goal id is required"));
+            }
+        }
+    }
+    let tx = conn.unchecked_transaction()?;
+    let mut rows = list(&tx, engagement_id)?;
+    let mut changed: Vec<usize> = entries.iter().flat_map(|e| replace_entry_ticks(&mut rows, e)).collect();
+    changed.sort_unstable();
+    changed.dedup();
+    let now = now_ms();
+    for i in changed {
+        let it = &rows[i];
+        let evidence = serde_json::to_string(&it.evidence)?;
+        tx.execute(
+            "INSERT INTO checklist_items \
+               (owner_id, engagement_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at, status_manual) \
+             VALUES (?1,?2,?3,?4,NULL,?5,?6,?7,?8,?9,0) \
+             ON CONFLICT(owner_id, goal_id) DO UPDATE SET \
+               status=excluded.status, completed_at=excluded.completed_at, auto=excluded.auto, \
+               auto_from=excluded.auto_from, evidence=excluded.evidence, updated_at=excluded.updated_at",
+            params![it.owner_id, engagement_id, it.goal_id, it.status, it.completed_at, it.auto, it.auto_from, evidence, now],
+        )?;
+    }
+    tx.commit()?;
+    list(conn, engagement_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,6 +541,174 @@ mod tests {
         for g in ["hand", "logged", "plain"] {
             assert_eq!(row(&out, &h, g).unwrap().status, "done", "{g}");
         }
+    }
+
+    const NOW: i64 = 1_800_000_000_000;
+    const LATER: i64 = NOW + 86_400_000;
+
+    fn ticks(entry: &str, at: i64, list: &[(&str, &str, &str)]) -> EntryTicks {
+        EntryTicks {
+            entry_id: entry.into(),
+            at,
+            ticks: list.iter().map(|(o, g, c)| EntryTick { owner_id: (*o).into(), goal_id: (*g).into(), command_id: Some((*c).into()) }).collect(),
+        }
+    }
+
+    fn ev(entry: &str, command: &str) -> Evidence {
+        Evidence { entry_id: entry.into(), command_id: Some(command.into()) }
+    }
+
+    #[test]
+    fn entry_ticks_tick_a_todo_goal_as_auto_done_with_evidence() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "192.0.2.5");
+        let out = apply_entry_ticks(c, &e, &[ticks("l1", NOW, &[(&h, "g", "nmap"), (&h, "g", "dupe")])]).unwrap();
+        let r = row(&out, &h, "g").unwrap();
+        assert_eq!((r.status.as_str(), r.auto, r.auto_from.clone(), r.completed_at), ("done", true, None, Some(NOW)));
+        assert_eq!(r.evidence, vec![ev("l1", "nmap")]);
+        // The same ticks again change nothing.
+        let again = apply_entry_ticks(c, &e, &[ticks("l1", LATER, &[(&h, "g", "nmap")])]).unwrap();
+        assert_eq!(row(&again, &h, "g").unwrap(), r);
+    }
+
+    #[test]
+    fn entry_ticks_keep_a_hand_done_and_its_time_and_only_link_evidence() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "192.0.2.5");
+        let mut hand = item(&h, "g", "done");
+        hand.completed_at = Some(5);
+        hand.notes = Some("by hand".into());
+        hand.status_manual = Some(true);
+        put(c, &e, &[hand]).unwrap();
+        let out = apply_entry_ticks(c, &e, &[ticks("l1", NOW, &[(&h, "g", "nmap")])]).unwrap();
+        let r = row(&out, &h, "g").unwrap();
+        assert_eq!((r.status.as_str(), r.auto, r.completed_at, r.status_manual), ("done", false, Some(5), true));
+        assert_eq!((r.notes.as_deref(), r.evidence.clone()), (Some("by hand"), vec![ev("l1", "nmap")]));
+        // Its entry deleted: only the evidence goes.
+        let out = apply_entry_ticks(c, &e, &[ticks("l1", LATER, &[])]).unwrap();
+        let r = row(&out, &h, "g").unwrap();
+        assert_eq!((r.status.as_str(), r.completed_at, r.status_manual, r.evidence.len()), ("done", Some(5), true, 0));
+    }
+
+    #[test]
+    fn a_status_set_by_hand_after_the_read_is_never_overwritten_by_entry_ticks() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "192.0.2.5");
+        apply_entry_ticks(c, &e, &[ticks("l1", NOW, &[(&h, "g", "flag")])]).unwrap();
+        // The caller read the auto tick; then the user sets In progress by hand, then the entry is deleted.
+        let mut hand = item(&h, "g", "in_progress");
+        hand.status_manual = Some(true);
+        hand.evidence = vec![ev("l1", "flag")];
+        put(c, &e, &[hand]).unwrap();
+        let out = apply_entry_ticks(c, &e, &[ticks("l1", LATER, &[])]).unwrap();
+        let r = row(&out, &h, "g").unwrap();
+        assert_eq!((r.status.as_str(), r.auto, r.status_manual, r.evidence.len()), ("in_progress", false, true, 0));
+        // A Done set by hand while an entry's ticks were worked out keeps its time and stays manual.
+        let mut done = item(&h, "k", "done");
+        done.completed_at = Some(7);
+        done.status_manual = Some(true);
+        put(c, &e, &[done]).unwrap();
+        let out = apply_entry_ticks(c, &e, &[ticks("l2", LATER, &[(&h, "k", "flag")])]).unwrap();
+        let r = row(&out, &h, "k").unwrap();
+        assert_eq!((r.status.as_str(), r.auto, r.completed_at, r.status_manual), ("done", false, Some(7), true));
+    }
+
+    #[test]
+    fn an_untick_reverts_only_when_no_evidence_is_left() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "192.0.2.5");
+        let mut noted = item(&h, "g", "todo");
+        noted.notes = Some("n".into());
+        put(c, &e, &[noted]).unwrap();
+        apply_entry_ticks(c, &e, &[ticks("l1", NOW, &[(&h, "g", "a")]), ticks("l2", NOW, &[(&h, "g", "b")])]).unwrap();
+        let out = apply_entry_ticks(c, &e, &[ticks("l1", LATER, &[])]).unwrap();
+        let r = row(&out, &h, "g").unwrap();
+        assert_eq!((r.status.as_str(), r.auto, r.evidence.clone()), ("done", true, vec![ev("l2", "b")]));
+        let out = apply_entry_ticks(c, &e, &[ticks("l2", LATER, &[])]).unwrap();
+        let r = row(&out, &h, "g").unwrap();
+        assert_eq!((r.status.as_str(), r.auto, r.completed_at, r.notes.as_deref()), ("todo", false, None, Some("n")));
+    }
+
+    #[test]
+    fn an_untick_restores_a_remembered_na_or_in_progress() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "192.0.2.5");
+        put(c, &e, &[item(&h, "na", "na"), item(&h, "prog", "in_progress")]).unwrap();
+        let out = apply_entry_ticks(c, &e, &[ticks("l1", NOW, &[(&h, "na", "a"), (&h, "prog", "a")])]).unwrap();
+        assert_eq!(row(&out, &h, "na").unwrap().auto_from.as_deref(), Some("na"));
+        assert_eq!(row(&out, &h, "prog").unwrap().auto_from.as_deref(), Some("in_progress"));
+        let out = apply_entry_ticks(c, &e, &[ticks("l1", LATER, &[])]).unwrap();
+        for (g, s) in [("na", "na"), ("prog", "in_progress")] {
+            let r = row(&out, &h, g).unwrap();
+            assert_eq!((r.status.as_str(), r.auto, r.auto_from.clone(), r.completed_at), (s, false, None, None), "{g}");
+        }
+    }
+
+    #[test]
+    fn a_cover_mark_ticked_then_unticked_goes_back_to_todo_for_the_cover() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "192.0.2.5");
+        apply_cover(c, &e, &[gref(&h, "g")], &[]).unwrap();
+        let out = apply_entry_ticks(c, &e, &[ticks("x1", NOW, &[(&h, "g", "c")])]).unwrap();
+        let r = row(&out, &h, "g").unwrap();
+        assert_eq!((r.status.as_str(), r.auto, r.auto_from.clone()), ("done", true, None));
+        let out = apply_entry_ticks(c, &e, &[ticks("x1", LATER, &[])]).unwrap();
+        assert_eq!(row(&out, &h, "g").unwrap().status, "todo");
+        // An `na` set by hand with `auto` is not a cover mark: a tick remembers it.
+        let mut hand = item(&h, "k", "na");
+        hand.auto = true;
+        hand.status_manual = Some(true);
+        put(c, &e, &[hand]).unwrap();
+        let out = apply_entry_ticks(c, &e, &[ticks("x2", NOW, &[(&h, "k", "c")])]).unwrap();
+        assert_eq!(row(&out, &h, "k").unwrap().auto_from.as_deref(), Some("na"));
+    }
+
+    #[test]
+    fn a_re_derive_keeps_a_still_ticked_goal_relinks_it_and_stamps_only_new_ticks() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h1 = host(c, &e, "192.0.2.5");
+        let h2 = host(c, &e, "192.0.2.6");
+        apply_entry_ticks(c, &e, &[ticks("l1", NOW, &[(&h1, "full", "nmap"), (&h1, "versions", "nmap-sv")])]).unwrap();
+        // One goal still ticked (another command), one no longer, one new, and one moved to another host.
+        let out = apply_entry_ticks(c, &e, &[ticks("l1", LATER, &[(&h1, "full", "rustscan"), (&h1, "udp", "nmap-u"), (&h2, "versions", "nmap-sv")])]).unwrap();
+        let full = row(&out, &h1, "full").unwrap();
+        assert_eq!((full.completed_at, full.evidence.clone()), (Some(NOW), vec![ev("l1", "rustscan")]));
+        let gone = row(&out, &h1, "versions").unwrap();
+        assert_eq!((gone.status.as_str(), gone.evidence.len()), ("todo", 0));
+        assert_eq!(row(&out, &h1, "udp").unwrap().completed_at, Some(LATER));
+        assert_eq!(row(&out, &h2, "versions").unwrap().status, "done");
+    }
+
+    #[test]
+    fn entry_ticks_check_owners_goals_and_size() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let other = eng(c);
+        let foreign = host(c, &other, "192.0.2.9");
+        let h = host(c, &e, "192.0.2.5");
+        assert!(matches!(apply_entry_ticks(c, &e, &[ticks("l1", NOW, &[(&foreign, "g", "c")])]), Err(AppError::NotFound)));
+        assert!(apply_entry_ticks(c, &e, &[ticks("l1", NOW, &[(&h, " ", "c")])]).is_err());
+        assert!(apply_entry_ticks(c, &e, &[ticks(" ", NOW, &[])]).is_err());
+        let many: Vec<EntryTicks> = (0..=MAX_ITEMS).map(|i| ticks(&format!("l{i}"), NOW, &[])).collect();
+        assert!(apply_entry_ticks(c, &e, &many).is_err());
+        // A failed call writes nothing.
+        assert!(apply_entry_ticks(c, &e, &[ticks("l1", NOW, &[(&h, "g", "c"), (&foreign, "g", "c")])]).is_err());
+        assert!(list(c, &e).unwrap().is_empty());
     }
 
     #[test]
