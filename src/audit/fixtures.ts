@@ -10,7 +10,7 @@ import type { BackupInfo } from "../types/backup";
 import type { Engagement } from "../types/engagement";
 import type { FailedAttempt, Finding, FindingFile } from "../types/findings";
 import type { Host } from "../types/host";
-import type { Attachment, Extraction, LogEntry, Progress } from "../types/log";
+import type { Attachment, Extraction, LogEntry } from "../types/log";
 import type { HostIdentity, PrivescVector } from "../types/hostFacts";
 import type { Hop, InterfaceDismissal, Tunnel } from "../types/network";
 import type { Note, RuledOut } from "../types/notes";
@@ -556,15 +556,6 @@ const checklist: ChecklistItem[] = [
 
 // ---------------------------------------------------------------- misc
 
-const progress: Record<string, Progress> = {
-  "e-lab": { hostsTotal: 6, hostsRooted: 2, flagsFound: 2, flagsTotal: 12 },
-  "e-exam": { hostsTotal: 7, hostsRooted: 6, flagsFound: 10, flagsTotal: 12 },
-  "e-old": { hostsTotal: 1, hostsRooted: 1, flagsFound: 2, flagsTotal: 2 },
-  "e-pay": { hostsTotal: 2, hostsRooted: 0, flagsFound: 0, flagsTotal: 4 },
-  "e-board": { hostsTotal: 23, hostsRooted: 1, flagsFound: 0, flagsTotal: 0 },
-  "e-fl": { hostsTotal: 4, hostsRooted: 1, flagsFound: 0, flagsTotal: 0 },
-};
-
 const backups: BackupInfo[] = [
   { file: "raven-2026-11-05-daily.db", reason: "daily", createdAt: ago(4 * HOUR), sizeBytes: 4_718_592 },
   { file: "raven-2026-11-04-pre-import.db", reason: "pre-import", createdAt: ago(28 * HOUR), sizeBytes: 4_521_984 },
@@ -602,8 +593,6 @@ export const FIXTURES: AuditFixtures = {
   failedAttempts: [...failedAttempts, ...exam.failedAttempts, ...garnet.attempts],
   cleanup: [...cleanup, ...exam.cleanup], backups, settings,
 };
-
-export const FIXTURE_PROGRESS = progress;
 
 /** A store with nothing in it but Settings: what store scenarios and fake-backed UI tests start from. */
 export const EMPTY_FIXTURES: AuditFixtures = {

@@ -1,0 +1,91 @@
+{
+  "name": "Exam-sim progress counts each standalone host's two flags and the AD set once, by its proof; a lab counts every host",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Mock exam", "kind": "exam-sim", "domain": "corp.example" }], "as": "exam" },
+    { "do": "engagementCreate", "args": [{ "name": "Practice lab", "kind": "lab" }], "as": "lab" },
+    {
+      "do": "engagementsProgress",
+      "expect": {
+        "$exam": { "hostsTotal": 0, "hostsRooted": 0, "flagsFound": 0, "flagsTotal": 0 },
+        "$lab": { "hostsTotal": 0, "hostsRooted": 0, "flagsFound": 0, "flagsTotal": 0 }
+      }
+    },
+    { "do": "hostCreate", "args": ["$exam", { "name": "web07", "ip": "192.0.2.51" }], "as": "web" },
+    { "do": "hostCreate", "args": ["$exam", { "name": "app07", "ip": "192.0.2.52" }], "as": "app" },
+    { "do": "hostCreate", "args": ["$exam", { "name": "dc07", "ip": "192.0.2.53" }], "as": "dc" },
+    { "do": "serviceCreate", "args": ["$dc", { "port": 88 }] },
+    { "do": "serviceCreate", "args": ["$dc", { "port": 389 }], "as": "ldap" },
+    { "do": "hostCreate", "args": ["$exam", { "name": "ms07", "ip": "192.0.2.54", "adSet": true }], "as": "ms" },
+    { "do": "hostCreate", "args": ["$exam", { "name": "ws07", "ip": "192.0.2.55", "adSet": true }], "as": "ws" },
+    { "do": "hostsList", "args": ["$exam"], "expect": [
+      { "id": "$web", "adSetEffective": false }, { "id": "$app", "adSetEffective": false }, { "id": "$dc", "adSetEffective": true },
+      { "id": "$ms", "adSetEffective": true }, { "id": "$ws", "adSetEffective": true }
+    ] },
+    { "do": "engagementsProgress", "expect": { "$exam": { "hostsTotal": 3, "hostsRooted": 0, "flagsFound": 0, "flagsTotal": 5 } } },
+    {
+      "do": "logCreate",
+      "args": ["$exam", { "title": "local.txt", "ranOn": null, "hostIds": ["$web"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "flag", "flagKind": "local", "value": "00000000000000000000000000000001" } }]
+    },
+    { "do": "engagementsProgress", "expect": { "$exam": { "hostsTotal": 3, "hostsRooted": 0, "flagsFound": 1, "flagsTotal": 5 } } },
+    {
+      "do": "logCreate",
+      "args": ["$exam", { "title": "proof.txt", "ranOn": null, "hostIds": ["$web"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "flag", "flagKind": "proof", "value": "00000000000000000000000000000002" } }]
+    },
+    {
+      "do": "logCreate",
+      "args": ["$exam", { "title": "proof.txt again", "ranOn": null, "hostIds": ["$web"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "flag", "flagKind": "proof", "value": "00000000000000000000000000000002" } }]
+    },
+    { "do": "engagementsProgress", "expect": { "$exam": { "hostsTotal": 3, "hostsRooted": 1, "flagsFound": 2, "flagsTotal": 5 } } },
+    {
+      "do": "logCreate",
+      "args": ["$exam", { "title": "local.txt on a client", "ranOn": null, "hostIds": ["$ms"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "flag", "flagKind": "local", "value": "00000000000000000000000000000003" } }]
+    },
+    { "do": "engagementsProgress", "expect": { "$exam": { "hostsTotal": 3, "hostsRooted": 1, "flagsFound": 2, "flagsTotal": 5 } } },
+    {
+      "do": "logCreate",
+      "args": ["$exam", { "title": "proof.txt on the DC", "ranOn": null, "hostIds": ["$dc"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "flag", "flagKind": "proof", "value": "00000000000000000000000000000004" } }]
+    },
+    {
+      "do": "logCreate",
+      "args": ["$exam", { "title": "proof.txt on a client", "ranOn": null, "hostIds": ["$ws"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "flag", "flagKind": "proof", "value": "00000000000000000000000000000005" } }]
+    },
+    { "do": "engagementsProgress", "expect": { "$exam": { "hostsTotal": 3, "hostsRooted": 2, "flagsFound": 3, "flagsTotal": 5 } } },
+    { "do": "serviceUpdate", "args": ["$ldap", { "port": 636 }] },
+    { "do": "engagementsProgress", "expect": { "$exam": { "hostsTotal": 4, "hostsRooted": 3, "flagsFound": 4, "flagsTotal": 7 } } },
+    { "do": "hostUpdate", "args": ["$web", { "name": "web07", "ip": "192.0.2.51", "adSet": true }] },
+    { "do": "hostUpdate", "args": ["$app", { "name": "app07", "ip": "192.0.2.52", "adSet": true }] },
+    { "do": "hostUpdate", "args": ["$dc", { "name": "dc07", "ip": "192.0.2.53", "adSet": true }] },
+    { "do": "engagementsProgress", "expect": { "$exam": { "hostsTotal": 1, "hostsRooted": 1, "flagsFound": 1, "flagsTotal": 1 } } },
+    { "do": "hostCreate", "args": ["$lab", { "name": "box07", "ip": "198.51.100.51" }], "as": "box" },
+    { "do": "hostCreate", "args": ["$lab", { "name": "dc08", "ip": "198.51.100.52", "adSet": true }], "as": "labdc" },
+    {
+      "do": "logCreate",
+      "args": ["$lab", { "title": "local.txt", "ranOn": null, "hostIds": ["$box"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "flag", "flagKind": "local", "value": "00000000000000000000000000000006" } }]
+    },
+    {
+      "do": "logCreate",
+      "args": ["$lab", { "title": "proof.txt", "ranOn": null, "hostIds": ["$labdc"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "flag", "flagKind": "proof", "value": "00000000000000000000000000000007" } }]
+    },
+    {
+      "do": "engagementsProgress",
+      "expect": {
+        "$exam": { "hostsTotal": 1, "hostsRooted": 1, "flagsFound": 1, "flagsTotal": 1 },
+        "$lab": { "hostsTotal": 2, "hostsRooted": 1, "flagsFound": 2, "flagsTotal": 4 }
+      }
+    },
+    { "do": "hostDelete", "args": ["$web"] },
+    { "do": "hostDelete", "args": ["$app"] },
+    { "do": "hostDelete", "args": ["$dc"] },
+    { "do": "hostDelete", "args": ["$ms"] },
+    { "do": "hostDelete", "args": ["$ws"] },
+    { "do": "engagementsProgress", "expect": { "$exam": { "hostsTotal": 0, "hostsRooted": 0, "flagsFound": 0, "flagsTotal": 0 } } }
+  ]
+}

@@ -19,12 +19,11 @@ import type { Report, ReportSection } from "../types/report";
 import type { ServiceVerdict } from "../types/hostFacts";
 import type { Extraction, ExtractionProofs, ExtractionRecord, Filed, PlannedAttemptProof, Progress } from "../types/log";
 import type { Service } from "../types/service";
-import { AUDIT_NOTE_SOURCES, AUDIT_NOW, FIXTURES, FIXTURE_PROGRESS, type AuditFixtures } from "./fixtures";
+import { AUDIT_NOTE_SOURCES, AUDIT_NOW, FIXTURES, type AuditFixtures } from "./fixtures";
 
 export type { Api };
 
 let db: AuditFixtures = structuredClone(FIXTURES);
-let progress: Record<string, Progress> = structuredClone(FIXTURE_PROGRESS);
 let seq = 0;
 
 /**
@@ -33,7 +32,6 @@ let seq = 0;
  */
 export function resetAuditState(seed: AuditFixtures = FIXTURES): void {
   db = structuredClone(seed);
-  progress = seed === FIXTURES ? structuredClone(FIXTURE_PROGRESS) : {};
   seq = 0;
 }
 resetAuditState();
@@ -68,8 +66,12 @@ type FakeHost = AuditFixtures["hosts"][number];
  * switch and every service change. The switch if set, else 88 and 389 both in state exactly `open`.
  */
 function hostOut(h: FakeHost): FakeHost {
+  return clone({ ...h, adSetEffective: adEffective(h) });
+}
+
+function adEffective(h: FakeHost): boolean {
   const open = (port: number) => db.services.some((s) => s.hostId === h.id && s.port === port && s.state === "open");
-  return clone({ ...h, adSetEffective: h.adSet ?? (open(88) && open(389)) });
+  return h.adSet ?? (open(88) && open(389));
 }
 
 const notFound = () => new RavenError("not_found", "not found");
@@ -181,6 +183,54 @@ function byIp(a: FakeHost, b: FakeHost): number {
   const [na, nb] = [a.name.toLowerCase(), b.name.toLowerCase()];
   if (na !== nb) return na < nb ? -1 : 1;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+// ---------------------------------------------------------------- progress, as engagements.rs `progress_all`
+
+/**
+ * Every engagement's host and flag progress, worked out from its hosts and flag entries. Two flags (local, proof) per
+ * host; a host is rooted by a proof; a flag found is a distinct host and flag kind. An exam sim with hosts counts each
+ * host outside the AD set that way, and the AD set (`adSetEffective`) as one target with one flag: a proof on any of
+ * its hosts. An exam sim with no hosts keeps the zero row.
+ */
+function progressAll(): Record<string, Progress> {
+  const out: Record<string, Progress> = {};
+  for (const e of db.engagements) {
+    const hosts = db.hosts.filter((h) => h.engagementId === e.id);
+    const flags = db.log.filter((l) => l.engagementId === e.id && l.kind === "flag");
+    const kindOf = (l: (typeof flags)[number]) => (l.content.kind === "flag" ? l.content.flagKind : null);
+    const has = (hostId: string, kind: string) => flags.some((l) => kindOf(l) === kind && l.hostIds.includes(hostId));
+    out[e.id] = {
+      hostsTotal: hosts.length,
+      hostsRooted: new Set(flags.filter((l) => kindOf(l) === "proof").flatMap((l) => l.hostIds)).size,
+      flagsFound: new Set(flags.flatMap((l) => l.hostIds.map((h) => `${h}|${kindOf(l)}`))).size,
+      flagsTotal: hosts.length * 2,
+    };
+    if (e.kind !== "exam-sim" || hosts.length === 0) continue;
+    const p: Progress = { hostsTotal: 0, hostsRooted: 0, flagsFound: 0, flagsTotal: 0 };
+    let adHosts = 0;
+    let adProof = false;
+    for (const h of hosts) {
+      const [local, proof] = [has(h.id, "local"), has(h.id, "proof")];
+      if (adEffective(h)) {
+        adHosts++;
+        adProof ||= proof;
+        continue;
+      }
+      p.hostsTotal += 1;
+      p.flagsTotal += 2;
+      p.hostsRooted += Number(proof);
+      p.flagsFound += Number(local) + Number(proof);
+    }
+    if (adHosts > 0) {
+      p.hostsTotal += 1;
+      p.flagsTotal += 1;
+      p.hostsRooted += Number(adProof);
+      p.flagsFound += Number(adProof);
+    }
+    out[e.id] = p;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- deletes, as the schema's foreign keys cascade them
@@ -296,7 +346,6 @@ function dropEngagement(id: string): void {
   db.cleanup = rest(db.cleanup);
   db.checklist = db.checklist.filter((c) => c.ownerId !== id);
   db.engagements = db.engagements.filter((e) => e.id !== id);
-  delete progress[id];
 }
 
 // ---------------------------------------------------------------- checklist, as checklist.rs
@@ -838,7 +887,19 @@ const base = {
     db.services.push(s);
     return clone(s);
   },
-  serviceUpdate: async (id: string, input) => clone(assign(find(db.services, id), input, { updatedAt: now() })),
+  serviceUpdate: async (id: string, input) => {
+    // services.rs `update`: a full update, checked as `create` is, and refused if another service on the host has the
+    // same port and protocol.
+    if (!(input.port >= 1 && input.port <= 65535)) throw invalid("port", "port must be 1-65535");
+    const protocol = (input.protocol ?? "tcp").trim().toLowerCase() as Service["protocol"];
+    if (protocol !== "tcp" && protocol !== "udp") throw invalid("protocol", "protocol must be tcp or udp");
+    const s = find(db.services, id);
+    if (db.services.some((x) => x.id !== id && x.hostId === s.hostId && x.port === input.port && x.protocol === protocol)) {
+      throw invalid("port", "That port is already listed");
+    }
+    const fields = { port: input.port, protocol, nmapService: blank(input.nmapService), nmapVersion: blank(input.nmapVersion) };
+    return clone(Object.assign(s, fields, { updatedAt: now() }));
+  },
   serviceConfirm: async (id: string, input) =>
     clone(assign(find(db.services, id), {}, { confirmedProduct: input.product, confirmedVersion: input.version ?? null, confirmedEntryId: input.entryId ?? null, updatedAt: now() })),
   serviceUnconfirm: async (id: string) =>
@@ -1373,7 +1434,7 @@ const base = {
     for (const c of db.cleanup) if (c.status === "open") counts[c.engagementId] = (counts[c.engagementId] ?? 0) + 1;
     return counts;
   },
-  engagementsProgress: async () => clone(progress),
+  engagementsProgress: async () => progressAll(),
 } satisfies Api;
 
 export type AuditScenario = "full" | "empty" | "loading" | "error";
