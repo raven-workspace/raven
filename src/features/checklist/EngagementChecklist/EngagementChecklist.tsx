@@ -75,7 +75,7 @@ export function EngagementChecklist() {
   const loadState = queryState([hostsQ, engagement, servicesQ, settings, log], "the engagement checklist");
   if (loadState || !hosts || !eng || !servicesQ.data) return loadState;
 
-  const facts = engagementFacts(eng, hosts, servicesByHost);
+  const facts = engagementFacts(eng, hosts);
   const setup = ENGAGEMENT_SETUP.filter((g) => goalApplies(g, facts));
   const state = byOwner.get(eng.id) ?? {};
   const entries = log.data ?? [];

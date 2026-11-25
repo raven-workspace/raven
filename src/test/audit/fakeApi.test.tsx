@@ -154,6 +154,32 @@ describe("audit fake api", () => {
     await expect(api.fieldManualScan()).rejects.toMatchObject({ code: "unsupported" });
   });
 
+  it("derives adSetEffective as the store does: the switch, else 88 and 389 open, following every service change", async () => {
+    const effective = async (id: string) => (await api.hostsList("e-lab")).find((h) => h.id === id)!.adSetEffective;
+    const h = await api.hostCreate("e-lab", { name: "dc09", ip: "192.0.2.40" });
+    expect(h.adSetEffective).toBe(false);
+    const kerberos = await api.serviceCreate(h.id, { port: 88 });
+    expect(await effective(h.id)).toBe(false);
+    const ldap = await api.serviceCreate(h.id, { port: 389 });
+    expect(await effective(h.id)).toBe(true);
+    await api.serviceUpdate(ldap.id, { port: 636 });
+    expect(await effective(h.id)).toBe(false);
+    await api.serviceUpdate(ldap.id, { port: 389 });
+    expect(await effective(h.id)).toBe(true);
+    expect((await api.hostUpdate(h.id, { name: "dc09", adSet: false })).adSetEffective).toBe(false);
+    expect((await api.hostUpdate(h.id, { name: "dc09", adSet: null })).adSetEffective).toBe(true);
+    // A UDP scan's open|filtered is not open.
+    await api.servicesUpsertScan(h.id, [{ port: 88, protocol: "tcp", state: "open|filtered", service: "kerberos-sec", version: "" }]);
+    expect(await effective(h.id)).toBe(false);
+    await api.servicesUpsertScan(h.id, [{ port: 88, protocol: "tcp", state: "open", service: "kerberos-sec", version: "" }]);
+    expect(await effective(h.id)).toBe(true);
+    await api.serviceDelete(kerberos.id);
+    expect(await effective(h.id)).toBe(false);
+    expect((await api.hostUpdate(h.id, { name: "dc09", adSet: true })).adSetEffective).toBe(true);
+    const created = await api.hostCreate("e-lab", { name: "ms09", adSet: true });
+    expect(created.adSetEffective).toBe(true);
+  });
+
   it("mutations persist until reload", async () => {
     await api.hostMove("h-web", "reporting");
     expect((await api.hostsList("e-lab")).find((h) => h.id === "h-web")!.boardColumn).toBe("reporting");

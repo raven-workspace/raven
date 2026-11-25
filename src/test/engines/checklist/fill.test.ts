@@ -350,7 +350,7 @@ describe('arsenal tokens', () => {
   const text = (t: string, p: Partial<FillInput> = {}) => fillCommand(t, input(p));
 
   it('TARGET_HOST is the FQDN for a domain-joined host and the name otherwise', () => {
-    const dc = host({ id: 'dc', name: 'dc01', ip: '10.60.1.2' });
+    const dc = host({ id: 'dc', name: 'dc01', ip: '10.60.1.2', adSetEffective: true });
     const hosts = [dc, host({ name: 'ms01' })];
     const servicesByHost = new Map([['dc', [svc('dc', 88), svc('dc', 389)]]]);
     const joined = input({ engagement: eng({ domain: 'corp.local' }), hosts, servicesByHost });

@@ -42,6 +42,14 @@ _Avoid_: hidden, private (private is one way to be kept from the report)
 
 ## Engagement data
 
+**AD set**:
+The hosts that make one report target together: those switched into it by hand, else those with Kerberos (88) and LDAP (389) both `open`. The store decides it (`adSetEffective`), and nothing recomputes it; a UDP `open|filtered` never counts.
+_Avoid_: AD host, domain hosts
+
+**DC**:
+The one AD set member with Kerberos (88) and LDAP (389) both `open`. An exam AD set has three machines and exactly one DC; with none or several such members, there is no DC. Domain admin means an admin result on it.
+_Avoid_: AD host, domain controller host
+
 **Store change**:
 What one write did to the vault, named by the kind of thing it touched, its id and what happened: "host h1 deleted", "entry e5 saved". A write reports only its own store change; what else that makes out of date is not its business.
 _Avoid_: event, mutation (a mutation is the call; the store change is what it did)

@@ -29,7 +29,7 @@ const svc = (hostId: string, port: number): Service => ({
   confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0,
 });
 
-const dc = host('dc', 'DC01', '10.0.0.1', 'windows');
+const dc = { ...host('dc', 'DC01', '10.0.0.1', 'windows'), adSetEffective: true };
 const ms01 = host('ms01', 'MS01', '10.0.0.5', 'windows');
 const ms02 = host('ms02', 'MS02', '10.0.0.6', 'windows');
 const web = host('web', 'WEB01', '10.0.0.50', 'linux');

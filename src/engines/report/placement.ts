@@ -1,5 +1,7 @@
 import type { Finding } from "../../types/findings";
 import type { LogEntry } from "../../types/log";
+import type { Service } from "../../types/service";
+import { findDc } from "../checklist/facts";
 import { byTime, draftable, hostName, isDeadEnd, isFlag, keptFromReport, provingEntries, type ProofReason } from "./prove";
 import { isPortScan } from "./tools";
 import type { Phase, ReportData, ReportTarget } from "./types";
@@ -276,13 +278,16 @@ function flagCompanions(data: ReportData, hostId: string, stepped: LogEntry[], p
 
 export type HostEntry = "foothold" | "hop";
 
-/** The AD set's domain controller: the host running Kerberos (88) and LDAP (389), else the last one a hop reached. */
+/**
+ * The AD set's DC among `hostIds`: the checklist's DC (`findDc`, the one AD set member with 88 and 389 open), else the
+ * last of them a hop reached, so an exam DC behind a pivot that was never scanned is still named.
+ */
 export function domainController(data: ReportData, hostIds: string[]): string | null {
   const ids = new Set(hostIds);
-  for (const id of hostIds) {
-    const ports = new Set(data.services.filter((s) => s.hostId === id).map((s) => s.port));
-    if (ports.has(88) && ports.has(389)) return id;
-  }
+  const servicesByHost = new Map<string, Service[]>();
+  for (const s of data.services) if (ids.has(s.hostId)) servicesByHost.set(s.hostId, [...(servicesByHost.get(s.hostId) ?? []), s]);
+  const dc = findDc(data.hosts.filter((h) => ids.has(h.id)), servicesByHost);
+  if (dc) return dc.id;
   const hops = data.hops.filter((h) => ids.has(h.toHostId)).sort((a, b) => a.at - b.at);
   return hops.length > 0 ? hops[hops.length - 1].toHostId : null;
 }

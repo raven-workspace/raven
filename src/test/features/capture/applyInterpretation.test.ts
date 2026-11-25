@@ -277,7 +277,7 @@ describe("applyInterpretation", () => {
   });
 
   it("a DC's machine account hash is a win; $MACHINE.ACC is named after its host", async () => {
-    setupBackend({ hosts: [DC01], services: [service("s88", "hD", 88), service("s389", "hD", 389)] });
+    setupBackend({ hosts: [{ ...DC01, adSetEffective: true }], services: [service("s88", "hD", 88), service("s389", "hD", 389)] });
     const { summary } = await save([{ command: "impacket-secretsdump corp.lan/jay:Synth123!@10.10.1.10", output: sam }]);
     expect(db.credentials).toContainEqual(expect.objectContaining({ username: "DC01$", secret: "000c000c000c000c000c000c000c000c", type: "hash" }));
     expect(summary?.wins).toContain("DC01$ hash: can DCSync");

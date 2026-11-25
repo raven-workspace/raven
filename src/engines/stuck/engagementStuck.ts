@@ -5,7 +5,7 @@ import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import type { Tunnel } from "../../types/network";
-import { applicableGoals, adHosts } from "../checklist";
+import { adSetHosts, applicableGoals } from "../checklist";
 import type { LibraryCommand } from "../library/types";
 import { hasFoothold, hasLegalCommand } from "./shared";
 import { ROUTINE_STEPS, accessFlags, cellFor, hostSprayServices, isSprayable, routineStepApplies } from "../credentials";
@@ -121,7 +121,7 @@ export function engagementStuck(input: {
       });
     }
   }
-  if (usernames.length > 0 && adHosts(hosts, servicesByHost).length > 0 && !ASREP_GOALS.some((id) => statusOf(engagement.id, id) === "done")) {
+  if (usernames.length > 0 && adSetHosts(hosts).length > 0 && !ASREP_GOALS.some((id) => statusOf(engagement.id, id) === "done")) {
     const id = ASREP_GOALS.find((g) => byOwner.get(engagement.id)?.[g]) ?? ASREP_GOALS[0]!;
     out.push({
       area: "credentials",

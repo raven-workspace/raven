@@ -1,9 +1,9 @@
 import { shellHost } from "../../engines/attribution";
 import {
-  adHosts,
   AD_PLAYBOOKS,
   ENGAGEMENT_SETUP,
   engagementFacts,
+  findDc,
   goalApplies,
   HOST_GOALS,
   hostFacts,
@@ -499,7 +499,8 @@ export async function applyInterpretation(
   let dcNames = new Set<string>();
   try {
     const ctx = await loadTickContext(engagementId);
-    dcNames = new Set(adHosts(ctx.hosts, ctx.servicesByHost).map((h) => shortHostName(h.name).toLowerCase()));
+    const dc = findDc(ctx.hosts, ctx.servicesByHost);
+    dcNames = new Set(dc ? [shortHostName(dc.name).toLowerCase()] : []);
     // Only for the summary wording ("Ticked …" for a goal not done yet): a failed read lists every tick.
     const state = byOwnerOf((await api.checklistList(engagementId).catch(() => [])) ?? []);
     const seen = new Set<string>();
@@ -513,7 +514,7 @@ export async function applyInterpretation(
       if (isHostGoal !== !!hostId || (hostId && !host)) continue;
       const applies = host
         ? goalApplies(goal, hostFacts(host, ctx.engagement, ctx.hosts, ctx.servicesByHost))
-        : goalApplies(goal, engagementFacts(ctx.engagement, ctx.hosts, ctx.servicesByHost));
+        : goalApplies(goal, engagementFacts(ctx.engagement, ctx.hosts));
       const ownerId = hostId ?? engagementId;
       const key = `${ownerId}\u0000${t.goalId}`;
       if (!applies || seen.has(key)) continue;
