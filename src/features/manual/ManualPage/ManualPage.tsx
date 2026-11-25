@@ -194,6 +194,8 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const { engagementId, hostId, pending: scopePending } = useFillScope();
   const base = useFillBase(engagementId, hostId);
   const fontsLoaded = useFontsLoaded();
+  /** Exam rules, fill data and web fonts are all in: the note's layout won't move again on its own. */
+  const settled = base.examReady && fontsLoaded;
   const hostRef = useRef<HostChipHandle>(null);
   const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
   const { cards } = useLibrary();
@@ -222,7 +224,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const pendingScroll = useRef<ManualPlace | null>(null);
   /** ⌘[ is returning: the note being left is not pushed onto the history. */
   const returning = useRef(false);
-  /** A restored scroll waiting for late layout (exam lines, filled text) to settle: applied once more then. */
+  /** A restored scroll waiting for late layout (exam lines, filled text, web fonts) to settle: applied once more then. */
   const restored = useRef<ManualPlace | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -257,7 +259,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     restored.current = null;
     if (pending?.noteId === note.id) {
       top = pending.scrollTop;
-      if (top > 0 && !base.examReady) restored.current = pending;
+      if (top > 0 && !settled) restored.current = pending;
     }
     else if (location.hash) {
       const el = pane.querySelector(`[id="${CSS.escape(decodeURIComponent(location.hash.slice(1)))}"]`);
@@ -281,16 +283,17 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     // location.key: a link to a heading in the same note scrolls again.
   }, [note?.id, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Exam rules and fill data arrive after the first paint and change the note's height: put the restored spot back once.
+  // Exam rules, fill data and web fonts (swapped in once loaded) arrive after the first paint and change the note's
+  // height: once they have all settled, put the restored spot back once, whichever arrived last.
   useLayoutEffect(() => {
     const pane = paneRef.current;
     const r = restored.current;
-    if (!base.examReady || !pane || !r) return;
+    if (!settled || !pane || !r) return;
     restored.current = null;
     if (shown.current?.noteId !== r.noteId) return;
     pane.scrollTop = r.scrollTop;
     shown.current = { noteId: r.noteId, scrollTop: pane.scrollTop };
-  }, [base.examReady]);
+  }, [settled]);
 
   const ids = useMemo(() => note?.outline.map((o) => o.id) ?? [], [note]);
   const spy = useOutlineSpy(paneRef, note?.id ?? "", ids);
@@ -357,7 +360,6 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   }, [note?.id, query, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
   // Exam lines, filled text and web fonts (swapped in once loaded) arrive late and move the note: once they have all
   // settled, put the current match (or lit row) back in the middle, whichever arrived last.
-  const settled = base.examReady && fontsLoaded;
   useLayoutEffect(() => {
     if (!settled || !query) return;
     const row = lit();
