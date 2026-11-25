@@ -1,6 +1,6 @@
-import type { Credential, CredAttempt } from "./credentials";
-import type { HostIdentity } from "./hostFacts";
-import type { Service } from "./service";
+import type { Credential, CredAttempt, CredAttemptInput, CredentialInput, TriedPair, TriedPairInput, UsernameInput } from "./credentials";
+import type { HostIdentity, PrivescVector } from "./hostFacts";
+import type { ScanPort, Service } from "./service";
 
 export type LogKind = "command" | "screenshot" | "http" | "note" | "flag";
 export type FlagKind = "local" | "proof";
@@ -114,6 +114,70 @@ export interface ExtractionRecord {
   reprovedCredentialIds: string[];
   /** Stored usernames this save listed again: another entry's Undo keeps them. */
   reprovedUsernameIds: string[];
+  /** Stored tried pairs this save promoted into credentials it created, as they were, with the attempts it made from
+   *  them. Undo puts them back. The store always sends it; a record written by hand may leave it out. */
+  promotedTriedPairs?: { credentialId: string; triedPairs: TriedPair[]; attempts: CredAttempt[] }[];
+}
+
+/** A planned attempt (mirrors the Rust `PlannedAttempt`): no `credId` on a pending credential's own attempts, and a
+ *  `usernameKey` for a username the same plan adds. */
+export type PlannedAttemptProof = Omit<CredAttemptInput, "credId" | "logEntryId" | "at"> & { credId?: string; usernameKey?: string };
+
+/** Mirrors the Rust `IntakeProof`: a credential intake plan, with the operator's choice on each pending credential. */
+export interface IntakeProof {
+  usernames: { key: string; input: UsernameInput }[];
+  attempts: PlannedAttemptProof[];
+  credentials: {
+    input: CredentialInput;
+    accepted: boolean;
+    attempts: PlannedAttemptProof[];
+    fromUsername: { usernameId?: string | null; usernameKey?: string; secretCredIds: string[]; hostId?: string | null } | null;
+    ifDeclined: PlannedAttemptProof[];
+  }[];
+  hashes: CredentialInput[];
+  links: { credId: string; fromSecretId: string }[];
+  reprovedCredentialIds: string[];
+  reprovedUsernameIds: string[];
+}
+
+/**
+ * Mirrors the Rust `ExtractionProofs`: what one saved entry's output proved, for the store to file. A host id anywhere
+ * in it may be the `key` of one of `newHosts`: the store puts that host's id in its place.
+ */
+export interface ExtractionProofs {
+  /** Hosts the save made before the entry, for a scan of an IP that wasn't one yet. */
+  createdHostIds: string[];
+  newHosts: { key: string; ip: string }[];
+  scans: { hostId: string; ports: ScanPort[]; os: string | null }[];
+  /** Who the user is on the host, merged with what was stored. */
+  identity: { hostId: string; username: string; privileges: string[]; groups: string[] } | null;
+  /** Dumped and pasted credentials. */
+  credentials: CredentialInput[];
+  /** A cracked secret and the hashes it cracks: stored ones by id, and ones in `credentials` by index. */
+  cracks: { plaintext: string; credentialIds: string[]; proofCredentials: number[] }[];
+  usernames: UsernameInput[];
+  intake: IntakeProof | null;
+  /** Failed pairs whose secret is no credential. */
+  triedPairs: TriedPairInput[];
+  vectors: { hostId: string; title: string }[];
+}
+
+/** Mirrors the Rust `Filed`: what the store filed, for the summary. */
+export interface Filed {
+  /** The stored extraction; its summary is empty until `extractionFinish`. */
+  extraction: Extraction;
+  /** Each new host's id, by its key. */
+  hostIds: Record<string, string>;
+  scans: { hostId: string; services: number; osSet: boolean }[];
+  identityChanged: boolean;
+  /** Attempts the save added or whose result it changed. */
+  attempts: CredAttempt[];
+  /** Every credential the save created or changed, or that one of `attempts` is on. */
+  credentials: Credential[];
+  triedPairsAdded: number;
+  cracked: { hashId: string; plaintext: string }[];
+  /** The vectors it created. */
+  vectors: PrivescVector[];
 }
 
 /** Mirrors the Rust `Extraction`: one per log entry. Timestamps are Unix milliseconds. */

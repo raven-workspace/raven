@@ -8,15 +8,15 @@ import { FIELD_MANUAL_CARDS } from "../engines/library/data/fieldManual";
 import { parseNote } from "../engines/manual";
 import type { Api } from "../lib/api";
 import type { ChecklistItem } from "../types/checklist";
-import type { Credential, TriedPair } from "../types/credentials";
+import type { AttemptService, Credential, CredentialInput, TriedPair } from "../types/credentials";
 import type { GoalRef } from "../engines/checklist";
 import type { EngagementInput } from "../types/engagement";
-import { BOARD_COLUMNS, type HostInput } from "../types/host";
+import { BOARD_COLUMNS, type Host, type HostInput } from "../types/host";
 import type { NvdRecord } from "../types/findings";
 import { RavenError } from "../types/errors";
 import type { Report, ReportSection } from "../types/report";
 import type { ServiceVerdict } from "../types/hostFacts";
-import type { Extraction, Progress } from "../types/log";
+import type { Extraction, ExtractionProofs, ExtractionRecord, Filed, PlannedAttemptProof, Progress } from "../types/log";
 import type { Service } from "../types/service";
 import { AUDIT_NOTE_SOURCES, AUDIT_NOW, FIXTURES, FIXTURE_PROGRESS, type AuditFixtures } from "./fixtures";
 
@@ -368,6 +368,148 @@ const AUDIT_NVD_RECORD: NvdRecord = {
   published: "2021-12-10T10:15:09.143",
   lastModified: "2025-02-04T15:15:13.773",
 };
+
+/**
+ * `extraction_file` over this fake's own writes: files the proofs and stores the extraction, its record found by
+ * comparing the rows before and after. Unlike the store it is not all or nothing, skips the tried-pair check on
+ * failed username results, and leaves username re-keys and secret links out.
+ */
+async function fileExtraction(engagementId: string, logEntryId: string, p: ExtractionProofs): Promise<Filed> {
+  if (db.extractions.some((x) => x.logEntryId === logEntryId)) throw new RavenError("conflict", "this entry's extraction is already recorded");
+  const at = find(db.log, logEntryId).at;
+  const mine = <T extends { engagementId: string }>(rows: T[]) => clone(rows.filter((r) => r.engagementId === engagementId));
+  const was = { credentials: mine(db.credentials), usernames: mine(db.usernames), attempts: mine(db.credAttempts), tried: mine(db.triedPairs) };
+  const hostIds: Record<string, string> = {};
+  const host = (id: string | null | undefined) => (id ? (hostIds[id] ?? id) : null);
+  const record: ExtractionRecord = {
+    createdHostIds: [...p.createdHostIds], createdServiceIds: [], servicesBefore: [], hostOsBefore: [], identityBefore: [], createdCredentialIds: [],
+    credentialsBefore: [], createdUsernameIds: [], createdAttemptIds: [], attemptsBefore: [], createdTriedPairIds: [], createdVectorIds: [],
+    outputTicks: [], reprovedCredentialIds: [], reprovedUsernameIds: [], promotedTriedPairs: [],
+  };
+  const reprove = (ids: string[], stored: { id: string }[], id: string) => {
+    if (stored.some((x) => x.id === id) && !ids.includes(id)) ids.push(id);
+  };
+  for (const h of p.newHosts) {
+    let id = db.hosts.find((x) => x.engagementId === engagementId && x.ip === h.ip)?.id;
+    if (!id) {
+      id = (await base.hostCreate(engagementId, { name: h.ip, ip: h.ip })).id;
+      record.createdHostIds.push(id);
+    }
+    hostIds[h.key] = id;
+  }
+  const scans: Filed["scans"] = [];
+  for (const s of p.scans) {
+    const hostId = host(s.hostId)!;
+    const before = clone(db.services.filter((x) => x.hostId === hostId));
+    const scanned = (await base.servicesUpsertScan(hostId, s.ports)).filter((x) => s.ports.some((pt) => pt.port === x.port && pt.protocol === x.protocol));
+    for (const x of scanned) {
+      const old = before.find((b) => b.id === x.id);
+      if (old) record.servicesBefore.push(old);
+      else record.createdServiceIds.push(x.id);
+    }
+    const h = find(db.hosts, hostId);
+    const osSet = !h.os && !!s.os;
+    if (osSet) {
+      record.hostOsBefore.push({ hostId, os: h.os });
+      await base.hostUpdate(hostId, { name: h.name, ip: h.ip, os: s.os as Host["os"], access: h.access });
+    }
+    scans.push({ hostId, services: scanned.length, osSet });
+  }
+  let identityChanged = false;
+  if (p.identity) {
+    const hostId = host(p.identity.hostId)!;
+    const before = clone(db.hostIdentity.find((i) => i.hostId === hostId) ?? null);
+    const fields = (i: { username: string; privileges: string[]; groups: string[] }) => JSON.stringify([i.username, i.privileges, i.groups]);
+    if (!before || fields(before) !== fields(p.identity)) {
+      await base.hostIdentitySet({ ...p.identity, hostId, entryId: logEntryId });
+      record.identityBefore.push({ hostId, identity: before });
+      identityChanged = true;
+    }
+  }
+  const create = async (c: CredentialInput) => {
+    const { credential, existed } = await base.credentialCreate(engagementId, { ...c, localHostId: host(c.localHostId), sourceHostId: host(c.sourceHostId) });
+    if (existed) reprove(record.reprovedCredentialIds, was.credentials, credential.id);
+    return credential.id;
+  };
+  const proofIds: string[] = [];
+  for (const c of p.credentials) proofIds.push(await create(c));
+  const cracked: Filed["cracked"] = [];
+  for (const k of p.cracks) {
+    for (const id of new Set([...k.credentialIds, ...k.proofCredentials.map((i) => proofIds[i]!)])) {
+      if (find(db.credentials, id).crackStatus === "cracked") reprove(record.reprovedCredentialIds, was.credentials, id);
+      else {
+        await base.credentialCrack(id, k.plaintext);
+        cracked.push({ hashId: id, plaintext: k.plaintext });
+      }
+    }
+  }
+  for (const u of p.usernames) {
+    reprove(record.reprovedUsernameIds, was.usernames, (await base.usernameCreate(engagementId, { ...u, sourceHostId: host(u.sourceHostId) })).id);
+  }
+  if (p.intake) {
+    const plan = p.intake;
+    const userIds = new Map<string, string>();
+    for (const u of plan.usernames) userIds.set(u.key, (await base.usernameCreate(engagementId, { ...u.input, sourceHostId: host(u.input.sourceHostId) })).id);
+    const upsert = async (rows: PlannedAttemptProof[], credId?: string) => {
+      const inputs = rows.flatMap((a) => {
+        const usernameId = a.usernameId ?? (a.usernameKey ? userIds.get(a.usernameKey) : undefined);
+        if (a.usernameKey && !usernameId) return [];
+        return [{ ...a, credId: credId ?? a.credId ?? "", usernameId: usernameId ?? null, hostId: host(a.hostId)!, logEntryId, at }];
+      });
+      if (inputs.length) await base.credAttemptsUpsert(engagementId, inputs);
+    };
+    const ids: (string | null)[] = [];
+    for (const c of plan.credentials) ids.push(c.accepted ? await create(c.input) : null);
+    await upsert(plan.attempts);
+    for (const [i, c] of plan.credentials.entries()) await (ids[i] ? upsert(c.attempts, ids[i]!) : upsert(c.ifDeclined));
+    for (const h of plan.hashes) await create(h);
+    for (const id of plan.reprovedCredentialIds) reprove(record.reprovedCredentialIds, was.credentials, id);
+    for (const id of plan.reprovedUsernameIds) reprove(record.reprovedUsernameIds, was.usernames, id);
+  }
+  if (p.triedPairs.length) await base.triedPairsUpsert(engagementId, p.triedPairs.map((t) => ({ ...t, hostId: host(t.hostId)!, logEntryId, at })));
+  const vectors: Filed["vectors"] = [];
+  for (const v of p.vectors) {
+    const hostId = host(v.hostId)!;
+    const known = db.vectors.some((x) => x.hostId === hostId && x.title === v.title.trim());
+    const row = await base.vectorUpsert(hostId, { title: v.title, status: "try", source: "auto" });
+    if (!known) {
+      record.createdVectorIds.push(row.id);
+      vectors.push(row);
+    }
+  }
+  // What the summary counts is read before the promotion, whose failures earlier entries recorded.
+  const attempts = mine(db.credAttempts).filter((a) => was.attempts.find((b) => b.id === a.id)?.result !== a.result);
+  const triedPairsAdded = mine(db.triedPairs).filter((t) => !was.tried.some((b) => b.id === t.id)).length;
+  for (const c of mine(db.credentials).filter((x) => !was.credentials.some((b) => b.id === x.id))) {
+    const pairs = db.triedPairs.filter(
+      (t) => t.engagementId === engagementId && t.username.toLowerCase() === c.username.toLowerCase() && t.secret === c.secret && sameDomainIn(engagementId, t.domain, c.domain),
+    );
+    if (!pairs.length) continue;
+    const rows = await base.credAttemptsUpsert(engagementId, pairs.map((t) => ({
+      credId: c.id, hostId: t.hostId, service: t.service as AttemptService, result: "failed" as const, authMode: t.authMode, logEntryId: t.logEntryId, at: t.at,
+    })));
+    db.triedPairs = db.triedPairs.filter((t) => !pairs.includes(t));
+    const stored = pairs.filter((t) => was.tried.some((b) => b.id === t.id));
+    if (stored.length) record.promotedTriedPairs!.push({ credentialId: c.id, triedPairs: clone(stored), attempts: rows.filter((a) => a.credId === c.id) });
+  }
+  for (const c of mine(db.credentials)) {
+    const old = was.credentials.find((b) => b.id === c.id);
+    if (!old) record.createdCredentialIds.push(c.id);
+    else if (JSON.stringify(old) !== JSON.stringify(c)) record.credentialsBefore.push(old);
+  }
+  record.createdUsernameIds = mine(db.usernames).filter((u) => !was.usernames.some((b) => b.id === u.id)).map((u) => u.id);
+  for (const a of mine(db.credAttempts)) {
+    const old = was.attempts.find((b) => b.id === a.id);
+    if (!old) record.createdAttemptIds.push(a.id);
+    else if (JSON.stringify(old) !== JSON.stringify(a)) record.attemptsBefore.push(old);
+  }
+  record.createdTriedPairIds = mine(db.triedPairs).filter((t) => !was.tried.some((b) => b.id === t.id)).map((t) => t.id);
+  const named = new Set([...record.createdCredentialIds, ...record.credentialsBefore.map((c) => c.id), ...attempts.map((a) => a.credId)]);
+  const extraction: Extraction = { logEntryId, engagementId, summary: { wins: [], counts: [], ticks: [] }, record, createdAt: now(), undoneAt: null };
+  db.extractions.push(extraction);
+  const credentials = mine(db.credentials).filter((c) => named.has(c.id));
+  return clone({ extraction, hostIds, scans, identityChanged, attempts, credentials, triedPairsAdded, cracked, vectors });
+}
 
 const base = {
   vaultStatus: async () => ({ exists: true, unlocked: true }),
@@ -925,6 +1067,13 @@ const base = {
     db.extractions.push(row);
     return clone(row);
   },
+  extractionFile: async (engagementId: string, logEntryId: string, p: ExtractionProofs) => fileExtraction(engagementId, logEntryId, p),
+  extractionFinish: async (logEntryId: string, summary, outputTicks) => {
+    const row = db.extractions.find((x) => x.logEntryId === logEntryId);
+    if (!row) throw new RavenError("not_found", `No extraction for ${logEntryId}`);
+    Object.assign(row,{ summary: clone(summary), record: { ...row.record, outputTicks: clone(outputTicks) }, createdAt: now() });
+    return clone(row);
+  },
   extractionGet: async (logEntryId: string) => clone(db.extractions.find((x) => x.logEntryId === logEntryId) ?? null),
   extractionsList: async (engagementId: string) => {
     engagementMustExist(engagementId);
@@ -947,6 +1096,7 @@ const base = {
       if (i >= 0) db.credAttempts[i] = clone(before);
     }
     db.triedPairs = db.triedPairs.filter((t) => !r.createdTriedPairIds.includes(t.id));
+    for (const p of r.promotedTriedPairs ?? []) db.triedPairs.push(...clone(p.triedPairs));
     db.vectors = db.vectors.filter((v) => !r.createdVectorIds.includes(v.id));
     db.services = db.services.filter((s) => !r.createdServiceIds.includes(s.id));
     db.hosts = db.hosts.filter((h) => !r.createdHostIds.includes(h.id));

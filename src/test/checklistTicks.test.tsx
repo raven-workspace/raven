@@ -18,6 +18,7 @@ import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { LogEntry, LogEntryInput } from "../types/log";
 import type { Service } from "../types/service";
+import { filed } from "./features/capture/filed";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
@@ -107,7 +108,7 @@ beforeEach(() => {
   m.hostsList.mockImplementation(async () => hosts);
   m.servicesList.mockResolvedValue([]);
   m.servicesListEngagement.mockResolvedValue([]);
-  m.servicesUpsertScan.mockResolvedValue([]);
+  m.extractionFile.mockResolvedValue(filed());
   m.logList.mockImplementation(async () => entries);
   m.notesList.mockResolvedValue([]);
   m.logCreate.mockImplementation(async (_e, input: LogEntryInput) => {
@@ -557,16 +558,16 @@ describe("ticks.ts", () => {
     const user = userEvent.setup();
     let services: Service[] = [];
     m.servicesListEngagement.mockImplementation(async () => services);
-    m.servicesUpsertScan.mockImplementation(async (hostId, ports) => {
-      services = ports.map((p, i) => ({
-        id: `s${i}`, hostId, port: p.port, protocol: p.protocol, state: p.state, nmapService: p.service, nmapVersion: p.version || null,
-        confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
-      }));
-      return services;
-    });
-    m.hostUpdate.mockImplementation(async (id, input) => {
-      hosts = hosts.map((h) => (h.id === id ? { ...h, os: input.os ?? null } : h));
-      return hosts.find((h) => h.id === id)!;
+    // The store files the scan: its services, and the OS of a host that has none.
+    m.extractionFile.mockImplementation(async (_e, _entry, proofs) => {
+      for (const { hostId, ports, os } of proofs.scans) {
+        services = ports.map((p, i) => ({
+          id: `s${i}`, hostId, port: p.port, protocol: p.protocol, state: p.state, nmapService: p.service, nmapVersion: p.version || null,
+          confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
+        }));
+        hosts = hosts.map((h) => (h.id === hostId && !h.os ? { ...h, os: os as Host["os"] } : h));
+      }
+      return filed();
     });
     mount();
     await openCapture(user);
@@ -583,7 +584,7 @@ describe("ticks.ts", () => {
     await saveCapture(user);
     await vi.waitFor(() => expect(stored("h1", "h-enum-os")).toMatchObject({ status: "done", auto: true }));
     expect(stored("h1", "h-enum-identified")).toMatchObject({ status: "done", auto: true });
-    expect(m.hostUpdate).toHaveBeenCalled();
+    expect(m.extractionFile).toHaveBeenCalled();
   });
 
   it("setting the OS ticks OS identified, and clearing it reverts", async () => {

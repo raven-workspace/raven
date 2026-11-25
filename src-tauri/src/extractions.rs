@@ -1,6 +1,11 @@
-//! Extraction records: what a log entry's Save filed automatically (created ids plus "before" snapshots of the rows
-//! it changed), so one Undo can reverse exactly that save's contribution. One record per log entry; deleting the
-//! entry drops the record (FK cascade) but keeps the filed data.
+//! Extractions: what a log entry's Save filed automatically (created ids plus "before" snapshots of the rows it
+//! changed), so one Undo can reverse exactly that save's contribution. `filing` does the writes and builds the record
+//! in one transaction; `undo` reverses it. One record per log entry; deleting the entry drops the record (FK cascade)
+//! but keeps the filed data.
+
+mod filing;
+
+pub use filing::{file, finish, ExtractionProofs, Filed};
 
 use crate::attempts::CredAttempt;
 use crate::credentials::{engagement_domain, same_domain, Credential};
@@ -8,6 +13,7 @@ use crate::db::{check_in_engagement, check_scope, now_ms};
 use crate::error::{AppError, AppResult};
 use crate::host_facts::HostIdentity;
 use crate::services::Service;
+use crate::tried_pairs::TriedPair;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +49,18 @@ pub struct OutputTick {
     pub parser: String,
 }
 
-/// Mirrors the TS `ExtractionRecord`. Every list defaults to empty.
+/// Tried pairs a save turned into failed attempts on a credential it created (R24), as they were before the save,
+/// with the attempts it made from them. Undo puts the pairs back when it deletes the credential.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Promotion {
+    pub credential_id: String,
+    pub tried_pairs: Vec<TriedPair>,
+    pub attempts: Vec<CredAttempt>,
+}
+
+/// Mirrors the TS `ExtractionRecord`. Every list defaults to empty, so a record stored before a field existed still
+/// reads (and undoes as it did then).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ExtractionRecord {
@@ -67,6 +84,8 @@ pub struct ExtractionRecord {
     pub reproved_credential_ids: Vec<String>,
     /// Stored usernames this save listed again: another entry's Undo keeps them.
     pub reproved_username_ids: Vec<String>,
+    /// Stored tried pairs this save promoted into credentials it created.
+    pub promoted_tried_pairs: Vec<Promotion>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -112,8 +131,9 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Extraction>
     raw.into_iter().map(parse).collect()
 }
 
-/// Stores the record for a log entry (stamped now). An entry is extracted once, on create: a second save is a
-/// `Conflict` and leaves the stored record (and any undo) as it is.
+/// Stores a record built elsewhere for a log entry (stamped now). A save files through `file`, which builds the record
+/// itself. An entry is extracted once, on create: a second save is a `Conflict` and leaves the stored record (and any
+/// undo) as it is.
 pub fn save(
     conn: &Connection,
     log_entry_id: &str,
@@ -161,7 +181,8 @@ const HOST_REFS: &str = "SELECT \
 /// Snapshots are restored only onto rows not changed since the save; created rows are deleted, except a credential
 /// edited since or proven by another entry, a username something else still uses, a vector edited since, and a host
 /// that anything else still references. A credential or username another live (not undone) extraction created or
-/// proved again stays too (interpreters-and-payloads interpreters-and-payloads spec §3.2).
+/// proved again stays too (interpreters-and-payloads interpreters-and-payloads spec §3.2). When a deleted credential
+/// had taken over stored tried pairs, they come back. A record stored before promotions were recorded has none.
 pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
     let ext = get(conn, log_entry_id)?.ok_or(AppError::NotFound)?;
     if ext.undone_at.is_some() {
@@ -256,12 +277,24 @@ pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
     for id in &r.created_vector_ids {
         tx.execute("DELETE FROM privesc_vectors WHERE id=?1 AND source <> 'manual' AND updated_at <= ?2", params![id, at])?;
     }
+    // A credential goes only while nothing but this save proves it: no attempt from another entry or made by hand,
+    // apart from those this save made from the tried pairs it promoted, while they are still as it made them. When it
+    // goes, those pairs come back.
+    let attempts = crate::attempts::list(&tx, &ext.engagement_id)?;
     for id in r.created_credential_ids.iter().filter(|id| !kept_creds.contains(*id)) {
-        tx.execute(
-            "DELETE FROM credentials WHERE id=?1 AND updated_at <= ?2 \
-             AND NOT EXISTS (SELECT 1 FROM cred_attempts WHERE cred_id=?1 AND ifnull(log_entry_id, '') <> ?3)",
-            params![id, at, log_entry_id],
-        )?;
+        let promoted: Vec<&Promotion> = r.promoted_tried_pairs.iter().filter(|p| &p.credential_id == id).collect();
+        let made: Vec<&CredAttempt> = promoted.iter().flat_map(|p| &p.attempts).collect();
+        let proven_elsewhere = attempts.iter().any(|a| {
+            &a.cred_id == id && a.log_entry_id.as_deref().unwrap_or("") != log_entry_id && !made.contains(&a)
+        });
+        if proven_elsewhere {
+            continue;
+        }
+        if tx.execute("DELETE FROM credentials WHERE id=?1 AND updated_at <= ?2", params![id, at])? == 1 {
+            for t in promoted.iter().flat_map(|p| &p.tried_pairs) {
+                restore_tried_pair(&tx, t)?;
+            }
+        }
     }
     // A username stays when something else still uses it: an attempt, grant or tried pair from another entry or made
     // by hand, or any credential left for that user (another entry's, hand-made, or one of ours kept above). A tried
@@ -314,6 +347,21 @@ pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
     tx.execute("UPDATE extractions SET undone_at=?2 WHERE log_entry_id=?1", params![log_entry_id, now_ms()])?;
     tx.commit()?;
     get(conn, log_entry_id)?.ok_or(AppError::NotFound)
+}
+
+/// Puts a promoted tried pair back as it was, unless its host is gone or an equal pair is stored again.
+fn restore_tried_pair(conn: &Connection, t: &TriedPair) -> AppResult<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO tried_pairs \
+           (id, engagement_id, username, domain, secret, secret_kind, host_id, service, auth_mode, log_entry_id, at) \
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, (SELECT id FROM log_entries WHERE id = ?10), ?11 \
+         WHERE EXISTS (SELECT 1 FROM hosts WHERE id = ?7)",
+        params![
+            t.id, t.engagement_id, t.username, t.domain, t.secret, t.secret_kind, t.host_id, t.service, t.auth_mode,
+            t.log_entry_id, t.at
+        ],
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]

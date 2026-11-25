@@ -3,10 +3,11 @@ import { resolveCapture } from "../../../features/capture/resolve";
 import { saveCapture } from "../../../features/capture/saveCapture";
 import { EMPTY_DRAFT } from "../../../features/capture/useCaptureStore";
 import { api } from "../../../lib/api";
-import type { Credential, CredentialInput } from "../../../types/credentials";
+import type { Credential } from "../../../types/credentials";
 import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry, LogEntryInput } from "../../../types/log";
+import { filed } from "./filed";
 
 vi.mock("../../../lib/api");
 const m = vi.mocked(api, true);
@@ -34,24 +35,28 @@ beforeEach(() => {
   m.checklistList.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
   m.credentialsList.mockImplementation(async () => [...stored]);
-  m.credentialCreate.mockImplementation(async (eid, input: CredentialInput) => {
-    const c: Credential = {
-      id: `c${stored.length + 1}`, engagementId: eid, type: input.type, username: input.username ?? "", domain: input.domain ?? null,
-      secret: input.secret ?? "", hashType: input.hashType ?? null, scope: input.scope ?? "domain", localHostId: input.localHostId ?? null,
-      sourceHostId: input.sourceHostId ?? null, source: input.source ?? null, notes: null, crackStatus: null, crackedFrom: null,
-      fromSecretId: null, createdAt: 1, updatedAt: 1,
-    };
-    // The store's answer, stubbed with equal spellings only (the same-credential rule itself is tested in Rust).
-    const lc = (s: string | null) => (s ?? "").toLowerCase();
-    const same = stored.find((x) => x.type === c.type && lc(x.username) === lc(c.username) && lc(x.domain) === lc(c.domain) && x.secret === c.secret);
-    if (same) return { credential: same, existed: true };
-    stored.push(c);
-    return { credential: c, existed: false };
+  // The store files the pasted credentials; whether one is the same credential is its answer, stubbed here with equal
+  // spellings only (the rule itself is tested in Rust).
+  m.extractionFile.mockImplementation(async (eid, _entry, proofs) => {
+    const created: Credential[] = [];
+    for (const input of proofs.credentials) {
+      const c: Credential = {
+        id: `c${stored.length + 1}`, engagementId: eid, type: input.type, username: input.username ?? "", domain: input.domain ?? null,
+        secret: input.secret ?? "", hashType: input.hashType ?? null, scope: input.scope ?? "domain", localHostId: input.localHostId ?? null,
+        sourceHostId: input.sourceHostId ?? null, source: input.source ?? null, notes: null, crackStatus: null, crackedFrom: null,
+        fromSecretId: null, createdAt: 1, updatedAt: 1,
+      };
+      const lc = (s: string | null) => (s ?? "").toLowerCase();
+      if (stored.some((x) => x.type === c.type && lc(x.username) === lc(c.username) && lc(x.domain) === lc(c.domain) && x.secret === c.secret)) continue;
+      stored.push(c);
+      created.push(c);
+    }
+    return filed({ credentials: created, record: { createdCredentialIds: created.map((c) => c.id) } });
   });
-  m.extractionSave.mockImplementation(async (logEntryId, engagementId, summary, record) => ({
-    logEntryId, engagementId, summary, record, createdAt: 2, undoneAt: null,
-  }));
 });
+
+/** The credentials each save gave the store to file. */
+const pasted = () => m.extractionFile.mock.calls.flatMap(([, , proofs]) => proofs.credentials);
 
 /** Pastes `text` into capture opened from web01's view, then saves it as the panel would. */
 function save(text: string, asNote = false) {
@@ -65,26 +70,25 @@ describe("saveCapture with pasted credentials", () => {
   it("admin:Summer2026! becomes a credential found on the host, scoped as the Credentials form does, and the note is kept", async () => {
     const saved = await save("admin:Summer2026!");
     expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ hostIds: ["h1"], content: { kind: "note", text: "admin:Summer2026!" } }));
-    expect(m.credentialCreate).toHaveBeenCalledTimes(1);
-    expect(m.credentialCreate).toHaveBeenCalledWith("e1", {
+    expect(pasted()).toEqual([{
       type: "password", username: "admin", domain: null, secret: "Summer2026!", hashType: null, scope: "domain",
       localHostId: null, sourceHostId: "h1", source: "paste",
-    });
+    }]);
     // Filed like any extraction: summarised, and Undo removes it.
     expect(saved.summary?.counts).toContain("1 password added");
-    expect(m.extractionSave).toHaveBeenCalledWith("l1", "e1", saved.summary, expect.objectContaining({ createdCredentialIds: ["c1"] }));
+    expect(m.extractionFinish).toHaveBeenCalledWith("l1", saved.summary, []);
   });
 
   it("CORP\\svc_sql:P@ss becomes a domain credential of CORP, found on the host", async () => {
     await save("CORP\\svc_sql:P@ss");
-    expect(m.credentialCreate).toHaveBeenCalledWith("e1", expect.objectContaining({
+    expect(pasted()).toContainEqual(expect.objectContaining({
       username: "svc_sql", domain: "CORP", secret: "P@ss", scope: "domain", localHostId: null, sourceHostId: "h1",
     }));
   });
 
   it(".\\Administrator:Passw0rd! becomes a local credential of the host, with no domain", async () => {
     await save(".\\Administrator:Passw0rd!");
-    expect(m.credentialCreate).toHaveBeenCalledWith("e1", expect.objectContaining({
+    expect(pasted()).toContainEqual(expect.objectContaining({
       username: "Administrator", domain: null, secret: "Passw0rd!", scope: "local", localHostId: "h1", sourceHostId: "h1",
     }));
   });
@@ -105,12 +109,12 @@ describe("saveCapture with pasted credentials", () => {
   it("admin:1234 is a credential; web01:8080 is host:port", async () => {
     await save("admin:1234");
     await save("web01:8080");
-    expect(m.credentialCreate.mock.calls.map(([, i]) => `${i.username}:${i.secret}`)).toEqual(["admin:1234"]);
+    expect(pasted().map((i) => `${i.username}:${i.secret}`)).toEqual(["admin:1234"]);
   });
 
   it("user:<32 hex> becomes an NTLM hash", async () => {
     const saved = await save(`jdoe:${NT}`);
-    expect(m.credentialCreate).toHaveBeenCalledWith("e1", expect.objectContaining({
+    expect(pasted()).toContainEqual(expect.objectContaining({
       type: "hash", username: "jdoe", secret: NT.toLowerCase(), hashType: "NTLM",
     }));
     expect(saved.summary?.counts).toContain("1 hash added");
@@ -118,7 +122,7 @@ describe("saveCapture with pasted credentials", () => {
 
   it("multiple lines become multiple credentials", async () => {
     await save("admin:Summer2026!\nCORP\\svc_sql:P@ss");
-    expect(m.credentialCreate.mock.calls.map(([, i]) => i.username)).toEqual(["admin", "svc_sql"]);
+    expect(pasted().map((i) => i.username)).toEqual(["admin", "svc_sql"]);
   });
 
   it("a credential already stored is not added twice", async () => {
@@ -131,13 +135,12 @@ describe("saveCapture with pasted credentials", () => {
   it("save as note keeps today's behaviour: the note only, no credential, no summary", async () => {
     const saved = await save("admin:Summer2026!", true);
     expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ title: "admin:Summer2026!", content: { kind: "note", text: "admin:Summer2026!" } }));
-    expect(m.credentialCreate).not.toHaveBeenCalled();
+    expect(m.extractionFile).not.toHaveBeenCalled();
     expect(saved.summary).toBeNull();
-    expect(m.extractionSave).not.toHaveBeenCalled();
   });
 
   it.each(["curl http://192.0.2.10:8080", "198.51.100.20:445"])("%s adds no credential", async (text) => {
     await save(text);
-    expect(m.credentialCreate).not.toHaveBeenCalled();
+    expect(pasted()).toEqual([]);
   });
 });

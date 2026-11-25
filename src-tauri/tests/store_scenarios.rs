@@ -144,6 +144,10 @@ fn call(c: &Connection, cmd: &str, a: &[Value]) -> AppResult<Value> {
         "payloadBuildsList" => out!(payload_builds::list(c, &s(0))),
         "payloadBuildRecord" => out!(payload_builds::record(c, arg(cmd, a, 0))),
         "extractionSave" => out!(extractions::save(c, &s(0), &s(1), &arg(cmd, a, 2), &arg(cmd, a, 3))),
+        "extractionFile" => out!(extractions::file(c, &s(0), &s(1), &arg(cmd, a, 2))),
+        "extractionFinish" => {
+            out!(extractions::finish(c, &s(0), &arg(cmd, a, 1), &arg::<Vec<extractions::OutputTick>>(cmd, a, 2)))
+        }
         "extractionGet" => out!(extractions::get(c, &s(0))),
         "extractionsList" => out!(extractions::list(c, &s(0))),
         "extractionUndo" => out!(extractions::undo(c, &s(0))),

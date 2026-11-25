@@ -7,7 +7,7 @@ use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TriedPair {
     pub id: String,
@@ -74,7 +74,7 @@ pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[TriedPairInput])
     check_scope(conn, engagement_id, None)?;
     let anchor = engagement_domain(conn, engagement_id)?;
     let now = now_ms();
-    let tx = conn.unchecked_transaction()?;
+    let tx = crate::db::atomic(conn)?;
     let mut out = Vec::with_capacity(inputs.len());
     for i in inputs {
         let username = i.username.trim();

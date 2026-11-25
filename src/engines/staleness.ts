@@ -201,7 +201,7 @@ export const ALSO_WRITES: Partial<Record<Entity, Partial<Record<Change, Also>>>>
     ],
   },
   // Undo deletes or restores what the save filed (hosts, services, credentials, usernames, attempts, tried pairs,
-  // vectors, identity), then the entry's follow-up runs again.
+  // vectors, identity), puts back the tried pairs the save promoted, then the entry's follow-up runs again.
   extraction: {
     undone: [
       ...to("extraction", "updated"),
@@ -212,7 +212,7 @@ export const ALSO_WRITES: Partial<Record<Entity, Partial<Record<Change, Also>>>>
       ...to("credential", "deleted", "updated"),
       ...to("username", "deleted"),
       ...to("credAttempt", "deleted", "updated"),
-      ...to("triedPair", "deleted"),
+      ...to("triedPair", "deleted", "created"),
       ...ENTRY_FOLLOW_UP,
     ],
   },
