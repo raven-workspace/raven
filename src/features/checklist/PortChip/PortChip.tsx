@@ -1,5 +1,5 @@
 import { Select } from "../../../ui/index";
-import type { FilledCommand } from "../CommandList/CommandList";
+import type { FilledCommand } from "../../commands/filledCommand";
 import { usePortPickStore } from "../portPick";
 import "./PortChip.scss";
 

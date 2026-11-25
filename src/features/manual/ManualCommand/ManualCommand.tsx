@@ -60,8 +60,7 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
       {/* An untitled block has no caption row (no empty gap above it). Copy results show in the page's status slot. */}
       {caption && <span className="manual-command__caption">{caption}</span>}
       <CommandBlock
-        text={cmd.text}
-        {...(cmd.copyText !== undefined ? { copyText: cmd.copyText } : {})}
+        text={cmd.shown}
         tokens={cmd.tokens ?? []}
         highlight={highlight ?? null}
         wrap={!output}

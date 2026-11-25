@@ -8,7 +8,7 @@ import type { CardMeta } from "../../../engines/library/types";
 import { isDialogOpen, isTypingTarget, useEscapeBack, useKeydown } from "../../../lib/keys";
 import { Button, HintLine, Select, type Hint } from "../../../ui/index";
 import { useCredPickStore } from "../../checklist/credPick";
-import { useFillBase } from "../../palette/fillData";
+import { useFillBase } from "../../commands/fillData";
 import { GENERATORS } from "../../palette/generators";
 import { browseList, OTHER_TOOLS, type BrowseSection } from "../browseList";
 import { CardView, CommandPane } from "../CardView/CardView";

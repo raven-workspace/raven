@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultCredFor, defaultDomainCred, fillCommand, resolveCred } from "../engines/checklist";
 import { useCredFill, useCredPickStore } from "../features/checklist/credPick";
-import { useFillBase } from "../features/palette/fillData";
+import { useFillBase } from "../features/commands/fillData";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { CredAttempt, Credential } from "../types/credentials";

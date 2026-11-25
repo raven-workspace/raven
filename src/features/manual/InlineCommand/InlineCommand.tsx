@@ -16,8 +16,8 @@ export function InlineCommand({ command, base, highlight }: { command: LibraryCo
   const { cmd, copy, copyAndLog } = useNoteCommand(command, { fill: hasPlaceholders(command.template), output: false, base });
   const tokens = [...(cmd.tokens ?? cmd.unresolved)].sort((a, b) => b.length - a.length);
   const split = tokens.length > 0 ? new RegExp(`(${tokens.map(escapeRegExp).join("|")})`) : null;
-  const found = rangesOf(cmd.text, highlight);
-  const parts = split ? cmd.text.split(split) : [cmd.text];
+  const found = rangesOf(cmd.shown, highlight);
+  const parts = split ? cmd.shown.split(split) : [cmd.shown];
   const starts = parts.map((_, i) => parts.slice(0, i).reduce((n, t) => n + t.length, 0));
   const pieces = parts.map((t, i) => {
     const start = starts[i] ?? 0;
@@ -33,7 +33,7 @@ export function InlineCommand({ command, base, highlight }: { command: LibraryCo
   };
   return (
     <button
-      type="button" aria-label={`Copy command: ${cmd.text}`}
+      type="button" aria-label={`Copy command: ${cmd.shown}`}
       onClick={() => void copy().catch(reportError)} onKeyDown={onKeyDown}
       className="inline-command"
     >

@@ -10,7 +10,7 @@ import type { Host } from "../../../types/host";
 
 vi.mock("../../../lib/api");
 const fillBase = vi.hoisted(() => ({ current: null as unknown }));
-vi.mock("../../../features/palette/fillData", () => ({ useFillBase: () => fillBase.current }));
+vi.mock("../../../features/commands/fillData", () => ({ useFillBase: () => fillBase.current }));
 const m = vi.mocked(api, true);
 
 // Synthetic fixtures only (RFC 5737 addresses, invented names).

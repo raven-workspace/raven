@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CommandList } from "../features/checklist/CommandList/CommandList";
 import { TitleBarButton } from "../ui/TitleBar";
+import { commandText } from "../features/commands/filledCommand";
 
 describe("a11y leftovers", () => {
   it("title bar button names contain their visible word; the kbd hint is hidden from the name", () => {
@@ -12,7 +13,7 @@ describe("a11y leftovers", () => {
   });
 
   it("command blocks are named and add no Tab stop", () => {
-    render(<CommandList commands={[{ id: "a", title: "Run it", text: "id", unresolved: [], msfMarker: false }]} />);
+    render(<CommandList commands={[commandText({ id: "a", title: "Run it", text: "id" })]} />);
     const pre = screen.getAllByTestId("command-block")[0]!.querySelector("pre")!;
     expect(pre).toHaveAccessibleName("Command: Run it");
     expect(pre.getAttribute("tabindex")).toBeNull();

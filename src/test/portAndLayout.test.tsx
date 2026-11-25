@@ -10,6 +10,7 @@ import { usePortPickStore } from "../features/checklist/portPick";
 import type { LibraryCommand } from "../engines/library/types";
 import type { FillInput } from "../engines/checklist";
 import type { Engagement } from "../types/engagement";
+import { commandText } from "../features/commands/filledCommand";
 
 /** The declarations of one rule in a feature sheet (jsdom loads no CSS, so layout rules are read from the source). */
 const rule = (file: string, selector: string) => {
@@ -72,7 +73,7 @@ describe("new credential notice", () => {
 
 describe("CommandList spacing", () => {
   it("separates commands with gap-4 and mutes the description", () => {
-    render(<CommandList commands={[{ id: "a", title: "Desc A", text: "id", unresolved: [], msfMarker: false }, { id: "b", title: "Desc B", text: "ls", unresolved: [], msfMarker: false }]} />);
+    render(<CommandList commands={[commandText({ id: "a", title: "Desc A", text: "id" }), commandText({ id: "b", title: "Desc B", text: "ls" })]} />);
     const ul = screen.getAllByRole("list")[0];
     expect(ul).toHaveClass("command-list");
     expect(rule("src/features/checklist/CommandList/CommandList.scss", ".command-list")).toMatch(/gap: var\(--space-lg\);/);
@@ -97,13 +98,13 @@ describe("{PORT} on checklist steps", () => {
     usePortPickStore.setState({ picks: {} });
     const eng = { id: "e1", kind: "pentest" } as unknown as Engagement;
     let c = goalCommands("h-enum-identified", input(), eng, library).commands.find((x) => x.id === "nc")!;
-    expect(c.text).toContain("10.0.0.5 22");
+    expect(c.shown).toContain("10.0.0.5 22");
     expect(c.portToken?.choices).toEqual([22, 80, 8080]);
     render(<PortChip commands={[c]} />);
     expect(screen.getByRole("combobox", { name: "Port" })).toHaveTextContent("22");
     usePortPickStore.getState().set(c.portToken!.key, 8080);
     c = goalCommands("h-enum-identified", input(), eng, library).commands.find((x) => x.id === "nc")!;
-    expect(c.text).toContain("10.0.0.5 8080");
+    expect(c.shown).toContain("10.0.0.5 8080");
     void within;
   });
   it("offers no fake port: a UDP open|filtered port makes no chip and leaves {PORT} unresolved", () => {
@@ -118,7 +119,7 @@ describe("{PORT} on checklist steps", () => {
     const none = { ...base, servicesByHost: new Map([["h1", [udp]]]) } as FillInput;
     const n = goalCommands("h-enum-identified", none, eng, library).commands.find((x) => x.id === "nc")!;
     expect(n.portToken).toBeUndefined();
-    expect(n.text).toContain("{PORT}");
+    expect(n.shown).toContain("{PORT}");
     expect(n.unresolved).toContain("PORT");
     const { container } = render(<PortChip commands={[n]} />);
     expect(container).toBeEmptyDOMElement();
