@@ -364,14 +364,14 @@ export function examFixtures(now: number) {
   // ------------------------------------------------------------ access, hops, credentials
 
   const usernames: Username[] = [
-    { id: "u-exam-apppool", engagementId: E, username: "defaultapppool", domain: "iis apppool", sourceHostId: MS01, source: "reverse shell", createdAt: ago(142) },
-    { id: "u-exam-system", engagementId: E, username: "system", domain: "nt authority", sourceHostId: null, source: null, createdAt: ago(114) },
-    { id: "u-exam-dev", engagementId: E, username: "dev", domain: null, sourceHostId: WEB, source: "/etc/passwd", createdAt: ago(93) },
-    { id: "u-exam-root", engagementId: E, username: "root", domain: null, sourceHostId: WEB, source: null, createdAt: ago(79) },
-    { id: "u-exam-jellis", engagementId: E, username: "j.ellis", domain: "EXAM", sourceHostId: null, source: "provided by the exam", createdAt: ago(180) },
-    { id: "u-exam-deploy", engagementId: E, username: "svc_deploy", domain: "EXAM", sourceHostId: AD02, source: "deploy.ps1", createdAt: ago(55) },
-    { id: "u-exam-mross", engagementId: E, username: "m.ross", domain: "EXAM", sourceHostId: AD02, source: "Winlogon autologon", createdAt: ago(49) },
-    { id: "u-exam-da", engagementId: E, username: "da_admin", domain: "EXAM", sourceHostId: AD02, source: "mimikatz on ad02", createdAt: ago(46) },
+    { id: "u-exam-apppool", engagementId: E, username: "defaultapppool", domain: "iis apppool", sourceHostId: MS01, source: "reverse shell", createdAt: ago(142), scope: "unknown", localHostId: null },
+    { id: "u-exam-system", engagementId: E, username: "system", domain: "nt authority", sourceHostId: null, source: null, createdAt: ago(114), scope: "unknown", localHostId: null },
+    { id: "u-exam-dev", engagementId: E, username: "dev", domain: null, sourceHostId: WEB, source: "/etc/passwd", createdAt: ago(93), scope: "unknown", localHostId: null },
+    { id: "u-exam-root", engagementId: E, username: "root", domain: null, sourceHostId: WEB, source: null, createdAt: ago(79), scope: "unknown", localHostId: null },
+    { id: "u-exam-jellis", engagementId: E, username: "j.ellis", domain: "EXAM", sourceHostId: null, source: "provided by the exam", createdAt: ago(180), scope: "unknown", localHostId: null },
+    { id: "u-exam-deploy", engagementId: E, username: "svc_deploy", domain: "EXAM", sourceHostId: AD02, source: "deploy.ps1", createdAt: ago(55), scope: "unknown", localHostId: null },
+    { id: "u-exam-mross", engagementId: E, username: "m.ross", domain: "EXAM", sourceHostId: AD02, source: "Winlogon autologon", createdAt: ago(49), scope: "unknown", localHostId: null },
+    { id: "u-exam-da", engagementId: E, username: "da_admin", domain: "EXAM", sourceHostId: AD02, source: "mimikatz on ad02", createdAt: ago(46), scope: "unknown", localHostId: null },
   ];
   const grant = (id: string, usernameId: string, hostId: string, level: AccessGrant["level"], via: string, logEntryId: string, min: number): AccessGrant => ({
     id: `ag-exam-${id}`, engagementId: E, usernameId, hostId, level, via, logEntryId, at: ago(min),
@@ -944,8 +944,8 @@ export function garnetFixtures(now: number): ReportData {
     },
   ];
   const usernames: Username[] = [
-    { id: "u-garnet-ronan", engagementId: E, username: "ronan", domain: null, sourceHostId: H, source: "git history", createdAt: ago(286) },
-    { id: "u-garnet-root", engagementId: E, username: "root", domain: null, sourceHostId: H, source: null, createdAt: ago(248) },
+    { id: "u-garnet-ronan", engagementId: E, username: "ronan", domain: null, sourceHostId: H, source: "git history", createdAt: ago(286), scope: "unknown", localHostId: null },
+    { id: "u-garnet-root", engagementId: E, username: "root", domain: null, sourceHostId: H, source: null, createdAt: ago(248), scope: "unknown", localHostId: null },
   ];
   const grants: AccessGrant[] = [
     { id: "ag-garnet-user", engagementId: E, usernameId: "u-garnet-ronan", hostId: H, level: "user", via: "SSH with the password from git history", logEntryId: ssh, at: ago(277) },

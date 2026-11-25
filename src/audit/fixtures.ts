@@ -390,8 +390,8 @@ const credentials: Credential[] = [
 ];
 
 const usernames: Username[] = [
-  { id: "u-1", engagementId: "e-lab", username: "j.harper", domain: "ACME", sourceHostId: "h-dc01", source: "rpcclient enumdomusers", createdAt: ago(80 * MIN) },
-  { id: "u-2", engagementId: "e-lab", username: "t.nakamura", domain: "ACME", sourceHostId: "h-dc01", source: "kerbrute", createdAt: ago(78 * MIN) },
+  { id: "u-1", engagementId: "e-lab", username: "j.harper", domain: "ACME", sourceHostId: "h-dc01", source: "rpcclient enumdomusers", createdAt: ago(80 * MIN), scope: "unknown", localHostId: null },
+  { id: "u-2", engagementId: "e-lab", username: "t.nakamura", domain: "ACME", sourceHostId: "h-dc01", source: "kerbrute", createdAt: ago(78 * MIN), scope: "unknown", localHostId: null },
 ];
 
 const triedPairs: TriedPair[] = [

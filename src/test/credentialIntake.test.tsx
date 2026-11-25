@@ -39,7 +39,7 @@ const cred = (o: Partial<Credential> & { id: string }): Credential => ({
   fromSecretId: null, createdAt: 1, updatedAt: 1, ...o,
 });
 const uname = (o: Partial<Username> & { id: string; username: string }): Username => ({
-  engagementId: "e1", domain: null, sourceHostId: null, source: null, createdAt: 1, ...o,
+  engagementId: "e1", domain: null, sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null, ...o,
 });
 
 const BOB = cred({ id: "cBob", username: "bob", domain: "corp.local", secret: "Pass1" });
@@ -129,7 +129,7 @@ function setupBackend(seed: Partial<Db> = {}) {
     if (found) return found;
     const u: Username = {
       id: nextId("u"), engagementId: eid, username: input.username.trim(), domain: input.domain ?? null,
-      sourceHostId: input.sourceHostId ?? null, source: input.source ?? null, createdAt: seq,
+      sourceHostId: input.sourceHostId ?? null, source: input.source ?? null, createdAt: seq, scope: input.scope ?? "unknown", localHostId: input.localHostId ?? null,
     };
     db.usernames.push(u);
     return u;

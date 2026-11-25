@@ -71,6 +71,18 @@ _Avoid_: domain match (says nothing about NetBIOS against DNS names)
 Decided by the store alone: the same type, username (ignoring case), same domain and secret, in one engagement (and on one host, for a local credential). A captured Kerberoast, AS-REP or NetNTLM hash is one credential per account and kind, whatever the capture's bytes. Creating one the store already holds returns the stored one and says it existed; duplicates stored before this rule stay.
 _Avoid_: duplicate key
 
+**Username scope**:
+Whether a username is a domain account, a local account on one host, or unknown. Usernames stored before scope existed are unknown, and so are those added by hand. Capture output sets it: `.\user` and `HOST\user` (HOST a host's short name) are local to that host, a name in the engagement's domain is a domain account, anything else is unknown. A local username keeps its scope when its host is deleted.
+_Avoid_: account type, username kind
+
+**Same username**:
+Decided by the store alone: the same name (ignoring case) and the same username scope, in one engagement. Two unknown usernames need the same domain, where a blank domain matches only a blank one; two domain usernames need the same domain, where a blank domain stands for the engagement's own; two local usernames need the same host. Unknown, domain and local usernames never merge with each other.
+_Avoid_: duplicate username
+
+**Password reuse**:
+A local account found on one host whose name and secret match a local credential already stored for another host. Capture files it as an attempt of the stored credential on the new host, with no new username or credential.
+_Avoid_: spray hit (a spray hit may be any credential)
+
 ## Commands
 
 **Filled command**:

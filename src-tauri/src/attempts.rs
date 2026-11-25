@@ -356,7 +356,7 @@ mod tests {
         credentials::username_create(
             c,
             eid,
-            UsernameInput { username: name.into(), domain: None, source_host_id: None, source: None },
+            UsernameInput { username: name.into(), domain: None, source_host_id: None, source: None, scope: None, local_host_id: None },
         )
         .unwrap()
         .id

@@ -118,6 +118,26 @@ describe("what an output proves", () => {
     expect(proved!.proofs.intake!.credentials).toEqual([]);
   });
 
+  it("a --local-auth result: the username is the answering host's own account, keyed by that host for its attempts", async () => {
+    stored.credentials = [cred({ id: "cJen", username: "jay", secret: "SyntheticPw01", scope: "local", localHostId: "hC" })];
+    const out = [
+      "SMB  10.10.1.6  445  WEB01  [+] WEB01\\jay:SyntheticPw01",
+      "SMB  10.10.1.5  445  SRV12  [-] SRV12\\kim:SyntheticPw01 STATUS_LOGON_FAILURE",
+    ].join("\n");
+    const { proved } = await prove([{ command: "nxc smb 10.10.1.5-6 -u users.txt -p 'SyntheticPw01' --local-auth", output: out }]);
+    const intake = proved!.proofs.intake!;
+    // The store decides the scope: `.` with the host it answered from is that host's local account.
+    expect(intake.usernames).toEqual([
+      { key: "e1|jay|.|local:hW", input: { username: "jay", domain: ".", sourceHostId: "hW", source: "nxc" } },
+      { key: "e1|kim|.|local:hC", input: { username: "kim", domain: ".", sourceHostId: "hC", source: "nxc" } },
+    ]);
+    // jay's secret is a local credential stored for SRV12: a result of that credential on WEB01 (password reuse).
+    expect(intake.attempts).toEqual([
+      expect.objectContaining({ credId: "cJen", hostId: "hW", result: "valid", authMode: "local" }),
+      expect.objectContaining({ credId: "cJen", usernameKey: "e1|kim|.|local:hC", hostId: "hC", result: "failed" }),
+    ]);
+  });
+
   it("secretsdump of an unknown IP: a new host, the SAM hashes local to it, the machine account dropped", async () => {
     const { proved } = await prove([{ command: "impacket-secretsdump corp.lan/jay:Synth123!@10.10.1.9", output: sam }]);
     const { newHosts, credentials } = proved!.proofs;

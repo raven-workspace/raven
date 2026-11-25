@@ -66,3 +66,7 @@ IDs and timestamps differ between the two stores, so check them through bound na
 | `checklist-conditional-writes.json` | The cover and fact writes only touch untouched items, and only revert their own marks. |
 | `extraction-undo.json` | Undoing a save restores the tried pairs its new credential took over, and removes what it filed. |
 | `error-codes.json` | Missing records are `not_found`; bad input is `validation` on its field. |
+| `username-scope.json` | A username's scope decides its identity: domain, unknown and local never merge. |
+| `username-host-delete.json` | Deleting a host keeps its local usernames, local and with no host. |
+| `capture-username-scope.json` | Capture output sets a username's scope (`.\user`, `HOST\user`, the engagement's domain). |
+| `password-reuse.json` | A local account stored for another host with the same secret is an attempt of that credential, not a new username. |

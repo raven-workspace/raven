@@ -6,7 +6,7 @@
 use super::{get, Extraction, ExtractionRecord, ExtractionSummary, HostOsBefore, IdentityBefore, OutputTick, Promotion};
 use crate::attempts::{self, CredAttempt, CredAttemptInput};
 use crate::credentials::{self, engagement_domain, same_domain, Credential, CredentialInput, UsernameInput};
-use crate::db::{check_in_engagement, now_ms};
+use crate::db::{blank_to_none, check_in_engagement, now_ms};
 use crate::error::{AppError, AppResult};
 use crate::host_facts::{self, clean_list, HostIdentity, PrivescVector, VectorInput};
 use crate::hosts::{self, HostInput};
@@ -379,24 +379,124 @@ impl<'c> Filing<'c> {
         Ok(())
     }
 
-    /// Dumped and pasted credentials. Returns the stored id of each, in order.
+    /// Dumped and pasted credentials. Returns the stored id of each, in order. A dumped local account that is password
+    /// reuse (`create_credential`) is a result of the stored credential on the dumped host instead.
     fn credentials(&mut self, inputs: &[CredentialInput]) -> AppResult<Vec<String>> {
         let mut ids = Vec::with_capacity(inputs.len());
         for input in inputs {
-            let created = self.create_credential(input)?;
+            let (created, reused_on) = self.create_credential(input)?;
             if created.existed {
                 self.reprove_credential(&created.credential.id);
+            }
+            if let Some(host_id) = reused_on {
+                let found = CredAttemptInput {
+                    cred_id: created.credential.id.clone(),
+                    username_id: None,
+                    host_id,
+                    service: "other".into(),
+                    port: None,
+                    result: "valid".into(),
+                    auth_mode: Some("local".into()),
+                    detail: Some("password reuse".into()),
+                    log_entry_id: Some(self.entry_id.to_string()),
+                    at: Some(self.at),
+                };
+                attempts::upsert(self.conn, self.engagement_id, &[found])?;
             }
             ids.push(created.credential.id);
         }
         Ok(ids)
     }
 
-    fn create_credential(&self, input: &CredentialInput) -> AppResult<credentials::CreatedCredential> {
+    /// Creates a credential, or returns the stored one that is the same credential. A local account whose name and
+    /// secret are stored as a local credential for another host is password reuse: that stored credential is returned,
+    /// with the host this one was found on, and nothing is written.
+    fn create_credential(&self, input: &CredentialInput) -> AppResult<(credentials::CreatedCredential, Option<String>)> {
         let mut input = input.clone();
         input.local_host_id = self.host_opt(&input.local_host_id);
         input.source_host_id = self.host_opt(&input.source_host_id);
-        credentials::create(self.conn, self.engagement_id, input)
+        if let Some(stored) = credentials::find_reused_local(self.conn, self.engagement_id, &input)? {
+            return Ok((credentials::CreatedCredential { credential: stored, existed: true }, input.local_host_id));
+        }
+        Ok((credentials::create(self.conn, self.engagement_id, input)?, None))
+    }
+
+    /// The scope capture output gives a username, unless the proof sets one: `.\name` is a local account on the host the
+    /// output ran on, `HOST\name` (HOST one host's short name) a local account on that host, and a name in the
+    /// engagement's own domain, in either spelling, a domain account. Anything else is unknown. Host keys become ids.
+    fn scoped(&self, input: &UsernameInput) -> AppResult<UsernameInput> {
+        let mut u = input.clone();
+        u.source_host_id = self.host_opt(&u.source_host_id);
+        u.local_host_id = self.host_opt(&u.local_host_id);
+        if blank_to_none(u.scope.as_deref()).is_some() {
+            return Ok(u);
+        }
+        let domain = u.domain.as_deref().map(str::trim).unwrap_or("");
+        let local = match domain {
+            "" => None,
+            "." => u.source_host_id.clone(),
+            d => self.host_named(d)?,
+        };
+        let anchor = blank_to_none(self.anchor.as_deref());
+        let scope = if let Some(host_id) = local {
+            u.local_host_id = Some(host_id);
+            u.domain = None;
+            "local"
+        } else if !domain.is_empty() && anchor.as_deref().is_some_and(|a| same_domain(Some(a), Some(domain), Some(a))) {
+            "domain"
+        } else {
+            "unknown"
+        };
+        u.scope = Some(scope.into());
+        Ok(u)
+    }
+
+    /// The one host whose short name (its name's first label, never an IP) is `label`, ignoring case. None when no host
+    /// or several have it.
+    fn host_named(&self, label: &str) -> AppResult<Option<String>> {
+        let named: Vec<String> = hosts::list(self.conn, self.engagement_id)?
+            .into_iter()
+            .filter(|h| {
+                let name = h.name.trim();
+                name.parse::<std::net::Ipv4Addr>().is_err()
+                    && !name.contains(':')
+                    && name.split('.').next().is_some_and(|first| first.eq_ignore_ascii_case(label))
+            })
+            .map(|h| h.id)
+            .collect();
+        Ok(if named.len() == 1 { named.into_iter().next() } else { None })
+    }
+
+    /// Of an intake plan's usernames, the local accounts that are only password reuse: a result of a stored local
+    /// credential for another host, with that account's name, on the username's host, and no other secret for it there
+    /// and nothing that needs the username. Each is (host id, name lowercased).
+    fn reuse_only(&self, plan: &IntakeProof, attempts: &[&PlannedAttempt]) -> AppResult<HashSet<(String, String)>> {
+        let mut reused = HashSet::new();
+        for a in attempts.iter().filter(|a| a.username_id.is_none() && a.username_key.is_none()) {
+            let host_id = self.host(&a.host_id);
+            if let Some(c) = self.before.credentials.iter().find(|c| c.id == a.cred_id)
+                && c.scope == "local"
+                && c.local_host_id.as_deref().is_some_and(|h| h != host_id)
+            {
+                reused.insert((host_id, c.username.trim().to_lowercase()));
+            }
+        }
+        let mut other_secret = HashSet::new();
+        for p in &plan.credentials {
+            let Some(host_id) = self.host_opt(&p.input.local_host_id).filter(|_| p.input.scope.as_deref() == Some("local")) else {
+                continue;
+            };
+            let mut input = p.input.clone();
+            input.local_host_id = Some(host_id.clone());
+            input.source_host_id = self.host_opt(&input.source_host_id);
+            let account = (host_id, input.username.trim().to_lowercase());
+            if p.accepted && credentials::find_reused_local(self.conn, self.engagement_id, &input)?.is_some() {
+                reused.insert(account);
+            } else {
+                other_secret.insert(account);
+            }
+        }
+        Ok(reused.difference(&other_secret).cloned().collect())
     }
 
     /// Cracks each named hash not cracked yet. One cracked before is proved again, with the passwords cracked from it.
@@ -433,18 +533,18 @@ impl<'c> Filing<'c> {
 
     fn usernames(&mut self, inputs: &[UsernameInput]) -> AppResult<()> {
         for input in inputs {
-            let mut input = input.clone();
-            input.source_host_id = self.host_opt(&input.source_host_id);
+            let input = self.scoped(input)?;
             let stored = credentials::username_create(self.conn, self.engagement_id, input)?;
             self.reprove_username(&stored.id);
         }
         Ok(())
     }
 
-    /// Records a credential intake plan, in order: its usernames, the accepted credentials (a stored one that is the
-    /// same credential is reused, and gets the owner-less secret it came from when it has none), the plan's attempts
-    /// (less failed username results already kept as a tried pair), each pending credential's results (on it when
-    /// accepted, its `if_declined` ones otherwise), the roast hashes, then the links to owner-less secrets.
+    /// Records a credential intake plan, in order: its usernames (less local accounts that are only password reuse), the
+    /// accepted credentials (a stored one that is the same credential, or the one a local account reuses, is used, and
+    /// gets the owner-less secret it came from when it has none), the plan's attempts (less failed username results
+    /// already kept as a tried pair), each pending credential's results (on it when accepted, its `if_declined` ones
+    /// otherwise), the roast hashes, then the links to owner-less secrets.
     fn intake(&mut self, plan: &IntakeProof) -> AppResult<()> {
         let attempts: Vec<&PlannedAttempt> = {
             let mut keep = Vec::new();
@@ -455,10 +555,23 @@ impl<'c> Filing<'c> {
             }
             keep
         };
+        let reuse_only = self.reuse_only(plan, &attempts)?;
+        let needed: HashSet<&str> = plan
+            .attempts
+            .iter()
+            .chain(plan.credentials.iter().flat_map(|p| p.attempts.iter().chain(&p.if_declined)))
+            .filter_map(|a| a.username_key.as_deref())
+            .chain(plan.credentials.iter().filter_map(|p| p.from_username.as_ref()?.username_key.as_deref()))
+            .collect();
         let mut username_ids: HashMap<String, String> = HashMap::new();
         for u in &plan.usernames {
-            let mut input = u.input.clone();
-            input.source_host_id = self.host_opt(&input.source_host_id);
+            let input = self.scoped(&u.input)?;
+            if let Some(host_id) = input.local_host_id.clone()
+                && reuse_only.contains(&(host_id, input.username.trim().to_lowercase()))
+                && !needed.contains(u.key.as_str())
+            {
+                continue;
+            }
             let stored = credentials::username_create(self.conn, self.engagement_id, input)?;
             username_ids.insert(u.key.clone(), stored.id);
         }
@@ -564,7 +677,7 @@ impl<'c> Filing<'c> {
 
     /// Adds an accepted credential, or reuses the stored one that is the same credential. Returns its id.
     fn accept_credential(&mut self, input: &CredentialInput) -> AppResult<String> {
-        let created = self.create_credential(input)?;
+        let (created, _) = self.create_credential(input)?;
         let c = created.credential;
         if created.existed {
             self.reprove_credential(&c.id);
@@ -913,7 +1026,7 @@ mod tests {
             }),
             credentials: vec![admin],
             cracks: vec![CrackProof { plaintext: "Winter2000!".into(), credential_ids: vec!["cH".into()], proof_credentials: vec![] }],
-            usernames: vec![UsernameInput { username: "mia".into(), domain: Some("corp.lan".into()), source_host_id: Some("h1".into()), source: None }],
+            usernames: vec![UsernameInput { username: "mia".into(), domain: Some("corp.lan".into()), source_host_id: Some("h1".into()), source: None, scope: None, local_host_id: None }],
             intake: Some(IntakeProof {
                 credentials: vec![pending(cred("password", "dina", Some("corp.lan"), "Synth01!"), true, vec![attempt("h1", "smb", "valid")])],
                 ..Default::default()
@@ -1018,7 +1131,7 @@ mod tests {
             intake: Some(IntakeProof {
                 usernames: vec![PlannedUsername {
                     key: "stan|".into(),
-                    input: UsernameInput { username: "stan".into(), domain: None, source_host_id: None, source: Some("nxc".into()) },
+                    input: UsernameInput { username: "stan".into(), domain: None, source_host_id: None, source: Some("nxc".into()), scope: None, local_host_id: None },
                 }],
                 credentials: vec![pending(cred("password", "stan", None, "Synth01!"), true, vec![attempt("h1", "ssh", "valid")])],
                 reproved_username_ids: vec![stored.to_string()],
@@ -1052,7 +1165,7 @@ mod tests {
     fn a_failed_username_result_already_kept_as_a_tried_pair_is_not_filed_again() {
         let c = vault();
         let pw = credentials::create(&c, "e", cred("password", "", None, "Synth01!")).unwrap().credential;
-        let input = UsernameInput { username: "dina".into(), domain: Some("CORP".into()), source_host_id: None, source: None };
+        let input = UsernameInput { username: "dina".into(), domain: Some("CORP".into()), source_host_id: None, source: None, scope: None, local_host_id: None };
         let dina = credentials::username_create(&c, "e", input).unwrap();
         tried(&c, "t1", "Dina", "corp.lan", "Synth01!", "ssh", "l0");
         let failed = |service: &str| PlannedAttempt { cred_id: pw.id.clone(), username_id: Some(dina.id.clone()), ..attempt("h1", service, "failed") };
@@ -1189,5 +1302,222 @@ mod tests {
         assert!(ids(&c, "SELECT id FROM tried_pairs").is_empty());
         assert_eq!(ids(&c, "SELECT id FROM cred_attempts"), vec!["aPromoted"]);
         assert_eq!(ids(&c, "SELECT id FROM credentials"), vec![jay.id]);
+    }
+
+    /// Adds WEB01 (`hW`) and sql01.corp.lan (`hS`) to the vault.
+    fn two_windows_hosts(c: &Connection) {
+        c.execute_batch(
+            "INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES \
+             ('hW','e','WEB01','192.0.2.10',1,1), ('hS','e','sql01.corp.lan','192.0.2.11',1,1)",
+        )
+        .unwrap();
+    }
+
+    fn user(name: &str, domain: Option<&str>, source_host: Option<&str>) -> UsernameInput {
+        UsernameInput {
+            username: name.into(),
+            domain: domain.map(str::to_string),
+            source_host_id: source_host.map(str::to_string),
+            source: None,
+            scope: None,
+            local_host_id: None,
+        }
+    }
+
+    /// Every username: (name, domain, scope, local host).
+    fn scoped(c: &Connection) -> Vec<(String, Option<String>, String, Option<String>)> {
+        let mut out: Vec<_> = credentials::usernames_list(c, "e")
+            .unwrap()
+            .into_iter()
+            .map(|u| (u.username, u.domain, u.scope, u.local_host_id))
+            .collect();
+        out.sort();
+        out
+    }
+
+    fn local_cred(kind: &str, name: &str, secret: &str, host: &str) -> CredentialInput {
+        let mut i = cred(kind, name, None, secret);
+        i.scope = Some("local".into());
+        i.local_host_id = Some(host.into());
+        i.source_host_id = Some(host.into());
+        i
+    }
+
+    #[test]
+    fn capture_output_sets_a_username_scope() {
+        let c = vault();
+        two_windows_hosts(&c);
+        let s = |x: &str| Some(x.to_string());
+        let proofs = ExtractionProofs {
+            usernames: vec![
+                // `.\name`: local to the host the output ran on; with no such host, unknown.
+                user("ann", Some("."), Some("hS")),
+                user("bea", Some("."), None),
+                // A host's short name, in any case, from wherever the output ran: local to that host.
+                user("cal", Some("web01"), Some("hS")),
+                user("dee", Some("SQL01"), Some("hS")),
+                // The engagement's domain, in either spelling: domain, as written.
+                user("eve", Some("CORP"), Some("hS")),
+                user("fay", Some("corp.lan"), None),
+                // Anything else: unknown.
+                user("gus", Some("FABRIKAM"), None),
+                user("hal", Some("corp.local"), None),
+                user("ivy", None, Some("hS")),
+            ],
+            // An nxc --local-auth result's username, which the frontend plans as `.\name` on the host it answered from.
+            intake: Some(IntakeProof {
+                usernames: vec![PlannedUsername { key: "k-jo".into(), input: user("jo", Some("."), Some("hW")) }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let filed = file(&c, "e", "l1", &proofs).unwrap();
+        assert_eq!(
+            scoped(&c),
+            vec![
+                ("ann".into(), None, "local".into(), s("hS")),
+                ("bea".into(), s("."), "unknown".into(), None),
+                ("cal".into(), None, "local".into(), s("hW")),
+                ("dee".into(), None, "local".into(), s("hS")),
+                ("eve".into(), s("CORP"), "domain".into(), None),
+                ("fay".into(), s("corp.lan"), "domain".into(), None),
+                ("gus".into(), s("FABRIKAM"), "unknown".into(), None),
+                ("hal".into(), s("corp.local"), "unknown".into(), None),
+                ("ivy".into(), None, "unknown".into(), None),
+                ("jo".into(), None, "local".into(), s("hW")),
+            ]
+        );
+        assert_eq!(filed.extraction.record.created_username_ids.len(), 10);
+
+        // The same listing again is the same usernames, proved again.
+        let listing = ExtractionProofs { usernames: proofs.usernames.clone(), ..Default::default() };
+        let again = file(&c, "e", "l0", &listing).unwrap().extraction.record;
+        assert!(again.created_username_ids.is_empty());
+        assert_eq!(again.reproved_username_ids.len(), 9);
+
+        // A local name on another host is another username; a domain one never merges with the unknown one.
+        let more = ExtractionProofs { usernames: vec![user("ann", Some("."), Some("hW")), user("ivy", Some("corp.lan"), None)], ..Default::default() };
+        entry(&c, "l2", 20);
+        assert_eq!(file(&c, "e", "l2", &more).unwrap().extraction.record.created_username_ids.len(), 2);
+        undo(&c, "l2").unwrap();
+        undo(&c, "l1").unwrap();
+        // l0 still proves the listed ones; the nxc one goes with l1.
+        assert_eq!(credentials::usernames_list(&c, "e").unwrap().len(), 9);
+    }
+
+    #[test]
+    fn a_host_named_by_its_ip_or_shared_by_two_hosts_names_no_local_account() {
+        let c = vault();
+        c.execute_batch(
+            "INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES \
+             ('hIp','e','192.0.2.30','192.0.2.30',1,1), ('hA','e','dup.corp.lan','192.0.2.31',1,1), \
+             ('hB','e','DUP','192.0.2.32',1,1)",
+        )
+        .unwrap();
+        let proofs = ExtractionProofs { usernames: vec![user("ann", Some("192"), None), user("bo", Some("dup"), None)], ..Default::default() };
+        file(&c, "e", "l1", &proofs).unwrap();
+        let scopes: Vec<String> = scoped(&c).into_iter().map(|u| u.2).collect();
+        assert_eq!(scopes, vec!["unknown", "unknown"]);
+    }
+
+    /// The stored local credential jay / Winter2024! on WEB01, which the reuse tests find again on SQL01.
+    fn jen_on_web(c: &Connection) -> Credential {
+        two_windows_hosts(c);
+        credentials::create(c, "e", local_cred("password", "jay", "Winter2024!", "hW")).unwrap().credential
+    }
+
+    #[test]
+    fn a_local_account_whose_name_and_secret_are_stored_for_another_host_is_password_reuse() {
+        let c = vault();
+        let web = jen_on_web(&c);
+        // nxc --local-auth against SQL01: `SQL01\JAY:Winter2024!`. The frontend finds the stored credential by name and
+        // secret, so its result is an attempt of that credential, and plans the local username.
+        let spray = IntakeProof {
+            usernames: vec![PlannedUsername { key: "k-jay".into(), input: user("JAY", Some("."), Some("hS")) }],
+            attempts: vec![PlannedAttempt { cred_id: web.id.clone(), auth_mode: Some("local".into()), ..attempt("hS", "smb", "valid") }],
+            ..Default::default()
+        };
+        let filed = file(&c, "e", "l1", &ExtractionProofs { intake: Some(spray), ..Default::default() }).unwrap();
+        let r = &filed.extraction.record;
+        assert!(r.created_username_ids.is_empty() && r.created_credential_ids.is_empty());
+        assert!(credentials::usernames_list(&c, "e").unwrap().is_empty());
+        let tried: Vec<(String, String, String, String)> =
+            attempts::list(&c, "e").unwrap().into_iter().map(|a| (a.cred_id, a.host_id, a.result, a.auth_mode)).collect();
+        assert_eq!(tried, vec![(web.id.clone(), "hS".into(), "valid".into(), "local".into())]);
+
+        // A dump on SQL01 holding the same account and secret: no new credential, an attempt of the stored one there.
+        let dump = ExtractionProofs { credentials: vec![local_cred("password", "Jay", "Winter2024!", "hS")], ..Default::default() };
+        let r = file(&c, "e", "l0", &dump).unwrap().extraction.record;
+        assert!(r.created_credential_ids.is_empty() && r.created_username_ids.is_empty());
+        assert_eq!(r.reproved_credential_ids, vec![web.id.clone()]);
+        assert_eq!(credentials::list(&c, "e").unwrap().len(), 1);
+        let on_sql: Vec<(String, String)> =
+            attempts::list(&c, "e").unwrap().into_iter().filter(|a| a.host_id == "hS").map(|a| (a.cred_id, a.service)).collect();
+        assert_eq!(on_sql, vec![(web.id.clone(), "other".into()), (web.id.clone(), "smb".into())]);
+
+        // Undo takes the dump's attempt away and leaves the credential, which l1 still proves.
+        undo(&c, "l0").unwrap();
+        assert_eq!(attempts::list(&c, "e").unwrap().len(), 1);
+        assert_eq!(credentials::list(&c, "e").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_reused_nt_hash_matches_whatever_its_case() {
+        let c = vault();
+        two_windows_hosts(&c);
+        let web = credentials::create(&c, "e", local_cred("hash", "jay", &"AB".repeat(16), "hW")).unwrap().credential;
+        let dump = ExtractionProofs { credentials: vec![local_cred("hash", "jay", &"ab".repeat(16), "hS")], ..Default::default() };
+        file(&c, "e", "l1", &dump).unwrap();
+        assert_eq!(ids(&c, "SELECT id FROM credentials"), vec![web.id.clone()]);
+        assert_eq!(ids(&c, "SELECT cred_id || '@' || host_id FROM cred_attempts"), vec![format!("{}@hS", web.id)]);
+    }
+
+    #[test]
+    fn a_different_secret_or_none_files_a_new_local_username() {
+        let c = vault();
+        let web = jen_on_web(&c);
+        // nxc --local-auth against SQL01 with another password: a new local credential, and jay's username on SQL01.
+        let other = IntakeProof {
+            usernames: vec![PlannedUsername { key: "k-jay".into(), input: user("jay", Some("."), Some("hS")) }],
+            credentials: vec![pending(local_cred("password", "jay", "Spring2025!", "hS"), true, vec![attempt("hS", "smb", "valid")])],
+            ..Default::default()
+        };
+        let r = file(&c, "e", "l1", &ExtractionProofs { intake: Some(other), ..Default::default() }).unwrap().extraction.record;
+        assert_eq!(r.created_credential_ids.len(), 1);
+        assert_eq!(scoped(&c), vec![("jay".into(), None, "local".into(), Some("hS".into()))]);
+        let sql_cred = credentials::get(&c, &r.created_credential_ids[0]).unwrap();
+        assert_eq!((sql_cred.local_host_id.as_deref(), sql_cred.secret.as_str()), (Some("hS"), "Spring2025!"));
+        assert_ne!(sql_cred.id, web.id);
+        undo(&c, "l1").unwrap();
+
+        // Enumeration alone (`SQL01\jay`, no secret) files the local username on SQL01 too.
+        let listed = ExtractionProofs { usernames: vec![user("jay", Some("SQL01"), Some("hS"))], ..Default::default() };
+        file(&c, "e", "l0", &listed).unwrap();
+        assert_eq!(scoped(&c), vec![("jay".into(), None, "local".into(), Some("hS".into()))]);
+        assert_eq!(credentials::list(&c, "e").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn the_same_output_with_reuse_and_another_secret_keeps_the_username() {
+        let c = vault();
+        let web = jen_on_web(&c);
+        let both = IntakeProof {
+            usernames: vec![PlannedUsername { key: "k-jay".into(), input: user("jay", Some("."), Some("hS")) }],
+            attempts: vec![PlannedAttempt { cred_id: web.id.clone(), auth_mode: Some("local".into()), ..attempt("hS", "smb", "valid") }],
+            credentials: vec![pending(local_cred("password", "jay", "Spring2025!", "hS"), true, vec![attempt("hS", "winrm", "valid")])],
+            ..Default::default()
+        };
+        file(&c, "e", "l1", &ExtractionProofs { intake: Some(both), ..Default::default() }).unwrap();
+        assert_eq!(scoped(&c), vec![("jay".into(), None, "local".into(), Some("hS".into()))]);
+        assert_eq!(credentials::list(&c, "e").unwrap().len(), 2);
+    }
+
+    #[test]
+    fn deleting_a_host_keeps_the_local_usernames_capture_filed_on_it() {
+        let c = vault();
+        two_windows_hosts(&c);
+        file(&c, "e", "l1", &ExtractionProofs { usernames: vec![user("jay", Some("."), Some("hW"))], ..Default::default() }).unwrap();
+        hosts::delete(&c, "hW").unwrap();
+        assert_eq!(scoped(&c), vec![("jay".into(), None, "local".into(), None)]);
     }
 }

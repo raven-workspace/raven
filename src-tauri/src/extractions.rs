@@ -161,7 +161,7 @@ const HOST_REFS: &str = "SELECT \
       (SELECT count(*) FROM services WHERE host_id = ?1) \
     + (SELECT count(*) FROM log_entry_hosts WHERE host_id = ?1 AND entry_id <> ?2) \
     + (SELECT count(*) FROM credentials WHERE local_host_id = ?1 OR source_host_id = ?1) \
-    + (SELECT count(*) FROM usernames WHERE source_host_id = ?1) \
+    + (SELECT count(*) FROM usernames WHERE source_host_id = ?1 OR local_host_id = ?1) \
     + (SELECT count(*) FROM access_grants WHERE host_id = ?1) \
     + (SELECT count(*) FROM cred_attempts WHERE host_id = ?1) \
     + (SELECT count(*) FROM tried_pairs WHERE host_id = ?1) \
@@ -298,15 +298,32 @@ pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
     }
     // A username stays when something else still uses it: an attempt, grant or tried pair from another entry or made
     // by hand, or any credential left for that user (another entry's, hand-made, or one of ours kept above). A tried
-    // pair or credential is the user's when its username is equal ignoring case and its domain is the same domain.
+    // pair or credential is the user's when its username is equal ignoring case and its domain is the same domain; for
+    // a local username, only a local credential or local tried pair on its host is.
     let anchor = engagement_domain(&tx, &ext.engagement_id)?;
     for id in r.created_username_ids.iter().filter(|id| !kept_users.contains(*id)) {
         let user = tx
-            .query_row("SELECT username, domain FROM usernames WHERE id=?1", [id], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+            .query_row("SELECT username, domain, scope, local_host_id FROM usernames WHERE id=?1", [id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?))
             })
             .optional()?;
-        let Some((username, domain)) = user else { continue };
+        let Some((username, domain, scope, local_host)) = user else { continue };
+        if scope == "local" {
+            let used: bool = tx.query_row(
+                "SELECT EXISTS (SELECT 1 FROM cred_attempts WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
+                     OR EXISTS (SELECT 1 FROM access_grants WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
+                     OR EXISTS (SELECT 1 FROM tried_pairs WHERE engagement_id=?3 AND lower(username)=lower(?4) \
+                                AND auth_mode='local' AND host_id IS ?5 AND ifnull(log_entry_id, '') <> ?2) \
+                     OR EXISTS (SELECT 1 FROM credentials WHERE engagement_id=?3 AND lower(username)=lower(?4) \
+                                AND scope='local' AND local_host_id IS ?5)",
+                params![id, log_entry_id, ext.engagement_id, username, local_host],
+                |r| r.get(0),
+            )?;
+            if !used {
+                tx.execute("DELETE FROM usernames WHERE id=?1", [id])?;
+            }
+            continue;
+        }
         let linked: bool = tx.query_row(
             "SELECT EXISTS (SELECT 1 FROM cred_attempts WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
                  OR EXISTS (SELECT 1 FROM access_grants WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2)",

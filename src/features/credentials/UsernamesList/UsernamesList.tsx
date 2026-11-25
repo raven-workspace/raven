@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { usernameLabel } from "../../../engines/credentials/index";
+import { usernameLabel, usernameScopeLabel } from "../../../engines/credentials/index";
 import type { AccessGrant, Username } from "../../../types/credentials";
 import type { Host } from "../../../types/host";
 import { Trash } from "@phosphor-icons/react";
@@ -60,16 +60,22 @@ export function UsernamesList({ eid, usernames, grants, hosts }: {
         {error && <p role="alert" className="usernames-list__error">{error}</p>}
       </form>
       <ul className="usernames-list__list">
-        {usernames.map((u) => (
-          <li key={u.id} className="usernames-list__row">
-            <span className="usernames-list__name" title={usernameLabel(u)}>{usernameLabel(u)}</span>
-            <div className="usernames-list__grants"><AccessGrantTags eid={eid} username={u} grants={grants.filter((g) => g.usernameId === u.id)} hosts={hosts} /></div>
-            <ActionCell>
-              <Button size="sm" aria-label={`Add access for ${usernameLabel(u)}`} onClick={() => setGranting(u)}>Add access</Button>
-              <IconButton icon={Trash} tone="destructive" label={`Delete username ${usernameLabel(u)}`} onClick={() => setDeleting(u)} />
-            </ActionCell>
-          </li>
-        ))}
+        {usernames.map((u) => {
+          const scope = usernameScopeLabel(u, hosts);
+          return (
+            <li key={u.id} className="usernames-list__row">
+              <span className="usernames-list__who">
+                <span className="usernames-list__name" title={usernameLabel(u)}>{usernameLabel(u)}</span>
+                {scope && <span className="usernames-list__scope" title={scope}>{scope}</span>}
+              </span>
+              <div className="usernames-list__grants"><AccessGrantTags eid={eid} username={u} grants={grants.filter((g) => g.usernameId === u.id)} hosts={hosts} /></div>
+              <ActionCell>
+                <Button size="sm" aria-label={`Add access for ${usernameLabel(u)}`} onClick={() => setGranting(u)}>Add access</Button>
+                <IconButton icon={Trash} tone="destructive" label={`Delete username ${usernameLabel(u)}`} onClick={() => setDeleting(u)} />
+              </ActionCell>
+            </li>
+          );
+        })}
       </ul>
       {deleting && (
         <ConfirmDelete

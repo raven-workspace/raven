@@ -17,7 +17,7 @@ import {
   identifyHash,
   ntHalf,
   planCredentialIntake,
-  usernameKey,
+  plannedUsernameKey,
   type CredentialIntakePlan,
   type PlannedAttempt,
 } from "../../engines/credentials";
@@ -204,7 +204,7 @@ const attemptProof = (a: Omit<PlannedAttempt, "credId"> & { credId?: string }): 
 /** A plan as the store files it: the operator accepts every pending credential except the failed-only ones. */
 function intakeProof(plan: CredentialIntakePlan): IntakeProof {
   return {
-    usernames: plan.newUsernames.map((u) => ({ key: usernameKey({ ...u, domain: u.domain ?? null }), input: withoutEngagement(u) })),
+    usernames: plan.newUsernames.map((u) => ({ key: plannedUsernameKey(u), input: withoutEngagement(u) })),
     attempts: plan.attempts.map(attemptProof),
     credentials: plan.newCredentials.map((p) => ({
       input: intakeInput(p.input),

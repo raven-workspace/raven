@@ -199,7 +199,7 @@ describe("engagement checklist", () => {
   });
 
   it("a bare-username access flag names the username, not the secret's credential", async () => {
-    m.usernamesList.mockResolvedValue([{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1 }]);
+    m.usernamesList.mockResolvedValue([{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null }]);
     mount({ services: AD, creds: [cred("c1")], attempts: [attempt("a1", "c1", { usernameId: "u1", result: "valid" })] });
     const flags = await screen.findByRole("region", { name: "New access" });
     expect(await within(flags).findByText("dc01: valid over winrm as CORP\\alice")).toBeInTheDocument();
