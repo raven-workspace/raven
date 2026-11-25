@@ -175,6 +175,15 @@ describe("NoteView commands", () => {
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzscan -t 198.51.100.20"));
   });
 
+  it("<script>, <TARGET> and XML tags are never placeholders: such a block copies as written, never held back (RAV-48)", async () => {
+    const note = parseNote("03-Tools/Zz Angle.md", ["# Zz Angle", "## Scan", "```bash", "zzxss '<script>alert(1)</script>' <TARGET> <zzConnectorList>", "```"].join("\n"))!;
+    const user = userEvent.setup();
+    mount(note);
+    await navigator.clipboard.writeText("untouched");
+    await user.click(await screen.findByRole("button", { name: "Copy command: Scan: zzxss '<script>alert(1)</script>' <TARGET> <zzConnectorList>" }));
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzxss '<script>alert(1)</script>' <TARGET> <zzConnectorList>"));
+  });
+
   it("a plain block copies as is", async () => {
     const user = userEvent.setup();
     mount();

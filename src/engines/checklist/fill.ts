@@ -8,7 +8,7 @@ import { isNtlmHash, isOwnerless, ntHalf } from '../credentials/matrix';
 import { dcFillChoice, dcForFill, hostFacts, serviceNames } from './facts';
 import type { ChecklistGoal } from './types';
 import { quoteContextAt, shellEscape } from './shellQuote';
-import { resolveTemplate, type SubstitutionContext } from './template';
+import { canonicalToken, CREDENTIAL_TOKENS, resolveTemplate, type SubstitutionContext } from './template';
 
 export interface FillInput {
   host: Host;
@@ -228,9 +228,6 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
   };
 }
 
-/** Tokens whose value is, or derives from, the credential (DC_HOST carries the credential's domain). */
-const CRED_TOKENS = new Set(['USER', 'DOMAIN', 'PASS', 'HASH', 'DC_HOST']);
-
 export function fillCommand(template: string, input: FillInput, opts: FillOptions = {}): FillResult {
   const ctx = commandContext(input, opts);
   const { unresolved, ranges } = resolveTemplate(template, ctx);
@@ -242,7 +239,7 @@ export function fillCommand(template: string, input: FillInput, opts: FillOption
     text += template.slice(last, r.start);
     const token = template.slice(r.start, r.end);
     let piece = r.resolved || r.canonical === 'interface' ? resolveTemplate(token, ctx).text : token;
-    if (opts.shellSafe && r.resolved && CRED_TOKENS.has(r.raw.toUpperCase())) {
+    if (opts.shellSafe && r.resolved && CREDENTIAL_TOKENS.has(canonicalToken(r.raw))) {
       piece = shellEscape(piece, quoteContextAt(template, r.start));
     }
     text += piece;
@@ -252,7 +249,7 @@ export function fillCommand(template: string, input: FillInput, opts: FillOption
 
   const tunnel = tunnelFor(input.host, input.tunnels);
   const result: FillResult = { text, unresolved: unresolved.filter((u) => u !== 'INTERFACE') };
-  const usesDc = ranges.some((r) => r.resolved && ['DC_IP', 'DC-IP', 'DC_HOST'].includes(r.raw.toUpperCase()));
+  const usesDc = ranges.some((r) => r.resolved && ['DC_IP', 'DC_HOST'].includes(canonicalToken(r.raw)));
   if (usesDc && !input.overrides?.DC_IP && dcFillChoice(input.hosts, input.servicesByHost).byName) result.dcByName = true;
   if (tunnel) {
     result.viaTunnel = {

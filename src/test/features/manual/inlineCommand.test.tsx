@@ -74,6 +74,26 @@ describe("inline commands", () => {
     expect(status()).toMatchObject({ text: "Copied for zzdc01", tone: "ok" });
   });
 
+  it("<script>, <TARGET> and XML tags are never placeholders: the span copies as written on the first try (RAV-48)", async () => {
+    const user = userEvent.setup();
+    mount(note(["Try `zzxss '<script>alert(1)</script>' <TARGET> <zzConnectorList>` first."]));
+    await navigator.clipboard.writeText("untouched");
+    await user.click(await screen.findByRole("button", { name: "Copy command: zzxss '<script>alert(1)</script>' <TARGET> <zzConnectorList>" }));
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzxss '<script>alert(1)</script>' <TARGET> <zzConnectorList>"));
+    expect(status().tone).toBe("ok");
+  });
+
+  it("a lone <TARGET> span is plain code, not a command (RAV-48)", () => {
+    const { container } = mount(note(["Replace `<TARGET>` here."]));
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(container.querySelector("code")).toHaveTextContent("<TARGET>");
+  });
+
+  it("${VAR} and %{x} are not placeholders: a span with only those stays as written", async () => {
+    mount(note(["Try `zzrun ${ZZHOME} -w %{http_code}` first."]));
+    expect(await screen.findByRole("button", { name: "Copy command: zzrun ${ZZHOME} -w %{http_code}" })).toBeInTheDocument();
+  });
+
   it("inline command masks PASS and copies it clear", async () => {
     const user = userEvent.setup();
     useCredPickStore.getState().set("h1", "c1");

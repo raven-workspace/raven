@@ -3,6 +3,7 @@ import { isInlineCommand, lookupRows, plain, type LookupRow } from "./lookup";
 import { DEEP_HEADING, isTableStart, lineRuns, tableEnd, type Inline } from "./markdown";
 import type { ManualNote } from "./types";
 import { escapeRegExp } from "../regex";
+import { replacePlaceholders } from "../checklist/template";
 
 export interface ManualHit {
   noteId: string;
@@ -36,14 +37,13 @@ export function matchRanges(text: string, query: string | RegExp | null): [numbe
 
 const MAX_LINE = 120;
 
-const PLACEHOLDERS = /\{[A-Za-z][A-Za-z0-9_]*\}/g;
-
 /**
- * `text` with every `{PLACEHOLDER}` blanked out, length kept: the note shows a placeholder filled for the host in view,
- * so its name is never a match (text around it still is).
+ * `text` with every placeholder blanked out, length kept: the note shows a placeholder filled for the host in view,
+ * so its name is never a match (text around it still is). The template module's grammar decides what a placeholder
+ * is, so search and fill agree.
  */
 export function maskPlaceholders(text: string): string {
-  return text.replace(PLACEHOLDERS, (m) => "\u0000".repeat(m.length));
+  return replacePlaceholders(text, (p) => "\u0000".repeat(p.end - p.start));
 }
 
 /**

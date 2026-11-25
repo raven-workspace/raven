@@ -320,6 +320,33 @@ function offScaleSpacing(file: string, scss: string): string[] {
     });
 }
 
+/** The one module allowed to define the placeholder grammar. */
+export const PLACEHOLDER_GRAMMAR = "src/engines/checklist/template.ts";
+
+/** App source the placeholder rule reads: every .ts and .tsx under src, tests excepted. */
+export const sourceFiles = walk(join(ROOT, "src"), /\.tsx?$/)
+  .map((p) => relative(ROOT, p))
+  .filter((f) => !f.startsWith("src/test/"))
+  .sort();
+
+/**
+ * A regex that spots placeholders, in a regex literal or a `RegExp` string: `\{` (or `\\{`) then a name class or group
+ * (`\{[A-Z`, `\{(FILE|SCRIPT)`, `\{\w`), an escaped literal name (`\{LPORT\}`), or an angle form (`<([A-Z`, `<\w`),
+ * which the grammar dropped and must not come back elsewhere.
+ * Neither a Windows path in a string (`C:\\tmp\\{FILE}`: its closing brace is not escaped) nor a CSS rule (`\.a \{[^}]`)
+ * counts.
+ */
+const PLACEHOLDER_REGEX =
+  /\\{1,2}\{\(?(?:\[(?:A-Z|a-z|\\{1,2}w)|\\{1,2}w|[A-Z][A-Z0-9_|]*(?:\)|\\{1,2}\}))|<\(?(?:\[(?:A-Z|a-z)|\\{1,2}w)/;
+
+/** The code lines of `src` (comments aside) that define a placeholder regex. */
+export function placeholderRegexes(src: string): string[] {
+  return stripComments(src)
+    .split("\n")
+    .filter((line) => PLACEHOLDER_REGEX.test(line))
+    .map((line) => line.trim());
+}
+
 export function breaks(rule: RuleId, file: string, src: string): boolean {
   // Engines render no markup: only the narrow joined-strings check reads them.
   if (isEngine(file)) return rule === "joined-strings" && engineJoined(src);

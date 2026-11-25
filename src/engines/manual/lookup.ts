@@ -1,3 +1,4 @@
+import { hasPlaceholders } from "../checklist/template";
 import { parseMarkdown, type Inline } from "./markdown";
 import type { ManualNote } from "./types";
 
@@ -56,10 +57,8 @@ export function isKeyCell(parts: Inline[]): boolean {
 /** The vault suffixes most Foundations titles with " — Reference"; in the rail it only crowds out the name. */
 export const shortTitle = (title: string): string => title.replace(/\s+[—–-]\s+Reference$/i, "");
 
-const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
-
-/** A code span worth offering as a command: it has a `{PLACEHOLDER}` or a space. A bare flag or error code does not, and neither does anything starting with "-" (`-m MODE` is a flag with its value, not a command). */
-export const isInlineCommand = (code: string): boolean => !code.startsWith("-") && (PLACEHOLDER.test(code) || /\s/.test(code));
+/** A code span worth offering as a command: it has a placeholder (`{TARGET_IP}`, `<TARGET>`) or a space. A bare flag or error code does not, and neither does anything starting with "-" (`-m MODE` is a flag with its value, not a command). */
+export const isInlineCommand = (code: string): boolean => !code.startsWith("-") && (hasPlaceholders(code) || /\s/.test(code));
 
 export const ACTION_HEADER = /^(do( this)?|what to try next|fix)$/i;
 export const MEANS_HEADER = /^(means( for an attacker)?|what it means)$/i;

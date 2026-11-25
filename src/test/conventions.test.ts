@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PENDING, type RuleId } from "./conventionsPending";
-import { ROOT, breaks, files } from "./conventionsRules";
+import { PLACEHOLDER_GRAMMAR, ROOT, breaks, files, placeholderRegexes, sourceFiles } from "./conventionsRules";
 
 const RULES: RuleId[] = [
   "tiny-type",
@@ -30,6 +30,14 @@ describe("conventions", () => {
       expect(fixed).toEqual([]);
     });
   }
+
+  it("placeholder grammar: no placeholder regex is defined outside the template module (RAV-48)", () => {
+    const bad = sourceFiles
+      .filter((f) => f !== PLACEHOLDER_GRAMMAR)
+      .flatMap((f) => placeholderRegexes(read(f)).map((line) => `${f}: ${line}`));
+    expect(bad).toEqual([]);
+    expect(placeholderRegexes(read(PLACEHOLDER_GRAMMAR)).length).toBeGreaterThan(0);
+  });
 
   it("PENDING is empty", () => {
     expect(Object.entries(PENDING).filter(([, list]) => list.length > 0)).toEqual([]);
