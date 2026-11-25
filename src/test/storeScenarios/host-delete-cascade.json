@@ -1,5 +1,5 @@
 {
-  "name": "Deleting a host removes everything that hangs off it and unlinks what only points at it",
+  "name": "Deleting a host removes everything that hangs off it and unlinks what only points at it; a local credential it leaves with no host stays editable",
   "steps": [
     { "do": "engagementCreate", "args": [{ "name": "Synthetic lab", "kind": "lab", "domain": "corp.example" }], "as": "eng" },
     { "do": "hostCreate", "args": ["$eng", { "name": "web01", "ip": "192.0.2.10" }], "as": "web" },
@@ -20,7 +20,8 @@
     },
     {
       "do": "credentialCreate",
-      "args": ["$eng", { "type": "password", "username": "administrator", "secret": "Local-1", "scope": "local", "localHostId": "$web" }]
+      "args": ["$eng", { "type": "password", "username": "administrator", "secret": "Local-1", "scope": "local", "localHostId": "$web" }],
+      "bind": { "admin": "credential.id" }
     },
     { "do": "usernameCreate", "args": ["$eng", { "username": "bob", "sourceHostId": "$web" }], "as": "bob" },
     { "do": "accessGrantCreate", "args": ["$eng", { "usernameId": "$bob", "hostId": "$web", "level": "user", "via": "winrm" }] },
@@ -71,6 +72,16 @@
         { "username": "alice", "sourceHostId": null },
         { "username": "administrator", "scope": "local", "localHostId": null }
       ]
+    },
+    {
+      "do": "credentialUpdate",
+      "args": ["$admin", { "type": "password", "username": "administrator", "secret": "Local-2", "scope": "local", "localHostId": null, "notes": "reused on files01" }],
+      "expect": { "id": "$admin", "secret": "Local-2", "scope": "local", "localHostId": null, "notes": "reused on files01" }
+    },
+    {
+      "do": "credentialCreate",
+      "args": ["$eng", { "type": "password", "username": "guest", "secret": "Guest-1", "scope": "local", "localHostId": null }],
+      "error": { "code": "validation", "field": "localHostId" }
     },
     { "do": "usernamesList", "args": ["$eng"], "expect": [{ "id": "$bob", "sourceHostId": null }] },
     { "do": "accessGrantsList", "args": ["$eng"], "expect": [{ "usernameId": "$bob", "hostId": "$keep" }] },

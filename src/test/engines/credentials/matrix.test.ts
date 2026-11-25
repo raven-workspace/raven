@@ -173,6 +173,14 @@ describe("a local credential tested as domain", () => {
   it("with nothing recorded, both modes are untried (local first)", () => {
     expect(cellFor(mary, ms01, s, "smb", []).untriedModes).toEqual(["local", "domain"]);
   });
+
+  it("one whose host was deleted is still sprayed on every host, local first", () => {
+    const orphan = cred({ id: "orphan", username: "administrator", secret: "Local-1", scope: "local", localHostId: null });
+    expect(isSprayable(orphan)).toBe(true);
+    expect(authModesFor(orphan, "smb")).toEqual(["local", "domain"]);
+    const cell = cellFor(orphan, ms01, s, "smb", [att({ credId: "orphan", hostId: "ms01", result: "admin", authMode: "local" })]);
+    expect(cell.state).toBe("admin");
+  });
 });
 
 describe("foldCrackedHashes", () => {

@@ -350,6 +350,20 @@ function storedSame(c: Credential): Credential | undefined {
   return same.find((x) => sameDomainIn(c.engagementId, x.domain, c.domain));
 }
 
+/**
+ * A credential input's scope and local host, checked as credentials.rs `build` does: absent scope is `domain`; a local
+ * credential needs its host only when scope or host is being set or changed (`current` is the stored credential on
+ * update), so one whose host was deleted stays editable; only a local credential has a host.
+ */
+function scopeAndHost(input: CredentialInput, current?: Credential): Pick<Credential, "scope" | "localHostId"> {
+  const scope = input.scope || "domain";
+  const localHostId = input.localHostId || null;
+  const keeps = current !== undefined && current.scope === scope && current.localHostId === localHostId;
+  if (scope === "local" && !localHostId && !keeps) throw invalid("localHostId", "a local credential needs its host");
+  if (scope !== "local" && localHostId) throw invalid("localHostId", "only a local credential has a host");
+  return { scope, localHostId };
+}
+
 function listChecklist(engagementId: string): ChecklistItem[] {
   const owners = new Set([engagementId, ...db.hosts.filter((h) => h.engagementId === engagementId).map((h) => h.id)]);
   // The store always sends `statusManual`; a fixture row may leave it out.
@@ -877,9 +891,9 @@ const base = {
   credentialsList: async (engagementId: string) => clone(db.credentials.filter((c) => c.engagementId === engagementId)),
   credentialCreate: async (engagementId: string, input) => {
     const c = {
-      username: "", domain: null, secret: "", hashType: null, scope: "domain" as const, localHostId: null, sourceHostId: null, source: null, notes: null,
+      username: "", domain: null, secret: "", hashType: null, sourceHostId: null, source: null, notes: null,
       crackStatus: input.type === "hash" ? ("uncracked" as const) : null, crackedFrom: null, fromSecretId: null,
-      ...input, id: nid("c"), engagementId, createdAt: now(), updatedAt: now(),
+      ...input, ...scopeAndHost(input), id: nid("c"), engagementId, createdAt: now(), updatedAt: now(),
     };
     const stored = storedSame(c);
     if (stored) return { credential: clone(stored), existed: true };
@@ -887,7 +901,10 @@ const base = {
     return { credential: clone(c), existed: false };
   },
   sameDomains: async (engagementId: string, pairs) => pairs.map(([a, b]) => sameDomainIn(engagementId, a, b)),
-  credentialUpdate: async (id: string, input) => clone(assign(find(db.credentials, id), input, { updatedAt: now() })),
+  credentialUpdate: async (id: string, input) => {
+    const c = find(db.credentials, id);
+    return clone(assign(c, input, { ...scopeAndHost(input, c), updatedAt: now() }));
+  },
   credentialDelete: async (id: string) => {
     find(db.credentials, id);
     dropCredentials(new Set([id]));

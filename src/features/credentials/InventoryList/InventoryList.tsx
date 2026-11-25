@@ -1,5 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
-import { credName, identifyHash, isMachineAccount, isOwnerless, overallState, usernameLabel, type OverallState } from "../../../engines/credentials/index";
+import { credName, identifyHash, isMachineAccount, isOwnerless, overallState, scopeLabel, usernameLabel, type OverallState } from "../../../engines/credentials/index";
 import type { AccessGrant, CredAttempt, Credential, Username } from "../../../types/credentials";
 import type { Host } from "../../../types/host";
 import type { Service } from "../../../types/service";
@@ -112,7 +112,7 @@ function Group({ label, creds, crack, typed, ...ctx }: {
                 {crack && <TableCell className="inventory-list__value">{c.hashType ?? identifyHash(c.secret, "windows")[0]?.name ?? "unknown"}</TableCell>}
                 {typed && <TableCell className="inventory-list__value">{c.type}</TableCell>}
                 <TableCell className="inventory-list__scope inventory-list__cell inventory-list__value">
-                  <span className="inventory-list__scope-value">{c.scope}</span>
+                  <span className="inventory-list__scope-value">{scopeLabel(c)}</span>
                   {scopeHost && <span className="inventory-list__scope-host" title={scopeHost}>{scopeHost}</span>}
                 </TableCell>
                 <TableCell className="inventory-list__source inventory-list__cell inventory-list__value">
