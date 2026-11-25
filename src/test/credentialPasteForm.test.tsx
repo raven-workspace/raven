@@ -16,7 +16,7 @@ beforeEach(() => {
 function mount() {
   render(
     <QueryClientProvider client={makeQueryClient()}>
-      <CredentialForm eid="e1" hosts={[]} credentials={[]} onClose={() => {}} />
+      <CredentialForm eid="e1" hosts={[]} onClose={() => {}} />
     </QueryClientProvider>,
   );
   return within(screen.getByRole("dialog"));

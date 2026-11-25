@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { attemptKey, credKey, defaultHashType, findDuplicateCredential, usernameKey } from "../../../engines/credentials/keys";
+import { attemptKey, credKey, defaultHashType, usernameKey } from "../../../engines/credentials/keys";
 import { att, cred, NT, user } from "./fixtures";
 
 describe("credKey", () => {
@@ -12,14 +12,11 @@ describe("credKey", () => {
   it("secrets keep spaces; only leading and trailing line breaks are ignored (F-R1)", () => {
     expect(credKey(cred({ secret: "pass\r\n" }))).toBe(credKey(cred({ secret: "pass" })));
     expect(credKey(cred({ secret: " pass " }))).not.toBe(credKey(cred({ secret: "pass" })));
-    expect(findDuplicateCredential([cred({ id: "a", secret: "pass" })], cred({ id: "b", secret: "\npass\n" }))?.id).toBe("a");
-    expect(findDuplicateCredential([cred({ id: "a", secret: "pass" })], cred({ id: "b", secret: " pass" }))).toBeUndefined();
   });
 
   it("credKey treats a padded hash as the same hash", () => {
     const h = (secret: string) => cred({ type: "hash", secret, hashType: "NTLM" });
     expect(credKey(h(` ${NT}\t\n`))).toBe(credKey(h(NT)));
-    expect(findDuplicateCredential([cred({ id: "a", type: "hash", secret: NT, hashType: "NTLM" })], h(`${NT} `))?.id).toBe("a");
     // passwords still keep their edge spaces
     expect(credKey(cred({ secret: " pass " }))).not.toBe(credKey(cred({ secret: "pass" })));
   });
@@ -48,22 +45,6 @@ describe("usernameKey and attemptKey", () => {
     expect(attemptKey(a)).toBe("c|u|h|smb|local");
     expect(attemptKey(a)).not.toBe(attemptKey({ ...a, authMode: "domain" }));
     expect(attemptKey(a)).not.toBe(attemptKey({ ...a, usernameId: null }));
-  });
-});
-
-describe("findDuplicateCredential", () => {
-  it("matches by id, or by key within the same engagement and local host", () => {
-    const a = cred({ id: "a", secret: "pw" });
-    expect(findDuplicateCredential([a], cred({ id: "a", secret: "other" }))?.id).toBe("a");
-    expect(findDuplicateCredential([a], cred({ id: "b", secret: "pw" }))?.id).toBe("a");
-    expect(findDuplicateCredential([a], cred({ id: "b", engagementId: "eng2" }))).toBeUndefined();
-    const loc = cred({ id: "l", scope: "local", localHostId: "h1" });
-    expect(findDuplicateCredential([loc], cred({ id: "m", scope: "local", localHostId: "h2" }))).toBeUndefined();
-    expect(findDuplicateCredential([loc], cred({ id: "m", scope: "local", localHostId: "h1" }))?.id).toBe("l");
-  });
-
-  it("never merges empty secrets by key", () => {
-    expect(findDuplicateCredential([cred({ id: "a", secret: "" })], cred({ id: "b", secret: "" }))).toBeUndefined();
   });
 });
 

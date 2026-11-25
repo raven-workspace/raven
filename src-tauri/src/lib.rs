@@ -109,6 +109,7 @@ pub fn run() {
             commands::hop_delete,
             commands::credentials_list,
             commands::credential_create,
+            commands::same_domains,
             commands::credential_update,
             commands::credential_delete,
             commands::credential_crack,

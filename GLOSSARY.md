@@ -64,11 +64,11 @@ _Avoid_: resync (one step of it), board sync (the last step)
 
 
 **Same domain**:
-Two domain names that name one Windows domain: `CORP` and `corp.lan` (the NetBIOS name and the DNS name), compared without case. Credential, username and tried-pair identity all use it.
+Two domain spellings that name one Windows domain, anchored to the engagement's own domain (an FQDN): equal ignoring case and surrounding whitespace, or the engagement's domain and its first label (`corp.lan` and `CORP`). With no engagement domain only equal spellings match, and a NetBIOS name never matches any other FQDN (`CORP` is not `corp.local`, and `WEB01` is not `web01.corp.lan`). A blank domain matches only a blank one. Decided by the store; credential, username and tried-pair identity, tried-pair promotion and undo all use it.
 _Avoid_: domain match (says nothing about NetBIOS against DNS names)
 
 **Same credential**:
-Decided by the store alone: the same type, username, same domain and secret, in one engagement (and on one host, for a local credential). A captured Kerberoast, AS-REP or NetNTLM hash is one credential per account and kind, whatever the capture's bytes.
+Decided by the store alone: the same type, username (ignoring case), same domain and secret, in one engagement (and on one host, for a local credential). A captured Kerberoast, AS-REP or NetNTLM hash is one credential per account and kind, whatever the capture's bytes. Creating one the store already holds returns the stored one and says it existed; duplicates stored before this rule stay.
 _Avoid_: duplicate key
 
 ## Commands

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { credKey, sameDomain } from "../../../engines/credentials";
+import { credKey } from "../../../engines/credentials";
 import { applyInterpretation, interpretEntry, NOTHING_NEW } from "../../../features/capture/applyInterpretation";
 import { saveCapture, type CaptureEdits } from "../../../features/capture/saveCapture";
 import { afterEntrySaved } from "../../../features/checklist/ticks";
@@ -52,6 +52,12 @@ let seq = 0;
 let clock = 1000;
 const nextId = (p: string) => `${p}${++seq}`;
 const lc = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+/**
+ * The store's answer for E1 (domain corp.lan): equal spellings, and CORP with corp.lan. A stub of what the store
+ * says, not the rule: that is tested in Rust (credentials.rs `same_domain`).
+ */
+const STORE_SAME = new Set(["corp|corp.lan", "corp.lan|corp"]);
+const sameIn = (a: string | null | undefined, b: string | null | undefined) => lc(a) === lc(b) || STORE_SAME.has(`${lc(a)}|${lc(b)}`);
 const RANK: Record<string, number> = { admin: 3, valid: 2, failed: 1, errored: 0 };
 const cred = (o: Partial<Credential> & { id: string }): Credential => ({
   engagementId: "e1", type: "password", username: "", domain: null, secret: "", hashType: null, scope: "domain",
@@ -112,11 +118,14 @@ function setupBackend(seed: Partial<Db> = {}) {
       localHostId: input.localHostId ?? null, sourceHostId: input.sourceHostId ?? null, source: input.source ?? null,
       crackStatus: input.type === "hash" ? "uncracked" : null, fromSecretId: input.fromSecretId ?? null, createdAt: clock, updatedAt: clock,
     });
-    const found = db.credentials.find((x) => credKey(x) === credKey(c) && x.localHostId === c.localHostId);
-    if (found) return found;
+    const found = db.credentials.find(
+      (x) => credKey({ ...x, domain: null }) === credKey({ ...c, domain: null }) && x.localHostId === c.localHostId && sameIn(x.domain, c.domain),
+    );
+    if (found) return { credential: found, existed: true };
     db.credentials.push(c);
-    return c;
+    return { credential: c, existed: false };
   });
+  m.sameDomains.mockImplementation(async (_eid, pairs) => pairs.map(([a, b]) => sameIn(a, b)));
   m.credentialUpdate.mockImplementation(async (id, input) => {
     const i = db.credentials.findIndex((c) => c.id === id);
     db.credentials[i] = { ...db.credentials[i]!, fromSecretId: input.fromSecretId ?? db.credentials[i]!.fromSecretId, updatedAt: clock };
@@ -132,7 +141,7 @@ function setupBackend(seed: Partial<Db> = {}) {
   });
   m.usernamesList.mockImplementation(async () => structuredClone(db.usernames));
   m.usernameCreate.mockImplementation(async (eid, input) => {
-    const found = db.usernames.find((u) => lc(u.username) === lc(input.username) && lc(u.domain) === lc(input.domain));
+    const found = db.usernames.find((u) => lc(u.username) === lc(input.username) && sameIn(u.domain, input.domain));
     if (found) return found;
     const u: Username = { id: nextId("u"), engagementId: eid, username: input.username, domain: input.domain ?? null, sourceHostId: input.sourceHostId ?? null, source: input.source ?? null, createdAt: clock };
     db.usernames.push(u);
@@ -152,7 +161,7 @@ function setupBackend(seed: Partial<Db> = {}) {
   m.triedPairsUpsert.mockImplementation(async (eid, inputs) =>
     inputs.map((i) => {
       const found = db.tried.find(
-        (t) => lc(t.username) === lc(i.username) && lc(t.domain) === lc(i.domain) && t.secret === i.secret && t.hostId === i.hostId && t.service === i.service && t.authMode === (i.authMode ?? "domain"),
+        (t) => lc(t.username) === lc(i.username) && sameIn(t.domain, i.domain) && t.secret === i.secret && t.hostId === i.hostId && t.service === i.service && t.authMode === (i.authMode ?? "domain"),
       );
       if (found) return found;
       const t: TriedPair = {
@@ -165,7 +174,7 @@ function setupBackend(seed: Partial<Db> = {}) {
   );
   m.triedPairPromote.mockImplementation(async (_eid, username, domain, secret) => {
     const n = db.tried.length;
-    db.tried = db.tried.filter((t) => !(lc(t.username) === lc(username) && sameDomain(t.domain, domain) && t.secret === secret));
+    db.tried = db.tried.filter((t) => !(lc(t.username) === lc(username) && sameIn(t.domain, domain) && t.secret === secret));
     return n - db.tried.length;
   });
   m.vectorsList.mockImplementation(async (hostId) => structuredClone(db.vectors.filter((v) => v.hostId === hostId)));
@@ -493,6 +502,37 @@ describe("applyInterpretation", () => {
     expect(db.extractions[1]!.record.createdAttemptIds).toContain(failedOnA.id);
   });
 
+  it("a credential takes over only the tried pairs the store puts in its domain", async () => {
+    const pair = (id: string, domain: string): TriedPair => ({
+      id, engagementId: "e1", username: "jay", domain, secret: "Synth999!", secretKind: "password", hostId: "hC", service: "ssh",
+      authMode: "domain", logEntryId: null, at: 1,
+    });
+    setupBackend({ tried: [pair("tNetbios", "CORP"), pair("tOther", "corp.local")] });
+    const hit = "SMB         10.10.1.5       445    SRV12            [+] corp.lan\\jay:Synth999!";
+    await save([{ command: "nxc smb 10.10.1.5 -u jay -p 'Synth999!'", output: hit }], ["hC"]);
+    const jay = db.credentials.find((c) => c.username === "jay")!;
+    expect(jay.domain).toBe("corp.lan");
+    // CORP is the engagement's domain spelled the NetBIOS way; corp.local is another domain.
+    expect(m.sameDomains).toHaveBeenCalledWith("e1", expect.arrayContaining([["CORP", "corp.lan"], ["corp.local", "corp.lan"]]));
+    expect(db.attempts.filter((a) => a.credId === jay.id && a.result === "failed").map((a) => [a.hostId, a.service])).toEqual([["hC", "ssh"]]);
+    expect(db.tried.map((t) => t.id)).toEqual(["tOther"]);
+  });
+
+  it("a dumped credential the store holds in another spelling is proved again, not created", async () => {
+    setupBackend({ hosts: [DC01] });
+    const header = "[*] Dumping Domain Credentials (domain\\uid:rid:lmhash:nthash)\n[*] Using the DRSUAPI method to get NTDS.DIT secrets\n";
+    const dump = (out: string) => save([{ command: "impacket-secretsdump corp.lan/jay:Synth123!@10.10.1.10", output: header + out }]);
+    await dump("corp.lan\\paul:1106:aad3b435b51404eeaad3b435b51404ee:00140014001400140014001400140014:::");
+    const paul = db.credentials.find((c) => c.username === "paul")!;
+    // Stored under the NetBIOS name; the next dump prints the FQDN.
+    expect(paul.domain).toBe("corp.lan");
+    paul.domain = "CORP";
+    await dump("corp.lan\\paul:1106:aad3b435b51404eeaad3b435b51404ee:00140014001400140014001400140014:::");
+    expect(db.credentials.filter((c) => c.username === "paul").map((c) => c.id)).toEqual([paul.id]);
+    expect(db.extractions[1]!.record.createdCredentialIds).toEqual([]);
+    expect(db.extractions[1]!.record.reprovedCredentialIds).toEqual([paul.id]);
+  });
+
   describe("john cracks", () => {
     const hashes = [
       cred({ id: "hNt", type: "hash", username: "jay", domain: "corp.lan", secret: "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f", hashType: "NTLM", crackStatus: "uncracked" }),
@@ -551,7 +591,7 @@ describe("applyInterpretation", () => {
     });
   });
 
-  it("a mimikatz NetBIOS user matches the FQDN username already listed (R16)", async () => {
+  it("the store returns the FQDN username already listed for a NetBIOS user, which is proved again", async () => {
     setupBackend({ usernames: [{ id: "uJ", engagementId: "e1", username: "jay", domain: "corp.lan", sourceHostId: null, source: null, createdAt: 1 }] });
     const entry: LogEntry = {
       id: "lX", engagementId: "e1", kind: "command", title: "t", titleEdited: false, ranOn: null, hostIds: ["hC"], observations: null,
@@ -560,7 +600,8 @@ describe("applyInterpretation", () => {
     };
     const r = interpretEntry(entry, db.hosts);
     const applied = await applyInterpretation("e1", entry, r, { hosts: db.hosts, createdHostIds: [], scans: [], identity: null });
-    expect(m.usernameCreate).not.toHaveBeenCalled();
+    expect(m.usernameCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ username: "jay", domain: "CORP" }));
+    expect(db.usernames.map((u) => u.id)).toEqual(["uJ"]);
     expect(applied.record.createdUsernameIds).toEqual([]);
     // Listed again: another entry's Undo keeps it.
     expect(applied.record.reprovedUsernameIds).toEqual(["uJ"]);

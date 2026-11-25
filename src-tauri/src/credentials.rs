@@ -171,29 +171,118 @@ fn derive_hash_type(secret: &str) -> Option<String> {
     }
 }
 
-/// Identity of a credential inside one engagement: type, username, secret (hashes lower-cased),
-/// domain, and the local host for local-scope credentials.
-fn cred_key(c: &Credential) -> (String, String, String, String, String) {
-    let secret = clean_secret(&c.kind, &c.secret);
-    let secret = if c.kind == "hash" { secret.to_lowercase() } else { secret.to_string() };
+/// The kind of a hash captured from a challenge or a ticket (Kerberoast, AS-REP, NetNTLM). Such a hash differs on
+/// every capture but cracks to the same password, so the account and the kind identify it, not the text. NT and
+/// stored hashes have none. Agrees with TS `hashCaptureKind`.
+fn capture_kind(c: &Credential) -> Option<&'static str> {
+    if c.kind != "hash" {
+        return None;
+    }
+    let s = c.secret.trim();
+    let starts = |s: &str, p: &str| s.get(..p.len()).is_some_and(|h| h.eq_ignore_ascii_case(p));
+    if starts(s, "$krb5tgs$") {
+        return Some("krb5tgs");
+    }
+    if starts(s, "$krb5asrep$") {
+        return Some("krb5asrep");
+    }
+    if c.hash_type.as_deref().is_some_and(|t| starts(t, "netntlm")) || is_netntlm_shape(s) {
+        return Some("netntlm");
+    }
+    None
+}
+
+/// `user::domain:<16 hex>:...`, the shape Responder and friends print for a NetNTLM capture.
+fn is_netntlm_shape(s: &str) -> bool {
+    let Some(i) = s.find("::") else { return false };
+    let user = &s[..i];
+    if user.is_empty() || user.chars().any(|c| c == ':' || c.is_whitespace()) {
+        return false;
+    }
+    let Some((_, rest)) = s[i + 2..].split_once(':') else { return false };
+    rest.get(..16).is_some_and(|h| h.chars().all(|c| c.is_ascii_hexdigit())) && rest.as_bytes().get(16) == Some(&b':')
+}
+
+/// The domain-free part of a credential's identity inside one engagement: type, username, secret (hashes
+/// lower-cased, a captured hash by its kind), and the local host for local-scope credentials. Two credentials are
+/// the same when their keys are equal and their domains are the same domain.
+fn cred_key(c: &Credential) -> (String, String, String, String) {
+    let secret = match capture_kind(c) {
+        Some(kind) => format!("capture:{kind}"),
+        None if c.kind == "hash" => clean_secret(&c.kind, &c.secret).to_lowercase(),
+        None => clean_secret(&c.kind, &c.secret).to_string(),
+    };
     (
         c.kind.clone(),
         c.username.trim().to_lowercase(),
         secret,
-        c.domain.as_deref().unwrap_or("").trim().to_lowercase(),
         if c.scope == "local" { c.local_host_id.clone().unwrap_or_default() } else { String::new() },
     )
 }
 
-/// An existing credential (other than `except_id`) with the same key. Empty secrets never match.
+/// Whether two domain spellings name the same domain, inside an engagement whose own domain is `engagement_domain`
+/// (an FQDN such as `corp.lan`). They are the same when equal ignoring case and surrounding whitespace, or when one is
+/// the engagement's domain and the other its first label (`CORP` for `corp.lan`). With no engagement domain only
+/// equal spellings match, and a NetBIOS name never matches any other FQDN (`CORP` is not `corp.local`, `WEB01` is not
+/// `web01.corp.lan`). A blank domain matches only a blank one.
+pub fn same_domain(engagement_domain: Option<&str>, a: Option<&str>, b: Option<&str>) -> bool {
+    let norm = |s: Option<&str>| s.unwrap_or("").trim().to_lowercase();
+    let (x, y) = (norm(a), norm(b));
+    if x == y {
+        return true;
+    }
+    let fqdn = norm(engagement_domain);
+    let Some((label, _)) = fqdn.split_once('.') else { return false };
+    if label.is_empty() || x.is_empty() || y.is_empty() {
+        return false;
+    }
+    (x == fqdn && y == label) || (y == fqdn && x == label)
+}
+
+/// The engagement's own domain, the anchor of `same_domain`. None when it has none (or there is no such engagement).
+pub(crate) fn engagement_domain(conn: &Connection, engagement_id: &str) -> AppResult<Option<String>> {
+    Ok(conn
+        .query_row("SELECT domain FROM engagements WHERE id = ?1", [engagement_id], |r| r.get::<_, Option<String>>(0))
+        .optional()?
+        .flatten())
+}
+
+/// For each pair of domain spellings, whether they are the same domain in the engagement (`same_domain`). Lets the
+/// frontend ask the store instead of keeping its own copy of the rule.
+pub fn same_domains(conn: &Connection, engagement_id: &str, pairs: &[(Option<String>, Option<String>)]) -> AppResult<Vec<bool>> {
+    check_scope(conn, engagement_id, None)?;
+    let anchor = engagement_domain(conn, engagement_id)?;
+    Ok(pairs.iter().map(|(a, b)| same_domain(anchor.as_deref(), a.as_deref(), b.as_deref())).collect())
+}
+
+/// Of `rows`, the first whose domain is the same domain as `domain`, preferring an equal spelling so that of
+/// duplicates stored before the store owned identity, the one spelled the same wins.
+pub(crate) fn pick_same_domain<T>(rows: Vec<T>, domain_of: impl Fn(&T) -> Option<&str>, anchor: Option<&str>, domain: Option<&str>) -> Option<T> {
+    let at = rows
+        .iter()
+        .position(|r| same_domain(None, domain_of(r), domain))
+        .or_else(|| rows.iter().position(|r| same_domain(anchor, domain_of(r), domain)))?;
+    rows.into_iter().nth(at)
+}
+
+/// An existing credential (other than `except_id`) that is the same credential: an equal key and the same domain.
+/// Empty secrets never match.
 pub(crate) fn find_duplicate(conn: &Connection, probe: &Credential, except_id: &str) -> AppResult<Option<Credential>> {
     if clean_secret(&probe.kind, &probe.secret).is_empty() {
         return Ok(None);
     }
     let key = cred_key(probe);
-    Ok(list(conn, &probe.engagement_id)?
+    let anchor = engagement_domain(conn, &probe.engagement_id)?;
+    let candidates: Vec<Credential> = list(conn, &probe.engagement_id)?
         .into_iter()
-        .find(|c| c.id != except_id && !clean_secret(&c.kind, &c.secret).is_empty() && cred_key(c) == key))
+        .filter(|c| c.id != except_id && !clean_secret(&c.kind, &c.secret).is_empty() && cred_key(c) == key)
+        .collect();
+    Ok(pick_same_domain(candidates, |c| c.domain.as_deref(), anchor.as_deref(), probe.domain.as_deref()))
+}
+
+/// Whether two credentials are the same credential, in an engagement whose domain is `anchor`.
+fn same_credential(anchor: Option<&str>, a: &Credential, b: &Credential) -> bool {
+    cred_key(a) == cred_key(b) && same_domain(anchor, a.domain.as_deref(), b.domain.as_deref())
 }
 
 pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Credential>> {
@@ -284,22 +373,31 @@ fn insert(conn: &Connection, c: &Credential) -> AppResult<()> {
     Ok(())
 }
 
-/// Creates a credential, or returns the existing one with the same key (never an error for a duplicate).
-pub fn create(conn: &Connection, engagement_id: &str, input: CredentialInput) -> AppResult<Credential> {
+/// What `create` returns: the stored credential, and whether it was stored already (the same credential), in which
+/// case nothing was written.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedCredential {
+    pub credential: Credential,
+    pub existed: bool,
+}
+
+/// Creates a credential, or returns the stored one that is the same credential (never an error for a duplicate).
+pub fn create(conn: &Connection, engagement_id: &str, input: CredentialInput) -> AppResult<CreatedCredential> {
     check_scope(conn, engagement_id, None)?;
     let mut c = build(conn, engagement_id, input)?;
     if c.kind == "hash" && c.crack_status.is_none() {
         c.crack_status = Some("uncracked".into());
     }
     if let Some(existing) = find_duplicate(conn, &c, "")? {
-        return Ok(existing);
+        return Ok(CreatedCredential { credential: existing, existed: true });
     }
     let now = now_ms();
     c.id = uuid::Uuid::new_v4().to_string();
     c.created_at = now;
     c.updated_at = now;
     insert(conn, &c)?;
-    get(conn, &c.id)
+    Ok(CreatedCredential { credential: get(conn, &c.id)?, existed: false })
 }
 
 /// Full update. `sourceHostId`, `crackStatus`, `crackedFrom` and `fromSecretId` keep their current values
@@ -307,7 +405,10 @@ pub fn create(conn: &Connection, engagement_id: &str, input: CredentialInput) ->
 pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<Credential> {
     let current = get(conn, id)?;
     let c = build(conn, &current.engagement_id, input)?;
-    if find_duplicate(conn, &c, id)?.is_some() {
+    // An edit that keeps the credential's identity is always allowed, so a duplicate stored before the store owned
+    // identity stays editable; one that makes it another stored credential is refused.
+    let anchor = engagement_domain(conn, &current.engagement_id)?;
+    if !same_credential(anchor.as_deref(), &current, &c) && find_duplicate(conn, &c, id)?.is_some() {
         return Err(AppError::validation("secret", "A credential with these values already exists"));
     }
     for link in [&c.cracked_from, &c.from_secret_id] {
@@ -433,18 +534,17 @@ fn username_get(conn: &Connection, id: &str) -> AppResult<Username> {
     conn.query_row(&format!("SELECT {USER_COLS} FROM usernames WHERE id = ?1"), [id], user_row).optional()?.ok_or(AppError::NotFound)
 }
 
+/// The stored username that is the same username: equal ignoring case, and the same domain.
 fn username_find(conn: &Connection, engagement_id: &str, username: &str, domain: Option<&str>) -> AppResult<Option<Username>> {
-    Ok(conn.query_row(
-        &format!(
-            "SELECT {USER_COLS} FROM usernames WHERE engagement_id = ?1 AND lower(username) = lower(?2) \
-             AND lower(ifnull(domain,'')) = lower(?3)"
-        ),
-        params![engagement_id, username, domain.unwrap_or("")],
-        user_row,
-    ).optional()?)
+    let mut st = conn.prepare(&format!(
+        "SELECT {USER_COLS} FROM usernames WHERE engagement_id = ?1 AND lower(username) = lower(?2) ORDER BY created_at, id"
+    ))?;
+    let rows = st.query_map(params![engagement_id, username], user_row)?.collect::<Result<Vec<_>, _>>()?;
+    let anchor = engagement_domain(conn, engagement_id)?;
+    Ok(pick_same_domain(rows, |u| u.domain.as_deref(), anchor.as_deref(), domain))
 }
 
-/// Creates a username, or returns the existing one (case-insensitive on username and domain).
+/// Creates a username, or returns the stored one that is the same username (`username_find`).
 pub fn username_create(conn: &Connection, engagement_id: &str, input: UsernameInput) -> AppResult<Username> {
     check_scope(conn, engagement_id, None)?;
     let username = input.username.trim().to_string();
@@ -628,6 +728,157 @@ mod tests {
 
     fn count(c: &Connection, sql: &str) -> i64 {
         c.query_row(sql, [], |r| r.get(0)).unwrap()
+    }
+
+    /// `super::create`'s credential, for tests that don't look at `existed`.
+    fn create(c: &Connection, e: &str, i: CredentialInput) -> AppResult<Credential> {
+        super::create(c, e, i).map(|x| x.credential)
+    }
+
+    /// An engagement whose own domain is `domain`.
+    fn eng_on(c: &Connection, name: &str, domain: Option<&str>) -> String {
+        let e = eng(c, name);
+        c.execute("UPDATE engagements SET domain = ?2 WHERE id = ?1", params![e, domain]).unwrap();
+        e
+    }
+
+    fn on(mut i: CredentialInput, domain: &str) -> CredentialInput {
+        i.domain = Some(domain.into());
+        i
+    }
+
+    #[test]
+    fn same_domain_is_anchored_to_the_engagement() {
+        let corp = Some("corp.lan");
+        // The engagement's FQDN and its first label are one domain, either way round, in any case.
+        assert!(same_domain(corp, Some("CORP"), Some("corp.lan")));
+        assert!(same_domain(corp, Some("corp.lan"), Some("corp")));
+        assert!(same_domain(Some(" Corp.LAN "), Some("CORP"), Some("CORP.LAN")));
+        // With no engagement domain, only equal spellings.
+        assert!(!same_domain(None, Some("CORP"), Some("corp.lan")));
+        assert!(!same_domain(Some("  "), Some("CORP"), Some("corp.lan")));
+        // A NetBIOS name never matches another FQDN, nor a host's DNS name.
+        assert!(!same_domain(corp, Some("CORP"), Some("corp.local")));
+        assert!(!same_domain(corp, Some("WEB01"), Some("web01.corp.lan")));
+        assert!(!same_domain(corp, Some("corp"), Some("corporate.com")));
+        // An engagement domain that isn't an FQDN anchors nothing.
+        assert!(!same_domain(Some("CORP"), Some("corp"), Some("corp.lan")));
+        // Case and surrounding whitespace are ignored; blank matches only blank.
+        assert!(same_domain(None, Some(" Corp.Local "), Some("corp.local")));
+        assert!(same_domain(corp, None, Some("  ")));
+        assert!(!same_domain(corp, None, Some("corp.lan")));
+        assert!(!same_domain(corp, None, Some("CORP")));
+    }
+
+    #[test]
+    fn create_returns_the_stored_credential_in_either_spelling() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        let first = super::create(c, &e, on(cin("password", "jay", "Winter2024!"), "CORP")).unwrap();
+        assert!(!first.existed);
+        let again = super::create(c, &e, on(cin("password", "JAY", "Winter2024!"), "corp.lan")).unwrap();
+        assert_eq!((again.credential.id.as_str(), again.existed), (first.credential.id.as_str(), true));
+        // Another FQDN with the same first label, or no domain, is another credential.
+        assert!(!super::create(c, &e, on(cin("password", "jay", "Winter2024!"), "corp.local")).unwrap().existed);
+        assert!(!super::create(c, &e, cin("password", "jay", "Winter2024!")).unwrap().existed);
+        // Nothing was written for the duplicate.
+        assert_eq!(list(c, &e).unwrap().len(), 3);
+        // A crack finds the password stored in the other spelling.
+        let hash = create(c, &e, on(cin("hash", "jay", &"ab".repeat(16)), "corp.lan")).unwrap();
+        assert_eq!(crack(c, &hash.id, "Winter2024!").unwrap().id, first.credential.id);
+
+        // With no engagement domain the two spellings are two credentials.
+        let e2 = eng_on(c, "b", None);
+        let a = super::create(c, &e2, on(cin("password", "jay", "Winter2024!"), "CORP")).unwrap();
+        let b = super::create(c, &e2, on(cin("password", "jay", "Winter2024!"), "corp.lan")).unwrap();
+        assert!(!a.existed && !b.existed);
+        assert_ne!(a.credential.id, b.credential.id);
+    }
+
+    #[test]
+    fn a_recaptured_hash_is_one_credential_per_account_and_kind() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        let tgs = |s: &str| on(cin("hash", "svc_sql", &format!("$krb5tgs$23$*svc_sql$CORP.LAN$cifs/sql01*${s}")), "corp.lan");
+        let roast = super::create(c, &e, tgs("aaaa$bbbb")).unwrap();
+        let reroast = super::create(c, &e, tgs("cccc$dddd")).unwrap();
+        assert_eq!((reroast.credential.id.as_str(), reroast.existed), (roast.credential.id.as_str(), true));
+        // ...in either spelling of the domain.
+        let mut netbios = tgs("eeee$ffff");
+        netbios.domain = Some("CORP".into());
+        assert!(super::create(c, &e, netbios).unwrap().existed);
+        // AS-REP is another kind; another account is another credential.
+        let asrep = |u: &str, s: &str| on(cin("hash", u, &format!("$krb5asrep$23$svc_sql@CORP.LAN:{s}")), "corp.lan");
+        let a1 = super::create(c, &e, asrep("svc_sql", "11$22")).unwrap();
+        assert!(!a1.existed);
+        assert!(super::create(c, &e, asrep("svc_sql", "33$44")).unwrap().existed);
+        assert!(!super::create(c, &e, on(cin("hash", "svc_web", "$krb5tgs$23$*svc_web$CORP.LAN$http/web01*$aa$bb"), "corp.lan")).unwrap().existed);
+        // NetNTLM, by its shape or by its hash type.
+        let ntlmv2 = |chal: &str| on(cin("hash", "jay", &format!("jay::CORP:{chal}:0101aa:0101bb")), "CORP");
+        let n1 = super::create(c, &e, ntlmv2("1122334455667788")).unwrap();
+        assert!(!n1.existed);
+        assert!(super::create(c, &e, ntlmv2("8877665544332211")).unwrap().existed);
+        let mut typed = on(cin("hash", "jay", "opaque-capture-bytes"), "corp.lan");
+        typed.hash_type = Some("NetNTLMv2".into());
+        assert_eq!(super::create(c, &e, typed).unwrap().credential.id, n1.credential.id);
+        // An NT hash is identified by its value.
+        let nt1 = super::create(c, &e, on(cin("hash", "jay", &"ab".repeat(16)), "corp.lan")).unwrap();
+        let nt2 = super::create(c, &e, on(cin("hash", "jay", &"cd".repeat(16)), "corp.lan")).unwrap();
+        assert!(!nt1.existed && !nt2.existed);
+    }
+
+    #[test]
+    fn update_refuses_a_collision_but_a_stored_duplicate_stays_editable() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        // Two rows for one credential, stored before the store owned identity.
+        for (id, domain) in [("c1", "CORP"), ("c2", "corp.lan")] {
+            c.execute(
+                "INSERT INTO credentials (id,engagement_id,type,username,domain,secret,scope,created_at,updated_at) \
+                 VALUES (?1,?2,'password','jay',?3,'Winter2024!','domain',1,1)",
+                params![id, e, domain],
+            )
+            .unwrap();
+        }
+        let mut notes = on(cin("password", "jay", "Winter2024!"), "CORP");
+        notes.notes = Some("from the share".into());
+        assert_eq!(update(c, "c1", notes).unwrap().notes.as_deref(), Some("from the share"));
+        assert_eq!(list(c, &e).unwrap().len(), 2);
+        // Creating it again returns the row spelled the same.
+        let again = super::create(c, &e, on(cin("password", "jay", "Winter2024!"), "corp.lan")).unwrap();
+        assert_eq!((again.credential.id.as_str(), again.existed), ("c2", true));
+        // Editing another credential into this one is refused, in either spelling.
+        let other = create(c, &e, on(cin("password", "jay", "Spring2024!"), "corp.lan")).unwrap();
+        let (field_name, message) = field(update(c, &other.id, on(cin("password", "jay", "Winter2024!"), "CORP")));
+        assert_eq!((field_name.as_str(), message.as_str()), ("secret", "A credential with these values already exists"));
+    }
+
+    #[test]
+    fn usernames_are_the_same_in_either_spelling_of_the_engagement_domain() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        let mk = |u: &str, d: &str| UsernameInput { username: u.into(), domain: Some(d.into()), source_host_id: None, source: None };
+        let a = username_create(c, &e, mk("alice", "CORP")).unwrap();
+        assert_eq!(username_create(c, &e, mk("Alice", "corp.lan")).unwrap().id, a.id);
+        assert_ne!(username_create(c, &e, mk("alice", "corp.local")).unwrap().id, a.id);
+        let e2 = eng_on(c, "b", None);
+        let b = username_create(c, &e2, mk("alice", "CORP")).unwrap();
+        assert_ne!(username_create(c, &e2, mk("alice", "corp.lan")).unwrap().id, b.id);
+    }
+
+    #[test]
+    fn same_domains_answers_for_the_engagement() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        let s = |x: &str| Some(x.to_string());
+        let pairs = [(s("CORP"), s("corp.lan")), (s("CORP"), s("corp.local")), (None, None), (None, s("CORP"))];
+        assert_eq!(same_domains(c, &e, &pairs).unwrap(), vec![true, false, true, false]);
+        assert_eq!(same_domains(c, "nope", &pairs), Err(AppError::NotFound));
     }
 
     #[test]

@@ -41,8 +41,12 @@ beforeEach(() => {
       sourceHostId: input.sourceHostId ?? null, source: input.source ?? null, notes: null, crackStatus: null, crackedFrom: null,
       fromSecretId: null, createdAt: 1, updatedAt: 1,
     };
+    // The store's answer, stubbed with equal spellings only (the same-credential rule itself is tested in Rust).
+    const lc = (s: string | null) => (s ?? "").toLowerCase();
+    const same = stored.find((x) => x.type === c.type && lc(x.username) === lc(c.username) && lc(x.domain) === lc(c.domain) && x.secret === c.secret);
+    if (same) return { credential: same, existed: true };
     stored.push(c);
-    return c;
+    return { credential: c, existed: false };
   });
   m.extractionSave.mockImplementation(async (logEntryId, engagementId, summary, record) => ({
     logEntryId, engagementId, summary, record, createdAt: 2, undoneAt: null,
@@ -93,7 +97,8 @@ describe("saveCapture with pasted credentials", () => {
       fromSecretId: null, createdAt: 1, updatedAt: 1,
     });
     const saved = await save("admin:Summer2026!");
-    expect(m.credentialCreate).not.toHaveBeenCalled();
+    // The store returns the one it holds: proved again, nothing added.
+    expect(stored.map((c) => c.id)).toEqual(["c0"]);
     expect(saved.summary?.counts).toEqual(["Nothing new: already recorded"]);
   });
 
@@ -119,7 +124,7 @@ describe("saveCapture with pasted credentials", () => {
   it("a credential already stored is not added twice", async () => {
     await save("admin:Summer2026!");
     const again = await save("admin:Summer2026!");
-    expect(m.credentialCreate).toHaveBeenCalledTimes(1);
+    expect(stored).toHaveLength(1);
     expect(again.summary?.counts).toEqual(["Nothing new: already recorded"]);
   });
 

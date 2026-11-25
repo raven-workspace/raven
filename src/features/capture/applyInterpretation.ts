@@ -13,12 +13,9 @@ import {
   type Tick,
 } from "../../engines/checklist";
 import {
-  asCredential,
-  findStoredCredential,
   identifyHash,
   ntHalf,
   planCredentialIntake,
-  sameDomain,
   usernameKey,
   type CredentialIntakePlan,
   type PlannedAttempt,
@@ -29,7 +26,7 @@ import type { HostRef, Interpretation } from "../../engines/interpret/types";
 import { api } from "../../lib/api";
 import { shortHostName } from "../../lib/hostName";
 import { ipInScope } from "../../engines/parse/scope";
-import type { AttemptService, CredAttempt, Credential, TriedPair, TriedPairInput, Username } from "../../types/credentials";
+import type { AttemptService, CredAttempt, Credential, DomainPair, TriedPair, TriedPairInput, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { HostIdentity, PrivescVector } from "../../types/hostFacts";
 import type { ExtractionRecord, ExtractionSummary, LogEntry, OutputTick } from "../../types/log";
@@ -254,6 +251,9 @@ export async function applyInterpretation(
   const noteReproved = (ids: string[], id: string, stored: { id: string }[]) => {
     if (stored.some((x) => x.id === id) && !ids.includes(id)) ids.push(id);
   };
+  /** For each pair of domain spellings, whether the store counts them as the same domain (it owns the rule). */
+  const sameDomains = async (pairs: DomainPair[]): Promise<boolean[]> =>
+    pairs.length ? ((await api.sameDomains(engagementId, pairs)) ?? []) : [];
 
   try {
     // 1. Hosts for the IPs the output proved. A retry finds the host already made.
@@ -316,20 +316,13 @@ export async function applyInterpretation(
         username = `${shortHostName(name).toUpperCase()}$`;
       }
       if (c.scope === "local" && !hostId) continue;
-      const candidate = asCredential({
-        engagementId, type: c.type, username, domain: c.domain, secret: c.secret, hashType: c.hashType,
-        scope: c.scope, localHostId: c.scope === "local" ? hostId : null, sourceHostId: hostId, source: c.source,
-      });
-      const stored = findStoredCredential(creds, candidate);
-      if (stored) {
-        noteReproved(record.reprovedCredentialIds, stored.id, before.credentials);
-        continue;
-      }
-      const created = await api.credentialCreate(engagementId, {
+      // The store returns the credential it holds when this is the same credential: this output proves it again.
+      const { credential, existed } = await api.credentialCreate(engagementId, {
         type: c.type, username, domain: c.domain, secret: c.secret, hashType: c.hashType, scope: c.scope,
-        localHostId: candidate.localHostId, sourceHostId: hostId, source: c.source,
+        localHostId: c.scope === "local" ? hostId : null, sourceHostId: hostId, source: c.source,
       });
-      noteCredential(created);
+      if (existed) noteReproved(record.reprovedCredentialIds, credential.id, before.credentials);
+      else noteCredential(credential);
     }
 
     // 2b. Cracks: every stored hash with that value, or (john `user:password`) the only hash of that user, of the
@@ -340,11 +333,14 @@ export async function applyInterpretation(
       const prefixed = /^([^/\\]+)[/\\](.+)$/.exec((k.username ?? "").trim());
       const user = (prefixed ? prefixed[2]! : (k.username ?? "")).trim().toLowerCase();
       const userDomain = prefixed ? prefixed[1]!.trim() : null;
-      const match = k.hash
-        ? hashes.filter((c) => c.secret.trim().toLowerCase() === k.hash.trim().toLowerCase() || ntOf(c.secret) === ntOf(k.hash))
-        : user
-          ? hashes.filter((c) => c.username.trim().toLowerCase() === user && (!userDomain || sameDomain(c.domain, userDomain)) && (!k.format || isJohnFormat(c, k.format)))
-          : [];
+      let match: Credential[];
+      if (k.hash) {
+        match = hashes.filter((c) => c.secret.trim().toLowerCase() === k.hash.trim().toLowerCase() || ntOf(c.secret) === ntOf(k.hash));
+      } else {
+        const ofUser = user ? hashes.filter((c) => lc(c.username) === user && (!k.format || isJohnFormat(c, k.format))) : [];
+        const inDomain = userDomain ? await sameDomains(ofUser.map((c): DomainPair => [c.domain, userDomain])) : [];
+        match = userDomain ? ofUser.filter((_, i) => inDomain[i]) : ofUser;
+      }
       if (!k.hash && match.length !== 1) continue;
       for (const hash of match) {
         if (hash.crackStatus === "cracked") {
@@ -361,19 +357,11 @@ export async function applyInterpretation(
       }
     }
 
-    // 2c. Usernames, unless already listed (R16: CORP and corp.lan are one domain).
-    const listedUsers = [...before.usernames];
+    // 2c. Usernames. The store returns the one it lists already when this is the same username: proved again.
     for (const u of r.usernames) {
-      const known = listedUsers.find(
-        (x) => x.username.trim().toLowerCase() === u.username.trim().toLowerCase() && (!x.domain || !u.domain || sameDomain(x.domain, u.domain)),
-      );
-      if (known) {
-        noteReproved(record.reprovedUsernameIds, known.id, before.usernames);
-        continue;
-      }
-      const created = await api.usernameCreate(engagementId, { username: u.username, domain: u.domain, sourceHostId: placed(u), source: u.source });
-      noteUsername(created);
-      listedUsers.push(created);
+      const stored = await api.usernameCreate(engagementId, { username: u.username, domain: u.domain, sourceHostId: placed(u), source: u.source });
+      noteReproved(record.reprovedUsernameIds, stored.id, before.usernames);
+      noteUsername(stored);
     }
 
     // 3. nxc results and roast hashes, planned against the hosts as they are now (new IPs included).
@@ -393,18 +381,21 @@ export async function applyInterpretation(
         a.usernameId
           ? planUsers.find((u) => u.id === a.usernameId)
           : planned.find((u) => usernameKey({ ...u, domain: u.domain ?? null }) === a.usernameKey);
-      plan = {
-        ...plan,
-        attempts: plan.attempts.filter((a) => {
-          if ((!a.usernameId && !a.usernameKey) || (a.result !== "failed" && a.result !== "errored")) return true;
-          const u = usernameOf(a);
-          const secret = planCreds.find((c) => c.id === a.credId)?.secret;
-          return !pairs.some(
-            (t) => !!u && lc(t.username) === lc(u.username) && sameDomain(t.domain, u.domain) && t.secret === secret &&
-              t.hostId === a.hostId && t.service === a.service && t.authMode === (a.authMode ?? "domain"),
-          );
-        }),
-      };
+      // Stored pairs equal to a failed username attempt on all but the domain; the store says which share its domain.
+      const candidates: { a: PlannedAttempt; domains: DomainPair }[] = [];
+      for (const a of plan.attempts) {
+        if ((!a.usernameId && !a.usernameKey) || (a.result !== "failed" && a.result !== "errored")) continue;
+        const u = usernameOf(a);
+        if (!u) continue;
+        const secret = planCreds.find((c) => c.id === a.credId)?.secret;
+        for (const t of pairs) {
+          if (lc(t.username) === lc(u.username) && t.secret === secret && t.hostId === a.hostId && t.service === a.service &&
+            t.authMode === (a.authMode ?? "domain")) candidates.push({ a, domains: [t.domain, u.domain ?? null] });
+        }
+      }
+      const sameDomain = await sameDomains(candidates.map((x) => x.domains));
+      const alreadyTried = new Set(candidates.filter((_, i) => sameDomain[i]).map((x) => x.a));
+      plan = { ...plan, attempts: plan.attempts.filter((a) => !alreadyTried.has(a)) };
       // Stored rows the plan matched instead of adding (a re-roasted hash, a listed username): another entry's Undo keeps them.
       for (const id of plan.reproved.credentialIds) noteReproved(record.reprovedCredentialIds, id, before.credentials);
       for (const id of plan.reproved.usernameIds) noteReproved(record.reprovedUsernameIds, id, before.usernames);
@@ -471,12 +462,14 @@ export async function applyInterpretation(
     try {
       const pairs = after?.triedPairs ?? (await api.triedPairsList(engagementId)) ?? [];
       const known = after?.credentials ?? creds;
-      for (const id of record.createdCredentialIds) {
-        const c = known.find((x) => x.id === id);
-        if (!c) continue;
-        const matching = pairs.filter(
-          (t) => lc(t.username) === lc(c.username) && sameDomain(t.domain, c.domain) && t.secret === c.secret,
-        );
+      const created = record.createdCredentialIds.flatMap((id) => known.filter((x) => x.id === id));
+      // Pairs with the credential's username and secret; the store says which are in its domain (as promote does).
+      const candidates = created.flatMap((c) =>
+        pairs.filter((t) => lc(t.username) === lc(c.username) && t.secret === c.secret).map((t) => ({ c, t })),
+      );
+      const sameDomain = await sameDomains(candidates.map(({ c, t }): DomainPair => [t.domain, c.domain]));
+      for (const c of created) {
+        const matching = candidates.filter((x, i) => x.c === c && sameDomain[i]).map((x) => x.t);
         if (matching.length) {
           const rows = await api.credAttemptsUpsert(
             engagementId,

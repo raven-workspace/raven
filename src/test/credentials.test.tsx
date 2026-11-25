@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { api } from "../lib/api";
+import { RavenError } from "../types/errors";
 import { makeQueryClient } from "../lib/queryClient";
 import type { AccessGrant, Credential, CredentialInput, TriedPair, Username } from "../types/credentials";
 import type { Engagement } from "../types/engagement";
@@ -80,10 +81,14 @@ function mount(seed: { creds?: Credential[]; users?: Username[]; services?: Serv
     tried = tried.filter((t) => t.id !== id);
     return null;
   });
+  // The store's answer, stubbed with equal spellings only (the same-credential rule itself is tested in Rust).
   m.credentialCreate.mockImplementation(async (_e, input) => {
     const c = toCred(input);
+    const lc = (s: string | null) => (s ?? "").toLowerCase();
+    const stored = creds.find((x) => x.type === c.type && lc(x.username) === lc(c.username) && lc(x.domain) === lc(c.domain) && x.secret === c.secret);
+    if (stored) return { credential: stored, existed: true };
     creds.push(c);
-    return c;
+    return { credential: c, existed: false };
   });
   m.credentialDelete.mockImplementation(async (id) => {
     creds = creds.filter((c) => c.id !== id);
@@ -103,6 +108,9 @@ function mount(seed: { creds?: Credential[]; users?: Username[]; services?: Serv
     return u;
   });
   m.usernameCreate.mockImplementation(async (_e, input) => {
+    const lc = (s: string | null | undefined) => (s ?? "").toLowerCase();
+    const stored = users.find((x) => lc(x.username) === lc(input.username) && lc(x.domain) === lc(input.domain));
+    if (stored) return stored;
     const u: Username = { id: `u${++seq}`, engagementId: "e1", username: input.username, domain: input.domain ?? null, sourceHostId: null, source: null, createdAt: 1 };
     users.push(u);
     return u;
@@ -309,8 +317,10 @@ describe("credentials section", () => {
     await user.type(within(dlg).getByLabelText("Domain"), "CORP");
     await user.type(within(dlg).getByLabelText("Secret"), "Winter2024!");
     await user.click(within(dlg).getByRole("button", { name: "Add" }));
+    // The store says it holds this credential already: nothing is added, the stored one is offered.
     expect(await within(dlg).findByText("Already recorded: CORP\\jsmith")).toBeInTheDocument();
-    expect(m.credentialCreate).not.toHaveBeenCalled();
+    expect(m.credentialCreate).toHaveBeenCalledTimes(1);
+    expect(creds.map((c) => c.id)).toEqual(["c1"]);
     await user.click(within(dlg).getByRole("button", { name: "Use existing" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -402,8 +412,10 @@ describe("credentials section", () => {
 
     await user.type(within(region).getByLabelText("New username"), "corp\\ALICE");
     await user.click(within(region).getByRole("button", { name: "Add username" }));
+    // The store returns the username it lists already.
     expect(await within(region).findByText("corp\\ALICE is already listed")).toBeInTheDocument();
-    expect(m.usernameCreate).toHaveBeenCalledTimes(1);
+    expect(m.usernameCreate).toHaveBeenCalledTimes(2);
+    expect(users).toHaveLength(1);
 
     await user.click(within(region).getByRole("button", { name: "Copy all" }));
     expect(await navigator.clipboard.readText()).toBe("alice");
@@ -529,9 +541,10 @@ describe("credentials section", () => {
     expect(dlg.textContent).not.toContain("Winter2024!");
   });
 
-  it("editing into another credential shows the collision instead of saving", async () => {
+  it("editing into another credential shows the store's refusal instead of saving", async () => {
     const user = userEvent.setup();
-    m.credentialUpdate.mockResolvedValue(cred({ id: "c2" }));
+    // Rust `update` refuses an edit that makes it another stored credential.
+    m.credentialUpdate.mockRejectedValue(new RavenError("validation", "A credential with these values already exists", "secret"));
     mount({ creds: [
       cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" }),
       cred({ id: "c2", username: "jsmith", domain: "CORP", secret: "Other2024!" }),
@@ -543,8 +556,9 @@ describe("credentials section", () => {
     await user.clear(secret);
     await user.type(secret, "Winter2024!");
     await user.click(within(dlg).getByRole("button", { name: "Save" }));
-    expect(await within(dlg).findByText("Already recorded: CORP\\jsmith")).toBeInTheDocument();
-    expect(m.credentialUpdate).not.toHaveBeenCalled();
+    expect(await within(dlg).findByText("A credential with these values already exists")).toBeInTheDocument();
+    expect(m.credentialUpdate).toHaveBeenCalledWith("c2", expect.objectContaining({ secret: "Winter2024!" }));
+    expect(screen.getByRole("dialog")).toBe(dlg);
   });
 });
 

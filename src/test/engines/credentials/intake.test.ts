@@ -88,13 +88,24 @@ describe('planCredentialIntake', () => {
   });
 
   it('records username-list failures against listed usernames and the password credential', () => {
-    const listed = uname({ id: 'uApache', username: 'Apache' });
+    const listed = uname({ id: 'uApache', username: 'Apache', domain: 'ZONE2.TEST' });
     const pw = cred({ id: 'cPw', username: 'someone', secret: 'Synth4Pw.!' });
     const plan = run(L.fail, 'nxc smb x -u users.txt -p Synth4Pw.!', [pw], [listed])!;
     expect(plan.attempts).toEqual([
       { engagementId: 'eng1', credId: 'cPw', usernameId: 'uApache', hostId: 'h96', service: 'smb', port: 445, result: 'failed', authMode: 'domain' },
     ]);
     expect(plan.unrecorded).toBe(0);
+  });
+
+  it('plans a username listed only in another spelling: whether it is the same is the store\'s call', () => {
+    const pw = cred({ id: 'cPw', username: 'someone', secret: 'Synth4Pw.!' });
+    for (const domain of [null, 'ZONE2']) {
+      const listed = uname({ id: 'uApache', username: 'Apache', domain });
+      const plan = run(L.fail, 'nxc smb x -u users.txt -p Synth4Pw.!', [pw], [listed])!;
+      expect(plan.newUsernames).toEqual([{ username: 'apache', domain: 'zone2.test', engagementId: 'eng1', sourceHostId: 'h96', source: 'nxc' }]);
+      expect(plan.attempts[0]).toMatchObject({ usernameKey: 'eng1|apache|zone2.test' });
+      expect(plan.reproved.usernameIds).toEqual([]);
+    }
   });
 
   it('counts failures with an unknown password as unrecorded', () => {
@@ -132,19 +143,19 @@ describe('planCredentialIntake', () => {
     expect(plan.summary.valid).toBe(0);
   });
 
-  it('adds roast hashes once (dedupe against stored hashes)', () => {
+  it('lists each roast hash once; whether one is stored already is the store\'s call', () => {
     const h1 = '$krb5tgs$23$*svc$ZONE2.TEST$MSSQL/db*$aabbccdd$eeff0011';
     const h2 = '$krb5asrep$23$bob@ZONE2.TEST:aabbccdd$eeff0011';
     const stored = cred({ id: 'hs', type: 'hash', username: 'svc', domain: 'ZONE2.TEST', secret: h1 });
     const out = `${h1}\n${h2}\n${h2}`;
     const plan = planCredentialIntake({ blocks: [{ command: 'nxc ldap dc -u a -p b --kerberoasting out', output: out }], engagement: eng, hosts, credentials: [stored], usernames: [] })!;
-    expect(plan.newHashes).toHaveLength(1);
-    expect(plan.newHashes[0]).toMatchObject({
+    expect(plan.newHashes.map((h) => h.username)).toEqual(['svc', 'bob']);
+    expect(plan.newHashes[1]).toMatchObject({
       type: 'hash', username: 'bob', domain: 'ZONE2.TEST', source: 'nxc ldap roast', crackStatus: 'uncracked', engagementId: 'eng1',
     });
   });
 
-  it('a re-roast of an account already holding that kind of hash adds nothing (each roast differs)', () => {
+  it('plans one roast per account and kind (each roast differs)', () => {
     const first = '$krb5tgs$23$*app_svc$EXAM.TEST$exam.test/app_svc*$aaaa1111$bbbb2222';
     const again = '$krb5tgs$23$*app_svc$EXAM.TEST$exam.test/app_svc*$cccc3333$dddd4444';
     const asrep1 = '$krb5asrep$23$bob@EXAM.TEST:1111$2222';
@@ -154,7 +165,7 @@ describe('planCredentialIntake', () => {
       blocks: [{ command: 'nxc ldap dc -u a -p b --kerberoasting out', output: `${again}\n${asrep1}\n${asrep2}` }],
       engagement: eng, hosts, credentials: [stored], usernames: [],
     })!;
-    expect(plan.newHashes.map((h) => h.username)).toEqual(['bob']);
+    expect(plan.newHashes.map((h) => h.username)).toEqual(['app_svc', 'bob']);
   });
 
   it('names the stored hashes and usernames it matched (re-proved, interpreters-and-payloads spec §3.2)', () => {
@@ -166,10 +177,11 @@ describe('planCredentialIntake', () => {
       blocks: [{ command: 'nxc smb 10.10.60.95 -u Sam.doe -p SyntheticPasswd001 --kerberoasting out', output: `${L.admin}\n${tgsAgain}\n${tgsAgain}` }],
       engagement: eng, hosts, credentials: [eric, storedHash], usernames: [listed],
     })!;
-    expect(plan.newHashes).toEqual([]);
+    // The re-roast is planned once; the store returns the hash it holds when the plan is applied.
+    expect(plan.newHashes.map((h) => h.secret)).toEqual([tgsAgain]);
     expect(plan.newUsernames).toEqual([]);
     // The stored credential the [+] pair matched is proved again too.
-    expect(plan.reproved).toEqual({ credentialIds: ['cEric', 'hs'], usernameIds: ['uSam'] });
+    expect(plan.reproved).toEqual({ credentialIds: ['cEric'], usernameIds: ['uSam'] });
   });
 
   it('returns null for a paste with no nxc results', () => {
@@ -255,7 +267,7 @@ describe('planCredentialIntake', () => {
     expect(p3.newCredentials[0].input.secret).toBe('Welcome1');
   });
   it('C2 (R12): a [+] for a listed username with another credential\'s password is offered as a new credential', () => {
-    const alice = uname({ id: 'uAlice', username: 'alice' });
+    const alice = uname({ id: 'uAlice', username: 'alice', domain: 'corp' });
     const bob = cred({ id: 'cBob', username: 'bob', secret: 'Pass', domain: 'corp' });
     const out = [
       'SMB  10.10.60.95  445  SRV21  [+] corp\\alice:Pass (Pwn3d!)',
@@ -450,7 +462,8 @@ describe('re-planning the same output', () => {
     const again = run(output, command, credentials, usernames)!;
     expect(again.newCredentials).toEqual([]);
     expect(again.newUsernames).toEqual([]);
-    expect(again.newHashes).toEqual([]);
+    // Roast hashes are planned as printed: the store returns the one it holds.
+    expect(again.newHashes).toEqual(plan.newHashes);
     expect(again.links).toEqual([]);
     // every attempt it plans is one already stored, with the same result
     const stored = new Map(attempts.map((a) => [attemptKey(a), a.result]));

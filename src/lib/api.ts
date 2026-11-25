@@ -31,6 +31,7 @@ import type { Note, RuledOut, RuledOutInput } from "../types/notes";
 import type {
   AccessGrant,
   AccessGrantInput,
+  CreatedCredential,
   Credential,
   CredAttempt,
   CredAttemptInput,
@@ -38,6 +39,7 @@ import type {
   TriedPairInput,
   CredentialInput,
   CrackStatus,
+  DomainPair,
   Username,
   UsernameInput,
 } from "../types/credentials";
@@ -193,8 +195,11 @@ export const api = {
   hopDelete: (id: string) => call<null>("hop_delete", { id }),
   hostMarkAccessReviewed: (hostId: string) => call<Host>("host_mark_access_reviewed", { hostId }),
   credentialsList: (engagementId: string) => call<Credential[]>("credentials_list", { engagementId }),
+  /** Creates a credential, or returns the stored one that is the same credential with `existed` set. */
   credentialCreate: (engagementId: string, input: CredentialInput) =>
-    call<Credential>("credential_create", { engagementId, input }),
+    call<CreatedCredential>("credential_create", { engagementId, input }),
+  /** For each pair of domain spellings, whether the store counts them as the same domain in the engagement. */
+  sameDomains: (engagementId: string, pairs: DomainPair[]) => call<boolean[]>("same_domains", { engagementId, pairs }),
   credentialUpdate: (id: string, input: CredentialInput) =>
     call<Credential>("credential_update", { id, input }),
   credentialDelete: (id: string) => call<null>("credential_delete", { id }),

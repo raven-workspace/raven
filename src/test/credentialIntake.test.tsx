@@ -141,11 +141,11 @@ function setupBackend(seed: Partial<Db> = {}) {
       notes: input.notes ?? null, crackStatus: input.type === "hash" ? (input.crackStatus ?? "uncracked") : null,
       crackedFrom: input.crackedFrom ?? null, fromSecretId: input.fromSecretId ?? null,
     });
-    // Rust's safety net: the plain key returns the existing row.
+    // The store's identity, with equal domain spellings only (the same-domain rule itself is tested in Rust).
     const found = db.credentials.find((x) => x.secret && credKey(x) === credKey(c) && x.localHostId === c.localHostId);
-    if (found) return found;
+    if (found) return { credential: found, existed: true };
     db.credentials.push(c);
-    return c;
+    return { credential: c, existed: false };
   });
   m.credentialUpdate.mockImplementation(async (id, input: CredentialInput) => {
     const i = db.credentials.findIndex((c) => c.id === id);
@@ -427,7 +427,8 @@ describe("nxc results on save", () => {
     await saved();
 
     expect(db.log).toHaveLength(2);
-    expect(m.credentialCreate).not.toHaveBeenCalled();
+    // The roast hash is offered to the store again, which returns the one it holds.
+    expect(m.credentialCreate.mock.calls.map(([, i]) => i.username)).toEqual(["svc"]);
     expect(db.credentials).toEqual(before.credentials);
     expect(db.usernames).toEqual(before.usernames);
     expect(db.tried).toEqual(before.tried);

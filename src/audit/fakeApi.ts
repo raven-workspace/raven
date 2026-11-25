@@ -1,12 +1,13 @@
 // In-memory stand-in for src/lib/api.ts, swapped in by the audit-mode Vite plugin. Reads return the fixtures,
 // writes mutate a private copy and return the resulting record. Reloading the page restores the fixtures.
+import { credKey, stripLineBreaks } from "../engines/credentials/keys";
 import type { CommandOverlay, FieldManualSnapshot } from "../engines/fieldManual/merge";
 import { BUILTIN_LIBRARY } from "../engines/library/data";
 import { FIELD_MANUAL_CARDS } from "../engines/library/data/fieldManual";
 import { parseNote } from "../engines/manual";
 import type { Api } from "../lib/api";
 import type { ChecklistItem } from "../types/checklist";
-import type { TriedPair } from "../types/credentials";
+import type { Credential, TriedPair } from "../types/credentials";
 import type { ErrorCode } from "../types/errors";
 import type { NvdRecord } from "../types/findings";
 import { RavenError } from "../types/errors";
@@ -82,6 +83,28 @@ const unsupported = (what: string): never => {
 function assign<T extends object>(row: T, input: object, extra: Partial<T> = {}): T {
   for (const [k, v] of Object.entries(input)) if (v !== undefined) (row as Record<string, unknown>)[k] = v;
   return Object.assign(row, extra);
+}
+
+/**
+ * The store's same-domain rule (credentials.rs `same_domain`), so the audit backend dedupes as the real one does:
+ * equal ignoring case, or the engagement's own FQDN and its first label.
+ */
+function sameDomainIn(engagementId: string, a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+  const [x, y] = [norm(a), norm(b)];
+  if (x === y) return true;
+  const fqdn = norm(db.engagements.find((e) => e.id === engagementId)?.domain);
+  const label = fqdn.includes(".") ? fqdn.slice(0, fqdn.indexOf(".")) : "";
+  if (!label || !x || !y) return false;
+  return (x === fqdn && y === label) || (y === fqdn && x === label);
+}
+
+/** The stored credential that is the same credential as `c` (credentials.rs `find_duplicate`). */
+function storedSame(c: Credential): Credential | undefined {
+  if (!(c.type === "hash" ? c.secret.trim() : stripLineBreaks(c.secret))) return undefined;
+  const key = (x: Credential) => `${credKey({ ...x, domain: null })}|${x.scope === "local" ? (x.localHostId ?? "") : ""}`;
+  const same = db.credentials.filter((x) => x.engagementId === c.engagementId && x.secret && key(x) === key(c));
+  return same.find((x) => sameDomainIn(c.engagementId, x.domain, c.domain));
 }
 
 function listChecklist(engagementId: string): ChecklistItem[] {
@@ -393,9 +416,12 @@ const base = {
       crackStatus: input.type === "hash" ? ("uncracked" as const) : null, crackedFrom: null, fromSecretId: null,
       ...input, id: nid("c"), engagementId, createdAt: now(), updatedAt: now(),
     };
+    const stored = storedSame(c);
+    if (stored) return { credential: clone(stored), existed: true };
     db.credentials.push(c);
-    return clone(c);
+    return { credential: clone(c), existed: false };
   },
+  sameDomains: async (engagementId: string, pairs) => pairs.map(([a, b]) => sameDomainIn(engagementId, a, b)),
   credentialUpdate: async (id: string, input) => clone(assign(find(db.credentials, id), input, { updatedAt: now() })),
   credentialDelete: async (id: string) => remove(db.credentials, id),
   credentialCrack: async (hashId: string, plaintext: string) => {
@@ -414,7 +440,10 @@ const base = {
   },
   usernamesList: async (engagementId: string) => clone(db.usernames.filter((u) => u.engagementId === engagementId)),
   usernameCreate: async (engagementId: string, input) => {
-    const u = { domain: null, sourceHostId: null, source: null, ...input, id: nid("u"), engagementId, createdAt: now() };
+    const stored = db.usernames.find((x) =>
+      x.engagementId === engagementId && x.username.trim().toLowerCase() === input.username.trim().toLowerCase() && sameDomainIn(engagementId, x.domain, input.domain));
+    if (stored) return clone(stored);
+    const u ={ domain: null, sourceHostId: null, source: null, ...input, id: nid("u"), engagementId, createdAt: now() };
     db.usernames.push(u);
     return clone(u);
   },
@@ -523,7 +552,7 @@ const base = {
     for (const i of inputs) {
       const authMode = i.authMode ?? "domain";
       const same = (t: TriedPair) =>
-        t.engagementId === engagementId && t.username.toLowerCase() === i.username.toLowerCase() && (t.domain ?? "").toLowerCase() === (i.domain ?? "").toLowerCase() &&
+        t.engagementId === engagementId && t.username.toLowerCase() === i.username.toLowerCase() && sameDomainIn(engagementId, t.domain, i.domain) &&
         t.secret === i.secret && t.hostId === i.hostId && t.service === i.service && t.authMode === authMode;
       let row = db.triedPairs.find(same);
       if (!row) {
@@ -537,7 +566,7 @@ const base = {
   triedPairDelete: async (id: string) => remove(db.triedPairs, id),
   triedPairPromote: async (engagementId: string, username: string, domain: string | null, secret: string) => {
     const hit = (t: TriedPair) =>
-      t.engagementId === engagementId && t.username.toLowerCase() === username.toLowerCase() && (t.domain ?? "").toLowerCase() === (domain ?? "").toLowerCase() && t.secret === secret;
+      t.engagementId === engagementId && t.username.toLowerCase() === username.toLowerCase() && sameDomainIn(engagementId, t.domain, domain) && t.secret === secret;
     const n = db.triedPairs.filter(hit).length;
     db.triedPairs = db.triedPairs.filter((t) => !hit(t));
     return n;

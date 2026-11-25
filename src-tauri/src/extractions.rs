@@ -3,7 +3,7 @@
 //! entry drops the record (FK cascade) but keeps the filed data.
 
 use crate::attempts::CredAttempt;
-use crate::credentials::Credential;
+use crate::credentials::{engagement_domain, same_domain, Credential};
 use crate::db::{check_in_engagement, check_scope, now_ms};
 use crate::error::{AppError, AppResult};
 use crate::host_facts::HostIdentity;
@@ -264,19 +264,35 @@ pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
         )?;
     }
     // A username stays when something else still uses it: an attempt, grant or tried pair from another entry or made
-    // by hand, or any credential left for that user (another entry's, hand-made, or one of ours kept above).
+    // by hand, or any credential left for that user (another entry's, hand-made, or one of ours kept above). A tried
+    // pair or credential is the user's when its username is equal ignoring case and its domain is the same domain.
+    let anchor = engagement_domain(&tx, &ext.engagement_id)?;
     for id in r.created_username_ids.iter().filter(|id| !kept_users.contains(*id)) {
-        tx.execute(
-            "DELETE FROM usernames WHERE id=?1 \
-             AND NOT EXISTS (SELECT 1 FROM cred_attempts WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
-             AND NOT EXISTS (SELECT 1 FROM access_grants WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
-             AND NOT EXISTS (SELECT 1 FROM tried_pairs t WHERE t.engagement_id=usernames.engagement_id \
-               AND lower(t.username)=lower(usernames.username) AND lower(ifnull(t.domain,''))=lower(ifnull(usernames.domain,'')) \
-               AND ifnull(t.log_entry_id, '') <> ?2) \
-             AND NOT EXISTS (SELECT 1 FROM credentials c WHERE c.engagement_id=usernames.engagement_id \
-               AND lower(c.username)=lower(usernames.username) AND lower(ifnull(c.domain,''))=lower(ifnull(usernames.domain,'')))",
+        let user = tx
+            .query_row("SELECT username, domain FROM usernames WHERE id=?1", [id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+            })
+            .optional()?;
+        let Some((username, domain)) = user else { continue };
+        let linked: bool = tx.query_row(
+            "SELECT EXISTS (SELECT 1 FROM cred_attempts WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
+                 OR EXISTS (SELECT 1 FROM access_grants WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2)",
             params![id, log_entry_id],
+            |r| r.get(0),
         )?;
+        // Domains of the other entries' and hand-made tried pairs for this name, and of every credential left for it.
+        let named: Vec<Option<String>> = tx
+            .prepare(
+                "SELECT domain FROM tried_pairs WHERE engagement_id=?1 AND lower(username)=lower(?2) \
+                   AND ifnull(log_entry_id, '') <> ?3 \
+                 UNION ALL SELECT domain FROM credentials WHERE engagement_id=?1 AND lower(username)=lower(?2)",
+            )?
+            .query_map(params![ext.engagement_id, username, log_entry_id], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        if linked || named.iter().any(|d| same_domain(anchor.as_deref(), d.as_deref(), domain.as_deref())) {
+            continue;
+        }
+        tx.execute("DELETE FROM usernames WHERE id=?1", [id])?;
     }
     // A service changed since the save (the owner confirmed it, or a later scan updated it) or linked to a finding stays.
     for id in &r.created_service_ids {
@@ -775,6 +791,38 @@ mod tests {
         // u4 (mia) went with this entry's credential; u5 only had this entry's attempt.
         assert_eq!(left, vec!["u1", "u2", "u3", "u6"]);
         assert_eq!(count(c, "SELECT count(*) FROM cred_attempts WHERE id='a2'"), 1);
+    }
+
+    #[test]
+    fn undo_keeps_a_username_whose_credential_or_pair_is_in_the_same_domain() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let f = setup(c);
+        c.execute("UPDATE engagements SET domain='corp.lan' WHERE id=?1", [&f.e]).unwrap();
+        log_entry(c, &f.e, "l2");
+        // This save listed jay, drew, paul and mia under the NetBIOS name.
+        for (id, user) in [("u1", "jay"), ("u2", "drew"), ("u3", "paul"), ("u4", "mia")] {
+            c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES (?1,?2,?3,'CORP',1)", params![id, f.e, user]).unwrap();
+        }
+        // jay: a hand-made credential under the engagement's FQDN (the helper stores jay@corp.lan).
+        cred(c, &f.e, "c9", "Summer2024!", 1);
+        // drew: a later entry's tried pair under the FQDN.
+        c.execute(
+            "INSERT INTO tried_pairs (id,engagement_id,username,domain,secret,secret_kind,host_id,service,auth_mode,log_entry_id,at) \
+             VALUES ('t1',?1,'Drew','corp.lan','Spring2024!','password','h1','smb','domain','l2',1)",
+            [&f.e],
+        )
+        .unwrap();
+        // paul: a credential in another domain whose first label is also CORP; mia: one for a host's account.
+        cred(c, &f.e, "c8", "Autumn2024!", 1);
+        c.execute("UPDATE credentials SET username='paul', domain='corp.local' WHERE id='c8'", []).unwrap();
+        cred(c, &f.e, "c7", "Autumn2024!", 1);
+        c.execute("UPDATE credentials SET username='mia', domain='mia.corp.lan' WHERE id='c7'", []).unwrap();
+        save_now(c, &f, ExtractionRecord { created_username_ids: ["u1", "u2", "u3", "u4"].map(String::from).to_vec(), ..Default::default() });
+        undo(c, "l1").unwrap();
+        let left: Vec<String> =
+            c.prepare("SELECT id FROM usernames ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(|x| x.unwrap()).collect();
+        assert_eq!(left, vec!["u1", "u2"]);
     }
 
     #[test]
