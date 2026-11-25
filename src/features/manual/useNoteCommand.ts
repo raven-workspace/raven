@@ -1,7 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { fillCommand } from "../../engines/checklist";
-import { METERPRETER } from "../../engines/fieldManual/classifyExam";
 import type { LibraryCommand } from "../../engines/library/types";
 import { msfLockLine } from "../../engines/payloads/msfLock";
 import { copyPlain, copySecret } from "../../lib/clipboard";
@@ -27,7 +26,8 @@ const note = (text: string, tone: "ok" | "warn") => useManualStatus.getState().s
  * outcome is written to the Manual's one status line.
  *
  * In an exam sim (or until the engagement's rules are known) the text is never hidden: a banned command is held back
- * on its first copy, and a Meterpreter command carries the Metasploit lock line.
+ * on its first copy, and a Metasploit command (by its exam rule, as in the Arsenal: a module other than multi/handler,
+ * or a Meterpreter payload) carries the Metasploit lock line.
  */
 export function useNoteCommand(command: LibraryCommand, { fill, output, base }: { fill: boolean; output: boolean; base: FillBase }): {
   cmd: FilledCommand;
@@ -52,7 +52,7 @@ export function useNoteCommand(command: LibraryCommand, { fill, output, base }: 
   const exam = !output && (!examReady || d.engagement?.kind === "exam-sim");
   const known = examReady && d.engagement?.kind === "exam-sim";
   const banned = exam && command.exam === "banned";
-  const msf = exam && !banned && command.template.split("\n").some((l) => METERPRETER.test(l))
+  const msf = exam && command.exam === "metasploit"
     ? msfLockLine({
       exam, def: { meterpreter: true }, hostId: host?.id ?? null, msfHostId: d.engagement?.msfHostId ?? null,
       hostName: (id) => shortHostName(d.hosts.find((h) => h.id === id)?.name ?? id),
