@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { api } from "../../lib/api";
 import { registerReads, storeChanged } from "../../lib/storeChange";
-import { resyncAndRefresh } from "../checklist/resync";
+import { reportError } from "../../lib/lockSignal";
+import { syncChecklist } from "../checklist/sync";
 import { servicesByHostOf } from "../checklist/state";
 import type { ServiceVerdict } from "../../types/hostFacts";
 import type { ConfirmInput, Service, ServiceInput } from "../../types/service";
@@ -37,7 +38,7 @@ export function useServiceMutations(engagementId: string, hostId: string) {
     void storeChanged(qc, { entity: "service", id, change });
     // A service (above all a confirmed identity) changes which goals apply, so the derived column can move.
     // Not fatal: a failure goes to the shared error path (a locked vault reaches the gate).
-    void resyncAndRefresh(qc, engagementId);
+    void syncChecklist({ engagementId, change: { entity: "service", id, change }, qc }).catch(reportError);
   };
   return {
     create: useMutation({ mutationFn: (input: ServiceInput) => api.serviceCreate(hostId, input), onSuccess: (s) => changed(s.id, "created") }),
@@ -52,7 +53,7 @@ export function useServiceMutations(engagementId: string, hostId: string) {
     unconfirm: useMutation({ mutationFn: (id: string) => api.serviceUnconfirm(id), onSuccess: (_s, id) => changed(id, "updated") }),
     // Deleting a service also removes the ruled-out item its dead-end verdict made.
     remove: useMutation({ mutationFn: (id: string) => api.serviceDelete(id), onSuccess: (_r, id) => changed(id, "deleted") }),
-    /** A verdict changes no goal: no resync. A dead end writes a ruled-out item; the staleness map knows. */
+    /** A verdict changes no goal: no checklist sync. A dead end writes a ruled-out item; the staleness map knows. */
     setVerdict: useMutation({
       mutationFn: (v: { id: string; verdict: ServiceVerdict | null; reason?: string }) => api.serviceSetVerdict(v.id, v.verdict, v.reason),
       onSuccess: (_s, v) => void storeChanged(qc, { entity: "service", id: v.id, change: "updated" }),

@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { registerReads, storeChanged, type StoreChange } from "../../lib/storeChange";
-import { resyncAndRefresh } from "../checklist/resync";
+import { reportError } from "../../lib/lockSignal";
+import { syncChecklist } from "../checklist/sync";
 import type {
   AccessGrantInput,
   CredAttemptInput,
@@ -27,11 +28,11 @@ registerReads(["credAttempts"], ["credAttempt"]);
  * loot on domain-joined hosts (and its removal uncovers them), and an elevated grant moves its host to
  * Post-exploitation, which can move boards. Not fatal: a failure goes to the shared error path.
  */
-function useChangedAndResync(eid: string) {
+function useChangedAndSync(eid: string) {
   const qc = useQueryClient();
-  return (change: StoreChange) => {
+  return (change: StoreChange & { entity: "credential" | "username" | "accessGrant" | "credAttempt" }) => {
     void storeChanged(qc, change);
-    void resyncAndRefresh(qc, eid);
+    void syncChecklist({ engagementId: eid, change, qc }).catch(reportError);
   };
 }
 
@@ -68,7 +69,7 @@ export function useForgetTried() {
 export function useCredentialMutations(eid: string) {
   const qc = useQueryClient();
   const changed = (id: string, change: StoreChange["change"]) => void storeChanged(qc, { entity: "credential", id, change });
-  const changedAndResync = useChangedAndResync(eid);
+  const changedAndSync = useChangedAndSync(eid);
   return {
     create: useMutation({
       mutationFn: (input: CredentialInput) => api.credentialCreate(eid, input),
@@ -80,11 +81,11 @@ export function useCredentialMutations(eid: string) {
     }),
     remove: useMutation({
       mutationFn: (id: string) => api.credentialDelete(id),
-      onSuccess: (_r, id) => changedAndResync({ entity: "credential", id, change: "deleted" }),
+      onSuccess: (_r, id) => changedAndSync({ entity: "credential", id, change: "deleted" }),
     }),
     crack: useMutation({
       mutationFn: (v: { hashId: string; plaintext: string }) => api.credentialCrack(v.hashId, v.plaintext),
-      onSuccess: (_pw, v) => changedAndResync({ entity: "credential", id: v.hashId, change: "cracked" }),
+      onSuccess: (_pw, v) => changedAndSync({ entity: "credential", id: v.hashId, change: "cracked" }),
     }),
     setCrackStatus: useMutation({
       mutationFn: (v: { id: string; status: CrackStatus }) => api.credentialSetCrackStatus(v.id, v.status),
@@ -92,14 +93,14 @@ export function useCredentialMutations(eid: string) {
     }),
     convert: useMutation({
       mutationFn: (v: { credId: string; grant: AccessGrantInput }) => api.credentialConvertToAccess(v.credId, v.grant),
-      onSuccess: (_u, v) => changedAndResync({ entity: "credential", id: v.credId, change: "converted" }),
+      onSuccess: (_u, v) => changedAndSync({ entity: "credential", id: v.credId, change: "converted" }),
     }),
   };
 }
 
 export function useUsernameMutations(eid: string) {
   const qc = useQueryClient();
-  const changedAndResync = useChangedAndResync(eid);
+  const changedAndSync = useChangedAndSync(eid);
   return {
     create: useMutation({
       mutationFn: (input: UsernameInput) => api.usernameCreate(eid, input),
@@ -108,38 +109,38 @@ export function useUsernameMutations(eid: string) {
     // A username's grants and attempts go with it.
     remove: useMutation({
       mutationFn: (id: string) => api.usernameDelete(id),
-      onSuccess: (_r, id) => changedAndResync({ entity: "username", id, change: "deleted" }),
+      onSuccess: (_r, id) => changedAndSync({ entity: "username", id, change: "deleted" }),
     }),
   };
 }
 
-/** An elevated grant moves its host to Post-exploitation (and removing it lets the host fall back), so each change re-syncs the board. */
+/** An elevated grant moves its host to Post-exploitation (and removing it lets the host fall back), so each change runs the checklist sync. */
 export function useAccessGrantMutations(eid: string) {
-  const changedAndResync = useChangedAndResync(eid);
+  const changedAndSync = useChangedAndSync(eid);
   return {
     create: useMutation({
       mutationFn: (v: { usernameId: string; grant: AccessGrantInput }) =>
         api.accessGrantCreate(eid, { ...v.grant, usernameId: v.usernameId }),
-      onSuccess: (g) => changedAndResync({ entity: "accessGrant", id: g.id, change: "created" }),
+      onSuccess: (g) => changedAndSync({ entity: "accessGrant", id: g.id, change: "created" }),
     }),
     remove: useMutation({
       mutationFn: (id: string) => api.accessGrantDelete(id),
-      onSuccess: (_r, id) => changedAndResync({ entity: "accessGrant", id, change: "deleted" }),
+      onSuccess: (_r, id) => changedAndSync({ entity: "accessGrant", id, change: "deleted" }),
     }),
   };
 }
 
 /** Hand-set cell results: the attempts drive every cell and state chip. */
 export function useCredAttemptMutations(eid: string) {
-  const changedAndResync = useChangedAndResync(eid);
+  const changedAndSync = useChangedAndSync(eid);
   return {
     upsert: useMutation({
       mutationFn: (input: CredAttemptInput) => api.credAttemptsUpsert(eid, [input]),
-      onSuccess: (saved) => changedAndResync({ entity: "credAttempt", id: saved[0]?.id ?? "", change: "updated" }),
+      onSuccess: (saved) => changedAndSync({ entity: "credAttempt", id: saved[0]?.id ?? "", change: "updated" }),
     }),
     remove: useMutation({
       mutationFn: (id: string) => api.credAttemptDelete(id),
-      onSuccess: (_r, id) => changedAndResync({ entity: "credAttempt", id, change: "deleted" }),
+      onSuccess: (_r, id) => changedAndSync({ entity: "credAttempt", id, change: "deleted" }),
     }),
   };
 }

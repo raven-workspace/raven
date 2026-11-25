@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { deleteEntryWithTicks, resyncBoards } from "../features/checklist/ticks";
+import { syncChecklist } from "../features/checklist/sync";
 import { useChecklist } from "../features/checklist/queries";
 import { useHostMutations } from "../features/hosts/queries";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
@@ -45,7 +45,7 @@ const ADMIN: CredAttempt = {
   authMode: "domain", detail: null, logEntryId: null, at: 1000,
 };
 
-/** A stateful checklist store, so a resync reads what the last put wrote. */
+/** A stateful checklist store, so a checklist sync reads what the last put wrote. */
 let store: ChecklistItem[];
 function mount(path: string, attempts: CredAttempt[], items: ChecklistItem[] = []) {
   store = items;
@@ -164,7 +164,7 @@ describe("domain admin cover", () => {
     expect(within(row).getByText("Covered by domain admin")).toBeInTheDocument();
     await user.click(within(group).getByRole("radio", { name: "To do" }));
     await waitFor(() => expect(within(row).queryByText("Covered by domain admin")).not.toBeInTheDocument());
-    // Let the resync that follows the put run, then check it never covered the item again.
+    // Let the checklist sync that follows the put run, then check it never covered the item again.
     await waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalled());
     const puts = m.checklistPut.mock.calls.flatMap((c) => c[1]).filter((i) => i.ownerId === "ws" && i.goalId === "h-pe-win-privs");
     expect(puts[0]).toMatchObject({ ownerId: "ws", status: "todo", auto: false, statusManual: true });
@@ -172,7 +172,7 @@ describe("domain admin cover", () => {
     expect(store.find((i) => i.ownerId === "ws" && i.goalId === "h-pe-win-privs")).toMatchObject({ status: "todo", statusManual: true });
   });
 
-  it("a resync that covers a host refetches the checklist, so the row shows the label", async () => {
+  it("a checklist sync that covers a host refetches the checklist, so the row shows the label", async () => {
     // WS01 is Linux at first, so DA covers nothing there; the OS edit makes it a member.
     let ws: Host = { ...WS, os: "linux" };
     const qc = makeQueryClient();
@@ -225,14 +225,19 @@ describe("domain admin cover", () => {
       }
       return store;
     });
+    // The store's entry-tick write for a deleted entry: its evidence goes, and the auto tick with it.
+    m.checklistApplyEntryTicks.mockImplementation(async () => {
+      store = store.map((i) => (i.evidence.some((e) => e.entryId === "x1") ? { ...i, status: "todo", completedAt: null, auto: false, evidence: [] } : i));
+      return store;
+    });
     m.hostSyncBoard.mockResolvedValue(undefined as never);
     m.logDelete.mockResolvedValue(null as never);
-    await deleteEntryWithTicks("e1", "x1");
+    await syncChecklist({ engagementId: "e1", change: { entity: "logEntry", id: "x1", change: "deleted" } });
     expect(m.logDelete).toHaveBeenCalledWith("x1");
     expect(store.find((i) => i.ownerId === "ws" && i.goalId === "h-loot-hashes")).toMatchObject({ status: "na", auto: true });
   });
 
-  it("a resync reads the checklist once and syncs the boards from the cover result", async () => {
+  it("a sync reads the checklist once and syncs the boards from the cover result", async () => {
     store = [];
     m.engagementGet.mockResolvedValue(E1);
     m.hostsList.mockResolvedValue([DC, WS]);
@@ -244,7 +249,7 @@ describe("domain admin cover", () => {
       return store;
     });
     m.hostSyncBoard.mockResolvedValue(undefined as never);
-    await resyncBoards("e1");
+    await syncChecklist({ engagementId: "e1", change: { entity: "credAttempt", id: "a1", change: "updated" } });
     expect(m.checklistApplyCover).toHaveBeenCalled();
     expect(m.checklistList).toHaveBeenCalledTimes(1);
   });

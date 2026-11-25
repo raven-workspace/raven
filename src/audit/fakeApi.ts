@@ -8,7 +8,7 @@ import { BUILTIN_LIBRARY } from "../engines/library/data";
 import { FIELD_MANUAL_CARDS } from "../engines/library/data/fieldManual";
 import { parseNote } from "../engines/manual";
 import type { Api } from "../lib/api";
-import type { ChecklistItem } from "../types/checklist";
+import type { ChecklistItem, EntryTick, EntryTicks } from "../types/checklist";
 import type { AttemptService, Credential, CredentialInput, TriedPair, Username, UsernameInput } from "../types/credentials";
 import type { GoalRef } from "../engines/checklist";
 import type { EngagementInput } from "../types/engagement";
@@ -324,6 +324,47 @@ function insertChecklist(g: GoalRef, status: "na" | "done", completedAt: number 
   db.checklist.push({
     ownerId: g.ownerId, goalId: g.goalId, status, notes: null, completedAt, auto: true, autoFrom: null, statusManual: false, evidence: [], updatedAt: now(),
   });
+}
+
+/** checklist.rs `replace_entry_ticks`: one entry's ticks re-derived on the engagement's rows as they are now. */
+function replaceEntryTicks(engagementId: string, e: EntryTicks): void {
+  const wanted: EntryTick[] = [];
+  for (const t of e.ticks) if (!wanted.some((w) => w.ownerId === t.ownerId && w.goalId === t.goalId)) wanted.push(t);
+  const owners = new Set(listChecklist(engagementId).map((r) => r.ownerId));
+  const stamp = { updatedAt: now() };
+  for (const r of db.checklist.filter((c) => owners.has(c.ownerId))) {
+    const i = r.evidence.findIndex((x) => x.entryId === e.entryId);
+    if (i === -1) continue;
+    const t = wanted.find((w) => w.ownerId === r.ownerId && w.goalId === r.goalId);
+    if (t) {
+      if ((r.evidence[i]!.commandId ?? null) !== (t.commandId ?? null)) {
+        r.evidence = r.evidence.map((x, j) => (j === i ? { ...x, commandId: t.commandId ?? null } : x));
+        Object.assign(r, stamp);
+      }
+      continue;
+    }
+    r.evidence = r.evidence.filter((x) => x.entryId !== e.entryId);
+    if (r.auto && r.evidence.length === 0) {
+      const status = r.autoFrom === "na" || r.autoFrom === "in_progress" ? r.autoFrom : "todo";
+      Object.assign(r, { status, completedAt: null, auto: false, autoFrom: null });
+    }
+    Object.assign(r, stamp);
+  }
+  for (const t of wanted) {
+    let r = checklistRow(t);
+    if (!r) {
+      r = { ownerId: t.ownerId, goalId: t.goalId, status: "todo", notes: null, completedAt: null, auto: false, autoFrom: null, statusManual: false, evidence: [], updatedAt: now() };
+      db.checklist.push(r);
+    }
+    if (r.evidence.some((x) => x.entryId === e.entryId)) continue;
+    r.evidence = [...r.evidence, { entryId: e.entryId, commandId: t.commandId ?? null }];
+    if (r.status !== "done") {
+      const coverMarked = r.status === "na" && r.auto && !r.statusManual;
+      const autoFrom = r.status === "in_progress" || (r.status === "na" && !coverMarked) ? r.status : null;
+      Object.assign(r, { status: "done", completedAt: e.at, auto: true, autoFrom });
+    }
+    Object.assign(r, stamp);
+  }
 }
 
 /** Create/update helper: merges `input` over the row, ignoring undefined so "absent keeps the current value" holds. */
@@ -755,11 +796,14 @@ const base = {
     if (!BOARD_COLUMNS.includes(column)) throw invalid("column", "column must be one of the six PEN-200 stages");
     return hostOut(assign(find(db.hosts, id), {}, { boardColumn: column, boardManual: true, updatedAt: now() }));
   },
+  // hosts.rs `sync_board`: a new derived column moves the card and ends a hand placement, except that a card placed
+  // by hand before any column was derived only records it.
   hostSyncBoard: async (hostId: string, derived) => {
+    if (!BOARD_COLUMNS.includes(derived)) throw invalid("derived", "column must be one of the six PEN-200 stages");
     const h = find(db.hosts, hostId);
-    if (!h.boardManual) h.boardColumn = derived;
-    h.boardDerived = derived;
-    return hostOut(h);
+    if (h.boardDerived === derived) return hostOut(h);
+    if (h.boardDerived == null && h.boardManual) return hostOut(Object.assign(h, { boardDerived: derived, updatedAt: now() }));
+    return hostOut(Object.assign(h, { boardColumn: derived, boardManual: false, boardDerived: derived, updatedAt: now() }));
   },
   hostDelete: async (id: string) => {
     find(db.hosts, id);
@@ -942,6 +986,21 @@ const base = {
       if (!r) insertChecklist(g, "done", now());
       else if (r.status === "todo" && !r.auto && !r.statusManual) Object.assign(r, { status: "done", auto: true, autoFrom: null, completedAt: now(), updatedAt: now() });
     }
+    return listChecklist(engagementId);
+  },
+
+  // checklist.rs `apply_entry_ticks`: each entry's ticks re-derived on the rows as they are now, all or nothing.
+  checklistApplyEntryTicks: async (engagementId: string, entries) => {
+    if (entries.length > MAX_ITEMS || entries.reduce((n, e) => n + e.ticks.length, 0) > MAX_ITEMS * 4) throw invalid("entries", "too many entries or ticks");
+    engagementMustExist(engagementId);
+    for (const e of entries) {
+      if (!e.entryId.trim()) throw invalid("entryId", "entry id is required");
+      for (const t of e.ticks) {
+        checkOwned(engagementId, t.ownerId);
+        if (!t.goalId.trim()) throw invalid("goalId", "goal id is required");
+      }
+    }
+    for (const e of entries) replaceEntryTicks(engagementId, e);
     return listChecklist(engagementId);
   },
 

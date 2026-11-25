@@ -63,6 +63,7 @@ function mount(opts: { services?: Service[]; hops?: Hop[]; log?: LogEntry[]; tun
   m.checklistList.mockResolvedValue(opts.items ?? []);
   m.checklistApplyFacts.mockResolvedValue(opts.items ?? []);
   m.checklistApplyCover.mockResolvedValue(opts.items ?? []);
+  m.checklistApplyEntryTicks.mockResolvedValue(opts.items ?? []);
   m.servicesListEngagement.mockResolvedValue(opts.services ?? []);
   m.hopsList.mockResolvedValue(opts.hops ?? []);
   m.tunnelsList.mockResolvedValue(opts.tunnels ?? []);
@@ -226,17 +227,21 @@ describe("engagement checklist", () => {
   it("Tick from log re-derives a tick that was missing and reports the count", async () => {
     const user = userEvent.setup();
     mount({ log: [flagEntry] });
+    // The store's entry-tick write, after the rebuild: the flag's tick is back.
+    m.checklistApplyEntryTicks.mockResolvedValue([
+      { ownerId: "h2", goalId: "h-orient-proof", status: "done", notes: null, completedAt: 1000, auto: true, autoFrom: null, evidence: [{ entryId: "f1", commandId: "flag" }], updatedAt: 1 },
+    ]);
     await user.click(await screen.findByRole("button", { name: "Tick from log" }));
     const section = screen.getByRole("region", { name: "Engagement checklist" });
     expect(await within(section).findByText("Updated 1 goal")).toBeInTheDocument();
-    expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ ownerId: "h2", goalId: "h-orient-proof", status: "done" })]);
+    expect(m.checklistApplyEntryTicks).toHaveBeenCalledWith("e1", [{ entryId: "f1", at: 1000, ticks: [expect.objectContaining({ ownerId: "h2", goalId: "h-orient-proof" })] }]);
   });
 
   it("Tick from log re-fetches the checklist and shows the repaired goal as done", async () => {
     const user = userEvent.setup();
     let repaired = false;
     mount({ services: AD });
-    // tickFromLog reads the log; from then on the store holds the repaired tick.
+    // The rebuild reads the log; from then on the store holds the repaired tick.
     m.logList.mockImplementation(async () => {
       repaired = true;
       return [];

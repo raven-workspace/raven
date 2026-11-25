@@ -1,6 +1,7 @@
 import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { api } from "../../lib/api";
-import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError, outputTicksOf } from "../checklist/ticks";
+import { CHECKLIST_FAILED, ChecklistSyncError, syncChecklist } from "../checklist/sync";
+import { lockMetasploit, MsfLockError } from "../checklist/ticks";
 import type { Host } from "../../types/host";
 import type { ExtractionSummary, Filed, LogContent, LogEntry, LogKind, NewAttachment, OutputTick } from "../../types/log";
 import type { ResolvedInterpretation } from "../../engines/interpret/resolve";
@@ -188,16 +189,22 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<SaveCaptureRes
     failures.push({ reason: e, message: EXTRACTION_FAILED, also: extractionAlso });
   }
 
-  try {
-    await afterEntrySaved(engagementId, entry, entry.id, outputTicksOf(entry.id, filing?.ticks ?? []));
-  } catch (e) {
-    const checklistAlso = "The checklist didn't update either: use Tick from log on the Engagement checklist.";
-    if (e instanceof FollowUpError) {
-      failures.push({ reason: e.reason, message: e.message, also: e.message !== CHECKLIST_FAILED ? e.message : checklistAlso });
-    } else {
-      failures.push({ reason: e, message: new PartialSaveError(entry, e).message, also: checklistAlso });
+  // The checklist sync, then the exam-sim Metasploit lock, which runs even when the sync failed. The caller's
+  // `logEntry saved` covers what they write.
+  const followUp = async (step: () => Promise<unknown>) => {
+    try {
+      await step();
+    } catch (e) {
+      const checklistAlso = "The checklist didn't update either: use Tick from log on the Engagement checklist.";
+      if (e instanceof ChecklistSyncError || e instanceof MsfLockError) {
+        failures.push({ reason: e.reason, message: e.message, also: e.message !== CHECKLIST_FAILED ? e.message : checklistAlso });
+      } else {
+        failures.push({ reason: e, message: new PartialSaveError(entry, e).message, also: checklistAlso });
+      }
     }
-  }
+  };
+  await followUp(() => syncChecklist({ engagementId, change: { entity: "logEntry", id: entry.id, change: "saved", entry, outputTicks: filing?.ticks ?? [] } }));
+  await followUp(() => lockMetasploit(engagementId, entry));
 
   // R7/R8: the summary and output ticks, after the board sync.
   if (filing) {

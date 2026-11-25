@@ -1,6 +1,5 @@
 import type { Engagement } from '../../types/engagement';
 import type { Host } from '../../types/host';
-import type { ChecklistState, Evidence, ItemState } from '../../types/checklist';
 import type { LogEntry } from '../../types/log';
 import type { Service } from '../../types/service';
 import { excludesHosts, namedHostsInLine, shellHost, type HostRef } from '../attribution';
@@ -8,7 +7,6 @@ import type { LibraryCommand } from '../library/types';
 import { matchLine } from '../library/matcher';
 import { HOST_GOALS } from './data/hostChecklist';
 import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, LATERAL_MOVEMENT_GOALS } from './data/engagementChecklist';
-import { isCoverMarked } from './daCover';
 import { adSetHosts, engagementFacts, goalApplies, hostFacts, type HostFacts } from './facts';
 import { scanProvenanceLines } from './scanImport';
 import type { ChecklistGoal } from './types';
@@ -129,96 +127,4 @@ export function ticksForEntry(entry: LogEntry, ctx: TickContext): Tick[] {
     for (const line of scanProvenanceLines(block.output ?? '')) tickLine(line, block.shell, true, shellCache);
   }
   return out;
-}
-
-/**
- * Applies ticks to one owner's checklist. A goal not yet done becomes done with `auto: true` (an 'na' or
- * 'in_progress' status is remembered in `autoFrom`); a goal already done keeps its status and gains the evidence
- * link. Returns `state` itself when nothing changes. `ticks` must already be filtered to this state's owner (`Tick.ownerId`).
- */
-export function applyTicks(state: ChecklistState | undefined, ticks: Tick[], now: number): ChecklistState {
-  const base: ChecklistState = state ?? {};
-  let next = base;
-  let changed = false;
-  for (const t of ticks) {
-    const item: ItemState = next[t.goalId] ?? { status: 'todo' };
-    const evidence = item.evidence ?? [];
-    if (evidence.some((e) => e.entryId === t.entryId)) continue;
-    const link: Evidence = { entryId: t.entryId, commandId: t.commandId };
-    const updated: ItemState = { ...item, evidence: [...evidence, link] };
-    if (item.status !== 'done') {
-      // A cover-marked 'na' is not a manual status: evidence removal returns it to todo, and the cover re-applies.
-      if ((item.status === 'na' && !isCoverMarked(item)) || item.status === 'in_progress') updated.autoFrom = item.status;
-      else delete updated.autoFrom;
-      updated.status = 'done';
-      updated.completedAt = now;
-      updated.auto = true;
-    }
-    next = { ...next, [t.goalId]: updated };
-    changed = true;
-  }
-  return changed ? next : (state ?? base);
-}
-
-/**
- * Removes the evidence one log entry left. A goal whose status came from auto-tick and has no evidence left goes
- * back to its `autoFrom` status (else 'todo') without `completedAt`. Returns `state` itself when the entry left nothing.
- */
-export function removeEntryTicks(state: ChecklistState | undefined, entryId: string): ChecklistState {
-  const base: ChecklistState = state ?? {};
-  let next = base;
-  let changed = false;
-  for (const [goalId, item] of Object.entries(base)) {
-    const evidence = item.evidence;
-    if (!evidence || !evidence.some((e) => e.entryId === entryId)) continue;
-    const kept = evidence.filter((e) => e.entryId !== entryId);
-    const updated: ItemState = { ...item };
-    if (kept.length > 0) updated.evidence = kept;
-    else delete updated.evidence;
-    if (updated.auto && kept.length === 0) {
-      updated.status = updated.autoFrom === 'na' || updated.autoFrom === 'in_progress' ? updated.autoFrom : 'todo';
-      delete updated.completedAt;
-      delete updated.auto;
-      delete updated.autoFrom;
-    }
-    next = { ...next, [goalId]: updated };
-    changed = true;
-  }
-  return changed ? next : (state ?? base);
-}
-
-/**
- * Re-applies one log entry's ticks after it was added or edited: `removeEntryTicks` then `applyTicks`, except that a
- * goal this entry still ticks keeps its link in place (with the current command id) and its `completedAt`, so editing
- * a title or output does not move completion times. Returns `state` itself when nothing changes.
- * `ticks` must already be filtered to this state's owner (`Tick.ownerId`).
- */
-export function replaceEntryTicks(state: ChecklistState | undefined, entryId: string, ticks: Tick[], now: number): ChecklistState {
-  const base: ChecklistState = state ?? {};
-  const wanted = new Map(ticks.filter((t) => t.entryId === entryId).map((t) => [t.goalId, t]));
-
-  const stillLinked: ChecklistState = {};
-  const others: ChecklistState = {};
-  let relinked = false;
-  for (const [goalId, item] of Object.entries(base)) {
-    const tick = wanted.get(goalId);
-    const idx = tick ? (item.evidence ?? []).findIndex((e) => e.entryId === entryId) : -1;
-    if (!tick || idx === -1) {
-      others[goalId] = item;
-      continue;
-    }
-    if (item.evidence![idx].commandId === tick.commandId) {
-      stillLinked[goalId] = item;
-    } else {
-      const evidence = [...item.evidence!];
-      evidence[idx] = { ...evidence[idx], commandId: tick.commandId };
-      stillLinked[goalId] = { ...item, evidence };
-      relinked = true;
-    }
-  }
-  const pruned = removeEntryTicks(others, entryId);
-  const input: ChecklistState = { ...pruned, ...stillLinked };
-  const merged = applyTicks(input, ticks, now);
-  if (pruned === others && !relinked && merged === input) return state ?? base;
-  return merged;
 }

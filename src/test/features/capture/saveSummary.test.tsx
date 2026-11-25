@@ -3,13 +3,13 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SaveSummary } from "../../../features/capture/SaveSummary/SaveSummary";
 import { useSaveSummaryStore } from "../../../features/capture/useSaveSummaryStore";
-import { afterEntrySaved } from "../../../features/checklist/ticks";
+import { syncChecklist } from "../../../features/checklist/sync";
 import { ExtractedLine } from "../../../features/log/ExtractedLine/ExtractedLine";
 import { api } from "../../../lib/api";
 import type { Extraction, ExtractionSummary, LogEntry } from "../../../types/log";
 
 vi.mock("../../../lib/api");
-vi.mock("../../../features/checklist/ticks", () => ({ afterEntrySaved: vi.fn() }));
+vi.mock("../../../features/checklist/sync", () => ({ syncChecklist: vi.fn() }));
 const m = vi.mocked(api, true);
 
 const SUMMARY: ExtractionSummary = { wins: ["2 hashes dumped"], counts: ["+3 services"], ticks: ["Ticked 'Dump hashes' on DC01"] };
@@ -34,7 +34,7 @@ beforeEach(() => {
   useSaveSummaryStore.getState().close();
   m.extractionUndo.mockResolvedValue(extraction({ undoneAt: 2 }));
   m.extractionsList.mockResolvedValue([]);
-  vi.mocked(afterEntrySaved).mockResolvedValue(undefined);
+  vi.mocked(syncChecklist).mockResolvedValue({ rebuilt: 0 });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -96,13 +96,13 @@ describe("save summary toast", () => {
     expect(screen.getByText("Ticked 'Dump hashes' on DC01")).not.toHaveClass("save-summary__win");
   });
 
-  it("Undo calls extractionUndo then afterEntrySaved", async () => {
+  it("Undo calls extractionUndo, then the checklist sync", async () => {
     wrap(<SaveSummary />);
     show();
     await act(async () => void fireEvent.click(screen.getByRole("button", { name: "Undo" })));
     expect(m.extractionUndo).toHaveBeenCalledWith("l1");
-    expect(afterEntrySaved).toHaveBeenCalledWith("e1", null, "l1");
-    expect(m.extractionUndo.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(afterEntrySaved).mock.invocationCallOrder[0]);
+    expect(syncChecklist).toHaveBeenCalledWith(expect.objectContaining({ engagementId: "e1", change: { entity: "extraction", id: "l1", change: "undone" } }));
+    expect(m.extractionUndo.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(syncChecklist).mock.invocationCallOrder[0]);
     expect(screen.queryByRole("status")).toBeNull();
   });
 

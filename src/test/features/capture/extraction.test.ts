@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { interpretEntry, NOTHING_NEW, outputTicks, proveEntry, summarize, type PlacedInterpretation, type Proved, type Ticked } from "../../../features/capture/extraction";
-import { afterEntrySaved } from "../../../features/checklist/ticks";
+import { syncChecklist } from "../../../features/checklist/sync";
 import { api } from "../../../lib/api";
 import type { ChecklistItem } from "../../../types/checklist";
 import type { CredAttempt, Credential, Username } from "../../../types/credentials";
@@ -322,28 +322,33 @@ describe("output ticks", () => {
     logEntryId: id, engagementId: "e1", summary: { wins: [], counts: [], ticks: [] }, createdAt: 1, undoneAt,
     record: { ...emptyRecord(), outputTicks: [{ ownerId: "hC", goalId: "h-vuln-spray", parser: "nxc-results" }] },
   });
-  const evidence = () => stored.checklist.find((c) => c.ownerId === "hC" && c.goalId === "h-vuln-spray");
+  // What each entry ticks, as the sync hands it to the store's conditional write (the write itself is tested in Rust
+  // and by the store scenarios).
+  const sent = () => m.checklistApplyEntryTicks.mock.calls.flatMap((c) => c[1]);
+  const spray = { ownerId: "hC", goalId: "h-vuln-spray", commandId: "out:nxc-results" };
+
+  beforeEach(() => {
+    m.checklistApplyEntryTicks.mockImplementation(async () => structuredClone(stored.checklist));
+  });
 
   it("editing an entry keeps its output ticks", async () => {
     stored.extractions.push(extraction("l9", null));
-    await afterEntrySaved("e1", entry("l9"), "l9");
-    expect(evidence()).toMatchObject({ status: "done", evidence: [{ entryId: "l9", commandId: "out:nxc-results" }] });
+    await syncChecklist({ engagementId: "e1", change: { entity: "logEntry", id: "l9", change: "updated", entry: entry("l9") } });
+    expect(sent()).toEqual([{ entryId: "l9", at: expect.any(Number), ticks: [spray] }]);
   });
 
   it("Tick from log rebuilds output ticks, except an undone extraction's", async () => {
     stored.extractions.push(extraction("l9", null), extraction("l8", 2));
     m.logList.mockResolvedValue([entry("l9"), { ...entry("l8"), hostIds: ["hW"] }]);
     m.extractionsList.mockImplementation(async () => structuredClone(stored.extractions));
-    const { loadTickContext, tickFromLog } = await import("../../../features/checklist/ticks");
-    await tickFromLog("e1", await loadTickContext("e1"));
-    expect(evidence()).toMatchObject({ status: "done", evidence: [{ entryId: "l9", commandId: "out:nxc-results" }] });
+    await syncChecklist({ engagementId: "e1", change: { entity: "log", id: "e1", change: "rebuilt" } });
+    expect(sent()).toEqual([{ entryId: "l9", at: 5, ticks: [spray] }, { entryId: "l8", at: 5, ticks: [] }]);
   });
 
   it("an undone extraction's entry ticks nothing", async () => {
-    stored.extractions.push(extraction("l9", null));
-    await afterEntrySaved("e1", entry("l9"), "l9");
-    stored.extractions[0]!.undoneAt = 2;
-    await afterEntrySaved("e1", entry("l9"), "l9");
-    expect(evidence()?.status ?? "todo").toBe("todo");
+    stored.extractions.push(extraction("l9", 2));
+    await syncChecklist({ engagementId: "e1", change: { entity: "logEntry", id: "l9", change: "updated", entry: entry("l9") } });
+    await syncChecklist({ engagementId: "e1", change: { entity: "extraction", id: "l9", change: "undone" } });
+    expect(sent()).toEqual([{ entryId: "l9", at: expect.any(Number), ticks: [] }, { entryId: "l9", at: expect.any(Number), ticks: [] }]);
   });
 });

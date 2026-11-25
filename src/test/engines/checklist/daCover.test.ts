@@ -8,12 +8,10 @@ import {
   AD_PLAYBOOKS,
   DA_COVER_LABEL,
   applicableGoals,
-  applyTicks,
   daCoverChanges,
   daCoverGoals,
   domainAdminConfirmed,
   isCoverMarked,
-  removeEntryTicks,
 } from '../../../engines/checklist';
 
 const host = (id: string, os: Host['os'], p: Partial<Host> = {}): Host => ({
@@ -132,13 +130,12 @@ describe('domain admin cover', () => {
     expect([...out.keys()]).toEqual(['WS02']);
   });
 
-  it('auto-tick on a covered item then evidence removal returns to todo', () => {
-    const covered = run(hosts, [attempt('DC', 'admin')]).get('WS01')!;
-    const ticked = applyTicks(covered, [{ ownerId: 'WS01', goalId: 'h-loot-hashes', entryId: 'x1', commandId: 'c' }], 5);
-    expect(ticked['h-loot-hashes']).toMatchObject({ status: 'done', auto: true });
-    expect(ticked['h-loot-hashes']!.autoFrom).toBeUndefined();
-    const back = removeEntryTicks(ticked, 'x1');
-    expect(back['h-loot-hashes']).toEqual({ status: 'todo' });
+  it('an item set by hand is not cover-marked, as the store reads it, so the cover never reverts it', () => {
+    const hand = { status: 'na' as const, auto: true, statusManual: true };
+    expect(isCoverMarked(hand)).toBe(false);
+    const out = run(hosts, [], new Map([['WS01', { 'h-loot-hashes': hand }]]));
+    expect(out.get('WS01')).toBeUndefined();
+    expect(daCoverGoals({ engagement, hosts, servicesByHost: servicesOf(hosts), attempts: [], byOwner: new Map([['WS01', { 'h-loot-hashes': hand }]]) }).revert).toEqual([]);
   });
 
   it('the Domain admin stage has no loot-all goal', () => {

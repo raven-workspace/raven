@@ -18,7 +18,7 @@ use crate::findings::{
 use crate::credentials::{
     self, AccessGrant, AccessGrantInput, CreatedCredential, Credential, CredentialInput, Username, UsernameInput,
 };
-use crate::checklist::{self, ChecklistItem, ChecklistItemInput, GoalRef};
+use crate::checklist::{self, ChecklistItem, ChecklistItemInput, EntryTicks, GoalRef};
 use crate::engagements::{self, Engagement, EngagementInput, Progress};
 use crate::network::{self, Hop, HopInput, InterfaceDismissal, Tunnel, TunnelInput};
 use crate::notes::{self, Note, RuledOut, RuledOutInput};
@@ -407,6 +407,15 @@ pub async fn checklist_apply_facts(
     revert: Vec<GoalRef>,
 ) -> AppResult<Vec<ChecklistItem>> {
     with_vault(app, move |v| checklist::apply_facts(v.conn()?, &engagement_id, &done, &revert)).await
+}
+
+#[tauri::command]
+pub async fn checklist_apply_entry_ticks(
+    app: AppHandle,
+    engagement_id: String,
+    entries: Vec<EntryTicks>,
+) -> AppResult<Vec<ChecklistItem>> {
+    with_vault(app, move |v| checklist::apply_entry_ticks(v.conn()?, &engagement_id, &entries)).await
 }
 
 #[tauri::command]

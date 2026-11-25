@@ -6,8 +6,7 @@ import { reportError } from "../../../lib/lockSignal";
 import { isFreeKey, useEscapeTo, useKeydown } from "../../../lib/keys";
 import type { Engagement } from "../../../types/engagement";
 import { Button, EmptyState, queryState } from "../../../ui/index";
-import { boardsSynced, resyncAndRefresh } from "../../checklist/resync";
-import { autoTickFromLog } from "../../checklist/ticks";
+import { syncChecklist } from "../../checklist/sync";
 import { HostView } from "../../hosts/HostView/HostView";
 import { CapturePanel } from "../../capture/CapturePanel/CapturePanel";
 import { NotesPanel } from "../../notes/NotesPanel/NotesPanel";
@@ -33,17 +32,12 @@ export function EngagementShell() {
     initialData: () => qc.getQueryData<Engagement[]>(engagementsKey)?.find((e) => e.id === id),
   });
 
-  // F-R1: an engagement logged before step 3 has an empty checklist; tick it from its log once, on open, before
-  // anything else syncs the board. Not blocking: a failure goes to the shared error path (a lock reaches the gate),
-  // and the next open tries again.
+  // On open, the checklist sync: an imported or older engagement gets its fact ticks, the domain admin cover and its
+  // board columns. F-R1: an engagement logged before step 3 has an empty checklist, so its first open in an app run
+  // ticks it from its log, before anything else syncs the board. Not blocking: a failure goes to the shared error
+  // path (a lock reaches the gate), and the next open tries again.
   useEffect(() => {
-    autoTickFromLog(id)
-      .then((ran) => {
-        if (!ran) return;
-        void boardsSynced(qc, id);
-      })
-      // Then once more, so an imported or older engagement gets the domain admin cover. Runs whether the tick ran or not.
-      .then(() => resyncAndRefresh(qc, id), reportError);
+    syncChecklist({ engagementId: id, change: { entity: "engagement", id, change: "opened" }, qc }).catch(reportError);
   }, [id, qc]);
 
   // Esc: host view -> engagement, engagement -> dashboard.

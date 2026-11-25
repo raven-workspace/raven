@@ -98,6 +98,7 @@ fn call(c: &Connection, cmd: &str, a: &[Value]) -> AppResult<Value> {
         "checklistApplyFacts" => {
             out!(checklist::apply_facts(c, &s(0), &arg::<Vec<checklist::GoalRef>>(cmd, a, 1), &arg::<Vec<checklist::GoalRef>>(cmd, a, 2)))
         }
+        "checklistApplyEntryTicks" => out!(checklist::apply_entry_ticks(c, &s(0), &arg::<Vec<checklist::EntryTicks>>(cmd, a, 1))),
 
         "notesGet" => out!(notes::get(c, &s(0), o(1).as_deref())),
         "notesList" => out!(notes::list(c, &s(0))),

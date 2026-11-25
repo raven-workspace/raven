@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { logCommand } from "../features/capture/logCommand";
 import { saveCapture } from "../features/capture/saveCapture";
-import { resyncBoards } from "../features/checklist/ticks";
+import { syncChecklist, type SyncChange } from "../features/checklist/sync";
 import { useCleanup } from "../features/cleanup/queries";
 import { useAccessGrantMutations, useAccessGrants, useCredentialMutations, useTriedPairs } from "../features/credentials/queries";
 import { useEngagements } from "../features/engagements/queries";
@@ -26,17 +26,19 @@ import type { Host } from "../types/host";
 import type { Extraction, LogEntry, LogEntryInput } from "../types/log";
 
 vi.mock("../lib/api");
-vi.mock("../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../features/checklist/ticks")>()),
-  resyncBoards: vi.fn(),
-  afterEntrySaved: vi.fn(),
-  deleteEntryWithTicks: vi.fn(),
+vi.mock("../features/checklist/sync", async (orig) => ({
+  ...(await orig<typeof import("../features/checklist/sync")>()),
+  syncChecklist: vi.fn(),
 }));
 vi.mock("../features/capture/saveCapture", async (orig) => ({
   ...(await orig<typeof import("../features/capture/saveCapture")>()),
   saveCapture: vi.fn(),
 }));
 const m = vi.mocked(api, true);
+
+/** Whether the checklist sync ran for this store change in engagement e1. */
+const synced = (change: SyncChange) =>
+  vi.mocked(syncChecklist).mock.calls.some(([a]) => a.engagementId === "e1" && JSON.stringify(a.change) === JSON.stringify(change));
 
 function setup() {
   const qc = makeQueryClient();
@@ -46,7 +48,7 @@ function setup() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(resyncBoards).mockResolvedValue(undefined);
+  vi.mocked(syncChecklist).mockResolvedValue({ rebuilt: 0 });
   m.engagementGet.mockResolvedValue({ id: "e1", kind: "lab", domain: null, msfHostId: null } as Engagement);
   m.engagementsList.mockResolvedValue([]);
   m.engagementsProgress.mockResolvedValue({});
@@ -86,8 +88,7 @@ describe("views refetch after a write", () => {
 
   it("log update whose checklist follow-up fails still refreshes the log", async () => {
     m.logUpdate.mockResolvedValue({ id: "l1", content: { kind: "note", text: "x" }, hostIds: [] } as unknown as LogEntry);
-    const { afterEntrySaved } = await import("../features/checklist/ticks");
-    vi.mocked(afterEntrySaved).mockRejectedValue(new Error("db busy"));
+    vi.mocked(syncChecklist).mockRejectedValue(new Error("db busy"));
     const { wrapper } = setup();
     const { result } = renderHook(() => {
       useLog("e1");
@@ -152,14 +153,14 @@ describe("views refetch after a write", () => {
     const lists = [m.engagementsList, m.engagementsProgress, m.logList];
     await waitFor(() => lists.forEach((l) => expect(l).toHaveBeenCalledTimes(1)));
     await act(() => result.current.remove.mutateAsync("h1"));
-    // At least once more: the resync that follows refetches the hosts (and so progress) again.
+    // At least once more: a host delete leaves the hosts (and so progress) stale.
     await waitFor(() => lists.forEach((l) => expect(l.mock.calls.length).toBeGreaterThanOrEqual(2)));
     // A deleted DC changes which hosts are AD hosts: the board re-syncs.
-    await waitFor(() => expect(resyncBoards).toHaveBeenCalledWith("e1"));
+    await waitFor(() => expect(synced({ entity: "host", id: "h1", change: "deleted" })).toBe(true));
   });
 });
 
-describe("writes keep their board resync", () => {
+describe("writes run the checklist sync", () => {
   it("host delete drops that host's unsaved note text only", async () => {
     m.hostDelete.mockResolvedValue(null);
     useNotesStore.setState({
@@ -178,22 +179,21 @@ describe("writes keep their board resync", () => {
     useNotesStore.setState({ pending: {}, errors: {} });
   });
 
-  it("access grant create and delete re-sync the board, then the hosts refetch", async () => {
+  it("access grant create and delete re-sync the board, which reports its writes to the same query client", async () => {
     m.accessGrantCreate.mockResolvedValue({ id: "g1" } as AccessGrant);
     m.accessGrantDelete.mockResolvedValue(null);
-    const { wrapper } = setup();
+    const { qc, wrapper } = setup();
     const { result } = renderHook(() => {
       useHosts("e1");
       return useAccessGrantMutations("e1");
     }, { wrapper });
     await waitFor(() => expect(m.hostsList).toHaveBeenCalledTimes(1));
     await act(() => result.current.create.mutateAsync({ usernameId: "u1", grant: { hostId: "h1", level: "admin", via: "winrm" } }).then(() => undefined));
-    await waitFor(() => expect(resyncBoards).toHaveBeenCalledWith("e1"));
-    await waitFor(() => expect(m.hostsList.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => expect(synced({ entity: "accessGrant", id: "g1", change: "created" })).toBe(true));
+    expect(vi.mocked(syncChecklist).mock.calls.every(([a]) => a.qc === qc)).toBe(true);
 
-    vi.mocked(resyncBoards).mockClear();
     await act(() => result.current.remove.mutateAsync("g1"));
-    await waitFor(() => expect(resyncBoards).toHaveBeenCalledWith("e1"));
+    await waitFor(() => expect(synced({ entity: "accessGrant", id: "g1", change: "deleted" })).toBe(true));
   });
 
   it("changing a host's OS re-syncs the board", async () => {
@@ -201,6 +201,6 @@ describe("writes keep their board resync", () => {
     const { wrapper } = setup();
     const { result } = renderHook(() => useHostMutations("e1"), { wrapper });
     await act(() => result.current.update.mutateAsync({ id: "h1", input: { name: "x", os: "linux" } }).then(() => undefined));
-    await waitFor(() => expect(resyncBoards).toHaveBeenCalledWith("e1"));
+    await waitFor(() => expect(synced({ entity: "host", id: "h1", change: "updated" })).toBe(true));
   });
 });

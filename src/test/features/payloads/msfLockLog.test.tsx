@@ -17,12 +17,8 @@ import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 
-// The real copy-and-log path (logCommand, saveCapture, afterEntrySaved, lockMetasploit) over the fake API.
+// The real copy-and-log path (logCommand, saveCapture, the checklist sync, lockMetasploit) over the fake API.
 vi.mock("../../../lib/api");
-vi.mock("../../../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../../../features/checklist/ticks")>()),
-  resyncBoards: vi.fn().mockResolvedValue(undefined),
-}));
 const m = vi.mocked(api, true);
 
 // Synthetic fixtures only (RFC 5737 addresses, invented names).
