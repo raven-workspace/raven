@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { fillCommand } from "../../engines/checklist";
 import type { LibraryCommand } from "../../engines/library/types";
-import { msfLockLine } from "../../engines/payloads/msfLock";
+import { examReading } from "../../engines/exam";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { shortHostName } from "../../lib/hostName";
 import { reportError } from "../../lib/lockSignal";
@@ -15,7 +15,6 @@ import { useManualStatus } from "./useManualStatus";
 
 export type FillBase = ReturnType<typeof useFillBase>;
 
-export const BANNED = "Not allowed in the exam";
 const noop = () => {};
 const note = (text: string, tone: "ok" | "warn") => useManualStatus.getState().set(text, tone);
 
@@ -25,19 +24,17 @@ const note = (text: string, tone: "ok" | "warn") => useManualStatus.getState().s
  * text copies as written. Copy goes through the copy guard (an unfilled token holds the first copy back). Every
  * outcome is written to the Manual's one status line.
  *
- * In an exam sim (or until the engagement's rules are known) the text is never hidden: a banned command is held back
- * on its first copy, and a Metasploit command (by its exam rule, as in the Arsenal: a module other than multi/handler,
- * or a Meterpreter payload) carries the Metasploit lock line.
+ * The exam rules read it as a reading surface (`examReading`): the text is never hidden, `examLine` is its exam
+ * verdict's line, and a banned command, a Metasploit command locked to another host, or one whose verdict waits on the
+ * engagement's kind is held back on its first copy.
  */
 export function useNoteCommand(command: LibraryCommand, { fill, output, base }: { fill: boolean; output: boolean; base: FillBase }): {
   cmd: FilledCommand;
   copy(): Promise<"copied" | "guarded">;
   copyAndLog(): Promise<void>;
-  banned: boolean;
-  msf: { text: string; breach: boolean } | null;
-  known: boolean;
+  examLine: { text: string; breach: boolean } | null;
 } {
-  const { d, host, makeInput, examReady } = base;
+  const { d, host, makeInput, exam } = base;
   const qc = useQueryClient();
   const hostName = host ? shortHostName(host.name) : null;
   const guard = useCopyGuard({ focusToken: noop, focusCred: noop, hostName, onNote: note });
@@ -48,17 +45,9 @@ export function useNoteCommand(command: LibraryCommand, { fill, output, base }: 
     [fill, command, input],
   );
 
-  // Fail closed: until the engagement's kind is known, a copy is held back as in an exam (the lines show once it is known).
-  const exam = !output && (!examReady || d.engagement?.kind === "exam-sim");
-  const known = examReady && d.engagement?.kind === "exam-sim";
-  const banned = exam && command.exam === "banned";
-  const msf = exam && command.exam === "metasploit"
-    ? msfLockLine({
-      exam, def: { meterpreter: true }, hostId: host?.id ?? null, msfHostId: d.engagement?.msfHostId ?? null,
-      hostName: (id) => shortHostName(d.hosts.find((h) => h.id === id)?.name ?? id),
-    })
-    : null;
-  const warn = banned ? { warn: BANNED, warnKey: "exam" } : msf?.breach ? { warn: msf.text, warnKey: "msf" } : undefined;
+  // A reading surface: the command always shows, with its verdict's line; a forbidden or pending one is held back once.
+  const reading = examReading(command, exam, (id) => shortHostName(d.hosts.find((h) => h.id === id)?.name ?? id));
+  const warn = reading.holdBack;
 
   const copy = (): Promise<"copied" | "guarded"> => {
     const text = cmd.copyText ?? cmd.text;
@@ -80,5 +69,5 @@ export function useNoteCommand(command: LibraryCommand, { fill, output, base }: 
     }
   };
 
-  return { cmd, copy, copyAndLog, banned, msf, known };
+  return { cmd, copy, copyAndLog, examLine: reading.line };
 }

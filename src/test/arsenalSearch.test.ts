@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { examScope } from "../engines/exam";
 import { searchArsenal } from "../engines/library/arsenalSearch";
 import type { CardMeta } from "../engines/library/store";
 import type { LibraryCommand } from "../engines/library/types";
@@ -38,12 +39,13 @@ describe("searchArsenal", () => {
     expect(g.map((x) => x.category)).toEqual(["Pivoting"]);
   });
   it("exam-banned category is dropped", () => {
-    const g = searchArsenal("", { library: [BANNED, FIND_CREDS], cards: [], generators: [], exam: { kind: "exam-sim", hostId: "h" } });
+    const g = searchArsenal("", { library: [BANNED, FIND_CREDS], cards: [], generators: [], exam: examScope({ kind: "exam-sim", msfHostId: null }, "h") });
     expect(g.find((x) => x.category === "Exploitation")).toBeUndefined();
     expect(g.map((x) => x.category)).toEqual(["Enumeration"]);
   });
-  it("examPending returns nothing", () => {
-    expect(searchArsenal("", { library: PIVOT_COMMANDS, cards: [], generators: [], examPending: true })).toEqual([]);
+  it("pending exam rules list no command that needs a verdict", () => {
+    const g = searchArsenal("", { library: [BANNED, FIND_CREDS], cards: [], generators: [], exam: examScope(undefined, "h") });
+    expect(g.flatMap((x) => x.hits.map((h) => h.id))).toEqual([FIND_CREDS.id]);
   });
   it("empty query lists everything, groups by label and hits by title", () => {
     const g = searchArsenal("", { library: [PSEXEC, FIND_CREDS, ...PIVOT_COMMANDS], cards: [], generators: [{ id: "transfer", title: "Transfer a file", category: "Shells-and-Transfers" }] });

@@ -291,10 +291,22 @@ describe("NoteView commands", () => {
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("sqlmap -u http://198.51.100.20/zz"));
   });
 
+  it("until the engagement's kind is known a banned command shows no line and its first copy is held", async () => {
+    m.engagementGet.mockImplementation(() => new Promise(() => {}));
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText((_, el) => el?.tagName === "PRE" && /^sqlmap -u http:\/\//.test(el.textContent ?? ""));
+    expect(screen.queryByText("Not allowed in the exam")).not.toBeInTheDocument();
+    await navigator.clipboard.writeText("untouched");
+    await user.click(screen.getByRole("button", { name: "Copy command: Banned: sqlmap -u http://{TARGET_IP}/zz" }));
+    await waitFor(() => expect(useManualStatus.getState().text).toMatch(/^The exam rules aren't loaded yet\. Press ↵ again/));
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+  });
+
   it("in an exam sim a Meterpreter command shows the Metasploit lock wording", async () => {
     m.engagementGet.mockResolvedValue({ ...E1, kind: "exam-sim" });
     mount();
-    expect(await screen.findByText("Using Meterpreter here makes this your Metasploit machine")).toBeInTheDocument();
+    expect(await screen.findByText("Using Metasploit here makes this your Metasploit machine")).toBeInTheDocument();
   });
 });
 

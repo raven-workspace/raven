@@ -2,49 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Engagement } from '../../../types/engagement';
 import type { Host } from '../../../types/host';
 import type { LogEntry } from '../../../types/log';
-import type { LibraryCommand } from '../../../engines/library/types';
-import { BUILTIN_LIBRARY } from '../../../engines/library/data';
-import { filterForKind, isMetasploitLine, metasploitHostIds, metasploitWarning } from '../../../engines/checklist';
-
-const cmd = (id: string, exam?: LibraryCommand['exam']): LibraryCommand =>
-  ({ id, title: id, tool: 't', template: id, os: 'any', runFrom: 'attacker', goals: [], source: 'raven', ...(exam ? { exam } : {}) }) as LibraryCommand;
-const set = [cmd('plain'), cmd('banned', 'banned'), cmd('msf', 'metasploit')];
-
-describe('filterForKind', () => {
-  it('exam sim removes banned commands', () => {
-    const { shown } = filterForKind(set, 'exam-sim', { hostId: 'a', msfHostId: null });
-    expect(shown.map((c) => c.id)).not.toContain('banned');
-    expect(shown.map((c) => c.id)).toContain('plain');
-  });
-
-  it('lab and client keep banned commands', () => {
-    for (const kind of ['lab', 'client'] as const) {
-      const { shown, msfMarker } = filterForKind(set, kind, { hostId: 'a', msfHostId: 'b' });
-      expect(shown).toHaveLength(3);
-      expect(msfMarker.size).toBe(0);
-    }
-  });
-
-  it('metasploit commands show only on the locked host', () => {
-    expect(filterForKind(set, 'exam-sim', { hostId: 'a', msfHostId: 'a' }).shown.map((c) => c.id)).toContain('msf');
-    const other = filterForKind(set, 'exam-sim', { hostId: 'b', msfHostId: 'a' });
-    expect(other.shown.map((c) => c.id)).not.toContain('msf');
-    expect(other.msfMarker.size).toBe(0);
-  });
-
-  it('unlocked metasploit commands are marked', () => {
-    const r = filterForKind(set, 'exam-sim', { hostId: 'a', msfHostId: null });
-    expect(r.shown.map((c) => c.id)).toContain('msf');
-    expect([...r.msfMarker]).toEqual(['msf']);
-  });
-
-  it('keeps Responder commands in exam sim (only poisoning/spoofing are banned)', () => {
-    const responder = BUILTIN_LIBRARY.filter((c) => /responder/i.test(c.tool) && !(c.tags ?? []).some((t) => t === 'poisoning' || t === 'spoofing'));
-    expect(responder.length).toBeGreaterThan(0);
-    const { shown } = filterForKind(responder, 'exam-sim', { hostId: 'a', msfHostId: null });
-    expect(shown.length).toBe(responder.filter((c) => c.exam !== 'banned').length);
-  });
-});
+import { isMetasploitLine, metasploitHostIds, metasploitWarning } from '../../../engines/checklist';
 
 describe('isMetasploitLine rules', () => {
   it('short-form multi handler is not metasploit', () => {

@@ -281,7 +281,7 @@ describe("Meterpreter lock", () => {
 
   it("no lock yet: a muted line, and ↵ copies at once", async () => {
     const { user, d } = await openOn(MET, EXAM);
-    expect(d.getByText("Using Meterpreter here makes this your Metasploit machine")).not.toHaveClass("payload-block__lock--breach");
+    expect(d.getByText("Using Metasploit here makes this your Metasploit machine")).not.toHaveClass("payload-block__lock--breach");
     await navigator.clipboard.writeText("untouched");
     await user.keyboard("{Enter}");
     expect(await navigator.clipboard.readText()).toBe(d.getByLabelText("Command: Payload").textContent);

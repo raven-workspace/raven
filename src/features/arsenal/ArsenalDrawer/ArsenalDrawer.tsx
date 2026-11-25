@@ -79,20 +79,14 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
       credRef.current?.open();
     }
   });
-  const { d, host, cred, credOwnerId, makeInput, examReady } = useFillBase(engagementId, hostId);
+  const { d, host, cred, credOwnerId, makeInput, examReady, exam } = useFillBase(engagementId, hostId);
 
-  // Exam rules fail closed: until the engagement is known the drawer lists nothing, not even categories.
+  // A list under the exam rules: until the engagement's kind is known it offers no command that would need a verdict.
   const groups = useMemo(
-    () =>
-      examReady
-        ? searchArsenal(query, {
-            library: getLibrary(), cards: getCards(), generators: GENERATORS,
-            ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
-          })
-        : [],
+    () => searchArsenal(query, { library: getLibrary(), cards: getCards(), generators: GENERATORS, exam }),
     // getLibrary()/getCards() change only with the library version.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query, host, d.engagement, examReady, libraryVersion],
+    [query, exam, libraryVersion],
   );
   const searching = query.trim() !== "";
   const listing = searching || category !== null;
