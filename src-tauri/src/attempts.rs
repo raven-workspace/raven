@@ -348,6 +348,7 @@ mod tests {
             },
         )
         .unwrap()
+        .credential
         .id
     }
 

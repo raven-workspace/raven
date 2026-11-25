@@ -1,7 +1,5 @@
 import {
-  asCredential,
   defaultHashType,
-  findDuplicateCredential,
   usernameKey,
   type CredentialIntakePlan,
   type PlannedAttempt,
@@ -22,6 +20,7 @@ export interface IntakeContext {
     credential?: (c: Credential) => void;
     /** Told the id of a stored credential an accepted pair or hash matched instead of adding (it may have been made earlier in this same save). */
     reused?: (id: string) => void;
+    /** Told each username the store returns, a stored one included: the store decides whether it was listed. */
     username?: (u: Username) => void;
     attempts?: (rows: CredAttempt[]) => void;
   };
@@ -46,20 +45,21 @@ function withoutEngagement<T extends { engagementId: string }>(o: T): Omit<T, "e
 /**
  * Records a credential intake plan, with the saved entry as proof (spec: nxc intake). In order:
  *  1. the new usernames (their ids replace the plan's `usernameKey`s);
- *  2. the accepted pending credentials, reusing a stored duplicate (and filling its empty `fromSecretId`);
+ *  2. the accepted pending credentials, reusing the stored one the store says is the same (and filling its empty
+ *     `fromSecretId`);
  *  3. the plan's attempts;
  *  4. each accepted credential's own attempts, then the re-key of its username-spray results onto it; a declined
  *     one's `ifDeclined` attempts instead;
- *  5. the new roast hashes (deduped against the current list);
+ *  5. the roast hashes (the store returns one it already holds);
  *  6. the plan's links, only where `fromSecretId` is empty.
  * Every write is idempotent (dedupe on create, no-downgrade upserts), so the same output saved twice adds nothing.
  */
 export async function applyIntake(engagementId: string, plan: CredentialIntakePlan, ctx: IntakeContext): Promise<void> {
   const accepted = new Set(ctx.acceptKeys);
-  // The panel's list may be stale; dedupe against the store's.
+  // The panel's list may be stale: the links in step 6 read the store's.
   const credentials = await api.credentialsList(engagementId);
 
-  // 1. Usernames. usernameCreate returns the stored row on a case-insensitive duplicate.
+  // 1. Usernames. usernameCreate returns the stored row when the store holds the same username.
   const usernameIds = new Map<string, string>();
   for (const u of plan.newUsernames) {
     const created = await api.usernameCreate(engagementId, withoutEngagement(u));
@@ -84,27 +84,35 @@ export async function applyIntake(engagementId: string, plan: CredentialIntakePl
     if (inputs.length) ctx.onFiled?.attempts?.((await api.credAttemptsUpsert(engagementId, inputs)) ?? []);
   };
 
+  /** Keeps the local list in step with what the store returned. */
+  const remember = (c: Credential) => {
+    const at = credentials.findIndex((x) => x.id === c.id);
+    if (at === -1) credentials.push(c);
+    else credentials[at] = c;
+  };
+
   const addCredential = async (planned: PlannedCredential): Promise<string> => {
-    const existing = findDuplicateCredential(credentials, asCredential(planned));
-    if (existing) {
-      ctx.onFiled?.reused?.(existing.id);
-      // Reused for a spray hit: remember the owner-less secret it came from, never replacing a link.
-      if (planned.fromSecretId && !existing.fromSecretId && planned.fromSecretId !== existing.id) {
-        const updated = await api.credentialUpdate(existing.id, { ...inputOf(existing), fromSecretId: planned.fromSecretId });
-        ctx.onFiled?.credential?.(updated);
-        credentials[credentials.indexOf(existing)] = updated;
-      }
-      return existing.id;
-    }
     const input: CredentialInput = withoutEngagement(planned);
     if (input.type === "hash" && !input.hashType) {
       const hashType = defaultHashType(input.secret ?? "");
       if (hashType) input.hashType = hashType;
     }
-    const created = await api.credentialCreate(engagementId, input);
-    ctx.onFiled?.credential?.(created);
-    if (!credentials.some((c) => c.id === created.id)) credentials.push(created);
-    return created.id;
+    // The store decides whether this is a credential it holds already.
+    const { credential: stored, existed } = await api.credentialCreate(engagementId, input);
+    if (!existed) {
+      ctx.onFiled?.credential?.(stored);
+      remember(stored);
+      return stored.id;
+    }
+    ctx.onFiled?.reused?.(stored.id);
+    remember(stored);
+    // Reused for a spray hit: remember the owner-less secret it came from, never replacing a link.
+    if (planned.fromSecretId && !stored.fromSecretId && planned.fromSecretId !== stored.id) {
+      const updated = await api.credentialUpdate(stored.id, { ...inputOf(stored), fromSecretId: planned.fromSecretId });
+      ctx.onFiled?.credential?.(updated);
+      remember(updated);
+    }
+    return stored.id;
   };
 
   // 2. Accepted credentials.

@@ -238,9 +238,9 @@ describe("Evidence rail: the log column", () => {
 
   it("lists a credential found elsewhere that nxc showed works on the target, with no source host or grant", async () => {
     await seed();
-    const found = await api.credentialCreate("e-exam", { type: "password", username: "svc_backup", secret: "Backup#2026", source: "paste" });
+    const { credential: found } = await api.credentialCreate("e-exam", { type: "password", username: "svc_backup", secret: "Backup#2026", source: "paste" });
     await api.credAttemptsUpsert("e-exam", [{ credId: found.id, hostId: LNX, service: "ssh", port: 22, result: "valid", authMode: "local" }]);
-    const failed = await api.credentialCreate("e-exam", { type: "password", username: "eve", secret: "nope" });
+    const { credential: failed } = await api.credentialCreate("e-exam", { type: "password", username: "eve", secret: "nope" });
     await api.credAttemptsUpsert("e-exam", [{ credId: failed.id, hostId: LNX, service: "ssh", port: 22, result: "failed" }]);
     mount();
     await ready();
@@ -254,7 +254,7 @@ describe("Evidence rail: the log column", () => {
 
   it("says no credential or access only when nothing ties one to the target", async () => {
     await seed();
-    const found = await api.credentialCreate("e-exam", { type: "password", username: "svc_backup", secret: "Backup#2026" });
+    const { credential: found } = await api.credentialCreate("e-exam", { type: "password", username: "svc_backup", secret: "Backup#2026" });
     await api.credAttemptsUpsert("e-exam", [{ credId: found.id, hostId: "h-exam-ms01", service: "ssh", result: "valid" }]);
     for (const c of await api.credentialsList("e-exam")) if (c.localHostId === LNX || c.sourceHostId === LNX) await api.credentialDelete(c.id);
     for (const g of await api.accessGrantsList("e-exam")) if (g.hostId === LNX) await api.accessGrantDelete(g.id);

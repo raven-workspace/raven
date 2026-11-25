@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { usernameKey, usernameLabel } from "../../../engines/credentials/index";
+import { usernameLabel } from "../../../engines/credentials/index";
 import type { AccessGrant, Username } from "../../../types/credentials";
 import type { Host } from "../../../types/host";
 import { Trash } from "@phosphor-icons/react";
@@ -35,12 +35,10 @@ export function UsernamesList({ eid, usernames, grants, hosts }: {
     e.preventDefault();
     const p = parseUsername(draft);
     if (!p.username) return setError("Give it a username");
-    if (usernames.some((u) => usernameKey(u) === usernameKey({ engagementId: eid, ...p }))) {
-      return setError(`${usernameLabel(p)} is already listed`);
-    }
     setError(undefined);
+    // The store returns the username it lists already when this is the same username.
     um.create.mutate(p, {
-      onSuccess: () => setDraft(""),
+      onSuccess: (u) => (usernames.some((x) => x.id === u.id) ? setError(`${usernameLabel(p)} is already listed`) : setDraft("")),
       onError: (err) => setError(err.message),
     });
   };

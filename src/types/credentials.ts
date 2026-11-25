@@ -25,6 +25,18 @@ export interface Credential {
   updatedAt: number;
 }
 
+/**
+ * Mirrors the Rust `CreatedCredential`: what creating a credential returns. The store decides whether the input is a
+ * credential it already holds (the same credential, GLOSSARY); then `existed` is true and nothing was written.
+ */
+export interface CreatedCredential {
+  credential: Credential;
+  existed: boolean;
+}
+
+/** Two domain spellings to ask the store about (`sameDomains`). */
+export type DomainPair = [string | null, string | null];
+
 /** Mirrors the Rust `CredentialInput` (create and full update). */
 export interface CredentialInput {
   type: CredentialType;

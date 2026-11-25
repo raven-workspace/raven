@@ -16,7 +16,7 @@ use crate::findings::{
     self, FailedAttempt, FailedAttemptInput, Finding, FindingFile, FindingFileInput, FindingInput,
 };
 use crate::credentials::{
-    self, AccessGrant, AccessGrantInput, Credential, CredentialInput, Username, UsernameInput,
+    self, AccessGrant, AccessGrantInput, CreatedCredential, Credential, CredentialInput, Username, UsernameInput,
 };
 use crate::checklist::{self, ChecklistItem, ChecklistItemInput, GoalRef};
 use crate::engagements::{self, Engagement, EngagementInput, Progress};
@@ -495,8 +495,14 @@ pub async fn credentials_list(app: AppHandle, engagement_id: String) -> AppResul
 }
 
 #[tauri::command]
-pub async fn credential_create(app: AppHandle, engagement_id: String, input: CredentialInput) -> AppResult<Credential> {
+pub async fn credential_create(app: AppHandle, engagement_id: String, input: CredentialInput) -> AppResult<CreatedCredential> {
     with_vault(app, move |v| credentials::create(v.conn()?, &engagement_id, input)).await
+}
+
+/// For each pair of domain spellings, whether the store counts them as the same domain in this engagement.
+#[tauri::command]
+pub async fn same_domains(app: AppHandle, engagement_id: String, pairs: Vec<(Option<String>, Option<String>)>) -> AppResult<Vec<bool>> {
+    with_vault(app, move |v| credentials::same_domains(v.conn()?, &engagement_id, &pairs)).await
 }
 
 #[tauri::command]

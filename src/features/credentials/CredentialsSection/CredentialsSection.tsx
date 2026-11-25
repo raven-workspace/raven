@@ -212,7 +212,7 @@ export function CredentialsSection() {
           <div className="credentials-section__panes">{panes}</div>
         )}
 
-        {form && <CredentialForm eid={id} hosts={hosts} credentials={creds} edit={form.edit} onClose={() => setForm(null)} onSaved={form.edit ? undefined : (c) => follow(selected?.id ?? "", c)} />}
+        {form && <CredentialForm eid={id} hosts={hosts} edit={form.edit} onClose={() => setForm(null)} onSaved={form.edit ? undefined : (c) => follow(selected?.id ?? "", c)} />}
         {deleting && (
           <ConfirmDelete
             title={`Delete ${credLabel(deleting)}?`}

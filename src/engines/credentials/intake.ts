@@ -2,7 +2,7 @@ import type { CredAttemptInput, Credential, CredentialInput, Username, UsernameI
 import type { CommandBlock } from "../../types/log";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
-import { credKey, findDuplicateCredential, sameDomain, usernameKey } from "./keys";
+import { credKey, usernameKey } from "./keys";
 import { ATTEMPT_RESULT_RANK, LOCAL_ONLY_SERVICES, isNtShape, isOwnerless, ntHalf } from "./matrix";
 import { parseNxcAuthResults, parseRoastHashes, type NxcAuthResult } from "./nxc";
 import type { CredAuthMode, SprayService } from "./types";
@@ -42,11 +42,14 @@ export interface CredentialIntakePlan {
   attempts: PlannedAttempt[];
   /** Pairs with no matching credential: [+] pairs (offered), then failed-only pairs (opt-in, `failedOnly`). */
   newCredentials: PendingCredential[];
-  /** Usernames seen in output, not yet listed. */
+  /**
+   * Usernames seen in output and not listed in that spelling. Creating one the store already holds in another
+   * spelling of the same domain returns the stored one.
+   */
   newUsernames: PlannedUsername[];
-  /** Roast hashes not already stored (dedupe by credKey). */
+  /** Roast hashes the output printed, one per account and kind. Creating one the store already holds returns it. */
   newHashes: PlannedCredential[];
-  /** Stored rows the output proved again but the plan doesn't add: listed usernames and roast hashes already stored. */
+  /** Stored rows the output proved again but the plan doesn't add: usernames listed in the spelling the output printed. */
   reproved: { credentialIds: string[]; usernameIds: string[] };
   /** Stored credentials a spray hit shows came from an owner-less secret; applied only where `fromSecretId` is unset. */
   links?: { credId: string; fromSecretId: string }[];
@@ -133,8 +136,8 @@ function secretMatches(cred: Credential, secret: string): boolean {
 }
 
 /**
- * A planned credential as a stored one, so the keys and `findDuplicateCredential` (the one dedupe rule) apply to
- * it. The id is synthetic and never stored (empty by default: an unsaved credential).
+ * A planned credential as a stored one, so the grouping keys apply to it. The id is synthetic and never stored (empty
+ * by default: an unsaved credential).
  */
 export function asCredential(i: PlannedCredential, id = ''): Credential {
   return {
@@ -147,11 +150,6 @@ export function asCredential(i: PlannedCredential, id = ''): Credential {
 }
 
 const lc = (s?: string): string => (s ?? '').trim().toLowerCase();
-
-function usernameMatches(u: Username, username: string, domain?: string): boolean {
-  if (lc(u.username) !== lc(username)) return false;
-  return !u.domain || !domain || sameDomain(u.domain, domain);
-}
 
 export function planCredentialIntake(input: {
   blocks: CommandBlock[];
@@ -244,9 +242,10 @@ export function planCredentialIntake(input: {
         ...(r.detail ? { detail: r.detail } : {}),
       };
 
-      // Username seen in output but not yet listed: planned, and treated as listed for the rest of this plan.
-      const listed = engUsernames.find(u => usernameMatches(u, r.username, domain));
+      // Username seen in output but not listed in that spelling: planned, and treated as listed for the rest of this
+      // plan. Whether another spelling is the same username is the store's call, when the plan is applied.
       const nuKey = usernameKey({ engagementId: engagement.id, username: r.username, domain: domain ?? null });
+      const listed = engUsernames.find(u => usernameKey(u) === nuKey);
       if (listed && !reproved.usernameIds.includes(listed.id)) reproved.usernameIds.push(listed.id);
       if (!listed && !newUsernames.has(nuKey)) {
         newUsernames.set(nuKey, {
@@ -335,8 +334,8 @@ export function planCredentialIntake(input: {
   for (const a of attempts) summary[a.result]++;
   for (const p of pending.values()) if (!p.failedOnly) for (const a of p.attempts) summary[a.result]++;
 
-  // Roast hashes
-  const seen = [...engCreds];
+  // Roast hashes, one per account and kind as printed. Whether one is stored already is the store's call.
+  const seenHashes = new Set<string>();
   const newHashes: PlannedCredential[] = [];
   for (const block of blocks) {
     for (const h of parseRoastHashes(block.output)) {
@@ -345,13 +344,9 @@ export function planCredentialIntake(input: {
         ...(h.domain ? { domain: h.domain } : {}),
         source: 'nxc ldap roast', crackStatus: 'uncracked', engagementId: engagement.id,
       };
-      const candidate = asCredential(hashInput, `planned:${newHashes.length}`);
-      const dup = findDuplicateCredential(seen, candidate);
-      if (dup) {
-        if (engCreds.includes(dup) && !reproved.credentialIds.includes(dup.id)) reproved.credentialIds.push(dup.id);
-        continue;
-      }
-      seen.push(candidate);
+      const key = credKey(asCredential(hashInput));
+      if (seenHashes.has(key)) continue;
+      seenHashes.add(key);
       newHashes.push(hashInput);
     }
   }
