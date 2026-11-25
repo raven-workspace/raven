@@ -1,6 +1,6 @@
 import { examList, type ExamScope } from "../exam";
 import { CATEGORY_ALIASES, categoryLabel, categoryOf } from "./categories";
-import type { CardMeta } from "./store";
+import type { CardMeta } from "./types";
 import type { LibraryCommand } from "./types";
 
 export type ArsenalHit =

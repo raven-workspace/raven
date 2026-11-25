@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CardMeta } from "../../../engines/library/store";
+import type { CardMeta } from "../../../engines/library/types";
 import { splitWikilinks } from "../../../engines/library/wikilinks";
 import { parseNote } from "../../../engines/manual";
 import { resolveLink } from "../../../engines/manual/links";

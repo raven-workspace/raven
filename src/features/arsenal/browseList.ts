@@ -1,6 +1,6 @@
 import type { ArsenalHit } from "../../engines/library/arsenalSearch";
 import { categoryOf } from "../../engines/library/categories";
-import type { CardMeta } from "../../engines/library/store";
+import type { CardMeta } from "../../engines/library/types";
 import type { LibraryCommand } from "../../engines/library/types";
 
 /** One block of pane 2: `heading` null is the cards block (cards, then generators); the others are a tool's card-less commands. */

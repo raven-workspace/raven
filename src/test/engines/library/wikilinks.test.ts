@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cardForLink, splitWikilinks } from "../../../engines/library/wikilinks";
-import type { CardMeta } from "../../../engines/library/store";
+import type { CardMeta } from "../../../engines/library/types";
 
 const card = (id: string, title: string, file: string): CardMeta => ({ id, title, file, stage: "", category: "active-directory", os: "windows" });
 const CARDS = [

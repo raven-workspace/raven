@@ -1,4 +1,5 @@
 import { parseCredentialPaste, type ParsedCredentialPaste } from '../credentials/paste';
+import type { LibraryCommand } from '../library/types';
 import { detectKind } from './kind';
 
 /** A pasted credential; `local` marks Windows local notation (`.\user:pass`): local to the host, no domain. */
@@ -19,17 +20,17 @@ const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
  * `user@domain:secret`, `.\user:secret` or `user:hash` (parseCredentialPaste). Empty when any line is something else, so
  * a note that merely contains a credential stays a note. Never offered: URLs (`scheme://`), `host:port` (an IP or a
  * dotted host name followed by a port number, or `name:<port>` where `name` is one of `hostNames`: a known host's name,
- * short name or IP), command lines (a command word, a shell prompt or shell syntax), and notes: a secret with whitespace or starting with `\\` or `/`, or a drive path.
+ * short name or IP), command lines (a command word, `library`'s included, a shell prompt or shell syntax), and notes: a secret with whitespace or starting with `\\` or `/`, or a drive path.
  */
-export function credentialsInPaste(text: string, hostNames: string[] = []): PastedCredential[] {
+export function credentialsInPaste(text: string, library: LibraryCommand[], hostNames: string[] = []): PastedCredential[] {
   const known = new Set(hostNames.map((n) => n.trim().toLowerCase()).filter(Boolean));
   const lines = text.replace(/\r\n?/g, '\n').split('\n').map((l) => l.trim()).filter(Boolean);
   if (lines.length === 0) return [];
   // A command, HTTP request or flag is that kind, whatever its colons.
-  if (detectKind(text, false) !== 'note') return [];
+  if (detectKind(text, false, library) !== 'note') return [];
   const found: PastedCredential[] = [];
   for (const line of lines) {
-    if (line.includes('://') || SHELL_LINE.test(line) || detectKind(line, false) !== 'note') return [];
+    if (line.includes('://') || SHELL_LINE.test(line) || detectKind(line, false, library) !== 'note') return [];
     const parsed = parseCredentialPaste(line);
     if (!parsed) return [];
     // A note, not a credential: a secret with whitespace or a path (`/var/www`, `\\share`), or a drive path.

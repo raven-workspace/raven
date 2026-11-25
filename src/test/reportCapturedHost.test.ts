@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { capturedHost, editsOf, XFER, XFER_CAPTURES, XFER_DOMAIN, XFER_MACHINES, XFER_SCOPE } from "../audit/capturedHost";
+import { BUILTIN_LIBRARY } from "../engines/library/data";
 import { resolveCapture } from "../features/capture/resolve";
 import { EMPTY_DRAFT } from "../features/capture/useCaptureStore";
 import { FIXTURES } from "../audit/fixtures";
@@ -71,7 +72,7 @@ describe("xfer03, captured through the real pipeline", () => {
       const image = c.image ? { mime: "image/png", dataBase64: AUDIT_PNGS[c.image as keyof typeof AUDIT_PNGS].base64, objectUrl: "" } : null;
       const r = resolveCapture(
         { ...EMPTY_DRAFT, text: c.image ? "" : c.text, caption: c.image ? c.text : "", image, kind: c.kind ?? null, flagKind: c.flagKind ?? null, observations: c.observations ?? "" },
-        { hosts, scope: XFER_SCOPE, domain: XFER_DOMAIN, machines: XFER_MACHINES, lastRanOn: "Kali (VM)", presetHostId: c.preset ? host.id : null },
+        { hosts, scope: XFER_SCOPE, domain: XFER_DOMAIN, machines: XFER_MACHINES, lastRanOn: "Kali (VM)", library: BUILTIN_LIBRARY, presetHostId: c.preset ? host.id : null },
       );
       const e = editsOf(c, hosts, host.id);
       expect({ ...r.edits, content: shape(r.edits.content) }, c.key).toMatchObject({ kind: e.kind, title: e.title, hostIds: e.hostIds, ranOn: e.ranOn, content: shape(e.content) });

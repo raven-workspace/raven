@@ -1,5 +1,5 @@
 import { matches, searchArsenal, wordsOf, type ArsenalGroup, type ArsenalHit } from "../../engines/library/arsenalSearch";
-import type { CardMeta } from "../../engines/library/store";
+import type { CardMeta } from "../../engines/library/types";
 import type { LibraryCommand } from "../../engines/library/types";
 import { examList, type ExamScope } from "../../engines/exam";
 import type { ManualNote } from "../../engines/manual";

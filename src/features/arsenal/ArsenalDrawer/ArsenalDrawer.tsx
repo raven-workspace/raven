@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent a
 import { useMatch, useNavigate } from "react-router";
 import { fillCommand } from "../../../engines/checklist/index";
 import { searchArsenal, type ArsenalHit } from "../../../engines/library/arsenalSearch";
-import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary, useToolkit } from "../../../engines/library/store";
 import { copyPlain, copySecret } from "../../../lib/clipboard";
 import { shortHostName } from "../../../lib/hostName";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../../lib/keys";
@@ -42,7 +42,8 @@ const hitRow = (hit: ArsenalHit): Row => ({
 function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: string; hostId: string | null }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const libraryVersion = useLibraryVersion();
+  const library = useLibrary();
+  const { toolkit } = useToolkit();
   const cardId = useArsenalStore((s) => s.cardId);
   const blockId = useArsenalStore((s) => s.blockId);
   const [query, setQuery] = useState("");
@@ -83,10 +84,8 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
 
   // A list under the exam rules: until the engagement's kind is known it offers no command that would need a verdict.
   const groups = useMemo(
-    () => searchArsenal(query, { library: getLibrary(), cards: getCards(), generators: GENERATORS, exam }),
-    // getLibrary()/getCards() change only with the library version.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query, exam, libraryVersion],
+    () => searchArsenal(query, { library: library.commands, cards: library.cards, generators: GENERATORS, exam }),
+    [query, exam, library],
   );
   const searching = query.trim() !== "";
   const listing = searching || category !== null;
@@ -251,7 +250,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     void copyCommand(current.hit, e.metaKey || e.ctrlKey);
   };
 
-  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
+  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit };
   const note = guard.forKey === (filled ? copyKey(filled.cmd) : null) ? (guard.hint ?? guard.confirm) : null;
   const activate = (r: Row, i: number) => {
     setSelected(i);

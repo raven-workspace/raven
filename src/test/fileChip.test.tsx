@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { getLibrary, setImported } from "../engines/library/store";
+import { currentLibrary, setImported } from "../engines/library/store";
 import { filePickFor, useFilePickStore } from "../features/checklist/filePick";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useCredPickStore } from "../features/checklist/credPick";
@@ -76,7 +76,7 @@ const TOOLKIT = [
 ];
 beforeEach(() => {
   // The goal's first command takes {FILE}, so the Now panel (first command only) shows it too.
-  const first = getLibrary().find((c) => c.goals.includes(GOAL))!;
+  const first = currentLibrary().commands.find((c) => c.goals.includes(GOAL))!;
   setImported({ commands: [{ ...first, template: "zzrun {FILE} on {TARGET_IP}", exam: undefined }], cards: [], toolkit: TOOLKIT });
 });
 afterEach(() => setImported({ commands: [], cards: [] }));

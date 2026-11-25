@@ -7,6 +7,7 @@ import type { Host } from "../types/host";
 import type { HostIdentity } from "../types/hostFacts";
 import type { ExtractionProofs, LogEntry, LogEntryInput } from "../types/log";
 import { filed } from "./features/capture/filed";
+import { TEST_LIBRARY } from "./support/library";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
@@ -185,6 +186,7 @@ describe("saveCapture", () => {
       domain: "",
       machines: ["Kali (VM)"],
       lastRanOn: null,
+      library: TEST_LIBRARY,
     };
     const created: string[] = [];
     await saveCapture({
@@ -234,6 +236,7 @@ describe("saveCapture", () => {
         domain: "",
         machines: ["Kali (VM)"],
         lastRanOn: null,
+        library: TEST_LIBRARY,
       },
       edits: edits({ hostIds: [] }),
       image: null,

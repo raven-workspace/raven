@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { examList } from "../../../engines/exam";
 import { categoryLabel } from "../../../engines/library/categories";
-import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary, useToolkit } from "../../../engines/library/store";
 import type { LibraryCommand } from "../../../engines/library/types";
 import { isTypingTarget } from "../../../lib/keys";
 import { reportError } from "../../../lib/lockSignal";
@@ -46,6 +46,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   onOpenCard?: (cardId: string) => void;
 }) {
   const { d, host, cred, makeInput, exam } = useFillBase(engagementId, hostId);
+  const { toolkit } = useToolkit();
   const fieldEls = useRef(new Map<string, HTMLInputElement>());
   const root = useRef<HTMLDivElement>(null);
   // The block whose copy was held back (focus went to a fill field or the credential chip): Enter there copies it anyway.
@@ -61,7 +62,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   const templates = [...main.shown, ...extra.shown].map((c) => c.template);
   const tokens = tokensOf(templates);
   const auto = autoFill(tokens, makeInput({}));
-  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
+  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit };
 
   // The outline of the block the card opened at, until the next keypress.
   const [seenFocus, setSeenFocus] = useState(focusBlockId);
@@ -286,18 +287,15 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
   autoFocus?: boolean;
   onOpenCard?: (cardId: string) => void;
 }) {
-  const version = useLibraryVersion();
-  const card = getCards().find((c) => c.id === cardId);
+  const library = useLibrary();
+  const card = library.cards.find((c) => c.id === cardId);
   const [obsidianError, setObsidianError] = useState<string>();
-  // getLibrary() changes only with the library version.
-  /* eslint-disable react-hooks/exhaustive-deps */
-  const commands = useMemo(() => getLibrary().filter((c) => c.cardId === cardId), [cardId, version]);
+  const commands = useMemo(() => library.commands.filter((c) => c.cardId === cardId), [cardId, library]);
   const also = useMemo(() => {
     const goals = new Set(commands.flatMap((c) => c.goals));
     const ids = new Set(commands.map((c) => c.id));
-    return getLibrary().filter((c) => (c.source === "raven" || c.source === "oscp-notes") && !ids.has(c.id) && c.goals.some((g) => goals.has(g)));
-  }, [commands, version]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+    return library.commands.filter((c) => (c.source === "raven" || c.source === "oscp-notes") && !ids.has(c.id) && c.goals.some((g) => goals.has(g)));
+  }, [commands, library]);
 
   if (!card) return <p className="card-view__missing">That card is not in the library.</p>;
   const openInObsidian = () => {

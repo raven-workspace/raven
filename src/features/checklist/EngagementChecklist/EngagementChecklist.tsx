@@ -26,6 +26,7 @@ import { CredentialPicker } from "../CredentialPicker/CredentialPicker";
 import { newCredLabels, useCredFill } from "../credPick";
 import { useFilePickStore } from "../filePick";
 import { usePortPickStore } from "../portPick";
+import { useLibrary } from "../../../engines/library/store";
 import { goalCommands } from "../goalCommands";
 import { shortHostName } from "../../../lib/hostName";
 import { GoalRow } from "../GoalRow/GoalRow";
@@ -53,6 +54,7 @@ const EXAM_EMPTY = "Nothing allowed in an exam sim; do it by hand";
 export function EngagementChecklist() {
   useFilePickStore((s) => s.file); // a chip pick refills the rows' commands
   usePortPickStore((s) => s.picks); // a port pick refills them too
+  const library = useLibrary(); // an import refills them too
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -95,7 +97,7 @@ export function EngagementChecklist() {
   const row = (g: ChecklistGoal, owner?: Host) => {
     const ownerId = owner?.id ?? eng.id;
     const rowInput = owner ? { ...input, host: owner } : input;
-    const { commands, hadAny } = goalCommands(g.id, rowInput, eng);
+    const { commands, hadAny } = goalCommands(g.id, rowInput, eng, library.commands);
     const s = (owner ? byOwner.get(owner.id) ?? {} : state)[g.id];
     return (
       <GoalRow

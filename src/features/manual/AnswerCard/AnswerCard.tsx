@@ -1,6 +1,6 @@
 import { XIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { getCards, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary } from "../../../engines/library/store";
 import type { LibraryCommand } from "../../../engines/library/types";
 import { leftover, type LookupRow } from "../../../engines/manual/lookup";
 import { resolveLink } from "../../../engines/manual/links";
@@ -64,8 +64,7 @@ function CardCommand({ command, base }: { command: LibraryCommand; base: FillBas
  */
 export function AnswerCard({ row, base, onClose }: { row: LookupRow; base: FillBase; onClose(): void }) {
   const { notes } = useManualNotes();
-  useLibraryVersion();
-  const cards = getCards();
+  const { cards } = useLibrary();
   const note = notes.find((n) => n.id === row.noteId);
   const [more, setMore] = useState(false);
   const rowTitle = `${row.tableName}: ${row.key}`;

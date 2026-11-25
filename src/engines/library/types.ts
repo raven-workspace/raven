@@ -29,3 +29,13 @@ export interface LibraryCommand {
   /** Built-ins only: lines that must / must not match `match` (tested). */
   matchExamples?: { hit: string[]; miss: string[] };
 }
+
+export interface CardMeta {
+  id: string;
+  title: string;
+  stage: string;
+  category: string;
+  os: 'linux' | 'windows' | 'any';
+  /** Path relative to the Field-Manual vault. */
+  file: string;
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { examScope } from "../engines/exam";
 import { searchArsenal } from "../engines/library/arsenalSearch";
-import type { CardMeta } from "../engines/library/store";
+import type { CardMeta } from "../engines/library/types";
 import type { LibraryCommand } from "../engines/library/types";
 
 const cmd = (id: string, over: Partial<LibraryCommand> = {}): LibraryCommand =>

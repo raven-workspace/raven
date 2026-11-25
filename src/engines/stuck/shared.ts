@@ -2,7 +2,6 @@ import type { ChecklistState } from "../../types/checklist";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import { examList, examScope } from "../exam";
-import { getLibrary } from "../library/store";
 import type { LibraryCommand } from "../library/types";
 
 const FOOTHOLD_GOALS = ["h-foot-shell", "h-foot-creds", "h-foot-arrived"];
@@ -17,7 +16,7 @@ export function hasLegalCommand(
   goalId: string,
   engagement: Pick<Engagement, "kind"> & { msfHostId?: string | null },
   hostId: string,
-  library: LibraryCommand[] = getLibrary(),
+  library: LibraryCommand[],
 ): boolean {
   const cmds = library.filter((c) => c.goals.includes(goalId));
   if (cmds.length === 0) return true;

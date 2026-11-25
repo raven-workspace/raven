@@ -46,8 +46,8 @@ export function engagementStuck(input: {
   attempts: CredAttempt[];
   usernames: Username[];
   tunnels: Tunnel[];
-  /** Defaults to the built-in library. */
-  library?: LibraryCommand[];
+  /** The command library: in exam sims a goal none of whose commands is legal is not "to do". */
+  library: LibraryCommand[];
 }): StuckLine[] {
   const { engagement, hosts, servicesByHost, byOwner } = input;
   const credentials = input.credentials.filter((c) => c.engagementId === engagement.id);

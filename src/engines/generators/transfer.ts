@@ -1,4 +1,4 @@
-import type { CardMeta } from '../library/store';
+import type { CardMeta } from '../library/types';
 import type { LibraryCommand } from '../library/types';
 
 export interface TransferMethod {

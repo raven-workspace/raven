@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import type { RuleId } from "./conventionsPending";
 
 export const ROOT = join(__dirname, "..", "..");
@@ -376,6 +376,29 @@ export function breaks(rule: RuleId, file: string, src: string): boolean {
         stripComments(src),
       );
   }
+}
+
+/** The library store. Engines take the command library as an argument and never import it (RAV-49). */
+export const LIBRARY_STORE = "src/engines/library/store.ts";
+
+/** Every .ts module under src/engines but the library store itself. */
+export const engineFiles = sourceFiles.filter((f) => isEngine(f) && f !== LIBRARY_STORE);
+
+/** The module specifiers `src` imports or re-exports: static, side-effect and dynamic imports, comments aside. */
+function specifiers(src: string): string[] {
+  const code = stripComments(src);
+  const out: string[] = [];
+  for (const m of code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) out.push(m[1]!);
+  return out;
+}
+
+/** True when `file` imports the library store, by a relative path or the `@/` alias, with or without an extension. */
+export function importsLibraryStore(file: string, src: string): boolean {
+  const target = LIBRARY_STORE.replace(/\.ts$/, "");
+  return specifiers(src).some((spec) => {
+    const path = spec.startsWith("@/") ? join("src", spec.slice(2)) : spec.startsWith(".") ? join(dirname(file), spec) : null;
+    return path !== null && path.replace(/\.[jt]s$/, "") === target;
+  });
 }
 
 export { unknownColors, offScaleSpacing, featureFlex, offRoleSize };
