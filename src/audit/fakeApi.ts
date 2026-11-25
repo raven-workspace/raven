@@ -453,8 +453,15 @@ const base = {
     const report = db.reports.find((r) => r.id === id);
     if (!report) throw new RavenError("not_found", "Not found");
     if (patch.title !== undefined && !patch.title.trim()) throw new RavenError("validation", "title is required", "title");
-    for (const [k, v] of Object.entries(patch)) if (v !== undefined) (report as unknown as Record<string, unknown>)[k] = clone(v);
-    report.updatedAt = now();
+    // As the backend: a field left out keeps its value.
+    Object.assign(report, {
+      candidateName: patch.candidateName ?? report.candidateName,
+      email: patch.email ?? report.email,
+      osid: patch.osid ?? report.osid,
+      title: patch.title ?? report.title,
+      meta: patch.meta === undefined ? report.meta : clone(patch.meta),
+      updatedAt: now(),
+    });
     return clone(report);
   },
   reportSectionsList: async (reportId: string) =>

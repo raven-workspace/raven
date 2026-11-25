@@ -90,10 +90,6 @@ fn parse(s: &str) -> AppResult<Value> {
     serde_json::from_str(s).map_err(|e| AppError::Db(format!("stored report JSON is invalid: {e}")))
 }
 
-fn to_text(v: &Value) -> String {
-    v.to_string()
-}
-
 const REPORT_COLS: &str = "id, engagement_id, candidate_name, email, osid, title, meta, created_at, updated_at, exported_at";
 
 fn report_row(r: &Row) -> rusqlite::Result<(Report, String)> {
@@ -172,7 +168,7 @@ pub fn update(conn: &Connection, id: &str, patch: ReportPatch) -> AppResult<Repo
             patch.email.unwrap_or(cur.email),
             patch.osid.unwrap_or(cur.osid),
             title,
-            to_text(&patch.meta.unwrap_or(cur.meta)),
+            patch.meta.unwrap_or(cur.meta).to_string(),
             now_ms(),
             id
         ],
@@ -231,8 +227,8 @@ pub fn sections_list(conn: &Connection, report_id: &str) -> AppResult<Vec<Report
 
 /// The page and meta as stored, refused past 8 MiB together.
 fn section_texts(doc: Option<&Value>, meta: &Value) -> AppResult<(Option<String>, String)> {
-    let doc = doc.map(to_text);
-    let meta = to_text(meta);
+    let doc = doc.map(Value::to_string);
+    let meta = meta.to_string();
     if doc.as_ref().map_or(0, String::len) + meta.len() > MAX_SECTION_BYTES {
         return Err(AppError::validation("doc", "this page is over 8 MiB"));
     }
