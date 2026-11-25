@@ -25,6 +25,8 @@ npm run dev:audit      # the UI in a browser at http://localhost:5199, with a fa
 
 Audit mode serves the same React app against an in-memory backend (`src/audit/fakeApi.ts`) filled with stress fixtures (`src/audit/fixtures.ts`). In any dev build, `/__ui` shows the shared UI primitives.
 
+The fake and the real store must pass the same [store scenarios](src/test/storeScenarios/README.md), so the fake can't drift from the store. New UI tests run on the fake through [`src/test/support/fakeStore.tsx`](src/test/support/fakeStore.tsx).
+
 ## Checking your work
 
 ```sh

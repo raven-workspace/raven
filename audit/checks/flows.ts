@@ -75,7 +75,8 @@ export const FLOWS: Flow[] = [
   },
   {
     id: "next-step", path: E, budget: 2, done: async (page) => {
-      await page.waitForURL(`**${H}`, { timeout: DONE_TIMEOUT_MS });
+      // Whichever host the sidebar lists first: hosts come in IP order, as the store sorts them.
+      await page.waitForURL(`**${E}/h/*`, { timeout: DONE_TIMEOUT_MS });
       await page.getByRole("tab", { name: "Next", selected: true }).waitFor({ state: "visible", timeout: DONE_TIMEOUT_MS });
     },
     // The shortest keyboard path from the board to a host today is the first sidebar host link; board cards come later.

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
 import { api, resetAuditState, scenarioFromSearch, setAuditScenario } from "../../audit/fakeApi";
-import { RavenError } from "../../types/errors";
+import { isAppError, RavenError } from "../../types/errors";
 import { AUDIT_NOTE_SOURCES, FIXTURES } from "../../audit/fixtures";
 import { AUDIT_PNGS } from "../../audit/images";
 import { makeQueryClient } from "../../lib/queryClient";
@@ -17,6 +17,17 @@ describe("audit fake api", () => {
   it("implements every Api command", async () => {
     const real = await vi.importActual<typeof import("../../lib/api")>("../../lib/api");
     expect(Object.keys(api).sort()).toEqual(Object.keys(real.api).sort());
+  });
+
+  it("throws only error codes the app knows: every RavenError takes a literal code, never a cast", async () => {
+    const source = (await import("../../audit/fakeApi.ts?raw")).default;
+    expect(source).not.toMatch(/as ErrorCode/);
+    const codes = [...source.matchAll(/new RavenError\(([^,]+),/g)].map((m) => m[1]!.trim());
+    expect(codes.length).toBeGreaterThan(0);
+    for (const code of codes) {
+      expect(code).toMatch(/^"[a-z_]+"$/);
+      expect(isAppError({ code: JSON.parse(code), message: "" }), code).toBe(true);
+    }
   });
 
   it("serves verdicts, identity and vectors, and links dead ends to ruled-out items", async () => {
@@ -150,8 +161,8 @@ describe("audit fake api", () => {
     // A realistic import: the built-in cards and a command overlay, so Settings reads like a real import.
     expect(fm?.cards.length).toBeGreaterThan(0);
     expect(Object.keys(fm?.overlay ?? {}).length).toBeGreaterThan(0);
-    await expect(api.backupNow()).rejects.toMatchObject({ code: "unsupported" });
-    await expect(api.fieldManualScan()).rejects.toMatchObject({ code: "unsupported" });
+    await expect(api.backupNow()).rejects.toMatchObject({ code: "io" });
+    await expect(api.fieldManualScan()).rejects.toMatchObject({ code: "io" });
   });
 
   it("derives adSetEffective as the store does: the switch, else 88 and 389 open, following every service change", async () => {

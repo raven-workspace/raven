@@ -1,0 +1,86 @@
+{
+  "name": "The cover and fact writes only touch untouched items, and only revert their own marks",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Checklist lab", "kind": "lab" }], "as": "eng" },
+    { "do": "engagementCreate", "args": [{ "name": "Other lab", "kind": "lab" }], "as": "other" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "ws01", "ip": "192.0.2.50" }], "as": "h" },
+    { "do": "hostCreate", "args": ["$other", { "name": "ws02", "ip": "192.0.2.51" }], "as": "foreign" },
+    {
+      "do": "checklistPut",
+      "args": ["$eng", [
+        { "ownerId": "$h", "goalId": "manual", "status": "todo", "statusManual": true },
+        { "ownerId": "$h", "goalId": "noted", "status": "todo", "notes": "keep", "evidence": [{ "entryId": "x1" }] },
+        { "ownerId": "$h", "goalId": "prog", "status": "in_progress" },
+        { "ownerId": "$h", "goalId": "done", "status": "done" }
+      ]],
+      "expect": [
+        { "goalId": "manual", "statusManual": true },
+        { "goalId": "noted", "statusManual": false, "notes": "keep", "evidence": [{ "entryId": "x1" }] },
+        { "goalId": "prog", "status": "in_progress", "statusManual": false, "auto": false, "autoFrom": null, "completedAt": null },
+        { "goalId": "done", "status": "done", "statusManual": false }
+      ]
+    },
+    {
+      "do": "checklistApplyCover",
+      "args": ["$eng", [
+        { "ownerId": "$h", "goalId": "missing" }, { "ownerId": "$h", "goalId": "manual" }, { "ownerId": "$h", "goalId": "noted" },
+        { "ownerId": "$h", "goalId": "prog" }, { "ownerId": "$h", "goalId": "done" }
+      ], []],
+      "expect": [
+        { "goalId": "missing", "status": "na", "auto": true, "statusManual": false, "evidence": [] },
+        { "goalId": "manual", "status": "todo", "auto": false, "statusManual": true },
+        { "goalId": "noted", "status": "na", "auto": true, "notes": "keep", "evidence": [{ "entryId": "x1" }] },
+        { "goalId": "prog", "status": "in_progress", "auto": false },
+        { "goalId": "done", "status": "done", "auto": false }
+      ]
+    },
+    {
+      "do": "checklistApplyCover",
+      "args": ["$eng", [], [{ "ownerId": "$h", "goalId": "missing" }, { "ownerId": "$h", "goalId": "done" }, { "ownerId": "$h", "goalId": "never" }]],
+      "expect": [
+        { "goalId": "missing", "status": "todo", "auto": false, "completedAt": null },
+        { "goalId": "manual", "status": "todo" },
+        { "goalId": "noted", "status": "na", "auto": true },
+        { "goalId": "prog", "status": "in_progress" },
+        { "goalId": "done", "status": "done" }
+      ]
+    },
+    {
+      "do": "checklistApplyFacts",
+      "args": ["$eng", [{ "ownerId": "$h", "goalId": "missing" }, { "ownerId": "$h", "goalId": "fact" }, { "ownerId": "$h", "goalId": "noted" }], []],
+      "expect": [
+        { "goalId": "missing", "status": "done", "auto": true, "evidence": [] },
+        { "goalId": "fact", "status": "done", "auto": true, "statusManual": false },
+        { "goalId": "manual", "status": "todo" },
+        { "goalId": "noted", "status": "na" },
+        { "goalId": "prog", "status": "in_progress" },
+        { "goalId": "done", "status": "done", "auto": false }
+      ]
+    },
+    {
+      "do": "checklistApplyFacts",
+      "args": ["$eng", [], [{ "ownerId": "$h", "goalId": "fact" }, { "ownerId": "$h", "goalId": "done" }, { "ownerId": "$h", "goalId": "noted" }]],
+      "expect": [
+        { "goalId": "missing", "status": "done", "auto": true },
+        { "goalId": "fact", "status": "todo", "auto": false, "completedAt": null },
+        { "goalId": "manual", "status": "todo" },
+        { "goalId": "noted", "status": "na" },
+        { "goalId": "prog", "status": "in_progress" },
+        { "goalId": "done", "status": "done" }
+      ]
+    },
+    {
+      "do": "checklistPut",
+      "args": ["$eng", [{ "ownerId": "$h", "goalId": "manual", "status": "done" }]]
+    },
+    { "do": "checklistList", "args": ["$eng"], "expect": [
+      { "goalId": "missing" }, { "goalId": "fact" }, { "goalId": "manual", "status": "done", "statusManual": true },
+      { "goalId": "noted" }, { "goalId": "prog" }, { "goalId": "done" }
+    ] },
+    { "do": "checklistApplyCover", "args": ["$eng", [{ "ownerId": "$foreign", "goalId": "x" }], []], "error": { "code": "not_found" } },
+    { "do": "checklistApplyFacts", "args": ["$eng", [{ "ownerId": "$h", "goalId": " " }], []], "error": { "code": "validation", "field": "goalId" } },
+    { "do": "checklistPut", "args": ["$eng", [{ "ownerId": "$foreign", "goalId": "x", "status": "todo" }]], "error": { "code": "not_found" } },
+    { "do": "checklistPut", "args": ["$eng", [{ "ownerId": "$h", "goalId": "x", "status": "skipped" }]], "error": { "code": "validation", "field": "status" } },
+    { "do": "checklistList", "args": ["$other"], "expect": [] }
+  ]
+}

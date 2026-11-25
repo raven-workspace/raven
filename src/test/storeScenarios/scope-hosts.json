@@ -1,0 +1,45 @@
+{
+  "name": "Single IPs in an engagement's scope become hosts on create, and only newly added ones on save",
+  "steps": [
+    {
+      "do": "engagementCreate",
+      "args": [{ "name": "Scoped lab", "kind": "lab", "scopeCidrs": [" 192.0.2.10 ", "192.0.2.0/24", "198.51.100.7/32"] }],
+      "as": "eng",
+      "expect": { "scopeCidrs": ["192.0.2.10", "192.0.2.0/24", "198.51.100.7/32"] }
+    },
+    {
+      "do": "hostsList", "args": ["$eng"], "ordered": true,
+      "expect": [
+        { "name": "192.0.2.10", "ip": "192.0.2.10", "boardColumn": "information-gathering", "access": "none" },
+        { "name": "198.51.100.7", "ip": "198.51.100.7" }
+      ],
+      "bind": { "first": "0.id" }
+    },
+    { "do": "hostCreate", "args": ["$eng", { "name": "web", "ip": "203.0.113.5" }], "as": "web" },
+    {
+      "do": "engagementUpdate",
+      "args": ["$eng", { "name": "Scoped lab", "kind": "lab", "scopeCidrs": ["192.0.2.10", "192.0.2.0/24", "198.51.100.7/32", "203.0.113.5", "203.0.113.6"] }]
+    },
+    {
+      "do": "hostsList", "args": ["$eng"], "ordered": true,
+      "expect": [
+        { "ip": "192.0.2.10" },
+        { "ip": "198.51.100.7" },
+        { "id": "$web", "name": "web", "ip": "203.0.113.5" },
+        { "name": "203.0.113.6", "ip": "203.0.113.6" }
+      ]
+    },
+    { "do": "hostDelete", "args": ["$first"] },
+    {
+      "do": "engagementUpdate",
+      "args": ["$eng", { "name": "Scoped lab, renamed", "kind": "lab", "scopeCidrs": ["192.0.2.10", "192.0.2.0/24", "198.51.100.7/32", "203.0.113.5", "203.0.113.6"] }]
+    },
+    { "do": "hostsList", "args": ["$eng"], "ordered": true, "expect": [{ "ip": "198.51.100.7" }, { "ip": "203.0.113.5" }, { "ip": "203.0.113.6" }] },
+    {
+      "do": "engagementUpdate",
+      "args": ["$eng", { "name": "Scoped lab", "kind": "lab", "scopeCidrs": ["192.0.2.300"] }],
+      "error": { "code": "validation", "field": "scopeCidrs" }
+    },
+    { "do": "engagementGet", "args": ["$eng"], "expect": { "name": "Scoped lab, renamed" } }
+  ]
+}

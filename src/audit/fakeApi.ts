@@ -1,5 +1,6 @@
 // In-memory stand-in for src/lib/api.ts, swapped in by the audit-mode Vite plugin. Reads return the fixtures,
 // writes mutate a private copy and return the resulting record. Reloading the page restores the fixtures.
+// It must pass the same store scenarios as the real store (src/test/storeScenarios), and throw only the app's error codes.
 import { credKey, stripLineBreaks } from "../engines/credentials/keys";
 import type { CommandOverlay, FieldManualSnapshot } from "../engines/fieldManual/merge";
 import { BUILTIN_LIBRARY } from "../engines/library/data";
@@ -8,12 +9,15 @@ import { parseNote } from "../engines/manual";
 import type { Api } from "../lib/api";
 import type { ChecklistItem } from "../types/checklist";
 import type { Credential, TriedPair } from "../types/credentials";
-import type { ErrorCode } from "../types/errors";
+import type { GoalRef } from "../engines/checklist";
+import type { EngagementInput } from "../types/engagement";
+import { BOARD_COLUMNS, type HostInput } from "../types/host";
 import type { NvdRecord } from "../types/findings";
 import { RavenError } from "../types/errors";
 import type { Report, ReportSection } from "../types/report";
 import type { ServiceVerdict } from "../types/hostFacts";
 import type { Extraction, Progress } from "../types/log";
+import type { Service } from "../types/service";
 import { AUDIT_NOTE_SOURCES, AUDIT_NOW, FIXTURES, FIXTURE_PROGRESS, type AuditFixtures } from "./fixtures";
 
 export type { Api };
@@ -22,10 +26,13 @@ let db: AuditFixtures = structuredClone(FIXTURES);
 let progress: Record<string, Progress> = structuredClone(FIXTURE_PROGRESS);
 let seq = 0;
 
-/** Restores the fixtures. Called once at module load; tests call it to undo their mutations. */
-export function resetAuditState(): void {
-  db = structuredClone(FIXTURES);
-  progress = structuredClone(FIXTURE_PROGRESS);
+/**
+ * Restores the fixtures, or starts from `seed` (`EMPTY_FIXTURES` for an empty store). Called once at module load;
+ * tests call it to undo their mutations.
+ */
+export function resetAuditState(seed: AuditFixtures = FIXTURES): void {
+  db = structuredClone(seed);
+  progress = seed === FIXTURES ? structuredClone(FIXTURE_PROGRESS) : {};
   seq = 0;
 }
 resetAuditState();
@@ -64,20 +71,256 @@ function hostOut(h: FakeHost): FakeHost {
   return clone({ ...h, adSetEffective: h.adSet ?? (open(88) && open(389)) });
 }
 
+const notFound = () => new RavenError("not_found", "not found");
+const invalid = (field: string, message: string) => new RavenError("validation", message, field);
+
 function find<T extends { id: string }>(rows: T[], id: string): T {
   const row = rows.find((r) => r.id === id);
-  if (!row) throw new RavenError("not_found", `No record ${id}`);
+  if (!row) throw notFound();
   return row;
 }
+/** Deletes row `id`; `not_found` if there was none, as the store's `delete_by_id`. */
 function remove<T extends { id: string }>(rows: T[], id: string): null {
   const i = rows.findIndex((r) => r.id === id);
-  if (i >= 0) rows.splice(i, 1);
+  if (i < 0) throw notFound();
+  rows.splice(i, 1);
   return null;
 }
+/** The engagement must exist (db.rs `check_scope` with no host). */
+function engagementMustExist(id: string): void {
+  if (!db.engagements.some((e) => e.id === id)) throw notFound();
+}
+// What the desktop app does on disk can't happen in a browser. `io` is the code the app shows as a plain failure.
 const unsupported = (what: string): never => {
-  // "unsupported" is audit-only, so it is not in the real ErrorCode union.
-  throw new RavenError("unsupported" as ErrorCode, `${what} is not available in audit mode`);
+  throw new RavenError("io", `${what} is not available in audit mode`);
 };
+
+const blank = (s: string | null | undefined): string | null => s?.trim() || null;
+
+/** engagements.rs `valid_cidr`: dotted-quad IPv4 with an optional /0-32 prefix, no leading zeros. */
+function validCidr(s: string): boolean {
+  const slash = s.indexOf("/");
+  if (slash >= 0) {
+    const p = s.slice(slash + 1);
+    if (!/^(0|[1-9][0-9]?)$/.test(p) || Number(p) > 32) return false;
+  }
+  const parts = (slash < 0 ? s : s.slice(0, slash)).split(".");
+  return parts.length === 4 && parts.every((o) => /^(0|[1-9][0-9]{0,2})$/.test(o) && Number(o) <= 255);
+}
+/** hosts.rs `single_ip`: one IPv4 address, bare or `/32`, returned bare. */
+function singleIp(s: string): string | null {
+  const bare = s.endsWith("/32") ? s.slice(0, -3) : s;
+  return !bare.includes("/") && validCidr(bare) ? bare : null;
+}
+
+/** engagements.rs `normalise`: every field is replaced, so an absent one is cleared. */
+function cleanEngagement(i: EngagementInput) {
+  const name = i.name.trim();
+  if (!name || [...name].length > 120) throw invalid("name", "name must be 1-120 characters");
+  if (!["exam-sim", "lab", "client"].includes(i.kind)) throw invalid("kind", "kind must be exam-sim, lab or client");
+  const scopeCidrs = (i.scopeCidrs ?? []).map((c) => c.trim());
+  const bad = scopeCidrs.find((c) => !validCidr(c));
+  if (bad !== undefined) throw invalid("scopeCidrs", `invalid IPv4 CIDR: ${bad}`);
+  const startsAt = i.startsAt ?? null;
+  const endsAt = i.endsAt ?? null;
+  if (startsAt !== null && endsAt !== null && endsAt < startsAt) throw invalid("endsAt", "end must not be before start");
+  const exam = i.kind === "exam-sim";
+  const timeboxMinutes = exam ? (i.timeboxMinutes ?? null) : null;
+  if (timeboxMinutes !== null && !(timeboxMinutes >= 1 && timeboxMinutes <= 4320)) throw invalid("timeboxMinutes", "timebox must be 1-4320 minutes");
+  return {
+    name, kind: i.kind, client: blank(i.client), subLabel: blank(i.subLabel), scopeCidrs, domain: blank(i.domain), startsAt, endsAt,
+    timeboxStart: exam ? (i.timeboxStart ?? null) : null, timeboxMinutes,
+  };
+}
+
+/** hosts.rs `normalise`: the name defaults to the IP; os and access are checked; absent dual-homed and AD set keep. */
+function cleanHost(i: HostInput) {
+  const raw = i.ip?.trim();
+  const ip = raw ? singleIp(raw) : null;
+  if (raw && !ip) throw invalid("ip", "must be a single IPv4 address");
+  const name = i.name.trim() || ip || "";
+  if (!name || [...name].length > 80) throw invalid("name", "name must be 1-80 characters");
+  const os = blank(i.os);
+  if (os !== null && !["windows", "linux", "other"].includes(os)) throw invalid("os", "os must be windows, linux or other");
+  const access = blank(i.access) ?? "none";
+  if (!["none", "user", "root"].includes(access)) throw invalid("access", "access must be none, user or root");
+  return { name, ip, os: os as HostInput["os"], access: access as NonNullable<HostInput["access"]> };
+}
+
+const ipTaken = (engagementId: string, ip: string, exceptId: string) =>
+  db.hosts.some((h) => h.engagementId === engagementId && h.ip === ip && h.id !== exceptId);
+
+function newHost(engagementId: string, over: Partial<FakeHost>): FakeHost {
+  const h: FakeHost = {
+    id: nid("h"), engagementId, name: "", ip: null, os: null, boardColumn: "information-gathering", boardManual: false, access: "none",
+    createdAt: now(), updatedAt: now(), dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, ...over,
+  };
+  db.hosts.push(h);
+  return h;
+}
+
+/** hosts.rs `sync_scope`: a host named after its IP for each single-IP scope entry no host has yet. */
+function syncScope(engagementId: string, scope: string[]): void {
+  for (const entry of scope) {
+    const ip = singleIp(entry.trim());
+    if (ip && !ipTaken(engagementId, ip, "")) newHost(engagementId, { name: ip, ip });
+  }
+}
+
+/** hosts.rs `ip_key`: the IPv4 address as a number, for the host list's order. */
+function ipKey(ip: string | null): number | null {
+  const parts = (ip ?? "").split(".").map(Number);
+  return parts.length === 4 && parts.every((p) => Number.isInteger(p) && p >= 0) ? parts.reduce((a, p) => a * 256 + p, 0) : null;
+}
+/** hosts.rs `list`: by IP numerically (hosts without one last), then name, then id. */
+function byIp(a: FakeHost, b: FakeHost): number {
+  const [ka, kb] = [ipKey(a.ip), ipKey(b.ip)];
+  if ((ka === null) !== (kb === null)) return ka === null ? 1 : -1;
+  if (ka !== null && kb !== null && ka !== kb) return ka - kb;
+  const [na, nb] = [a.name.toLowerCase(), b.name.toLowerCase()];
+  if (na !== nb) return na < nb ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+// ---------------------------------------------------------------- deletes, as the schema's foreign keys cascade them
+// Each mirrors the ON DELETE CASCADE / SET NULL clauses in src-tauri/migrations, so a delete in the fake leaves what
+// a delete in the store leaves.
+
+function dropServices(ids: Set<string>): void {
+  if (!ids.size) return;
+  db.services = db.services.filter((s) => !ids.has(s.id));
+  db.ruledOut = db.ruledOut.filter((r) => !(r.sourceKind === "service" && r.sourceId !== null && ids.has(r.sourceId)));
+  for (const f of db.findings) f.serviceIds = f.serviceIds.filter((id) => !ids.has(id));
+}
+
+function dropLogEntries(ids: Set<string>): void {
+  if (!ids.size) return;
+  const attachments = new Set(
+    db.log.filter((e) => ids.has(e.id)).flatMap((e) => ("attachmentId" in e.content && e.content.attachmentId ? [e.content.attachmentId] : [])),
+  );
+  db.log = db.log.filter((e) => !ids.has(e.id));
+  db.attachments = db.attachments.filter((a) => !attachments.has(a.id));
+  db.extractions = db.extractions.filter((x) => !ids.has(x.logEntryId));
+  for (const f of db.findings) f.stepEntryIds = f.stepEntryIds.filter((id) => !ids.has(id));
+  const unlink = <T extends { logEntryId: string | null }>(rows: T[]) => rows.forEach((r) => r.logEntryId !== null && ids.has(r.logEntryId) && (r.logEntryId = null));
+  unlink(db.hops);
+  unlink(db.accessGrants);
+  unlink(db.credAttempts);
+  unlink(db.failedAttempts);
+  unlink(db.triedPairs);
+  for (const s of db.services) if (s.confirmedEntryId !== null && ids.has(s.confirmedEntryId)) s.confirmedEntryId = null;
+  for (const i of db.hostIdentity) if (i.entryId !== null && ids.has(i.entryId)) i.entryId = null;
+  for (const c of db.cleanup) if (c.sourceEntryId !== null && ids.has(c.sourceEntryId)) c.sourceEntryId = null;
+}
+
+function dropCredentials(ids: Set<string>): void {
+  if (!ids.size) return;
+  db.credentials = db.credentials.filter((c) => !ids.has(c.id));
+  db.credAttempts = db.credAttempts.filter((a) => !ids.has(a.credId));
+  for (const c of db.credentials) {
+    if (c.crackedFrom !== null && ids.has(c.crackedFrom)) c.crackedFrom = null;
+    if (c.fromSecretId !== null && ids.has(c.fromSecretId)) c.fromSecretId = null;
+  }
+}
+
+function dropUsernames(ids: Set<string>): void {
+  if (!ids.size) return;
+  db.usernames = db.usernames.filter((u) => !ids.has(u.id));
+  db.accessGrants = db.accessGrants.filter((g) => !ids.has(g.usernameId));
+  db.credAttempts = db.credAttempts.filter((a) => a.usernameId === null || !ids.has(a.usernameId));
+}
+
+function dropFindings(ids: Set<string>): void {
+  if (!ids.size) return;
+  db.findings = db.findings.filter((f) => !ids.has(f.id));
+  db.findingFiles = db.findingFiles.filter((f) => !ids.has(f.findingId));
+  for (const a of db.failedAttempts) if (a.findingId !== null && ids.has(a.findingId)) a.findingId = null;
+}
+
+function dropHosts(ids: Set<string>): void {
+  if (!ids.size) return;
+  const has = (id: string | null) => id !== null && ids.has(id);
+  db.hosts = db.hosts.filter((h) => !ids.has(h.id));
+  dropServices(new Set(db.services.filter((s) => ids.has(s.hostId)).map((s) => s.id)));
+  db.notes = db.notes.filter((n) => !has(n.hostId));
+  db.ruledOut = db.ruledOut.filter((r) => !has(r.hostId));
+  db.tunnels = db.tunnels.filter((t) => !ids.has(t.viaHostId));
+  db.hops = db.hops.filter((h) => !has(h.fromHostId) && !ids.has(h.toHostId));
+  db.interfaceDismissals = db.interfaceDismissals.filter((d) => !ids.has(d.hostId));
+  db.accessGrants = db.accessGrants.filter((g) => !ids.has(g.hostId));
+  db.credAttempts = db.credAttempts.filter((a) => !ids.has(a.hostId));
+  db.triedPairs = db.triedPairs.filter((t) => !ids.has(t.hostId));
+  db.payloadBuilds = db.payloadBuilds.filter((b) => !ids.has(b.hostId));
+  db.hostIdentity = db.hostIdentity.filter((i) => !ids.has(i.hostId));
+  db.vectors = db.vectors.filter((v) => !ids.has(v.hostId));
+  // checklist_items.owner_id has no foreign key; hosts.rs `delete` clears a host's items by hand.
+  db.checklist = db.checklist.filter((c) => !ids.has(c.ownerId));
+  for (const e of db.engagements) if (has(e.msfHostId)) e.msfHostId = null;
+  for (const c of db.credentials) {
+    if (has(c.localHostId)) c.localHostId = null;
+    if (has(c.sourceHostId)) c.sourceHostId = null;
+  }
+  for (const u of db.usernames) if (has(u.sourceHostId)) u.sourceHostId = null;
+  for (const a of db.failedAttempts) if (has(a.hostId)) a.hostId = null;
+  for (const c of db.cleanup) if (has(c.hostId)) c.hostId = null;
+  for (const f of db.findings) f.hostIds = f.hostIds.filter((id) => !ids.has(id));
+  for (const e of db.log) e.hostIds = e.hostIds.filter((id) => !ids.has(id));
+}
+
+function dropEngagement(id: string): void {
+  const mine = <T extends { engagementId: string; id: string }>(rows: T[]) => new Set(rows.filter((r) => r.engagementId === id).map((r) => r.id));
+  dropHosts(mine(db.hosts));
+  dropLogEntries(mine(db.log));
+  dropCredentials(mine(db.credentials));
+  dropUsernames(mine(db.usernames));
+  dropFindings(mine(db.findings));
+  const reports = mine(db.reports);
+  db.reports = db.reports.filter((r) => !reports.has(r.id));
+  db.reportSections = db.reportSections.filter((s) => !reports.has(s.reportId));
+  const rest = <T extends { engagementId: string }>(rows: T[]) => rows.filter((r) => r.engagementId !== id);
+  db.notes = rest(db.notes);
+  db.ruledOut = rest(db.ruledOut);
+  db.tunnels = rest(db.tunnels);
+  db.hops = rest(db.hops);
+  db.interfaceDismissals = rest(db.interfaceDismissals);
+  db.accessGrants = rest(db.accessGrants);
+  db.credAttempts = rest(db.credAttempts);
+  db.triedPairs = rest(db.triedPairs);
+  db.payloadBuilds = rest(db.payloadBuilds);
+  db.extractions = rest(db.extractions);
+  db.failedAttempts = rest(db.failedAttempts);
+  db.cleanup = rest(db.cleanup);
+  db.checklist = db.checklist.filter((c) => c.ownerId !== id);
+  db.engagements = db.engagements.filter((e) => e.id !== id);
+  delete progress[id];
+}
+
+// ---------------------------------------------------------------- checklist, as checklist.rs
+
+const MAX_ITEMS = 500;
+
+/** The owner must be the engagement itself or one of its hosts; otherwise `not_found`. */
+function checkOwned(engagementId: string, ownerId: string): void {
+  if (ownerId !== engagementId && !db.hosts.some((h) => h.id === ownerId && h.engagementId === engagementId)) throw notFound();
+}
+
+function checkGoalRefs(engagementId: string, field: string, set: GoalRef[], revert: GoalRef[]): void {
+  if (set.length + revert.length > MAX_ITEMS * 4) throw invalid(field, "too many items");
+  engagementMustExist(engagementId);
+  for (const g of [...set, ...revert]) {
+    checkOwned(engagementId, g.ownerId);
+    if (!g.goalId.trim()) throw invalid("goalId", "goal id is required");
+  }
+}
+
+const checklistRow = (g: GoalRef) => db.checklist.find((c) => c.ownerId === g.ownerId && c.goalId === g.goalId);
+
+/** A conditional write's new row (checklist.rs `apply_cover` and `apply_facts` insert these). */
+function insertChecklist(g: GoalRef, status: "na" | "done", completedAt: number | null): void {
+  db.checklist.push({
+    ownerId: g.ownerId, goalId: g.goalId, status, notes: null, completedAt, auto: true, autoFrom: null, statusManual: false, evidence: [], updatedAt: now(),
+  });
+}
 
 /** Create/update helper: merges `input` over the row, ignoring undefined so "absent keeps the current value" holds. */
 function assign<T extends object>(row: T, input: object, extra: Partial<T> = {}): T {
@@ -109,7 +352,8 @@ function storedSame(c: Credential): Credential | undefined {
 
 function listChecklist(engagementId: string): ChecklistItem[] {
   const owners = new Set([engagementId, ...db.hosts.filter((h) => h.engagementId === engagementId).map((h) => h.id)]);
-  return clone(db.checklist.filter((c) => owners.has(c.ownerId)));
+  // The store always sends `statusManual`; a fixture row may leave it out.
+  return clone(db.checklist.filter((c) => owners.has(c.ownerId)).map((c) => ({ ...c, statusManual: c.statusManual ?? false })));
 }
 
 /** The one CVE the audit fake knows; any other ID is `not_found`. */
@@ -190,17 +434,34 @@ const base = {
   engagementsList: async () => clone(db.engagements),
   engagementGet: async (id: string) => clone(find(db.engagements, id)),
   engagementCreate: async (input) => {
-    const e = assign(
-      { id: nid("e"), client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active" as const, createdAt: now(), updatedAt: now(), lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null } as unknown as (typeof db.engagements)[number],
-      input,
-    );
+    const e: (typeof db.engagements)[number] = {
+      ...cleanEngagement(input), id: nid("e"), status: "active", createdAt: now(), updatedAt: now(), lastActivityAt: null, lastRanOn: null,
+      msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
+    };
     db.engagements.push(e);
+    syncScope(e.id, e.scopeCidrs);
     return clone(e);
   },
-  engagementUpdate: async (id: string, input) => clone(assign(find(db.engagements, id), input, { updatedAt: now() })),
-  engagementSetStatus: async (id: string, status) => clone(assign(find(db.engagements, id), { status }, { updatedAt: now() })),
-  engagementSetMsfHost: async (engagementId: string, hostId: string | null) =>
-    clone(assign(find(db.engagements, engagementId), { msfHostId: hostId }, { updatedAt: now() })),
+  engagementUpdate: async (id: string, input) => {
+    const clean = cleanEngagement(input);
+    const e = find(db.engagements, id);
+    // hosts.rs `sync_scope_added`: only IPs the old scope did not list become hosts, so a deleted host stays deleted.
+    const before = new Set(e.scopeCidrs.flatMap((c) => singleIp(c.trim()) ?? []));
+    const added = clean.scopeCidrs.filter((c) => { const ip = singleIp(c.trim()); return ip !== null && !before.has(ip); });
+    const noTimebox = clean.timeboxStart === null || clean.timeboxMinutes === null;
+    Object.assign(e, clean, { updatedAt: now() }, noTimebox ? { timeboxPausedMs: 0, timeboxPausedAt: null } : {});
+    syncScope(id, added);
+    return clone(e);
+  },
+  engagementSetStatus: async (id: string, status) => {
+    if (status !== "active" && status !== "archived") throw invalid("status", "status must be active or archived");
+    return clone(assign(find(db.engagements, id), { status }, { updatedAt: now() }));
+  },
+  engagementSetMsfHost: async (engagementId: string, hostId: string | null) => {
+    engagementMustExist(engagementId);
+    if (hostId !== null && !db.hosts.some((h) => h.id === hostId && h.engagementId === engagementId)) throw notFound();
+    return clone(assign(find(db.engagements, engagementId), { msfHostId: hostId }, { updatedAt: now() }));
+  },
   engagementSetTimeboxPaused: async (id: string, paused: boolean) => {
     const e = find(db.engagements, id);
     const t = now();
@@ -209,21 +470,31 @@ const base = {
       return clone(assign(e, { timeboxPausedMs: e.timeboxPausedMs + (t - e.timeboxPausedAt), timeboxPausedAt: null }, { updatedAt: t }));
     return clone(e);
   },
-  engagementDelete: async (id: string) => remove(db.engagements, id),
+  engagementDelete: async (id: string) => {
+    engagementMustExist(id);
+    dropEngagement(id);
+    return null;
+  },
 
-  hostsList: async (engagementId: string) => db.hosts.filter((h) => h.engagementId === engagementId).map(hostOut),
+  hostsList: async (engagementId: string) => db.hosts.filter((h) => h.engagementId === engagementId).sort(byIp).map(hostOut),
   hostCreate: async (engagementId: string, input) => {
-    const h = assign(
-      { id: nid("h"), engagementId, ip: null, os: null, boardColumn: "information-gathering", boardManual: false, access: "none", createdAt: now(), updatedAt: now(), dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } as unknown as (typeof db.hosts)[number],
-      input,
-    );
-    db.hosts.push(h);
-    return hostOut(h);
+    const c = cleanHost(input);
+    engagementMustExist(engagementId);
+    if (c.ip && ipTaken(engagementId, c.ip, "")) throw invalid("ip", "A host with this IP already exists");
+    return hostOut(newHost(engagementId, { ...c, dualHomed: input.dualHomed ?? false, adSet: input.adSet ?? null }));
   },
   hostUpdate: async (id: string, input) => {
-    return hostOut(assign(find(db.hosts, id), input, { updatedAt: now() }));
+    const c = cleanHost(input);
+    const h = find(db.hosts, id);
+    if (c.ip && ipTaken(h.engagementId, c.ip, id)) throw invalid("ip", "A host with this IP already exists");
+    return hostOut(Object.assign(h, c, {
+      updatedAt: now(), ...(input.dualHomed !== undefined ? { dualHomed: input.dualHomed } : {}), ...(input.adSet !== undefined ? { adSet: input.adSet } : {}),
+    }));
   },
-  hostMove: async (id: string, column) => hostOut(assign(find(db.hosts, id), {}, { boardColumn: column, boardManual: true, updatedAt: now() })),
+  hostMove: async (id: string, column) => {
+    if (!BOARD_COLUMNS.includes(column)) throw invalid("column", "column must be one of the six PEN-200 stages");
+    return hostOut(assign(find(db.hosts, id), {}, { boardColumn: column, boardManual: true, updatedAt: now() }));
+  },
   hostSyncBoard: async (hostId: string, derived) => {
     const h = find(db.hosts, hostId);
     if (!h.boardManual) h.boardColumn = derived;
@@ -231,11 +502,9 @@ const base = {
     return hostOut(h);
   },
   hostDelete: async (id: string) => {
-    db.services = db.services.filter((x) => x.hostId !== id);
-    db.vectors = db.vectors.filter((v) => v.hostId !== id);
-    db.hostIdentity = db.hostIdentity.filter((i) => i.hostId !== id);
-    db.ruledOut = db.ruledOut.filter((r) => r.hostId !== id);
-    return remove(db.hosts, id);
+    find(db.hosts, id);
+    dropHosts(new Set([id]));
+    return null;
   },
 
   servicesList: async (hostId: string) => clone(db.services.filter((s) => s.hostId === hostId)),
@@ -253,7 +522,15 @@ const base = {
     return clone(db.services.filter((s) => s.hostId === hostId));
   },
   serviceCreate: async (hostId: string, input) => {
-    const s = { id: nid("s"), hostId, port: input.port, protocol: input.protocol ?? "tcp", state: "open", nmapService: input.nmapService ?? null, nmapVersion: input.nmapVersion ?? null, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: now(), updatedAt: now() };
+    // services.rs `create`: port and protocol checked, the host must exist, one service per port and protocol.
+    if (!(input.port >= 1 && input.port <= 65535)) throw invalid("port", "port must be 1-65535");
+    const protocol = (input.protocol ?? "tcp").trim().toLowerCase() as Service["protocol"];
+    if (protocol !== "tcp" && protocol !== "udp") throw invalid("protocol", "protocol must be tcp or udp");
+    find(db.hosts, hostId);
+    if (db.services.some((x) => x.hostId === hostId && x.port === input.port && x.protocol === protocol)) {
+      throw invalid("port", "A service on this port and protocol already exists");
+    }
+    const s = { id: nid("s"), hostId, port: input.port, protocol, state: "open", nmapService: input.nmapService ?? null, nmapVersion: input.nmapVersion ?? null, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: now(), updatedAt: now() };
     db.services.push(s);
     return clone(s);
   },
@@ -263,8 +540,9 @@ const base = {
   serviceUnconfirm: async (id: string) =>
     clone(assign(find(db.services, id), {}, { confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, updatedAt: now() })),
   serviceDelete: async (id: string) => {
-    db.ruledOut = db.ruledOut.filter((r) => !(r.sourceKind === "service" && r.sourceId === id));
-    return remove(db.services, id);
+    find(db.services, id);
+    dropServices(new Set([id]));
+    return null;
   },
   serviceSetVerdict: async (id: string, verdict: ServiceVerdict | null, reason?: string) => {
     const s = find(db.services, id);
@@ -346,21 +624,66 @@ const base = {
     if (clearPayload) Object.assign(rest, { payloadId: null, payloadValues: null });
     return clone(assign(find(db.log, id), rest, { kind: rest.content.kind, ...(at != null ? { at } : {}), updatedAt: now() }));
   },
-  logDelete: async (id: string) => remove(db.log, id),
+  logDelete: async (id: string) => {
+    find(db.log, id);
+    dropLogEntries(new Set([id]));
+    return null;
+  },
 
   checklistList: async (engagementId: string) => listChecklist(engagementId),
   checklistPut: async (engagementId: string, items) => {
+    // checklist.rs `put`: every item is checked before any is written, so a bad one writes nothing.
+    if (items.length > MAX_ITEMS) throw invalid("items", "too many items (max 500)");
+    engagementMustExist(engagementId);
     for (const it of items) {
-      const base: ChecklistItem = { notes: null, completedAt: null, auto: false, autoFrom: null, evidence: [], ...it, updatedAt: now() };
+      if (!it.goalId.trim()) throw invalid("goalId", "goal id is required");
+      if (!["todo", "in_progress", "done", "na"].includes(it.status)) throw invalid("status", "status must be todo, in_progress, done or na");
+      if (it.autoFrom != null && it.autoFrom !== "na" && it.autoFrom !== "in_progress") throw invalid("autoFrom", "autoFrom must be na or in_progress");
+      checkOwned(engagementId, it.ownerId);
+    }
+    for (const it of items) {
       const i = db.checklist.findIndex((c) => c.ownerId === it.ownerId && c.goalId === it.goalId);
-      if (i >= 0) db.checklist[i] = base;
-      else db.checklist.push(base);
+      // A write that leaves `statusManual` out keeps the stored value (auto ticks never clear a status set by hand).
+      const row: ChecklistItem = {
+        ownerId: it.ownerId, goalId: it.goalId, status: it.status, notes: it.notes ?? null, completedAt: it.completedAt ?? null, auto: it.auto ?? false,
+        autoFrom: it.autoFrom ?? null, statusManual: it.statusManual ?? (i >= 0 ? db.checklist[i]!.statusManual : undefined) ?? false,
+        evidence: it.evidence ?? [], updatedAt: now(),
+      };
+      if (i >= 0) db.checklist[i] = row;
+      else db.checklist.push(row);
     }
     return listChecklist(engagementId);
   },
-  // The cover and fact ticks are derived by engines the fake does not reimplement: the fixtures already carry their result.
-  checklistApplyCover: async (engagementId: string) => listChecklist(engagementId),
-  checklistApplyFacts: async (engagementId: string) => listChecklist(engagementId),
+  // checklist.rs `apply_cover`: `cover` goals become na/auto only where untouched; `revert` only undoes cover marks.
+  checklistApplyCover: async (engagementId: string, cover, revert) => {
+    checkGoalRefs(engagementId, "cover", cover, revert);
+    for (const g of revert) {
+      const r = checklistRow(g);
+      if (r && r.status === "na" && r.auto && !r.statusManual) Object.assign(r, { status: "todo", auto: false, autoFrom: null, completedAt: null, updatedAt: now() });
+    }
+    for (const g of cover) {
+      const r = checklistRow(g);
+      if (!r) insertChecklist(g, "na", null);
+      else if (r.status === "todo" && !r.auto && !r.statusManual) Object.assign(r, { status: "na", auto: true, autoFrom: null, completedAt: null, updatedAt: now() });
+    }
+    return listChecklist(engagementId);
+  },
+  // checklist.rs `apply_facts`: `done` goals become done/auto only where untouched; `revert` only undoes fact marks.
+  checklistApplyFacts: async (engagementId: string, done, revert) => {
+    checkGoalRefs(engagementId, "facts", done, revert);
+    for (const g of revert) {
+      const r = checklistRow(g);
+      if (r && r.status === "done" && r.auto && !r.statusManual && r.evidence.length === 0) {
+        Object.assign(r, { status: "todo", auto: false, autoFrom: null, completedAt: null, updatedAt: now() });
+      }
+    }
+    for (const g of done) {
+      const r = checklistRow(g);
+      if (!r) insertChecklist(g, "done", now());
+      else if (r.status === "todo" && !r.auto && !r.statusManual) Object.assign(r, { status: "done", auto: true, autoFrom: null, completedAt: now(), updatedAt: now() });
+    }
+    return listChecklist(engagementId);
+  },
 
   notesGet: async (engagementId: string, hostId: string | null) => {
     const ownerId = hostId ?? engagementId;
@@ -423,12 +746,27 @@ const base = {
   },
   sameDomains: async (engagementId: string, pairs) => pairs.map(([a, b]) => sameDomainIn(engagementId, a, b)),
   credentialUpdate: async (id: string, input) => clone(assign(find(db.credentials, id), input, { updatedAt: now() })),
-  credentialDelete: async (id: string) => remove(db.credentials, id),
+  credentialDelete: async (id: string) => {
+    find(db.credentials, id);
+    dropCredentials(new Set([id]));
+    return null;
+  },
+  // credentials.rs `crack`: a password linked to its hash by `crackedFrom` (or the stored same password, linked if it
+  // wasn't yet), and the hash marked cracked.
   credentialCrack: async (hashId: string, plaintext: string) => {
-    const hash = assign(find(db.credentials, hashId), {}, { crackStatus: "cracked", updatedAt: now() });
-    const c = { ...hash, id: nid("c"), type: "password" as const, secret: plaintext, hashType: null, crackStatus: null, crackedFrom: null, fromSecretId: hash.id, createdAt: now(), updatedAt: now() };
-    db.credentials.push(c);
-    return clone(c);
+    const hash = find(db.credentials, hashId);
+    if (hash.type !== "hash") throw invalid("type", "only a hash can be cracked");
+    const secret = stripLineBreaks(plaintext);
+    if (!secret.trim()) throw invalid("plaintext", "plaintext is required");
+    const c: Credential = {
+      ...hash, id: nid("c"), type: "password", secret, hashType: null, notes: null, crackStatus: null, crackedFrom: hash.id, fromSecretId: null,
+      createdAt: now(), updatedAt: now(),
+    };
+    const stored = storedSame(c);
+    if (stored && stored.crackedFrom === null) Object.assign(stored, { crackedFrom: hash.id, updatedAt: now() });
+    else if (!stored) db.credentials.push(c);
+    Object.assign(hash, { crackStatus: "cracked", updatedAt: now() });
+    return clone(stored ?? c);
   },
   credentialSetCrackStatus: async (id: string, status) => clone(assign(find(db.credentials, id), {}, { crackStatus: status, updatedAt: now() })),
   credentialConvertToAccess: async (credId: string, grant) => {
@@ -447,7 +785,11 @@ const base = {
     db.usernames.push(u);
     return clone(u);
   },
-  usernameDelete: async (id: string) => remove(db.usernames, id),
+  usernameDelete: async (id: string) => {
+    find(db.usernames, id);
+    dropUsernames(new Set([id]));
+    return null;
+  },
   credAttemptsList: async (engagementId: string) => clone(db.credAttempts.filter((a) => a.engagementId === engagementId)),
   credAttemptsUpsert: async (engagementId: string, inputs) => {
     for (const i of inputs) {
@@ -462,7 +804,10 @@ const base = {
     return clone(db.credAttempts.filter((a) => a.engagementId === engagementId));
   },
   credAttemptDelete: async (id: string) => remove(db.credAttempts, id),
-  payloadBuildsList: async (engagementId: string) => clone(db.payloadBuilds.filter((b) => b.engagementId === engagementId)),
+  payloadBuildsList: async (engagementId: string) => {
+    engagementMustExist(engagementId);
+    return clone(db.payloadBuilds.filter((b) => b.engagementId === engagementId));
+  },
   payloadBuildRecord: async (input) => {
     if (!input.payloadId.trim()) throw new RavenError("validation", "payload id is required", "payloadId");
     const host = db.hosts.find((h) => h.id === input.hostId && h.engagementId === input.engagementId);
@@ -546,7 +891,10 @@ const base = {
     db.reportSections.splice(at, 1);
     return null;
   },
-  triedPairsList: async (engagementId: string) => clone(db.triedPairs.filter((t) => t.engagementId === engagementId)),
+  triedPairsList: async (engagementId: string) => {
+    engagementMustExist(engagementId);
+    return clone(db.triedPairs.filter((t) => t.engagementId === engagementId));
+  },
   triedPairsUpsert: async (engagementId: string, inputs) => {
     const out: TriedPair[] = [];
     for (const i of inputs) {
@@ -578,7 +926,10 @@ const base = {
     return clone(row);
   },
   extractionGet: async (logEntryId: string) => clone(db.extractions.find((x) => x.logEntryId === logEntryId) ?? null),
-  extractionsList: async (engagementId: string) => clone(db.extractions.filter((x) => x.engagementId === engagementId)),
+  extractionsList: async (engagementId: string) => {
+    engagementMustExist(engagementId);
+    return clone(db.extractions.filter((x) => x.engagementId === engagementId));
+  },
   extractionUndo: async (logEntryId: string) => {
     const row = db.extractions.find((e) => e.logEntryId === logEntryId);
     if (!row) throw new RavenError("not_found", `No extraction for ${logEntryId}`);
@@ -615,7 +966,10 @@ const base = {
   },
   accessGrantDelete: async (id: string) => remove(db.accessGrants, id),
 
-  findingsList: async (engagementId: string) => clone(db.findings.filter((f) => f.engagementId === engagementId)),
+  findingsList: async (engagementId: string) => {
+    engagementMustExist(engagementId);
+    return clone(db.findings.filter((f) => f.engagementId === engagementId));
+  },
   findingCreate: async (engagementId: string, input) => {
     const f = {
       severity: null, cvssVector: null, cvssScore: null, status: "draft" as const, description: "", impact: "", remediation: "", exploitNotes: "",
@@ -625,8 +979,15 @@ const base = {
     return clone(f);
   },
   findingUpdate: async (id: string, input) => clone(assign(find(db.findings, id), input, { updatedAt: now() })),
-  findingDelete: async (id: string) => remove(db.findings, id),
-  findingFilesList: async (findingId: string) => clone(db.findingFiles.filter((f) => f.findingId === findingId)),
+  findingDelete: async (id: string) => {
+    find(db.findings, id);
+    dropFindings(new Set([id]));
+    return null;
+  },
+  findingFilesList: async (findingId: string) => {
+    find(db.findings, findingId);
+    return clone(db.findingFiles.filter((f) => f.findingId === findingId));
+  },
   findingFileCreate: async (findingId: string, input) => {
     const f = { language: null, modified: false, originalUrl: null, originalContent: null, ...input, id: nid("ff"), findingId, createdAt: now(), updatedAt: now() };
     db.findingFiles.push(f);
@@ -634,7 +995,10 @@ const base = {
   },
   findingFileUpdate: async (id: string, input) => clone(assign(find(db.findingFiles, id), input, { updatedAt: now() })),
   findingFileDelete: async (id: string) => remove(db.findingFiles, id),
-  failedAttemptsList: async (engagementId: string) => clone(db.failedAttempts.filter((f) => f.engagementId === engagementId)),
+  failedAttemptsList: async (engagementId: string) => {
+    engagementMustExist(engagementId);
+    return clone(db.failedAttempts.filter((f) => f.engagementId === engagementId));
+  },
   failedAttemptCreate: async (engagementId: string, input) => {
     const f = { hostId: null, findingId: null, logEntryId: null, ...input, id: nid("fa"), engagementId, private: input.reasonKind === "operator", createdAt: now(), updatedAt: now() };
     db.failedAttempts.push(f);

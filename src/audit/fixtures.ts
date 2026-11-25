@@ -548,7 +548,9 @@ const checklist: ChecklistItem[] = [
   // The goal everything below is newer than: GoalRow's "12 new credentials since this was done".
   done("e-lab", "e-setup-scans", ago(6 * HOUR)),
   done("e-lab", "e-setup-logging", ago(6 * HOUR)),
-  done("h-web", "h-enum-identified", ago(5 * HOUR), { auto: true, statusManual: false }),
+  // Ticked by hand: h-web still has an unidentified port, so an automatic (fact) tick would be reverted on load, as the
+  // store reverts it.
+  done("h-web", "h-enum-identified", ago(5 * HOUR)),
   { ownerId: "h-web", goalId: "h-enum-os", status: "in_progress", notes: "Ubuntu 22.04 by banner.", completedAt: null, auto: false, autoFrom: null, statusManual: true, evidence: [{ entryId: "l-1" }], updatedAt: ago(30 * MIN) },
 ];
 
@@ -602,6 +604,14 @@ export const FIXTURES: AuditFixtures = {
 };
 
 export const FIXTURE_PROGRESS = progress;
+
+/** A store with nothing in it but Settings: what store scenarios and fake-backed UI tests start from. */
+export const EMPTY_FIXTURES: AuditFixtures = {
+  engagements: [], hosts: [], services: [], log: [], attachments: [], checklist: [], notes: [], ruledOut: [], hostIdentity: [],
+  vectors: [], tunnels: [], hops: [], interfaceDismissals: [], credentials: [], usernames: [], credAttempts: [], triedPairs: [],
+  payloadBuilds: [], reports: [], reportSections: [], extractions: [], accessGrants: [], findings: [], findingFiles: [],
+  failedAttempts: [], cleanup: [], backups: [], settings,
+};
 
 // ---------------------------------------------------------------- Manual notes
 

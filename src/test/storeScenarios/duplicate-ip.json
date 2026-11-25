@@ -1,0 +1,23 @@
+{
+  "name": "A host's IP is a single IPv4 address, unique within its engagement",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Dup lab", "kind": "lab" }], "as": "eng" },
+    { "do": "engagementCreate", "args": [{ "name": "Other lab", "kind": "lab" }], "as": "other" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "alpha", "ip": "192.0.2.20" }], "as": "alpha" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "beta", "ip": "192.0.2.20" }], "error": { "code": "validation", "field": "ip" } },
+    { "do": "hostCreate", "args": ["$eng", { "name": "beta", "ip": "192.0.2.20/32" }], "error": { "code": "validation", "field": "ip" } },
+    { "do": "hostCreate", "args": ["$other", { "name": "alpha", "ip": "192.0.2.20" }], "expect": { "ip": "192.0.2.20" } },
+    { "do": "hostCreate", "args": ["$eng", { "name": " ", "ip": " 192.0.2.21/32 " }], "as": "beta", "expect": { "name": "192.0.2.21", "ip": "192.0.2.21" } },
+    { "do": "hostUpdate", "args": ["$beta", { "name": "beta", "ip": "192.0.2.20" }], "error": { "code": "validation", "field": "ip" } },
+    { "do": "hostUpdate", "args": ["$alpha", { "name": "alpha", "ip": "192.0.2.20" }], "expect": { "ip": "192.0.2.20" } },
+    { "do": "hostCreate", "args": ["$eng", { "name": "gamma", "ip": "192.0.2.0/24" }], "error": { "code": "validation", "field": "ip" } },
+    { "do": "hostCreate", "args": ["$eng", { "name": "gamma", "ip": "192.0.2.256" }], "error": { "code": "validation", "field": "ip" } },
+    { "do": "hostCreate", "args": ["$eng", { "name": "", "ip": "" }], "error": { "code": "validation", "field": "name" } },
+    { "do": "hostCreate", "args": ["$eng", { "name": "noip" }], "expect": { "name": "noip", "ip": null } },
+    { "do": "hostCreate", "args": ["$eng", { "name": "noip2", "ip": "  " }], "expect": { "ip": null } },
+    {
+      "do": "hostsList", "args": ["$eng"], "ordered": true,
+      "expect": [{ "id": "$alpha" }, { "id": "$beta" }, { "name": "noip" }, { "name": "noip2" }]
+    }
+  ]
+}

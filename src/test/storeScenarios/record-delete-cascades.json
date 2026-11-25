@@ -1,0 +1,71 @@
+{
+  "name": "Deleting a service, log entry, credential, username or finding cleans up what refers to it",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Cascade lab", "kind": "lab" }], "as": "eng" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "app01", "ip": "203.0.113.20" }], "as": "h" },
+    { "do": "serviceCreate", "args": ["$h", { "port": 8080 }], "as": "web" },
+    { "do": "serviceCreate", "args": ["$h", { "port": 22 }], "as": "ssh" },
+    { "do": "serviceSetVerdict", "args": ["$web", "dead_end", "default page only"] },
+    {
+      "do": "logCreate",
+      "args": ["$eng", {
+        "title": "Tomcat manager", "ranOn": null, "hostIds": ["$h"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "screenshot", "attachmentId": "", "caption": "manager", "fileName": "manager.png" },
+        "attachment": { "mime": "image/png", "dataBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" }
+      }],
+      "as": "shot",
+      "bind": { "att": "content.attachmentId" }
+    },
+    {
+      "do": "logCreate",
+      "args": ["$eng", {
+        "title": "whoami", "ranOn": null, "hostIds": ["$h"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "note", "text": "tomcat" }
+      }],
+      "as": "note"
+    },
+    { "do": "findingCreate", "args": ["$eng", { "title": "Tomcat default credentials", "hostIds": ["$h"], "serviceIds": ["$web", "$ssh"], "stepEntryIds": ["$shot", "$note"] }], "as": "finding" },
+    { "do": "findingFileCreate", "args": ["$finding", { "name": "deploy.sh", "content": "curl -T shell.war" }] },
+    { "do": "failedAttemptCreate", "args": ["$eng", { "findingId": "$finding", "hostId": "$h", "title": "Manager brute force", "reasonKind": "control", "reason": "lockout", "logEntryId": "$shot" }] },
+    { "do": "hopCreate", "args": ["$eng", { "toHostId": "$h", "via": "http", "logEntryId": "$shot" }] },
+    { "do": "cleanupCreate", "args": ["$eng", { "hostId": "$h", "kind": "file", "target": "/opt/tomcat/webapps/shell.war", "sourceEntryId": "$shot" }] },
+    { "do": "credentialCreate", "args": ["$eng", { "type": "hash", "username": "tomcat", "secret": "5f4dcc3b5aa765d61d8327deb882cf99", "hashType": "md5" }], "bind": { "hash": "credential.id" } },
+    { "do": "credentialCrack", "args": ["$hash", "password"], "as": "plain", "expect": { "type": "password", "secret": "password", "crackedFrom": "$hash", "fromSecretId": null } },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "manager" }], "as": "mgr" },
+    { "do": "accessGrantCreate", "args": ["$eng", { "usernameId": "$mgr", "hostId": "$h", "level": "user", "via": "http", "logEntryId": "$shot" }] },
+    {
+      "do": "credAttemptsUpsert",
+      "args": ["$eng", [
+        { "credId": "$hash", "hostId": "$h", "service": "http", "result": "failed" },
+        { "credId": "$plain", "usernameId": "$mgr", "hostId": "$h", "service": "http", "result": "valid", "logEntryId": "$shot" }
+      ]]
+    },
+
+    { "do": "serviceDelete", "args": ["$web"] },
+    { "do": "ruledOutList", "args": ["$eng"], "expect": [] },
+    { "do": "findingsList", "args": ["$eng"], "expect": [{ "serviceIds": ["$ssh"] }] },
+
+    { "do": "logDelete", "args": ["$shot"] },
+    { "do": "attachmentGet", "args": ["$att"], "error": { "code": "not_found" } },
+    { "do": "findingsList", "args": ["$eng"], "expect": [{ "stepEntryIds": ["$note"] }] },
+    { "do": "failedAttemptsList", "args": ["$eng"], "expect": [{ "logEntryId": null, "findingId": "$finding" }] },
+    { "do": "hopsList", "args": ["$eng"], "expect": [{ "logEntryId": null }] },
+    { "do": "cleanupList", "args": ["$eng"], "expect": [{ "sourceEntryId": null }] },
+    { "do": "accessGrantsList", "args": ["$eng"], "expect": [{ "logEntryId": null }] },
+    { "do": "credAttemptsList", "args": ["$eng"], "expect": [{ "credId": "$hash" }, { "credId": "$plain", "logEntryId": null }] },
+
+    { "do": "credentialDelete", "args": ["$hash"] },
+    { "do": "credentialsList", "args": ["$eng"], "expect": [{ "id": "$plain", "fromSecretId": null, "crackedFrom": null }] },
+    { "do": "credAttemptsList", "args": ["$eng"], "expect": [{ "credId": "$plain" }] },
+
+    { "do": "usernameDelete", "args": ["$mgr"] },
+    { "do": "accessGrantsList", "args": ["$eng"], "expect": [] },
+    { "do": "credAttemptsList", "args": ["$eng"], "expect": [] },
+
+    { "do": "findingDelete", "args": ["$finding"] },
+    { "do": "findingsList", "args": ["$eng"], "expect": [] },
+    { "do": "findingFilesList", "args": ["$finding"], "error": { "code": "not_found" } },
+    { "do": "failedAttemptsList", "args": ["$eng"], "expect": [{ "title": "Manager brute force", "findingId": null }] },
+    { "do": "logList", "args": ["$eng"], "expect": [{ "id": "$note" }] }
+  ]
+}
