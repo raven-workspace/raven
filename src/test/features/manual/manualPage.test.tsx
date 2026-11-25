@@ -127,7 +127,20 @@ function layOut() {
 afterEach(() => {
   undoLayout?.();
   undoLayout = null;
+  // jsdom has no document.fonts of its own.
+  delete (document as { fonts?: FontFaceSet }).fonts;
 });
+
+/** A stand-in for `document.fonts` (jsdom has none): the web fonts start and finish loading when the test says. */
+function fakeFonts(status: FontFaceSetLoadStatus) {
+  const set = Object.assign(new EventTarget(), { status });
+  Object.defineProperty(document, "fonts", { value: set, configurable: true });
+  const fire = (next: FontFaceSetLoadStatus, type: string) => act(() => {
+    set.status = next;
+    set.dispatchEvent(new Event(type));
+  });
+  return { loading: () => fire("loading", "loading"), done: () => fire("loaded", "loadingdone") };
+}
 
 beforeEach(() => {
   localStorage.clear();
@@ -782,6 +795,57 @@ describe("Manual: the host commands fill for", () => {
     });
     await act(async () => release([E1]));
     await waitFor(() => expect(pane().scrollTop).toBe(240));
+  });
+
+  // RAV-57: a web font swapped in late reflows the note as the exam rules do; the restored spot waits for both.
+  it("the restored scroll is applied again once web fonts finish loading after the exam rules", async () => {
+    const fonts = fakeFonts("loading");
+    withEngagement();
+    let release: (v: Engagement[]) => void = () => {};
+    m.engagementsList.mockReturnValue(new Promise((r) => (release = r)));
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
+    useManualStore.setState({ place: { noteId: ERRORS.id, scrollTop: 240 } });
+    mount(["/manual"]);
+    await openNote("Zz Errors");
+    await waitFor(() => expect(pane().scrollTop).toBe(240));
+    await act(async () => release([E1]));
+    await screen.findByRole("button", { name: "Fill for host zzweb01" });
+    act(() => {
+      pane().scrollTop = 30; // the font swap moved the spot
+    });
+    fonts.done();
+    expect(pane().scrollTop).toBe(240);
+  });
+
+  it("the restored scroll is applied again once web fonts finish loading, with no engagement to wait on", async () => {
+    const fonts = fakeFonts("loading");
+    useManualStore.setState({ place: { noteId: ERRORS.id, scrollTop: 240 } });
+    mount(["/manual"]);
+    await openNote("Zz Errors");
+    await screen.findByText("No active engagement");
+    await waitFor(() => expect(pane().scrollTop).toBe(240));
+    act(() => {
+      pane().scrollTop = 30; // the font swap moved the spot
+    });
+    fonts.done();
+    expect(pane().scrollTop).toBe(240);
+  });
+
+  it("with web fonts already loaded, a later font load doesn't move the reader", async () => {
+    const fonts = fakeFonts("loaded");
+    withEngagement();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
+    useManualStore.setState({ place: { noteId: ERRORS.id, scrollTop: 240 } });
+    mount(["/manual"]);
+    await openNote("Zz Errors");
+    await screen.findByRole("button", { name: "Fill for host zzweb01" });
+    await waitFor(() => expect(pane().scrollTop).toBe(240));
+    act(() => {
+      pane().scrollTop = 30; // the reader scrolled on
+    });
+    fonts.loading();
+    fonts.done();
+    expect(pane().scrollTop).toBe(30);
   });
 });
 
