@@ -11,13 +11,15 @@ const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/gif";
  * A screenshot added from a finding: pasted, dropped or chosen, with its caption. Saving it makes a normal screenshot
  * log entry on the finding's hosts (it shows in the log like any capture) and hands its id back to be appended to the
  * finding's steps. "Link a screenshot from the log" asks for the step picker, screenshots only, to link an existing
- * capture instead: never a copy.
+ * capture instead: never a copy. When a step after the save fails (the checklist sync, say), the screenshot is still
+ * saved and added, and what failed is handed back with it.
  */
 export function AddScreenshot({ eid, hostIds, onAdded, onLink, onClose }: {
   eid: string;
   /** The finding's hosts: the screenshot is logged on them. */
   hostIds: string[];
-  onAdded: (entryId: string) => void;
+  /** `failed`: the message of a step after the save that failed; the screenshot is saved all the same. */
+  onAdded: (entryId: string, failed: string | null) => void;
   onLink: () => void;
   onClose: () => void;
 }) {
@@ -51,8 +53,8 @@ export function AddScreenshot({ eid, hostIds, onAdded, onLink, onClose }: {
     setBusy(true);
     setError(null);
     try {
-      const entry = await saveScreenshot(qc, eid, hostIds, file, caption);
-      onAdded(entry.id);
+      const { entry, failed } = await saveScreenshot(qc, eid, hostIds, file, caption);
+      onAdded(entry.id, failed?.message ?? null);
     } catch (e) {
       setError(`Couldn't save the screenshot: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
