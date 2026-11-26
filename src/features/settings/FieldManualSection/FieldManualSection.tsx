@@ -45,6 +45,10 @@ export function FieldManualSection() {
 
   const importNow = async () => {
     setError(null);
+    if (!path.trim()) {
+      setError("Set the vault folder first.");
+      return;
+    }
     if (!(await savePath())) return;
     imp.mutate(path.trim(), { onError: (e) => setError(e.message) });
   };
@@ -62,7 +66,7 @@ export function FieldManualSection() {
       }
     >
       <Field label="Vault folder">
-        <Input mono value={path} placeholder="~/…/Field-Manual" onChange={(e) => setPath(e.target.value)} onBlur={() => void savePath()} />
+        <Input mono value={path} placeholder="~/…/your Obsidian vault" onChange={(e) => setPath(e.target.value)} onBlur={() => void savePath()} />
       </Field>
       {error && <p role="alert" className="field-manual-section__error">{error}</p>}
       {s && (

@@ -4,7 +4,7 @@
 
 **Date:** 2026-11-05
 **Amends:** `2026-11-03-raven-desktop-design.md`, §5.2 (Board) and §6.4 (Checklist, the host stage order). Everything else in that spec stands.
-**Source of method:** the user's Field-Manual Obsidian vault at `~/Documents/Field Manual`.
+**Source of method:** the user's Field Manual Obsidian vault.
 - `01-Playbook/00 - Off-the-Bat.md` through `06 - Lateral Movement.md` are the method.
 - `00-Home/Conventions.md` is the vault's contract with Raven.
 

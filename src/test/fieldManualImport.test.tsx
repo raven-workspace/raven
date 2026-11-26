@@ -97,6 +97,16 @@ describe("Field Manual import", () => {
     expect(await screen.findByText(/kept the last import's 3 notes/)).toHaveClass("field-manual-section__warning");
   });
 
+  it("with no vault folder set, Import now asks for one and scans nothing", async () => {
+    const user = userEvent.setup();
+    m.settingsGet.mockResolvedValue({ ...settings, fieldManualPath: "" });
+    mount(<FieldManualSection />);
+    await user.click(await screen.findByRole("button", { name: "Import now" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Set the vault folder first.");
+    expect(m.fieldManualScan).not.toHaveBeenCalled();
+    expect(m.settingsUpdate).not.toHaveBeenCalled();
+  });
+
   it("a failed scan shows an error and leaves the library and snapshot unchanged", async () => {
     const user = userEvent.setup();
     const before = currentLibrary();

@@ -4,7 +4,7 @@
 
 **Date:** 2026-11-05
 **Builds on:** `2026-11-03-raven-desktop-design.md` §10 phase 2, and `2026-11-05-raven-pen200-restructure-design.md` (project 1, merged).
-**Source of commands:** the user's Field-Manual Obsidian vault at `~/Documents/Field Manual`. Its contract with Raven is `00-Home/Conventions.md`.
+**Source of commands:** the user's Field Manual Obsidian vault (its folder is set in Settings). Its contract with Raven is `00-Home/Conventions.md`.
 
 ## 1. Intent
 

@@ -209,7 +209,7 @@ The checklist (what they've done, what their options are next) and the host fact
 
 - Real engagement data lives only in the owner's encrypted database. Never fabricate it or copy it into the repo.
 - Synthetic stress fixtures are in `src/audit/fixtures.ts`.
-- The Field Manual vault is at `~/Documents/Field Manual`.
+- The Field Manual vault's path is set in Settings › Field Manual.
 - Design specs, one per feature round, are in `docs/specs/` with an index. They record the reasoning at the time; the mockups they cite are linked from git history.
 - Open work is tracked in Linear (RAV), not in the repo.
 
