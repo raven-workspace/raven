@@ -6,7 +6,9 @@ Setup and commands are in the [README](README.md). This file covers how work mov
 
 Raven Workspace Community Edition is open source under the [GNU AGPL-3.0](LICENSE) (`AGPL-3.0-only`). Keegan Techentin owns and maintains Raven and holds the copyright in its code.
 
-- **Contributor Licence Agreement (CLA):** before your first pull request can be merged, you sign the Raven CLA. You keep the copyright in your contribution and give Keegan Techentin a permanent, irrevocable licence to use, change and relicense it, including in commercial editions of Raven. Pull requests without a signed CLA can't be merged.
+- **Contributor Licence Agreement (CLA):** before your first pull request can be merged, you sign the [Raven CLA](CLA.md). You keep the copyright in your contribution and give Keegan Techentin a permanent, irrevocable licence to use, change and relicense it, including in commercial editions of Raven. Pull requests without a signed CLA can't be merged.
+  - **To sign:** open your pull request. The CLA check comments on it. Read the CLA, then reply with exactly `I have read the Raven CLA and I hereby sign it.` You sign once, and it covers your later pull requests.
+  - **If the check stays red** after you sign, comment `recheck`. Every commit author must sign, so check that your commits use the email address on your GitHub account.
 - **Only your own work:** contribute only code you wrote and have the right to give, that no employer or school owns.
 - **Third-party code and data:** ask in the issue before adding anything from another project. Anything added is listed in [`NOTICE`](NOTICE) with its licence.
 - **Name and logo:** the licence covers the code, not the "Raven Workspace" name or logo. See [`NOTICE`](NOTICE).
