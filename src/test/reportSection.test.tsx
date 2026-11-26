@@ -1781,6 +1781,23 @@ describe("CheckList", () => {
     expect(onPick).toHaveBeenLastCalledWith(expect.objectContaining({ id: "coverage:s2" }));
     expect(screen.queryByRole("button", { name: "Fix" })).toBeNull();
   });
+
+  it("shows a single check's text once when its row already reads in full, keeping its fix and action", () => {
+    const run = vi.fn();
+    render(
+      <TooltipProvider>
+        <CheckList
+          checks={[{ id: "coverage:s1", level: "soft", text: "22/tcp on ms01 is untested.", fix: "nmap -p22 ms01" }]}
+          onPick={() => {}}
+          actionFor={() => ({ label: "Mark tested", run })}
+        />
+      </TooltipProvider>,
+    );
+    fireEvent.click(screen.getByText("22/tcp on ms01 is untested"));
+    expect(screen.getAllByText(/22\/tcp on ms01 is untested/)).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Fix" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark tested" })).toBeInTheDocument();
+  });
 });
 
 describe("ReportTabs", () => {

@@ -57,8 +57,10 @@ export function CheckList({
         const action = isPicked ? actionFor?.(check) : undefined;
         const many = g.checks.length > 1;
         // The picked check in full: always for a single one (its row is the short wording), and for a group when its
-        // checks' words differ ("22/tcp on lnx02 is untested.").
-        const ownText = !many || g.checks.some((c) => c.text !== g.checks[0].text);
+        // checks' words differ ("22/tcp on lnx02 is untested."). A single check whose row already reads in full (a kind
+        // with no short wording) isn't said twice.
+        const sameAsRow = !many && check.text.replace(/\.$/, "") === g.text.replace(/\.$/, "");
+        const ownText = (!many && !sameAsRow) || (many && g.checks.some((c) => c.text !== g.checks[0].text));
         return (
           <li key={g.key} className="check-list__item">
             <Tooltip content={g.full} side="right">
