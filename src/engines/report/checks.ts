@@ -348,7 +348,8 @@ export function targetChecks(input: TargetChecksInput): Check[] {
     if (!id || goneSeen.has(id)) continue;
     goneSeen.add(id);
     const exists = finding ? data.findings.some((f) => f.id === finding) : data.findingFiles.some((f) => f.id === file);
-    if (!exists) out.push({ id: `gone:${id}`, level: "fail", text: "A finding or file on the page was deleted.", anchor: { nodeIndex: index } });
+    // A deleted source offers no Refresh: the block menu's Delete is the way out.
+    if (!exists) out.push({ id: `gone:${id}`, level: "fail", text: "A finding or file on the page was deleted. Delete its block from the block menu (⋯).", anchor: { nodeIndex: index } });
   }
 
   out.push(...stepChecks(nodes, sectionId));
@@ -533,6 +534,7 @@ const SHORT: Record<string, (c: Check) => string> = {
     return why ? `Long block (${why})` : "Long block";
   },
   legible: () => "Screenshot too narrow to print",
+  details: () => "Name, email or OSID missing",
 };
 
 /** The id's n-th ":" part ("proof-ip:ms01:local" → 1 "ms01", 2 "local"). */
@@ -573,7 +575,7 @@ export function reportChecks(input: { report: Report; targets: ReportTarget[]; d
   const { report, targets, data } = input;
   const out: Check[] = [];
   if (!report.candidateName.trim() || !report.email.trim() || !report.osid.trim()) {
-    out.push({ id: "details", level: "fail", text: "The report is missing your name, email or OSID." });
+    out.push({ id: "details", level: "fail", text: "The report is missing your name, email or OSID. Fill in your name, email and OSID in Report details." });
   }
   if (report.osid.trim() && !isValidOsid(report.osid)) {
     out.push({ id: "osid", level: "fail", text: "The OSID should look like OS-12345." });

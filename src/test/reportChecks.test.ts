@@ -530,11 +530,13 @@ describe("targetChecks", () => {
     });
   });
   describe("gone", () => {
+    // What is wrong, then what to do: the block menu's Delete (a deleted source offers no Refresh).
+    const GONE = "A finding or file on the page was deleted. Delete its block from the block menu (⋯).";
     it("fails once per finding or file that no longer exists, at its first block", () => {
       const page = doc(words("Why.", "finding:nf:explanation"), words("Fix.", "finding:nf:fix"), code("x", "file:nx"), ...goodDoc().content!);
       expect(run(good(), page).filter((c) => c.id.startsWith("gone"))).toEqual([
-        { id: "gone:nf", level: "fail", text: "A finding or file on the page was deleted.", anchor: { nodeIndex: 0 } },
-        { id: "gone:nx", level: "fail", text: "A finding or file on the page was deleted.", anchor: { nodeIndex: 4 } },
+        { id: "gone:nf", level: "fail", text: GONE, anchor: { nodeIndex: 0 } },
+        { id: "gone:nx", level: "fail", text: GONE, anchor: { nodeIndex: 4 } },
       ]);
     });
     it("says nothing for a finding and a file that exist", () => {
@@ -635,6 +637,10 @@ describe("reportChecks", () => {
   });
   it("details, osid and no-targets", () => {
     expect(reportChecks({ report: report({ email: " " }), targets: [target], data: data() }).map((c) => [c.id, c.level])).toEqual([["details", "fail"]]);
+    const details = reportChecks({ report: report({ email: " " }), targets: [target], data: data() });
+    expect(details[0].text).toBe("The report is missing your name, email or OSID. Fill in your name, email and OSID in Report details.");
+    // The outline's row stays short.
+    expect(groupChecks(details)[0].text).toBe("Name, email or OSID missing");
     expect(reportChecks({ report: report({ osid: "123" }), targets: [target], data: data() }).map((c) => [c.id, c.level])).toEqual([["osid", "fail"]]);
     expect(reportChecks({ report: report(), targets: [], data: data() }).map((c) => c.id)).toEqual(["no-targets"]);
   });
