@@ -222,6 +222,18 @@ describe("Report view", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
   });
 
+  it("picking a missing flag selects its machine's heading", async () => {
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    await waitFor(() => expect(openTodo()).toHaveTextContent("2 flags are not on the page"));
+    fireEvent.click(within(openTodo()).getByText("2 flags are not on the page"));
+    await waitFor(() => expect(pageEditor().state.selection instanceof NodeSelection).toBe(true));
+    const picked = (pageEditor().state.selection as NodeSelection).node;
+    expect(picked.type.name).toBe("heading");
+    expect(picked.textContent).toContain("lnx02");
+  });
+
   it("a dismissed check leaves To do and the tab's count, is saved with the page, and can be brought back", async () => {
     await seedLnx(80);
     const save = vi.spyOn(api, "reportSectionSave");
@@ -1029,6 +1041,8 @@ describe("Report view: the result", () => {
     await waitFor(() => expect(paper().querySelector('[data-source-gone="private"]')).toBeTruthy());
     const checks = openTodo();
     fireEvent.click(within(checks).getByText("Block from a now-private entry"));
+    // The action says what it does before it is pressed.
+    expect(within(checks).getByText("Keep the text to make it your own writing: it stays on the page and goes into the report, though its entry stays private.")).toBeInTheDocument();
     fireEvent.click(within(checks).getByRole("button", { name: "Keep the text" }));
     await waitFor(() => expect(paper().querySelector("[data-source-gone]")).toBeNull());
     expect(paper().textContent).toContain("creds in the share");
@@ -1780,6 +1794,38 @@ describe("CheckList", () => {
     expect(screen.getByText("80/tcp on ms01 is untested.")).toBeInTheDocument();
     expect(onPick).toHaveBeenLastCalledWith(expect.objectContaining({ id: "coverage:s2" }));
     expect(screen.queryByRole("button", { name: "Fix" })).toBeNull();
+  });
+
+  it("shows a single check's text once when its row already reads in full, keeping its fix and action", () => {
+    const run = vi.fn();
+    render(
+      <TooltipProvider>
+        <CheckList
+          checks={[{ id: "coverage:s1", level: "soft", text: "22/tcp on ms01 is untested.", fix: "nmap -p22 ms01" }]}
+          onPick={() => {}}
+          actionFor={() => ({ label: "Mark tested", run })}
+        />
+      </TooltipProvider>,
+    );
+    fireEvent.click(screen.getByText("22/tcp on ms01 is untested"));
+    expect(screen.getAllByText(/22\/tcp on ms01 is untested/)).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Fix" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark tested" })).toBeInTheDocument();
+  });
+
+  it("shows an action's note, saying what it does, with the action", () => {
+    render(
+      <TooltipProvider>
+        <CheckList
+          checks={[{ id: "copied-deleted:e1", level: "fail", text: "A block on the page comes from an entry that was deleted." }]}
+          onPick={() => {}}
+          actionFor={() => ({ label: "Keep the text", note: "It stays as yours.", run: () => {} })}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByText("It stays as yours.")).toBeNull();
+    fireEvent.click(screen.getByText("Block from a deleted entry"));
+    expect(screen.getByText("It stays as yours.")).toBeInTheDocument();
   });
 });
 
