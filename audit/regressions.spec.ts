@@ -5,13 +5,21 @@ import { caretAtEnd, garnetOutput, openGarnet, openReportItem, openReportPart, S
 
 // Hard regressions: unlike the audit checks, these fail the run.
 
+/**
+ * Waits for the app shell: the title bar's Search button, which is up only past the vault gate, where ⌘K is bound.
+ * Its accessible name is exactly "Search" (the ⌘K key cap is aria-hidden). It's matched exactly because a looser
+ * /Search/ also matches command copy buttons, such as "Copy command: Search the disk for …" on a host page.
+ */
+async function waitForShell(page: Page) {
+  await page.getByRole("button", { name: "Search", exact: true }).waitFor();
+}
+
 for (const path of ["/arsenal", "/"]) {
   test(`search from ${path}: the field stays usable next to a long engagement name`, async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.clock.install({ time: AUDIT_NOW });
     await page.goto(path);
-    // The app is ready once the title bar's Search button is up (⌘K is bound behind the vault gate).
-    await page.getByRole("button", { name: /Search/ }).waitFor();
+    await waitForShell(page);
     await page.keyboard.press("Meta+K");
     const dialog = page.getByRole("dialog");
     await dialog.waitFor();
@@ -69,7 +77,7 @@ test("scroll panes never clip focus or hide controls under the scrollbar", async
   const ready = async (path: string, width: number) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(path);
-    await page.getByRole("button", { name: /Search/ }).waitFor();
+    await waitForShell(page);
   };
 
   for (const width of [1280, 900]) {
@@ -122,7 +130,7 @@ async function open(page: Page, path: string, width: number, height = 900) {
   await page.clock.install({ time: AUDIT_NOW });
   await page.setViewportSize({ width, height });
   await page.goto(path);
-  await page.getByRole("button", { name: /Search/ }).waitFor();
+  await waitForShell(page);
 }
 
 test("host page never scrolls sideways", async ({ page }) => {
