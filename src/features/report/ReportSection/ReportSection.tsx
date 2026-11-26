@@ -650,12 +650,16 @@ function ReportBody({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleted, setDeleted] = useState<ReportSection | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  // What asked to delete (Page actions or the page's tab), and whether the page went: where focus goes as the dialog closes.
+  const deleteOpener = useRef<HTMLElement | null>(null);
+  const deleteDone = useRef(false);
   const confirmDelete = () => {
     const s = deleting;
     if (!s || deleteBusy) return;
     setDeleteBusy(true);
     deletePage(qc, s)
       .then((kept) => {
+        deleteDone.current = true;
         setDeleting(null);
         setDeleteError(null);
         if (openId === s.id) setOpenId(null);
@@ -1096,9 +1100,11 @@ function ReportBody({
             onTodo={(id) => openTodo([...(navRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find((t) => t.dataset.id === id) ?? null)}
             onAddPage={addPage}
             onRenamePage={renameTo}
-            onDeletePage={(id) => {
+            onDeletePage={(id, from) => {
               const s = sections.find((x) => x.id === id);
-              if (s) setDeleting(s);
+              if (!s) return;
+              deleteOpener.current = from;
+              setDeleting(s);
             }}
             exportSlot={<ExportButton report={report} build={buildExport} gaps={gaps} onSaveReport={saveReport} />}
             listRef={navRef}
@@ -1182,9 +1188,15 @@ function ReportBody({
         title={deleting ? `Delete ${pageTitleOf(deleting)}? Its text goes with it.` : ""}
         description={deleteError ? <span role="alert" className="report-section__delete-error">{deleteError}</span> : undefined}
         onCloseAutoFocus={(e) => {
-          // Back to the tab row, on the open tab (the first target's after a delete of the open page).
+          // Back to what asked (Page actions, or the tab), unless the page went: then the tab now open (the first
+          // target's after a delete of the open page).
           e.preventDefault();
-          focusReportTab(navRef.current, 0);
+          const back = deleteOpener.current;
+          const done = deleteDone.current;
+          deleteOpener.current = null;
+          deleteDone.current = false;
+          if (!done && back?.isConnected) back.focus();
+          else focusReportTab(navRef.current, 0);
         }}
         footer={
           <>

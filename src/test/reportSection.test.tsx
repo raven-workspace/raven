@@ -2006,4 +2006,36 @@ describe("Report view: tabs, focus and keyboard (RAV-17)", () => {
     fireEvent.keyDown(screen.getByRole("tab"), { key: "F2" });
     expect(screen.getByRole("textbox", { name: "Page title" })).toHaveValue("Pivoting");
   });
+
+  it("closing the delete dialog puts focus back on what opened it: Page actions, or the tab; after a delete, the open tab", async () => {
+    mount();
+    await ready();
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toContain("Appendix A"));
+    await addPage("Appendix page");
+    await waitFor(() => expect(tab("Appendix B")).toHaveAttribute("aria-selected", "true"));
+    const deleteDialog = () => screen.findByRole("dialog", { name: /^Delete Untitled appendix\?/ });
+    const cancel = async () => {
+      fireEvent.click(within(await deleteDialog()).getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    };
+    // From Page actions.
+    const actions = screen.getByRole("button", { name: "Page actions" });
+    actions.focus();
+    fireEvent.click(actions);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    await cancel();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Page actions" })));
+    // From Delete on a focused tab that isn't the open one.
+    tab("Appendix A").focus();
+    fireEvent.keyDown(tab("Appendix A"), { key: "Delete" });
+    await cancel();
+    await waitFor(() => expect(document.activeElement).toBe(tab("Appendix A")));
+    // Deleted: the tab that asked is gone, so focus goes to the tab now open.
+    fireEvent.keyDown(tab("Appendix A"), { key: "Delete" });
+    fireEvent.click(within(await deleteDialog()).getByRole("button", { name: "Delete page" }));
+    await waitFor(() => expect(tabLabels()).not.toContain("Appendix B"));
+    await waitFor(() => expect(document.activeElement).toBe(tab("Appendix A")));
+    expect(tab("Appendix A")).toHaveAttribute("aria-selected", "true");
+  });
 });

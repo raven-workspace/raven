@@ -63,16 +63,21 @@ function walkTabs(e: KeyboardEvent<HTMLElement>, onOpen: (id: string) => void): 
 
 const STATE_TEXT: Record<Exclude<TabItem["state"], "none">, string> = { ready: "ready", todo: "to do", "not-started": "not started" };
 
-/** A menu item; `movesFocus` items put focus somewhere themselves (an input, a dialog), so it doesn't go back to the trigger. */
-type MenuItem = { label: string; run(): void; destructive?: boolean; movesFocus?: boolean };
+/** A menu item; `movesFocus` items put focus somewhere themselves (an input, a dialog), so it doesn't go back to the
+ *  trigger. `run` gets the trigger, for a dialog to hand focus back to. */
+type MenuItem = { label: string; run(trigger: HTMLElement | null): void; destructive?: boolean; movesFocus?: boolean };
 
 /** A small menu of text items in a popover: its own portal, so the scrolling tab row never clips it. */
 function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: string; items: MenuItem[] }) {
   const [open, setOpen] = useState(false);
   const focusMoved = useRef(false);
+  // The button that opened the menu (a click doesn't focus a button in WebKit, so it is kept from the click).
+  const opener = useRef<HTMLElement | null>(null);
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      <Popover.Trigger asChild onClick={(e) => (opener.current = e.currentTarget)}>
+        {trigger}
+      </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
           side="bottom"
@@ -96,7 +101,7 @@ function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: str
               onClick={() => {
                 focusMoved.current = !!it.movesFocus;
                 setOpen(false);
-                it.run();
+                it.run(opener.current);
               }}
             >
               {it.label}
@@ -231,8 +236,8 @@ export function ReportTabs({
   onAddPage?(placement: "appendix" | "body"): void;
   /** A page's new title (trimmed, never empty). */
   onRenamePage?(id: string, title: string): void;
-  /** Delete was asked for a page: the caller confirms. */
-  onDeletePage?(id: string): void;
+  /** Delete was asked for a page, from `from` (Page actions or the tab): the caller confirms, then gives focus back. */
+  onDeletePage?(id: string, from: HTMLElement | null): void;
   exportSlot: ReactNode;
   listRef?: Ref<HTMLDivElement>;
 }) {
@@ -282,7 +287,7 @@ export function ReportTabs({
       }
       if ((e.key === "Delete" || e.key === "Backspace") && onDeletePage) {
         e.preventDefault();
-        onDeletePage(page.id);
+        onDeletePage(page.id, focused);
         return;
       }
     }
@@ -335,7 +340,7 @@ export function ReportTabs({
               trigger={<IconButton icon={DotsThree} label="Page actions" />}
               items={[
                 ...(onRenamePage ? [{ label: "Rename", run: () => setRenaming(openPage.id), movesFocus: true }] : []),
-                ...(onDeletePage ? [{ label: "Delete", run: () => onDeletePage(openPage.id), destructive: true, movesFocus: true }] : []),
+                ...(onDeletePage ? [{ label: "Delete", run: (from: HTMLElement | null) => onDeletePage(openPage.id, from), destructive: true, movesFocus: true }] : []),
               ]}
             />
           )}
