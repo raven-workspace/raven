@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useParams } from "react-router";
 import {
   archivePage,
@@ -59,7 +59,7 @@ import { EvidenceDrawer, EvidenceRail } from "../EvidenceRail/EvidenceRail";
 import { GuidePanel } from "../GuidePanel/GuidePanel";
 import { ReportDetails } from "../ReportDetails/ReportDetails";
 import { ReportStrip } from "../ReportStrip/ReportStrip";
-import { focusReportTab, PartTabs, ReportTabs, type TabItem } from "../ReportTabs/ReportTabs";
+import { focusReportTab, PartTabs, ReportTabs, reportTabDomId, type TabItem } from "../ReportTabs/ReportTabs";
 import { ExpectedFlags, TodoPanel, type CheckAction } from "../TodoPanel/TodoPanel";
 import {
   BACK_KINDS,
@@ -88,6 +88,7 @@ import { useSettings } from "../../settings/queries";
 import { useEngagement } from "../../engagements/queries";
 import { RavenError } from "../../../types/errors";
 import { moveToAppendix, undoMoveToAppendix, type MovedBlock } from "../moveToAppendix";
+import { popupOpen } from "../popupOpen";
 import "./ReportSection.scss";
 
 const HINTS: Hint[] = [
@@ -586,6 +587,20 @@ function ReportBody({
     patchCachedSection(qc, s.id, { doc: next.doc, meta: next.meta as Record<string, unknown> });
     setSwaps((n) => n + 1);
   };
+  // The swap the open page offers, if any. A page only converted to the new format holds the same words: nothing of
+  // the owner's to bring back.
+  const swapLabel =
+    openSectionMeta?.previousDoc && (openSectionMeta.restored || !openSectionMeta.flattened)
+      ? openSectionMeta.restored
+        ? "Use the rebuilt page"
+        : "Restore your previous page"
+      : null;
+  /** Hides the open page's rebuilt or converted notice for good (its meta keeps it); the swap moves to Page actions.
+   *  Focus goes to the page, as the notice and its buttons leave. */
+  const dismissNotice = () => {
+    patchMeta({ noticeDismissed: true });
+    pageEditor?.focus();
+  };
   // Front matter and Closing reopen on the part last shown in them.
   const lastPart = useRef<Partial<Record<string, string>>>({});
   const openItem = (id: string) => {
@@ -650,12 +665,16 @@ function ReportBody({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleted, setDeleted] = useState<ReportSection | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  // What asked to delete (Page actions or the page's tab), and whether the page went: where focus goes as the dialog closes.
+  const deleteOpener = useRef<HTMLElement | null>(null);
+  const deleteDone = useRef(false);
   const confirmDelete = () => {
     const s = deleting;
     if (!s || deleteBusy) return;
     setDeleteBusy(true);
     deletePage(qc, s)
       .then((kept) => {
+        deleteDone.current = true;
         setDeleting(null);
         setDeleteError(null);
         if (openId === s.id) setOpenId(null);
@@ -679,6 +698,7 @@ function ReportBody({
 
   // Keys: J/K move along the tabs; ⌥1/⌥2/⌥3 focus the tab row, the page and the evidence column.
   const navRef = useRef<HTMLDivElement | null>(null);
+  const panelId = useId();
   const pageRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
   const [sectionRef, paneWidth] = useWidthRef<HTMLElement>();
@@ -813,6 +833,19 @@ function ReportBody({
     const back = todoOpener.current;
     todoOpener.current = null;
     if (back?.isConnected) back.focus();
+  };
+  // Esc on the page closes the report checklist too (a picked check takes focus there), and focus stays where it is.
+  // Caught in the capture phase: prosemirror-view marks every real Esc (keyCode 27) handled without acting on it, so a
+  // bubble-phase listener never sees it. A field (the find bar, a link's address) keeps its own Esc, and so does an
+  // open dialog, menu, list or other popup.
+  const onPageKeyDownCapture = (e: KeyboardEvent<HTMLElement>) => {
+    if (!todoOpen || e.key !== "Escape" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('input, textarea, select, [role="dialog"], [role="menu"], [role="listbox"]') || isDialogOpen() || popupOpen()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    todoOpener.current = null;
+    setTodoOpen(false);
   };
   const openChecks = open?.target ? (checks.get(open.section.id) ?? []) : open?.item.group === "front" ? reportLevel : [];
   // The open tab's dismissed checks that still fire (a dismissal whose check stopped firing lists nothing).
@@ -993,8 +1026,8 @@ function ReportBody({
           </Button>
         </div>
       )}
-      {openSectionMeta?.previousDoc && (
-        <div className="report-section__notice report-section__notice--centred">
+      {openSectionMeta?.previousDoc && !openSectionMeta.noticeDismissed && (
+        <div className={cx("report-section__notice report-section__notice--centred", swapLabel && "report-section__notice--two-actions")}>
           <p className="report-section__note">
             {openSectionMeta.restored
               ? "This is your page from before the new layout."
@@ -1002,12 +1035,14 @@ function ReportBody({
                 ? "This page was converted to the new format."
                 : "This page was rebuilt for a new layout."}
           </p>
-          {/* A page only converted to the new format holds the same words: nothing of the owner's to bring back. */}
-          {(openSectionMeta.restored || !openSectionMeta.flattened) && (
+          {swapLabel && (
             <Button size="sm" onClick={swapPage}>
-              {openSectionMeta.restored ? "Use the rebuilt page" : "Restore your previous page"}
+              {swapLabel}
             </Button>
           )}
+          <Button size="sm" onClick={dismissNotice}>
+            Dismiss
+          </Button>
         </div>
       )}
       {swapFailed && <p role="alert" className="report-section__alert">{`Couldn't restore the previous page: ${swapFailed}`}</p>}
@@ -1095,18 +1130,24 @@ function ReportBody({
             onTodo={(id) => openTodo([...(navRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find((t) => t.dataset.id === id) ?? null)}
             onAddPage={addPage}
             onRenamePage={renameTo}
-            onDeletePage={(id) => {
+            onDeletePage={(id, from) => {
               const s = sections.find((x) => x.id === id);
-              if (s) setDeleting(s);
+              if (!s) return;
+              deleteOpener.current = from;
+              setDeleting(s);
             }}
             exportSlot={<ExportButton report={report} build={buildExport} gaps={gaps} onSaveReport={saveReport} />}
             listRef={navRef}
+            panelId={panelId}
+            // Once its notice is dismissed, a page's swap with its previous version is in Page actions.
+            openActions={swapLabel && openSectionMeta?.noticeDismissed ? [{ label: swapLabel, run: swapPage }] : undefined}
           />
           <div className={cx("report-section__body", railBeside && "report-section__body--rail")}>
-            <div className="report-section__main">
+            {/* The page region: the panel every tab controls, named by the open tab. */}
+            <div id={panelId} role="tabpanel" aria-labelledby={reportTabDomId(openTabId)} className="report-section__main">
               {partRow}
               {todoPanel}
-              <div ref={pageRef} className="report-section__pane">
+              <div ref={pageRef} onKeyDownCapture={onPageKeyDownCapture} className="report-section__pane">
             {!editorShown && notices}
             {openSection?.kind === "details" ? (
               <ReportDetails
@@ -1179,9 +1220,15 @@ function ReportBody({
         title={deleting ? `Delete ${pageTitleOf(deleting)}? Its text goes with it.` : ""}
         description={deleteError ? <span role="alert" className="report-section__delete-error">{deleteError}</span> : undefined}
         onCloseAutoFocus={(e) => {
-          // Back to the tab row, on the open tab (the first target's after a delete of the open page).
+          // Back to what asked (Page actions, or the tab), unless the page went: then the tab now open (the first
+          // target's after a delete of the open page).
           e.preventDefault();
-          focusReportTab(navRef.current, 0);
+          const back = deleteOpener.current;
+          const done = deleteDone.current;
+          deleteOpener.current = null;
+          deleteDone.current = false;
+          if (!done && back?.isConnected) back.focus();
+          else focusReportTab(navRef.current, 0);
         }}
         footer={
           <>

@@ -306,7 +306,7 @@ Checks never block export outright; export shows the open gaps in its confirm st
 
 ### 10.1 View layout (replaces the left outline of §4.1)
 
-- **Tab row** under the status strip, as in mock A: `Front matter`, each target in grading order (`1 lnx02`, `2 ms01`, …, `4 AD set`), then each appendix (`Appendix A · ms01 · 2 items`, `Appendix B · <title>`), then **+ Page**. Each tab shows its state in small text (`ready`, `N to do` in amber, `not started`). **Export PDF** sits at the row's right. The row scrolls horizontally when it overflows; the selected tab stays in view.
+- **Tab row** under the status strip, as in mock A: `Front matter`, each target in grading order (`1 lnx02`, `2 ms01`, …, `4 AD set`), then each appendix (`Appendix A · ms01 · 2 items`, `Appendix B · <title>`). Each tab shows its state in small text (`ready`, `N to do` in amber, `not started`), and its accessible name says it too ("1 lnx02, 3 to do"). The page's ⋯ menu, **+ Page** and **Export PDF** sit at the row's right, outside the scrolling tabs, so they stay in view (RAV-17). The tabs scroll horizontally when they overflow; the selected tab stays in view.
 - Targets reorder with ⌥←/⌥→ on the focused tab (grading order). Tabs are a roving-tabindex tablist (←/→ move, ↵ opens). Pane-focus keys stay as built.
 - **Front matter** is one tab. A segmented row at the top of its page switches between its parts: Details, 1 Introduction (Introduction, Objective, Requirements, Scope), 2 Summary, Testing considerations, 3 Methodology. Each part keeps its own stored section and editor; one editor is mounted at a time, so the formatting toolbar stays one. The tab's state is the worst of its parts. Closing sections (Further information, References) and the engagement-level Also tested get one **Closing** tab after the targets, using the same segmented row.
 - **Checks** (§6.5) move out of the outline. A tab's `N to do` and the strip's `TO DO` cell open a **To do** panel at the top of the page pane listing that tab's checks; clicking one scrolls to its place and focuses it, as before. Esc closes it. Under ~1000px of pane width the tab row stays (it scrolls); the picker and Checks disclosure of §4.4 go away.
@@ -395,6 +395,8 @@ The To do panel (checks), the log column, Export, and the **guide notes** (dismi
 ### 11.4 Layout 6 and old pages
 
 `DRAFT_LAYOUT` is 6. A page stored under an older layout is rebuilt as the plain draft. Before the rebuild, the save queue is flushed so no older write lands after it. The old page is kept byte for byte in `meta.previousDoc`. **Restore your previous page** converts it with `flattenToPlain`: containers are unwrapped, slot text becomes paragraphs, evidence becomes code blocks and figures, generated blocks become their tables or text, and unknown atoms are dropped. Its owner text is kept. A page already at layout 6 is never rebuilt. A page (an owner page included) that still holds old nodes is flattened when it opens, and the original is kept in `previousDoc`.
+
+The "rebuilt" or "converted" notice above such a page has a **Dismiss** button (RAV-17). Dismissing sets the owner meta `noticeDismissed`, carried forward like the rest of the owner's meta, and keeps `previousDoc`. After that, **Restore your previous page** (or **Use the rebuilt page**) is in the page's ⋯ menu, which shows on target and report pages too while they have a previous version. A page that was only converted has nothing to restore, so it gets no ⋯ entry. No migration: section meta is free JSON.
 
 ### 11.5 Appendices are manual
 

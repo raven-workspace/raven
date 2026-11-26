@@ -1,6 +1,6 @@
 import { DotsThree } from "@phosphor-icons/react";
 import * as Popover from "@radix-ui/react-popover";
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { cx } from "../../../lib/cx";
 import { TAB_MARK } from "../../../ui/shadcn/tabs";
 import { IconButton } from "../../../ui/IconButton";
@@ -27,6 +27,9 @@ export interface TabItem {
 }
 
 const TAB = '[role="tab"]';
+
+/** A tab's element id, which the page region (`role="tabpanel"`) names in `aria-labelledby`. */
+export const reportTabDomId = (id: string) => `report-tab-${id}`;
 
 const tabById = (root: HTMLElement | null, id: string) => [...(root?.querySelectorAll<HTMLElement>(TAB) ?? [])].find((t) => t.dataset.id === id);
 
@@ -60,16 +63,21 @@ function walkTabs(e: KeyboardEvent<HTMLElement>, onOpen: (id: string) => void): 
 
 const STATE_TEXT: Record<Exclude<TabItem["state"], "none">, string> = { ready: "ready", todo: "to do", "not-started": "not started" };
 
-/** A menu item; `movesFocus` items put focus somewhere themselves (an input, a dialog), so it doesn't go back to the trigger. */
-type MenuItem = { label: string; run(): void; destructive?: boolean; movesFocus?: boolean };
+/** A menu item; `movesFocus` items put focus somewhere themselves (an input, a dialog), so it doesn't go back to the
+ *  trigger. `run` gets the trigger, for a dialog to hand focus back to. */
+type MenuItem = { label: string; run(trigger: HTMLElement | null): void; destructive?: boolean; movesFocus?: boolean };
 
 /** A small menu of text items in a popover: its own portal, so the scrolling tab row never clips it. */
 function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: string; items: MenuItem[] }) {
   const [open, setOpen] = useState(false);
   const focusMoved = useRef(false);
+  // The button that opened the menu (a click doesn't focus a button in WebKit, so it is kept from the click).
+  const opener = useRef<HTMLElement | null>(null);
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      <Popover.Trigger asChild onClick={(e) => (opener.current = e.currentTarget)}>
+        {trigger}
+      </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
           side="bottom"
@@ -93,7 +101,7 @@ function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: str
               onClick={() => {
                 focusMoved.current = !!it.movesFocus;
                 setOpen(false);
-                it.run();
+                it.run(opener.current);
               }}
             >
               {it.label}
@@ -108,11 +116,17 @@ function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: str
 function Tab({
   tab,
   selected,
+  panelId,
+  renaming,
   onOpen,
   onTodo,
 }: {
   tab: TabItem;
   selected: boolean;
+  /** The page region the tab controls. */
+  panelId?: string;
+  /** Its title is being edited over it: it keeps its place in the row, hidden. */
+  renaming?: boolean;
   onOpen(): void;
   onTodo?(): void;
 }) {
@@ -121,8 +135,14 @@ function Tab({
     <button
       type="button"
       role="tab"
+      id={reportTabDomId(tab.id)}
       data-id={tab.id}
+      // The name says where the tab stands too ("1 lnx02, 3 to do"), which the state's own text only shows.
+      aria-label={stateText ? `${tab.label}, ${stateText}` : tab.label}
       aria-selected={selected}
+      aria-controls={panelId}
+      aria-hidden={renaming || undefined}
+      data-renaming={renaming || undefined}
       // Roving tabindex: Tab enters the row at the open tab; the arrows move from there.
       tabIndex={selected ? 0 : -1}
       onClick={onOpen}
@@ -133,7 +153,8 @@ function Tab({
       </span>
       <span
         data-tab-state
-        // `N to do` opens the tab and its To do panel; the rest of the tab only opens it.
+        // `N to do` opens the tab and its To do panel; the rest of the tab only opens it. A mouse shortcut: from the
+        // keyboard, the strip's To do opens the panel.
         onClick={
           tab.state === "todo" && onTodo
             ? (e) => {
@@ -155,7 +176,7 @@ function Tab({
 }
 
 /** A page's title, edited in place of its tab: ↵ keeps it, Esc (or an empty title) leaves the old one. */
-function RenameInput({ initial, onDone }: { initial: string; onDone(title: string | null, byKey: boolean): void }) {
+function RenameInput({ initial, style, onDone }: { initial: string; style?: CSSProperties; onDone(title: string | null, byKey: boolean): void }) {
   const [value, setValue] = useState(initial);
   const done = useRef(false);
   const finish = (title: string | null, byKey: boolean) => {
@@ -178,6 +199,7 @@ function RenameInput({ initial, onDone }: { initial: string; onDone(title: strin
         if (e.key === "Enter") finish(value, true);
         else if (e.key === "Escape") finish(null, true);
       }}
+      style={style}
       className="report-tabs__rename"
     />
   );
@@ -185,9 +207,9 @@ function RenameInput({ initial, onDone }: { initial: string; onDone(title: strin
 
 /**
  * The report's tab row under the status strip (§10.1, mock A): Front matter, the targets in grading order, Closing and
- * the appendices, then + Page. It is a roving-tabindex tablist (←/→ move, ↵ opens, ⌥←/⌥→ reorder a target or a page) that
- * scrolls sideways when it overflows, keeping the open tab in view; the export slot sits outside the scroller, so it
- * never scrolls away.
+ * the appendices. It is a roving-tabindex tablist (←/→ move, ↵ opens, ⌥←/⌥→ reorder a target or a page) that scrolls
+ * sideways when it overflows, keeping the open tab in view. The open page's actions (⋯), + Page and the export slot sit
+ * after it, outside the scroller, so they never scroll away.
  */
 export function ReportTabs({
   tabs,
@@ -200,9 +222,15 @@ export function ReportTabs({
   onDeletePage,
   exportSlot,
   listRef,
+  panelId,
+  openActions,
 }: {
   tabs: TabItem[];
   openId: string;
+  /** More of the open tab's Page actions (the swap with a page's previous version), on any tab. */
+  openActions?: { label: string; run(): void }[];
+  /** The page region's id (`role="tabpanel"`): every tab controls it. */
+  panelId?: string;
   onOpen(id: string): void;
   onReorder(id: string, delta: -1 | 1): void;
   /** A tab's `N to do` was clicked: open its To do panel (the tab itself opens through `onOpen`). */
@@ -211,8 +239,8 @@ export function ReportTabs({
   onAddPage?(placement: "appendix" | "body"): void;
   /** A page's new title (trimmed, never empty). */
   onRenamePage?(id: string, title: string): void;
-  /** Delete was asked for a page: the caller confirms. */
-  onDeletePage?(id: string): void;
+  /** Delete was asked for a page, from `from` (Page actions or the tab): the caller confirms, then gives focus back. */
+  onDeletePage?(id: string, from: HTMLElement | null): void;
   exportSlot: ReactNode;
   listRef?: Ref<HTMLDivElement>;
 }) {
@@ -220,6 +248,13 @@ export function ReportTabs({
   // The page whose title is being edited in place of its tab.
   const [renaming, setRenaming] = useState<string | null>(null);
   const openPage = tabs.find((t) => t.id === openId && t.page);
+  const renamed = renaming ? tabs.find((t) => t.id === renaming) : undefined;
+  // The open page's actions: Rename and Delete on an owner-written page, then any the caller adds for the open tab.
+  const pageActions: MenuItem[] = [
+    ...(openPage && onRenamePage ? [{ label: "Rename", run: () => setRenaming(openPage.id), movesFocus: true }] : []),
+    ...(openPage && onDeletePage ? [{ label: "Delete", run: (from: HTMLElement | null) => onDeletePage(openPage.id, from), destructive: true, movesFocus: true }] : []),
+    ...(openActions ?? []).map((a) => ({ label: a.label, run: () => a.run() })),
+  ];
   // A reordered tab keeps focus: the row re-renders with it elsewhere, and a moved node can lose focus in WebKit.
   const refocus = useRef<string | null>(null);
   useLayoutEffect(() => {
@@ -229,6 +264,20 @@ export function ReportTabs({
     const el = tabById(scroller.current, id);
     if (el && document.activeElement !== el) el.focus();
   });
+  // The title field sits over the tab it renames, outside the tablist (which holds only tabs): as wide as the tab, which
+  // keeps its place in the row (at least 12rem, from its stylesheet), so the row doesn't move when renaming starts.
+  const row = useRef<HTMLDivElement>(null);
+  const [renameBox, setRenameBox] = useState<CSSProperties | undefined>(undefined);
+  useLayoutEffect(() => {
+    const el = renaming ? tabById(scroller.current, renaming) : undefined;
+    const at = row.current?.getBoundingClientRect();
+    if (!el || !at) {
+      setRenameBox(undefined);
+      return;
+    }
+    const box = el.getBoundingClientRect();
+    setRenameBox({ left: box.left - at.left, top: box.top - at.top, width: box.width, height: box.height });
+  }, [renaming, tabs]);
   // The open tab stays in view as it changes (and as tabs come and go).
   useEffect(() => {
     tabById(scroller.current, openId)?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -247,7 +296,7 @@ export function ReportTabs({
       }
       if ((e.key === "Delete" || e.key === "Backspace") && onDeletePage) {
         e.preventDefault();
-        onDeletePage(page.id);
+        onDeletePage(page.id, focused);
         return;
       }
     }
@@ -264,54 +313,63 @@ export function ReportTabs({
   return (
     <div className="report-tabs">
       <div ref={scroller} className="report-tabs__scroller">
-        <div className="report-tabs__row">
+        <div ref={row} className="report-tabs__row">
           <div ref={listRef} role="tablist" aria-label="Report pages" onKeyDown={onKeyDown} className="report-tabs__list">
             <TabMarker className={TAB_MARK} />
-            {tabs.map((t) =>
-              t.id === renaming ? (
-                <RenameInput
-                  key={t.id}
-                  initial={t.title ?? t.label}
-                  onDone={(title, byKey) => {
-                    setRenaming(null);
-                    if (title !== null && title !== t.title) onRenamePage?.(t.id, title);
-                    // ↵ or Esc: focus goes back to the tab once it is back in the row (a click elsewhere keeps its focus).
-                    if (byKey) refocus.current = t.id;
-                  }}
-                />
-              ) : (
-                <Tab key={t.id} tab={t} selected={t.id === openId} onOpen={() => onOpen(t.id)} onTodo={onTodo && (() => onTodo(t.id))} />
-              ),
-            )}
+            {tabs.map((t) => (
+              <Tab
+                key={t.id}
+                tab={t}
+                selected={t.id === openId}
+                panelId={panelId}
+                renaming={t.id === renaming}
+                onOpen={() => onOpen(t.id)}
+                onTodo={onTodo && (() => onTodo(t.id))}
+              />
+            ))}
           </div>
-          {/* The open page's actions sit outside the tablist, which owns only tabs (F2 and Delete work on the tab itself). */}
-          {openPage && (onRenamePage || onDeletePage) && (
-            <MenuPopover
-              label="Page actions"
-              trigger={<IconButton icon={DotsThree} label="Page actions" shortcut="F2" />}
-              items={[
-                ...(onRenamePage ? [{ label: "Rename", run: () => setRenaming(openPage.id), movesFocus: true }] : []),
-                ...(onDeletePage ? [{ label: "Delete", run: () => onDeletePage(openPage.id), destructive: true, movesFocus: true }] : []),
-              ]}
-            />
-          )}
-          {onAddPage && (
-            <MenuPopover
-              label="Add a page"
-              trigger={
-                <button type="button" className="report-tabs__add">
-                  + Page
-                </button>
-              }
-              items={[
-                { label: "Appendix page", run: () => onAddPage("appendix") },
-                { label: "Free page", run: () => onAddPage("body") },
-              ]}
+          {renamed && (
+            <RenameInput
+              key={renamed.id}
+              initial={renamed.title ?? renamed.label}
+              style={renameBox}
+              onDone={(title, byKey) => {
+                setRenaming(null);
+                if (title !== null && title !== renamed.title) onRenamePage?.(renamed.id, title);
+                // ↵ or Esc: focus goes back to the tab once it is back in the row (a click elsewhere keeps its focus).
+                if (byKey) refocus.current = renamed.id;
+              }}
             />
           )}
         </div>
       </div>
-      {exportSlot != null && exportSlot !== false && <div className="report-tabs__export">{exportSlot}</div>}
+      {/* Outside the scroller, so they never scroll out of view; outside the tablist, which owns only tabs (F2 and
+          Delete work on a page's tab itself). */}
+      <div className="report-tabs__actions">
+        {pageActions.length > 0 && (
+          <MenuPopover
+            label="Page actions"
+            // No F2 on its tooltip: F2 renames from a focused tab, not from here.
+            trigger={<IconButton icon={DotsThree} label="Page actions" />}
+            items={pageActions}
+          />
+        )}
+        {onAddPage && (
+          <MenuPopover
+            label="Add a page"
+            trigger={
+              <button type="button" className="report-tabs__add">
+                + Page
+              </button>
+            }
+            items={[
+              { label: "Appendix page", run: () => onAddPage("appendix") },
+              { label: "Free page", run: () => onAddPage("body") },
+            ]}
+          />
+        )}
+        {exportSlot}
+      </div>
     </div>
   );
 }

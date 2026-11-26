@@ -10,6 +10,7 @@ import { api, resetAuditState } from "../audit/fakeApi";
 import { reportSchema } from "../features/report/editor/extension";
 import { PROGRAMMATIC } from "../features/report/editor/pageActions";
 import { ReportSectionView } from "../features/report/ReportSection/ReportSection";
+import { openFindBar } from "../features/report/editor/ReportEditor/ReportEditor";
 import { pruneRemoved } from "../features/report/queries";
 import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, type ReportNode, type SectionMeta, placedIn, removalKeys } from "../engines/report";
 import { discardReports, flushReports, queueReportSave } from "../features/report/saveQueue";
@@ -1309,14 +1310,14 @@ describe("Report view: the result", () => {
       const report = await api.reportGetOrCreate("e-exam");
       const older = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Written under layout 3" }] }]);
       const old = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Written under layout 5" }] }]);
-      const was = { layout: 5, coverage: { s1: { result: "tested", note: "checked by hand" } }, removedEntryIds: ["l-gone"], previousDoc: older, previousLayout: 3, previousAt: 7 };
+      const was = { layout: 5, coverage: { s1: { result: "tested", note: "checked by hand" } }, removedEntryIds: ["l-gone"], noticeDismissed: true, previousDoc: older, previousLayout: 3, previousAt: 7 };
       await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: was, draftBuiltAt: 1 });
       const upsert = vi.spyOn(api, "reportSectionUpsert");
       mount();
       await ready();
       await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
       const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: SectionMeta }];
-      expect(input.meta).toMatchObject({ coverage: was.coverage, removedEntryIds: ["l-gone"], layout: 6, previousDoc: old, previousLayout: 5 });
+      expect(input.meta).toMatchObject({ coverage: was.coverage, removedEntryIds: ["l-gone"], noticeDismissed: true, layout: 6, previousDoc: old, previousLayout: 5 });
       expect(input.meta.originals).toEqual([{ doc: old, layout: 5, meta: was, at: expect.any(Number), why: "rebuild" }]);
     });
 
@@ -1941,5 +1942,219 @@ describe("pruneRemoved", () => {
     expect(pruneRemoved(doc, { removedEntryIds: ["a", "b"], layout: 3 })).toEqual({ removedEntryIds: ["b"], layout: 3 });
     const meta = { removedEntryIds: ["b"] };
     expect(pruneRemoved(doc, meta)).toBe(meta);
+  });
+});
+
+describe("Report view: tabs, focus and keyboard (RAV-17)", () => {
+  const addPage = async (kind: "Appendix page" | "Free page") => {
+    fireEvent.click(screen.getByRole("button", { name: "+ Page" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: kind }));
+  };
+
+  it("names each tab with its state; every tab controls the page, a tabpanel labelled by the open tab", async () => {
+    await seedLnx(80);
+    mount();
+    await ready();
+    await waitFor(() => expect(rowFor("lnx02")).toHaveAccessibleName(/^1 lnx02, \d+ to do$/));
+    expect(tab("Front matter")).toHaveAccessibleName("Front matter, ready");
+    expect(rowFor("ms01")).toHaveAccessibleName("3 ms01, ready");
+    expect(tab("Closing")).toHaveAccessibleName("Closing");
+    // The page region (the evidence column's own tabs have panels too).
+    const panel = () => document.getElementById(rowFor("lnx02").getAttribute("aria-controls") ?? "")!;
+    expect(panel()).toHaveAttribute("role", "tabpanel");
+    expect(panel()).toContainElement(document.querySelector<HTMLElement>(".report-page"));
+    for (const t of tabEls()) expect(t).toHaveAttribute("aria-controls", panel().id);
+    expect(panel()).toHaveAttribute("aria-labelledby", rowFor("lnx02").id);
+    expect(panel()).toHaveAccessibleName(rowFor("lnx02").getAttribute("aria-label")!);
+    fireEvent.click(rowFor("ms01"));
+    await waitFor(() => expect(panel()).toHaveAttribute("aria-labelledby", rowFor("ms01").id));
+    expect(panel()).toHaveAccessibleName("3 ms01, ready");
+  });
+
+  it("while a page is renamed the tablist holds only tabs: the title field sits outside it, over the tab", async () => {
+    mount();
+    await ready();
+    await addPage("Free page");
+    await waitFor(() => expect(tabLabels()).toContain("§6 Untitled page"));
+    fireEvent.keyDown(tab("§6 Untitled page"), { key: "F2" });
+    const input = screen.getByRole("textbox", { name: "Page title" });
+    expect(tabRow()).not.toContainElement(input);
+    expect(tabRow().querySelector("input")).toBeNull();
+    // The tab it edits keeps its place in the row, out of the accessibility tree until the rename ends.
+    expect(within(tabRow()).queryByRole("tab", { name: /Untitled page/ })).toBeNull();
+    fireEvent.change(input, { target: { value: "Pivoting" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(document.activeElement).toBe(tab("§6 Pivoting")));
+  });
+
+  it("Page actions' tooltip shows no F2, which renames only from a focused tab", async () => {
+    const onRenamePage = vi.fn();
+    render(
+      <TooltipProvider>
+        <ReportTabs
+          tabs={[{ id: "p", label: "§6 Pivoting", state: "none", page: true, title: "Pivoting" }]}
+          openId="p"
+          onOpen={() => {}}
+          onReorder={() => {}}
+          onRenamePage={onRenamePage}
+          exportSlot={null}
+        />
+      </TooltipProvider>,
+    );
+    fireEvent.focus(screen.getByRole("button", { name: "Page actions" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(/^Page actions$/);
+    // F2 on the focused tab still renames.
+    fireEvent.keyDown(screen.getByRole("tab"), { key: "F2" });
+    expect(screen.getByRole("textbox", { name: "Page title" })).toHaveValue("Pivoting");
+  });
+
+  it("Dismiss hides a rebuilt page's notice for good; Page actions then offers the swap, both ways", async () => {
+    const paper = () => document.querySelector<HTMLElement>(".report-page")!;
+    const report = await api.reportGetOrCreate("e-exam");
+    const old = { type: "doc", content: [{ type: "slot", attrs: { hint: "x" }, content: [{ type: "text", text: "Written under the old layout" }] }] };
+    const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: { layout: 2 }, draftBuiltAt: 1 });
+    const save = vi.spyOn(api, "reportSectionSave");
+    const first = mount();
+    await ready();
+    await screen.findByText("This page was rebuilt for a new layout.");
+    // A target page has no Page actions until there is something in them.
+    expect(screen.queryByRole("button", { name: "Page actions" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("This page was rebuilt for a new layout.")).toBeNull();
+    // Kept in the page's meta, the previous page with it.
+    await waitFor(() => expect(save.mock.calls.some(([id, , meta]) => id === section.id && (meta as SectionMeta).noticeDismissed === true)).toBe(true));
+    const [, , meta] = save.mock.calls.filter(([id]) => id === section.id).at(-1)!;
+    expect((meta as SectionMeta).previousDoc).toEqual(old);
+    first.unmount();
+    discardReports();
+
+    // Reloaded: still hidden; Page actions offers the restore, which still works.
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(1));
+    expect(screen.queryByText("This page was rebuilt for a new layout.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Page actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Restore your previous page" }));
+    await waitFor(() => expect(paper().textContent).toContain("Written under the old layout"));
+    expect(screen.queryByText("This is your page from before the new layout.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Page actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Use the rebuilt page" }));
+    await waitFor(() => expect(paper().textContent).not.toContain("Written under the old layout"));
+  });
+
+  it("a page only converted to the new format can dismiss its notice, with nothing to restore in Page actions", async () => {
+    const report = await api.reportGetOrCreate("e-exam");
+    await api.reportSectionUpsert(report.id, {
+      kind: "page",
+      targetKey: "p-owner",
+      position: 99,
+      doc: layout3Json as ReportNode,
+      meta: { title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT },
+      draftBuiltAt: 1,
+    });
+    mount();
+    await ready();
+    fireEvent.click(pageTab("Owner notes"));
+    await screen.findByText("This page was converted to the new format.");
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("This page was converted to the new format.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Page actions" }));
+    const menu = await screen.findByRole("menu", { name: "Page actions" });
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Rename", "Delete"]);
+  });
+
+  it("Page actions and + Page sit outside the scrolling tab row, beside Export; only the tabs scroll", () => {
+    render(
+      <TooltipProvider>
+        <ReportTabs
+          tabs={[
+            { id: "a", label: "1 lnx02", state: "ready" },
+            { id: "p", label: "§6 Pivoting", state: "none", page: true, title: "Pivoting" },
+          ]}
+          openId="p"
+          onOpen={() => {}}
+          onReorder={() => {}}
+          onAddPage={() => {}}
+          onRenamePage={() => {}}
+          exportSlot={<button type="button">Export PDF</button>}
+        />
+      </TooltipProvider>,
+    );
+    const list = screen.getByRole("tablist", { name: "Report pages" });
+    const scroller = list.closest<HTMLElement>(".report-tabs__scroller")!;
+    const actions = screen.getByRole("button", { name: "Page actions" });
+    const add = screen.getByRole("button", { name: "+ Page" });
+    const exportButton = screen.getByRole("button", { name: "Export PDF" });
+    for (const b of [actions, add]) expect(scroller).not.toContainElement(b);
+    const beside = exportButton.closest<HTMLElement>(".report-tabs__actions")!;
+    for (const b of [actions, add]) expect(beside).toContainElement(b);
+    // In reading order: the tabs, Page actions, + Page, then Export.
+    expect(list.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(actions.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(add.compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("closing the delete dialog puts focus back on what opened it: Page actions, or the tab; after a delete, the open tab", async () => {
+    mount();
+    await ready();
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toContain("Appendix A"));
+    await addPage("Appendix page");
+    await waitFor(() => expect(tab("Appendix B")).toHaveAttribute("aria-selected", "true"));
+    const deleteDialog = () => screen.findByRole("dialog", { name: /^Delete Untitled appendix\?/ });
+    const cancel = async () => {
+      fireEvent.click(within(await deleteDialog()).getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    };
+    // From Page actions.
+    const actions = screen.getByRole("button", { name: "Page actions" });
+    actions.focus();
+    fireEvent.click(actions);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    await cancel();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Page actions" })));
+    // From Delete on a focused tab that isn't the open one.
+    tab("Appendix A").focus();
+    fireEvent.keyDown(tab("Appendix A"), { key: "Delete" });
+    await cancel();
+    await waitFor(() => expect(document.activeElement).toBe(tab("Appendix A")));
+    // Deleted: the tab that asked is gone, so focus goes to the tab now open.
+    fireEvent.keyDown(tab("Appendix A"), { key: "Delete" });
+    fireEvent.click(within(await deleteDialog()).getByRole("button", { name: "Delete page" }));
+    await waitFor(() => expect(tabLabels()).not.toContain("Appendix B"));
+    await waitFor(() => expect(document.activeElement).toBe(tab("Appendix A")));
+    expect(tab("Appendix A")).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("after a check is picked, Esc on the page closes To do and focus stays in the page; a field or a menu keeps its Esc", async () => {
+    await seedLnx(80);
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBe(1));
+    const pick = async () => {
+      fireEvent.click(within(openTodo()).getByText("Long block (80 lines)"));
+      await waitFor(() => expect(pageEditor().state.selection instanceof NodeSelection).toBe(true));
+    };
+    const inPage = () => pageEditor().view.dom.contains(document.activeElement);
+    await waitFor(() => expect(openTodo()).toHaveTextContent("Long block (80 lines)"));
+    await pick();
+    expect(inPage()).toBe(true);
+    // A field of the page's own (the find bar) keeps its Esc: it closes, the panel stays.
+    act(() => void openFindBar(pageEditor()));
+    const find = await screen.findByRole("textbox", { name: "Find" });
+    find.focus();
+    fireEvent.keyDown(find, { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("search", { name: "Find on this page" })).toBeNull());
+    expect(screen.getByRole("region", { name: "To do" })).toBeInTheDocument();
+    await waitFor(() => expect(inPage()).toBe(true));
+    // A menu is open: Esc is the menu's.
+    const menu = document.body.appendChild(Object.assign(document.createElement("div"), { role: "menu" }));
+    menu.setAttribute("role", "menu");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape", code: "Escape" });
+    expect(screen.getByRole("region", { name: "To do" })).toBeInTheDocument();
+    menu.remove();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
+    expect(inPage()).toBe(true);
   });
 });
