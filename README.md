@@ -73,3 +73,4 @@ docs/
 ## Licence
 
 Raven Workspace Community Edition is licensed under the [GNU AGPL-3.0](LICENSE) (`AGPL-3.0-only`). Copyright (C) 2026 Keegan Techentin. Trademark and third-party notices are in [`NOTICE`](NOTICE). Before contributing, read [Licence and ownership](CONTRIBUTING.md#licence-and-ownership).
+
