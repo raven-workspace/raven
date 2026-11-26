@@ -10,7 +10,7 @@ import type { BackupInfo } from "../types/backup";
 import type { Engagement } from "../types/engagement";
 import type { FailedAttempt, Finding, FindingFile } from "../types/findings";
 import type { Host } from "../types/host";
-import type { Attachment, Extraction, LogEntry, Progress } from "../types/log";
+import type { Attachment, Extraction, LogEntry } from "../types/log";
 import type { HostIdentity, PrivescVector } from "../types/hostFacts";
 import type { Hop, InterfaceDismissal, Tunnel } from "../types/network";
 import type { Note, RuledOut } from "../types/notes";
@@ -390,13 +390,13 @@ const credentials: Credential[] = [
 ];
 
 const usernames: Username[] = [
-  { id: "u-1", engagementId: "e-lab", username: "j.harper", domain: "ACME", sourceHostId: "h-dc01", source: "rpcclient enumdomusers", createdAt: ago(80 * MIN) },
-  { id: "u-2", engagementId: "e-lab", username: "t.nakamura", domain: "ACME", sourceHostId: "h-dc01", source: "kerbrute", createdAt: ago(78 * MIN) },
+  { id: "u-1", engagementId: "e-lab", username: "j.harper", domain: "ACME", sourceHostId: "h-dc01", source: "rpcclient enumdomusers", createdAt: ago(80 * MIN), scope: "unknown", localHostId: null },
+  { id: "u-2", engagementId: "e-lab", username: "t.nakamura", domain: "ACME", sourceHostId: "h-dc01", source: "kerbrute", createdAt: ago(78 * MIN), scope: "unknown", localHostId: null },
 ];
 
 const triedPairs: TriedPair[] = [
-  { id: "tp-1", engagementId: "e-lab", username: "drew", domain: "acme.corp", secret: "Guess1", secretKind: "password", hostId: "h-dc01", service: "smb", authMode: "domain", logEntryId: "l-5", at: ago(65 * MIN) },
-  { id: "tp-2", engagementId: "e-lab", username: "drew", domain: "acme.corp", secret: "Guess1", secretKind: "password", hostId: "h-fs01", service: "smb", authMode: "domain", logEntryId: "l-5", at: ago(65 * MIN) },
+  { id: "tp-1", engagementId: "e-lab", username: "omar", domain: "acme.corp", secret: "Guess1", secretKind: "password", hostId: "h-dc01", service: "smb", authMode: "domain", logEntryId: "l-5", at: ago(65 * MIN) },
+  { id: "tp-2", engagementId: "e-lab", username: "omar", domain: "acme.corp", secret: "Guess1", secretKind: "password", hostId: "h-fs01", service: "smb", authMode: "domain", logEntryId: "l-5", at: ago(65 * MIN) },
 ];
 
 // One saved entry with an extraction, so the log's "Extracted" line has something to show.
@@ -548,20 +548,13 @@ const checklist: ChecklistItem[] = [
   // The goal everything below is newer than: GoalRow's "12 new credentials since this was done".
   done("e-lab", "e-setup-scans", ago(6 * HOUR)),
   done("e-lab", "e-setup-logging", ago(6 * HOUR)),
-  done("h-web", "h-enum-identified", ago(5 * HOUR), { auto: true, statusManual: false }),
+  // Ticked by hand: h-web still has an unidentified port, so an automatic (fact) tick would be reverted on load, as the
+  // store reverts it.
+  done("h-web", "h-enum-identified", ago(5 * HOUR)),
   { ownerId: "h-web", goalId: "h-enum-os", status: "in_progress", notes: "Ubuntu 22.04 by banner.", completedAt: null, auto: false, autoFrom: null, statusManual: true, evidence: [{ entryId: "l-1" }], updatedAt: ago(30 * MIN) },
 ];
 
 // ---------------------------------------------------------------- misc
-
-const progress: Record<string, Progress> = {
-  "e-lab": { hostsTotal: 6, hostsRooted: 2, flagsFound: 2, flagsTotal: 12 },
-  "e-exam": { hostsTotal: 7, hostsRooted: 6, flagsFound: 10, flagsTotal: 12 },
-  "e-old": { hostsTotal: 1, hostsRooted: 1, flagsFound: 2, flagsTotal: 2 },
-  "e-pay": { hostsTotal: 2, hostsRooted: 0, flagsFound: 0, flagsTotal: 4 },
-  "e-board": { hostsTotal: 23, hostsRooted: 1, flagsFound: 0, flagsTotal: 0 },
-  "e-fl": { hostsTotal: 4, hostsRooted: 1, flagsFound: 0, flagsTotal: 0 },
-};
 
 const backups: BackupInfo[] = [
   { file: "raven-2026-11-05-daily.db", reason: "daily", createdAt: ago(4 * HOUR), sizeBytes: 4_718_592 },
@@ -601,7 +594,13 @@ export const FIXTURES: AuditFixtures = {
   cleanup: [...cleanup, ...exam.cleanup], backups, settings,
 };
 
-export const FIXTURE_PROGRESS = progress;
+/** A store with nothing in it but Settings: what store scenarios and fake-backed UI tests start from. */
+export const EMPTY_FIXTURES: AuditFixtures = {
+  engagements: [], hosts: [], services: [], log: [], attachments: [], checklist: [], notes: [], ruledOut: [], hostIdentity: [],
+  vectors: [], tunnels: [], hops: [], interfaceDismissals: [], credentials: [], usernames: [], credAttempts: [], triedPairs: [],
+  payloadBuilds: [], reports: [], reportSections: [], extractions: [], accessGrants: [], findings: [], findingFiles: [],
+  failedAttempts: [], cleanup: [], backups: [], settings,
+};
 
 // ---------------------------------------------------------------- Manual notes
 

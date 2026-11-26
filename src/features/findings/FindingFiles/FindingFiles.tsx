@@ -1,7 +1,7 @@
 import { Check, Copy, PencilSimple, Trash } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import type { FindingFile } from "../../../types/findings";
-import { ActionCell, Button, Field, useFlash, IconButton, Input, Select, Textarea, Toggle, fieldLabelClass } from "../../../ui/index";
+import { ActionCell, Button, Field, useFlash, IconButton, Input, queryState, Select, Textarea, Toggle, fieldLabelClass } from "../../../ui/index";
 import { ConfirmDelete } from "../../checklist/ConfirmDelete/ConfirmDelete";
 import { CodeView, guessLanguage, LANGUAGES } from "../CodeView/CodeView";
 import { useFindingFileMutations, useFindingFiles } from "../queries";
@@ -9,6 +9,8 @@ import { copyPlain } from "../../../lib/clipboard";
 import "./FindingFiles.scss";
 
 const MAX_BYTES = 1024 * 1024;
+/** The backend's cap on an exploit's original URL. */
+const MAX_URL_BYTES = 8 * 1024;
 const AUTO = "auto";
 const LANGUAGE_OPTIONS = [{ value: AUTO, label: "Auto (from name)" }, ...LANGUAGES.map((l) => ({ value: l, label: l }))];
 const bytes = (s: string) => new TextEncoder().encode(s).length;
@@ -92,6 +94,7 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
     if (name === "") return fail("Give the file a name");
     if (bytes(d.content) > MAX_BYTES) return fail("The content is over 1 MiB");
     if (d.modified && bytes(d.originalContent) > MAX_BYTES) return fail("The original code is over 1 MiB");
+    if (d.modified && bytes(d.originalUrl.trim()) > MAX_URL_BYTES) return fail("The original URL is over 8 KiB");
     setError(undefined);
     setBusy(true);
     const input = {
@@ -250,7 +253,7 @@ export function FindingFiles({ findingId, form, onForm, onDirty, register }: {
         <span className={fieldLabelClass}>Files</span>
         {!form && <Button size="sm" onClick={() => open()}>Add file</Button>}
       </div>
-      {files.isError && <p role="alert" className="finding-files__error">Couldn't load files: {files.error.message}</p>}
+      {files.isError && queryState([files], "files")}
       {formReady && (
         <FileForm
           key={formFile?.id ?? "new"}

@@ -37,6 +37,9 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (14, include_str!("../../migrations/0014_interface_dismissals.sql")),
     (15, include_str!("../../migrations/0015_reports.sql")),
     (16, include_str!("../../migrations/0016_timebox_pause.sql")),
+    (17, include_str!("../../migrations/0017_service_exploited.sql")),
+    (18, include_str!("../../migrations/0018_vector_exploited.sql")),
+    (19, include_str!("../../migrations/0019_username_scope.sql")),
 ];
 
 const FK_OFF_MARKER: &str = "-- raven:foreign-keys-off";
@@ -302,14 +305,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 16));
+            assert_eq!((f, t), (1, 19));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 16 });
-        assert_eq!(version(&c), 16);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 19 });
+        assert_eq!(version(&c), 19);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -663,13 +666,13 @@ mod tests {
         c.execute("INSERT INTO settings (key, value) VALUES ('k', 'v')", []).unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (8, 16));
+            assert_eq!((f, t), (8, 19));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 8, to: 16 });
+        assert_eq!(out, MigrationOutcome { from: 8, to: 19 });
         let kept: i64 = c.query_row("SELECT count(*) FROM settings WHERE key='k'", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
         c.execute("INSERT INTO field_manual (id, imported_at, snapshot) VALUES (1, 1, '{}')", []).unwrap();
@@ -687,7 +690,7 @@ mod tests {
         )
         .unwrap();
         let mut hook_calls = 0;
-        let out = migrate(&mut c, &mut |f, t| {
+        let out = migrate_with(&mut c, &MIGRATIONS[..16], &mut |f, t| {
             assert_eq!((f, t), (15, 16));
             hook_calls += 1;
             Ok(())
@@ -700,5 +703,77 @@ mod tests {
             })
             .unwrap();
         assert_eq!((ms, at, start), (0, None, 5));
+    }
+
+    /// Every usernames row, the given columns: what 0019 must leave unchanged.
+    fn username_rows(c: &Connection, cols: &str) -> Vec<Vec<rusqlite::types::Value>> {
+        let n = cols.split(',').count();
+        c.prepare(&format!("SELECT {cols} FROM usernames ORDER BY id"))
+            .unwrap()
+            .query_map([], |r| (0..n).map(|i| r.get::<_, rusqlite::types::Value>(i)).collect())
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn migration_0019_from_v18_makes_every_username_unknown_and_changes_nothing_else() {
+        let mut c = Connection::open_in_memory().unwrap();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        migrate_with(&mut c, &MIGRATIONS[..18], &mut |_, _| panic!("hook on fresh db")).unwrap();
+        // Seeded the old way: a name in several domain spellings, a blank domain, a host's own name as the domain (which
+        // nothing may read as local), a source host, and the grants and attempts that hang off usernames.
+        c.execute_batch(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,domain,status,created_at,updated_at) \
+               VALUES ('e','Synthetic lab','lab','[]','corp.example','active',1,1); \
+             INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('h1','e','WEB01','192.0.2.10',1,1); \
+             INSERT INTO usernames (id,engagement_id,username,domain,source_host_id,source,created_at) VALUES \
+               ('u1','e','zoe',NULL,'h1','nxc',1), ('u2','e','zoe','CORP',NULL,NULL,2), ('u3','e','zoe','corp.example',NULL,NULL,3), \
+               ('u4','e','zoe','WEB01','h1','lookupsid',4), ('u5','e','Admin','.',NULL,NULL,5); \
+             INSERT INTO credentials (id,engagement_id,type,username,secret,scope,created_at,updated_at) \
+               VALUES ('c1','e','password','zoe','Winter2024!','domain',1,1); \
+             INSERT INTO access_grants (id,engagement_id,username_id,host_id,level,via,at) VALUES ('g1','e','u4','h1','admin','winrm',1); \
+             INSERT INTO cred_attempts (id,engagement_id,cred_id,username_id,host_id,service,result,auth_mode,at) \
+               VALUES ('a1','e','c1','u1','h1','smb','valid','domain',1);",
+        )
+        .unwrap();
+        let old_cols = "id, engagement_id, username, domain, source_host_id, source, created_at";
+        let before = username_rows(&c, old_cols);
+        let mut hook_calls = 0;
+        let out = migrate_with(&mut c, &MIGRATIONS[..19], &mut |f, t| {
+            assert_eq!((f, t), (18, 19));
+            hook_calls += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!((hook_calls, out), (1, MigrationOutcome { from: 18, to: 19 }));
+
+        // Every row kept as it was, none merged, each now unknown with no host.
+        assert_eq!(username_rows(&c, old_cols), before);
+        use rusqlite::types::Value;
+        let scopes = username_rows(&c, "id, scope, local_host_id");
+        let unknown = |id: &str| vec![Value::Text(id.into()), Value::Text("unknown".into()), Value::Null];
+        assert_eq!(scopes, ["u1", "u2", "u3", "u4", "u5"].map(unknown).to_vec());
+        assert_eq!(count(&c, "SELECT count(*) FROM access_grants WHERE username_id = 'u4'"), 1);
+        assert_eq!(count(&c, "SELECT count(*) FROM cred_attempts WHERE username_id = 'u1'"), 1);
+
+        // The new indexes: one unknown username per name and domain spelling, as before; the same name may also be a
+        // domain username; one local username per name on each host; local usernames whose host went never collide.
+        let insert = |id: &str, user: &str, domain: Option<&str>, scope: &str, host: Option<&str>| {
+            c.execute(
+                "INSERT INTO usernames (id,engagement_id,username,domain,scope,local_host_id,created_at) VALUES (?1,'e',?2,?3,?4,?5,9)",
+                rusqlite::params![id, user, domain, scope, host],
+            )
+        };
+        assert!(insert("x1", "ZOE", Some("corp"), "unknown", None).is_err());
+        assert!(insert("x2", "zoe", Some("CORP"), "domain", None).is_ok());
+        assert!(insert("x3", "zoe", None, "local", Some("h1")).is_ok());
+        assert!(insert("x4", "Zoe", None, "local", Some("h1")).is_err());
+        assert!(insert("x5", "zoe", None, "bogus", None).is_err());
+        c.execute("INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('h2','e','SQL01','192.0.2.11',1,1)", []).unwrap();
+        insert("x6", "zoe", None, "local", Some("h2")).unwrap();
+        c.execute("DELETE FROM hosts WHERE id IN ('h1','h2')", []).unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM usernames WHERE scope = 'local' AND local_host_id IS NULL"), 2);
+        assert_eq!(count(&c, "SELECT count(*) FROM pragma_foreign_key_check"), 0);
     }
 }

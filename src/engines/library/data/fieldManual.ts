@@ -1,4 +1,4 @@
-import type { CardMeta } from '../store';
+import type { CardMeta } from '../types';
 import type { LibraryCommand } from '../types';
 
 /**
@@ -276,7 +276,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'field-manual',
     cardId: 'enum-ssh',
     match: { bins: ['ssh-audit'] },
-    matchExamples: { hit: ['ssh-audit 10.0.0.5', 'ssh-audit -p 2222 10.0.0.5'], miss: ['ssh jace@10.0.0.5', 'nc -nv 10.0.0.5 22'] },
+    matchExamples: { hit: ['ssh-audit 10.0.0.5', 'ssh-audit -p 2222 10.0.0.5'], miss: ['ssh ruth@10.0.0.5', 'nc -nv 10.0.0.5 22'] },
   },
   {
     id: 'fm-enum-ssh-4',
@@ -418,7 +418,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'field-manual',
     cardId: 'enum-kerberos',
     match: { bins: ['kerbrute'], all: [String.raw`(^|\s)userenum(?=\s)`] },
-    matchExamples: { hit: ['kerbrute userenum -d corp.local --dc 10.0.0.5 users.txt'], miss: ['kerbrute passwordspray -d corp.local --dc 10.0.0.5 users.txt Pw1', 'kerbrute bruteuser -d corp.local --dc 10.0.0.5 pw.txt jace'] },
+    matchExamples: { hit: ['kerbrute userenum -d corp.local --dc 10.0.0.5 users.txt'], miss: ['kerbrute passwordspray -d corp.local --dc 10.0.0.5 users.txt Pw1', 'kerbrute bruteuser -d corp.local --dc 10.0.0.5 pw.txt ruth'] },
   },
   {
     id: 'fm-enum-kerberos-4',
@@ -4125,7 +4125,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'field-manual',
     cardId: 'ad-bloodhound-collection-and-analysis',
     match: { bins: ['bloodhound-ce-python', 'bloodhound-python'], all: [String.raw`(^|\s)-c\s+\S*(All|DCOnly|Session)`] },
-    matchExamples: { hit: ['bloodhound-ce-python -u jace -p \'Pw1!\' -d corp.local -dc dc01.corp.local -ns 10.0.0.5 -c All --zip'], miss: ['sudo bloodhound-start', 'bloodhound-ce-python --help'] },
+    matchExamples: { hit: ['bloodhound-ce-python -u ruth -p \'Pw1!\' -d corp.local -dc dc01.corp.local -ns 10.0.0.5 -c All --zip'], miss: ['sudo bloodhound-start', 'bloodhound-ce-python --help'] },
   },
   {
     id: 'fm-ad-bloodhound-collection-and-analysis-4',
@@ -4140,7 +4140,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'field-manual',
     cardId: 'ad-bloodhound-collection-and-analysis',
     match: { bins: ['bloodhound-ce-python', 'bloodhound-python'], all: [String.raw`(^|\s)-c\s+\S*(All|DCOnly|Session)`] },
-    matchExamples: { hit: ['bloodhound-ce-python -u jace --hashes :aad3b435b51404eeaad3b435b51404ee -d corp.local -dc dc01.corp.local -ns 10.0.0.5 -c All --zip'], miss: ['bloodhound-ce-python --help'] },
+    matchExamples: { hit: ['bloodhound-ce-python -u ruth --hashes :aad3b435b51404eeaad3b435b51404ee -d corp.local -dc dc01.corp.local -ns 10.0.0.5 -c All --zip'], miss: ['bloodhound-ce-python --help'] },
   },
   {
     id: 'fm-ad-bloodhound-collection-and-analysis-5',

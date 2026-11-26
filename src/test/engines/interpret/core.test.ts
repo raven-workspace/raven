@@ -4,11 +4,11 @@ import { hasRedOnYellow, normalize } from '../../../engines/interpret/text'
 import { EMPTY, type FoundAttempt, type FoundCredential, type Parser } from '../../../engines/interpret/types'
 
 const cred = (secret: string, source: string): FoundCredential => ({
-  username: 'jay', domain: 'corp.lan', type: 'password', secret, hashType: null,
+  username: 'zoe', domain: 'corp.lan', type: 'password', secret, hashType: null,
   scope: 'domain', host: null, source,
 })
 const attempt = (result: FoundAttempt['result']): FoundAttempt => ({
-  username: 'jay', domain: 'corp.lan', secret: 'Pw1', secretKind: 'password',
+  username: 'zoe', domain: 'corp.lan', secret: 'Pw1', secretKind: 'password',
   host: { ip: '10.10.10.5' }, service: 'smb', result, authMode: 'domain',
 })
 const stub = (id: string, credentials: FoundCredential[]): Parser => ({
@@ -50,10 +50,10 @@ describe('interpret core', () => {
     const crack = (username: string, plaintext: string) => ({ hash: '', plaintext, username })
     PARSERS.push({
       id: 'j', detect: () => true,
-      parse: () => ({ ...EMPTY, cracks: [crack('jay', 'a'), crack('drew', 'a'), crack('JAY', 'a'), crack('jay', 'b')] }),
+      parse: () => ({ ...EMPTY, cracks: [crack('zoe', 'a'), crack('omar', 'a'), crack('ZOE', 'a'), crack('zoe', 'b')] }),
     })
     const r = interpret({ command: '', output: 'x' })
-    expect(r.cracks.map((c) => [c.username, c.plaintext])).toEqual([['jay', 'a'], ['drew', 'a'], ['jay', 'b']])
+    expect(r.cracks.map((c) => [c.username, c.plaintext])).toEqual([['zoe', 'a'], ['omar', 'a'], ['zoe', 'b']])
   })
 
   it('interpret never shares EMPTY\'s arrays, and EMPTY\'s arrays are frozen', () => {

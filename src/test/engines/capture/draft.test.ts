@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildDraft, detectKind, httpParts, httpTitle, noteTitle, proofShotFlag, screenshotFileName, commandTitle, flagTitle } from '../../../engines/capture';
+import { libraryCommand, TEST_LIBRARY } from '../../support/library';
 
 const srv11 = { id: 'h1', name: 'Srv11', ip: '10.10.61.143', column: 'information-gathering' as const };
 const base = {
@@ -9,6 +10,7 @@ const base = {
   domain: '',
   machines: ['Kali (VM)', 'Docker build', 'Mac'],
   lastRanOn: null,
+  library: TEST_LIBRARY,
 };
 
 describe('capture draft', () => {
@@ -22,7 +24,16 @@ describe('capture draft', () => {
   it('unmatched command keeps the full first line', () => {
     const line = './exploit.py --target 10.10.61.143 --lport 4444';
     const blocks = [{ command: line, output: '' }];
-    expect(commandTitle(blocks)).toBe(line);
+    expect(commandTitle(blocks, TEST_LIBRARY)).toBe(line);
+  });
+
+  it('the title and the kind come from the library passed in', () => {
+    const zz = libraryCommand('zz', { title: 'Run zz', match: { bins: ['zzscan'] } });
+    const blocks = [{ command: 'zzscan --all', output: '' }];
+    expect(commandTitle(blocks, [zz])).toBe('Run zz');
+    expect(commandTitle(blocks, [])).toBe('zzscan --all');
+    expect(detectKind('zzscan --all', false, [zz])).toBe('command');
+    expect(detectKind('zzscan --all', false, [])).toBe('note');
   });
 
   it('prompt shell attributes target host and ranOn', () => {
@@ -52,9 +63,9 @@ describe('capture draft', () => {
   });
 
   it('common binary without prompt is a command', () => {
-    expect(detectKind('ping -c1 10.0.0.1', false)).toBe('command');
-    expect(detectKind('./exploit.py --target 1.2.3.4', false)).toBe('command');
-    expect(detectKind('remember to ping later', false)).toBe('note');
+    expect(detectKind('ping -c1 10.0.0.1', false, TEST_LIBRARY)).toBe('command');
+    expect(detectKind('./exploit.py --target 1.2.3.4', false, TEST_LIBRARY)).toBe('command');
+    expect(detectKind('remember to ping later', false, TEST_LIBRARY)).toBe('note');
   });
 
   it('http attribution ignores the response body', () => {
@@ -95,17 +106,17 @@ describe('capture draft', () => {
   });
 
   it('a proof shot is named for its flag, not the board column', () => {
-    const args = { ip: '172.31.148.151', hostName: 'ms01', column: 'privilege-escalation' as const, mime: 'image/png' };
-    expect(screenshotFileName({ ...args, caption: '', flag: 'local' })).toBe('172.31.148.151_local-txt.png');
-    expect(screenshotFileName({ ...args, caption: 'proof.txt as SYSTEM' })).toBe('172.31.148.151_proof-txt.png');
-    expect(screenshotFileName({ ...args, caption: 'Local.txt', flag: null })).toBe('172.31.148.151_local-txt.png');
+    const args = { ip: '10.10.20.151', hostName: 'files01', column: 'privilege-escalation' as const, mime: 'image/png' };
+    expect(screenshotFileName({ ...args, caption: '', flag: 'local' })).toBe('10.10.20.151_local-txt.png');
+    expect(screenshotFileName({ ...args, caption: 'proof.txt as SYSTEM' })).toBe('10.10.20.151_proof-txt.png');
+    expect(screenshotFileName({ ...args, caption: 'Local.txt', flag: null })).toBe('10.10.20.151_local-txt.png');
   });
 
   it('no two screenshots share a name', () => {
-    const args = { ip: '172.31.148.151', hostName: 'ms01', column: 'privilege-escalation' as const, mime: 'image/png', caption: '' };
-    const taken = new Set(['172.31.148.151_privesc_shot.png', '172.31.148.151_privesc_shot_2.png', '172.31.148.151_local-txt.png']);
-    expect(screenshotFileName({ ...args, taken })).toBe('172.31.148.151_privesc_shot_3.png');
-    expect(screenshotFileName({ ...args, flag: 'local', taken })).toBe('172.31.148.151_local-txt_2.png');
+    const args = { ip: '10.10.20.151', hostName: 'files01', column: 'privilege-escalation' as const, mime: 'image/png', caption: '' };
+    const taken = new Set(['10.10.20.151_privesc_shot.png', '10.10.20.151_privesc_shot_2.png', '10.10.20.151_local-txt.png']);
+    expect(screenshotFileName({ ...args, taken })).toBe('10.10.20.151_privesc_shot_3.png');
+    expect(screenshotFileName({ ...args, flag: 'local', taken })).toBe('10.10.20.151_local-txt_2.png');
   });
 
   it('proofShotFlag: the host\'s last non-screenshot entry is a recent flag', () => {
@@ -125,11 +136,11 @@ describe('capture draft', () => {
 
   it('32-hex paste is a flag', () => {
     const v = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
-    expect(detectKind(v, false)).toBe('flag');
+    expect(detectKind(v, false, TEST_LIBRARY)).toBe('flag');
     expect(buildDraft({ ...base, text: v }).content).toMatchObject({ kind: 'flag', flagKind: 'local', value: v, attachmentId: '' });
     expect(flagTitle('local')).toBe('local.txt');
     expect(flagTitle('proof')).toBe('proof.txt');
-    expect(detectKind('x', true)).toBe('screenshot');
+    expect(detectKind('x', true, TEST_LIBRARY)).toBe('screenshot');
   });
 
   it('note title strips heading marks', () => {
@@ -220,7 +231,7 @@ describe('capture draft', () => {
 
   it('kali two-line zsh prompt is a command run on the kali machine (I3)', () => {
     const text = '┌──(kali㉿kali)-[~]\n└─$ whoami\nkali';
-    expect(detectKind(text, false)).toBe('command');
+    expect(detectKind(text, false, TEST_LIBRARY)).toBe('command');
     const d = buildDraft({ ...base, text, lastRanOn: 'Mac' });
     expect(d.kind).toBe('command');
     expect(d.ranOn).toBe('Kali (VM)');
@@ -249,12 +260,12 @@ describe('proof pastes and chained commands', () => {
   ].join('\n');
 
   it('a `;`-chained whoami line is a command', () => {
-    expect(detectKind('whoami; hostname; ip a\nsrv11', false)).toBe('command');
-    expect(detectKind('hostname && id', false)).toBe('command');
+    expect(detectKind('whoami; hostname; ip a\nsrv11', false, TEST_LIBRARY)).toBe('command');
+    expect(detectKind('hostname && id', false, TEST_LIBRARY)).toBe('command');
   });
 
   it('a block that cats local.txt into a 32-hex line is a flag on the box it ran on', () => {
-    expect(detectKind(proof, false)).toBe('flag');
+    expect(detectKind(proof, false, TEST_LIBRARY)).toBe('flag');
     const d = buildDraft({ ...base, text: proof });
     expect(d.content).toMatchObject({ kind: 'flag', flagKind: 'local', value: '22222222222222222222222222222222', proof });
     expect(d.title).toBe('local.txt');
@@ -277,6 +288,6 @@ describe('proof pastes and chained commands', () => {
   });
 
   it('cat of another file followed by a hash stays a command', () => {
-    expect(detectKind('cat /etc/hash.txt\n22222222222222222222222222222222', false)).toBe('command');
+    expect(detectKind('cat /etc/hash.txt\n22222222222222222222222222222222', false, TEST_LIBRARY)).toBe('command');
   });
 });

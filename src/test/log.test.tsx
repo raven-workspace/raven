@@ -71,6 +71,7 @@ beforeEach(() => {
   m.servicesListEngagement.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
+  m.checklistApplyEntryTicks.mockResolvedValue([]);
   m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [] });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
@@ -236,36 +237,36 @@ describe("log", () => {
 
   it("a screenshot's caption and file name are editable, and the name follows the caption", async () => {
     const user = userEvent.setup();
-    m.hostsList.mockResolvedValue([{ ...host("h1", "ms01"), ip: "172.31.148.151", boardColumn: "privilege-escalation" }]);
+    m.hostsList.mockResolvedValue([{ ...host("h1", "files01"), ip: "10.10.20.151", boardColumn: "privilege-escalation" }]);
     entries = [
       entry({
         id: "s", title: "root proof", kind: "screenshot", hostIds: ["h1"], at: T,
-        content: { kind: "screenshot", attachmentId: "att-1", caption: "root proof", fileName: "172.31.148.151_privesc_shot.png" },
+        content: { kind: "screenshot", attachmentId: "att-1", caption: "root proof", fileName: "10.10.20.151_privesc_shot.png" },
       }),
     ];
     mount();
     await user.click(await screen.findByRole("button", { name: /root proof/ }));
     await user.click(log().getByRole("button", { name: "Edit" }));
     const fileName = screen.getByLabelText("File name") as HTMLInputElement;
-    expect(fileName.value).toBe("172.31.148.151_privesc_shot.png");
+    expect(fileName.value).toBe("10.10.20.151_privesc_shot.png");
     const caption = screen.getByLabelText("Caption");
     await user.clear(caption);
     await user.type(caption, "proof.txt as SYSTEM");
-    expect(fileName.value).toBe("172.31.148.151_proof-txt.png");
+    expect(fileName.value).toBe("10.10.20.151_proof-txt.png");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await vi.waitFor(() => expect(m.logUpdate).toHaveBeenCalled());
     expect(m.logUpdate.mock.calls.at(-1)![1].content).toEqual({
-      kind: "screenshot", attachmentId: "att-1", caption: "proof.txt as SYSTEM", fileName: "172.31.148.151_proof-txt.png",
+      kind: "screenshot", attachmentId: "att-1", caption: "proof.txt as SYSTEM", fileName: "10.10.20.151_proof-txt.png",
     });
   });
 
   it("a hand-typed screenshot file name is kept when the caption changes", async () => {
     const user = userEvent.setup();
-    m.hostsList.mockResolvedValue([{ ...host("h1", "ms01"), ip: "172.31.148.151", boardColumn: "privilege-escalation" }]);
+    m.hostsList.mockResolvedValue([{ ...host("h1", "files01"), ip: "10.10.20.151", boardColumn: "privilege-escalation" }]);
     entries = [
       entry({
         id: "s", title: "root proof", kind: "screenshot", hostIds: ["h1"], at: T,
-        content: { kind: "screenshot", attachmentId: "att-1", caption: "shot", fileName: "172.31.148.151_privesc_shot.png" },
+        content: { kind: "screenshot", attachmentId: "att-1", caption: "shot", fileName: "10.10.20.151_privesc_shot.png" },
       }),
     ];
     mount();
@@ -273,9 +274,9 @@ describe("log", () => {
     await user.click(log().getByRole("button", { name: "Edit" }));
     const fileName = screen.getByLabelText("File name") as HTMLInputElement;
     await user.clear(fileName);
-    await user.type(fileName, "172.31.148.151_root.png");
+    await user.type(fileName, "10.10.20.151_root.png");
     await user.type(screen.getByLabelText("Caption"), " with proof.txt");
-    expect(fileName.value).toBe("172.31.148.151_root.png");
+    expect(fileName.value).toBe("10.10.20.151_root.png");
   });
 
   it("private entry shows marker", async () => {

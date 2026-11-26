@@ -1,13 +1,19 @@
-//! Extraction records: what a log entry's Save filed automatically (created ids plus "before" snapshots of the rows
-//! it changed), so one Undo can reverse exactly that save's contribution. One record per log entry; deleting the
-//! entry drops the record (FK cascade) but keeps the filed data.
+//! Extractions: what a log entry's Save filed automatically (created ids plus "before" snapshots of the rows it
+//! changed), so one Undo can reverse exactly that save's contribution. `filing` does the writes and builds the record
+//! in one transaction; `undo` reverses it. One record per log entry; deleting the entry drops the record (FK cascade)
+//! but keeps the filed data.
+
+mod filing;
+
+pub use filing::{file, finish, ExtractionProofs, Filed};
 
 use crate::attempts::CredAttempt;
-use crate::credentials::Credential;
+use crate::credentials::{engagement_domain, same_domain, Credential};
 use crate::db::{check_in_engagement, check_scope, now_ms};
 use crate::error::{AppError, AppResult};
 use crate::host_facts::HostIdentity;
 use crate::services::Service;
+use crate::tried_pairs::TriedPair;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +49,18 @@ pub struct OutputTick {
     pub parser: String,
 }
 
-/// Mirrors the TS `ExtractionRecord`. Every list defaults to empty.
+/// Tried pairs a save turned into failed attempts on a credential it created (R24), as they were before the save,
+/// with the attempts it made from them. Undo puts the pairs back when it deletes the credential.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Promotion {
+    pub credential_id: String,
+    pub tried_pairs: Vec<TriedPair>,
+    pub attempts: Vec<CredAttempt>,
+}
+
+/// Mirrors the TS `ExtractionRecord`. Every list defaults to empty, so a record stored before a field existed still
+/// reads (and undoes as it did then).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ExtractionRecord {
@@ -67,6 +84,8 @@ pub struct ExtractionRecord {
     pub reproved_credential_ids: Vec<String>,
     /// Stored usernames this save listed again: another entry's Undo keeps them.
     pub reproved_username_ids: Vec<String>,
+    /// Stored tried pairs this save promoted into credentials it created.
+    pub promoted_tried_pairs: Vec<Promotion>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -112,8 +131,9 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Extraction>
     raw.into_iter().map(parse).collect()
 }
 
-/// Stores the record for a log entry (stamped now). An entry is extracted once, on create: a second save is a
-/// `Conflict` and leaves the stored record (and any undo) as it is.
+/// Stores a record built elsewhere for a log entry (stamped now). A save files through `file`, which builds the record
+/// itself. An entry is extracted once, on create: a second save is a `Conflict` and leaves the stored record (and any
+/// undo) as it is.
 pub fn save(
     conn: &Connection,
     log_entry_id: &str,
@@ -141,7 +161,7 @@ const HOST_REFS: &str = "SELECT \
       (SELECT count(*) FROM services WHERE host_id = ?1) \
     + (SELECT count(*) FROM log_entry_hosts WHERE host_id = ?1 AND entry_id <> ?2) \
     + (SELECT count(*) FROM credentials WHERE local_host_id = ?1 OR source_host_id = ?1) \
-    + (SELECT count(*) FROM usernames WHERE source_host_id = ?1) \
+    + (SELECT count(*) FROM usernames WHERE source_host_id = ?1 OR local_host_id = ?1) \
     + (SELECT count(*) FROM access_grants WHERE host_id = ?1) \
     + (SELECT count(*) FROM cred_attempts WHERE host_id = ?1) \
     + (SELECT count(*) FROM tried_pairs WHERE host_id = ?1) \
@@ -161,7 +181,8 @@ const HOST_REFS: &str = "SELECT \
 /// Snapshots are restored only onto rows not changed since the save; created rows are deleted, except a credential
 /// edited since or proven by another entry, a username something else still uses, a vector edited since, and a host
 /// that anything else still references. A credential or username another live (not undone) extraction created or
-/// proved again stays too (spec §3.2).
+/// proved again stays too (interpreters-and-payloads interpreters-and-payloads spec §3.2). When a deleted credential
+/// had taken over stored tried pairs, they come back. A record stored before promotions were recorded has none.
 pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
     let ext = get(conn, log_entry_id)?.ok_or(AppError::NotFound)?;
     if ext.undone_at.is_some() {
@@ -256,27 +277,72 @@ pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
     for id in &r.created_vector_ids {
         tx.execute("DELETE FROM privesc_vectors WHERE id=?1 AND source <> 'manual' AND updated_at <= ?2", params![id, at])?;
     }
+    // A credential goes only while nothing but this save proves it: no attempt from another entry or made by hand,
+    // apart from those this save made from the tried pairs it promoted, while they are still as it made them. When it
+    // goes, those pairs come back.
+    let attempts = crate::attempts::list(&tx, &ext.engagement_id)?;
     for id in r.created_credential_ids.iter().filter(|id| !kept_creds.contains(*id)) {
-        tx.execute(
-            "DELETE FROM credentials WHERE id=?1 AND updated_at <= ?2 \
-             AND NOT EXISTS (SELECT 1 FROM cred_attempts WHERE cred_id=?1 AND ifnull(log_entry_id, '') <> ?3)",
-            params![id, at, log_entry_id],
-        )?;
+        let promoted: Vec<&Promotion> = r.promoted_tried_pairs.iter().filter(|p| &p.credential_id == id).collect();
+        let made: Vec<&CredAttempt> = promoted.iter().flat_map(|p| &p.attempts).collect();
+        let proven_elsewhere = attempts.iter().any(|a| {
+            &a.cred_id == id && a.log_entry_id.as_deref().unwrap_or("") != log_entry_id && !made.contains(&a)
+        });
+        if proven_elsewhere {
+            continue;
+        }
+        if tx.execute("DELETE FROM credentials WHERE id=?1 AND updated_at <= ?2", params![id, at])? == 1 {
+            for t in promoted.iter().flat_map(|p| &p.tried_pairs) {
+                restore_tried_pair(&tx, t)?;
+            }
+        }
     }
     // A username stays when something else still uses it: an attempt, grant or tried pair from another entry or made
-    // by hand, or any credential left for that user (another entry's, hand-made, or one of ours kept above).
+    // by hand, or any credential left for that user (another entry's, hand-made, or one of ours kept above). A tried
+    // pair or credential is the user's when its username is equal ignoring case and its domain is the same domain; for
+    // a local username, only a local credential or local tried pair on its host is.
+    let anchor = engagement_domain(&tx, &ext.engagement_id)?;
     for id in r.created_username_ids.iter().filter(|id| !kept_users.contains(*id)) {
-        tx.execute(
-            "DELETE FROM usernames WHERE id=?1 \
-             AND NOT EXISTS (SELECT 1 FROM cred_attempts WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
-             AND NOT EXISTS (SELECT 1 FROM access_grants WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
-             AND NOT EXISTS (SELECT 1 FROM tried_pairs t WHERE t.engagement_id=usernames.engagement_id \
-               AND lower(t.username)=lower(usernames.username) AND lower(ifnull(t.domain,''))=lower(ifnull(usernames.domain,'')) \
-               AND ifnull(t.log_entry_id, '') <> ?2) \
-             AND NOT EXISTS (SELECT 1 FROM credentials c WHERE c.engagement_id=usernames.engagement_id \
-               AND lower(c.username)=lower(usernames.username) AND lower(ifnull(c.domain,''))=lower(ifnull(usernames.domain,'')))",
+        let user = tx
+            .query_row("SELECT username, domain, scope, local_host_id FROM usernames WHERE id=?1", [id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?))
+            })
+            .optional()?;
+        let Some((username, domain, scope, local_host)) = user else { continue };
+        if scope == "local" {
+            let used: bool = tx.query_row(
+                "SELECT EXISTS (SELECT 1 FROM cred_attempts WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
+                     OR EXISTS (SELECT 1 FROM access_grants WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
+                     OR EXISTS (SELECT 1 FROM tried_pairs WHERE engagement_id=?3 AND lower(username)=lower(?4) \
+                                AND auth_mode='local' AND host_id IS ?5 AND ifnull(log_entry_id, '') <> ?2) \
+                     OR EXISTS (SELECT 1 FROM credentials WHERE engagement_id=?3 AND lower(username)=lower(?4) \
+                                AND scope='local' AND local_host_id IS ?5)",
+                params![id, log_entry_id, ext.engagement_id, username, local_host],
+                |r| r.get(0),
+            )?;
+            if !used {
+                tx.execute("DELETE FROM usernames WHERE id=?1", [id])?;
+            }
+            continue;
+        }
+        let linked: bool = tx.query_row(
+            "SELECT EXISTS (SELECT 1 FROM cred_attempts WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2) \
+                 OR EXISTS (SELECT 1 FROM access_grants WHERE username_id=?1 AND ifnull(log_entry_id, '') <> ?2)",
             params![id, log_entry_id],
+            |r| r.get(0),
         )?;
+        // Domains of the other entries' and hand-made tried pairs for this name, and of every credential left for it.
+        let named: Vec<Option<String>> = tx
+            .prepare(
+                "SELECT domain FROM tried_pairs WHERE engagement_id=?1 AND lower(username)=lower(?2) \
+                   AND ifnull(log_entry_id, '') <> ?3 \
+                 UNION ALL SELECT domain FROM credentials WHERE engagement_id=?1 AND lower(username)=lower(?2)",
+            )?
+            .query_map(params![ext.engagement_id, username, log_entry_id], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        if linked || named.iter().any(|d| same_domain(anchor.as_deref(), d.as_deref(), domain.as_deref())) {
+            continue;
+        }
+        tx.execute("DELETE FROM usernames WHERE id=?1", [id])?;
     }
     // A service changed since the save (the owner confirmed it, or a later scan updated it) or linked to a finding stays.
     for id in &r.created_service_ids {
@@ -298,6 +364,21 @@ pub fn undo(conn: &Connection, log_entry_id: &str) -> AppResult<Extraction> {
     tx.execute("UPDATE extractions SET undone_at=?2 WHERE log_entry_id=?1", params![log_entry_id, now_ms()])?;
     tx.commit()?;
     get(conn, log_entry_id)?.ok_or(AppError::NotFound)
+}
+
+/// Puts a promoted tried pair back as it was, unless its host is gone or an equal pair is stored again.
+fn restore_tried_pair(conn: &Connection, t: &TriedPair) -> AppResult<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO tried_pairs \
+           (id, engagement_id, username, domain, secret, secret_kind, host_id, service, auth_mode, log_entry_id, at) \
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, (SELECT id FROM log_entries WHERE id = ?10), ?11 \
+         WHERE EXISTS (SELECT 1 FROM hosts WHERE id = ?7)",
+        params![
+            t.id, t.engagement_id, t.username, t.domain, t.secret, t.secret_kind, t.host_id, t.service, t.auth_mode,
+            t.log_entry_id, t.at
+        ],
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -363,7 +444,7 @@ mod tests {
     fn cred(c: &Connection, e: &str, id: &str, secret: &str, updated_at: i64) {
         c.execute(
             "INSERT INTO credentials (id,engagement_id,type,username,domain,secret,scope,created_at,updated_at) \
-             VALUES (?1,?2,'password','jay','corp.lan',?3,'domain',1,?4)",
+             VALUES (?1,?2,'password','zoe','corp.lan',?3,'domain',1,?4)",
             params![id, e, secret, updated_at],
         )
         .unwrap();
@@ -379,7 +460,7 @@ mod tests {
     }
 
     fn save_now(c: &Connection, f: &Fx, record: ExtractionRecord) -> Extraction {
-        let summary = ExtractionSummary { wins: vec!["Credential jay".into()], counts: vec![], ticks: vec![] };
+        let summary = ExtractionSummary { wins: vec!["Credential zoe".into()], counts: vec![], ticks: vec![] };
         save(c, &f.entry, &f.e, &summary, &record).unwrap()
     }
 
@@ -439,11 +520,11 @@ mod tests {
         c.execute("INSERT INTO services (id,host_id,port,created_at,updated_at) VALUES ('s1','h2',445,1,1)", []).unwrap();
         c.execute("INSERT INTO checklist_items (owner_id,engagement_id,goal_id,status,auto,updated_at) VALUES ('h2',?1,'g','done',1,1)", [&f.e]).unwrap();
         cred(c, &f.e, "c1", "Winter2024!", 1);
-        c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES ('u1',?1,'jay','corp.lan',1)", [&f.e]).unwrap();
+        c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES ('u1',?1,'zoe','corp.lan',1)", [&f.e]).unwrap();
         attempt(c, &f.e, "a1", "c1", &f.h, "valid", Some("l1"), 1);
         c.execute(
             "INSERT INTO tried_pairs (id,engagement_id,username,secret,secret_kind,host_id,service,auth_mode,log_entry_id,at) \
-             VALUES ('t1',?1,'drew','Spring2024!','password','h1','smb','domain','l1',1)",
+             VALUES ('t1',?1,'omar','Spring2024!','password','h1','smb','domain','l1',1)",
             [&f.e],
         )
         .unwrap();
@@ -570,7 +651,7 @@ mod tests {
         log_entry(c, &f.e, "l2");
         cred(c, &f.e, "c1", "aad3b435b51404eeaad3b435b51404ee:22222222222222222222222222222222", 1);
         cred(c, &f.e, "c2", "Winter2024!", 1);
-        for (id, user) in [("u1", "jay"), ("u2", "drew")] {
+        for (id, user) in [("u1", "zoe"), ("u2", "omar")] {
             c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES (?1,?2,?3,'nowhere.local',1)", params![id, f.e, user]).unwrap();
         }
         c.execute("UPDATE credentials SET username='mia' WHERE id IN ('c1','c2')", []).unwrap();
@@ -583,7 +664,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        // l2 dumped the same hash and listed jay again; it created nothing.
+        // l2 dumped the same hash and listed zoe again; it created nothing.
         let s = ExtractionSummary::default();
         let later = ExtractionRecord { reproved_credential_ids: vec!["c1".into()], reproved_username_ids: vec!["u1".into()], ..Default::default() };
         save(c, "l2", &f.e, &s, &later).unwrap();
@@ -617,17 +698,17 @@ mod tests {
         log_entry(c, &f.e, "l0");
         let before = HostIdentity {
             host_id: "h1".into(),
-            username: "corp\\drew".into(),
+            username: "corp\\omar".into(),
             privileges: vec!["SeShutdownPrivilege".into()],
             groups: vec!["Users".into()],
             entry_id: Some("l0".into()),
             updated_at: 1,
         };
-        // The save: h1 os linux -> windows, identity drew -> jay; h3 got its first identity.
+        // The save: h1 os linux -> windows, identity omar -> zoe; h3 got its first identity.
         c.execute("UPDATE hosts SET os='windows' WHERE id='h1'", []).unwrap();
         c.execute(
             "INSERT INTO host_identity (host_id,username,privileges,groups,entry_id,updated_at) VALUES \
-             ('h1','corp\\jay','[\"SeImpersonatePrivilege\"]','[]','l1',2), ('h3','nt authority\\system','[]','[]','l1',2)",
+             ('h1','corp\\zoe','[\"SeImpersonatePrivilege\"]','[]','l1',2), ('h3','nt authority\\system','[]','[]','l1',2)",
             [],
         )
         .unwrap();
@@ -655,7 +736,7 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let f = setup(c);
-        c.execute("INSERT INTO host_identity (host_id,username,privileges,groups,updated_at) VALUES ('h1','corp\\jay','[]','[]',2)", []).unwrap();
+        c.execute("INSERT INTO host_identity (host_id,username,privileges,groups,updated_at) VALUES ('h1','corp\\zoe','[]','[]',2)", []).unwrap();
         let x = save_now(
             c,
             &f,
@@ -666,11 +747,11 @@ mod tests {
             },
         );
         c.execute("UPDATE hosts SET os='windows', updated_at=?1 WHERE id='h1'", [x.created_at + 1]).unwrap();
-        c.execute("UPDATE host_identity SET username='corp\\drew', updated_at=?1 WHERE host_id='h1'", [x.created_at + 1]).unwrap();
+        c.execute("UPDATE host_identity SET username='corp\\omar', updated_at=?1 WHERE host_id='h1'", [x.created_at + 1]).unwrap();
         undo(c, "l1").unwrap();
         let os: Option<String> = c.query_row("SELECT os FROM hosts WHERE id='h1'", [], |r| r.get(0)).unwrap();
         assert_eq!(os.as_deref(), Some("windows"));
-        assert_eq!(crate::host_facts::identity_get(c, "h1").unwrap().unwrap().username, "corp\\drew");
+        assert_eq!(crate::host_facts::identity_get(c, "h1").unwrap().unwrap().username, "corp\\omar");
     }
 
     #[test]
@@ -739,14 +820,14 @@ mod tests {
         let c = v.conn().unwrap();
         let f = setup(c);
         log_entry(c, &f.e, "l2");
-        for (id, user) in [("u1", "jay"), ("u2", "drew"), ("u3", "paul"), ("u4", "mia"), ("u5", "sam"), ("u6", "tom")] {
+        for (id, user) in [("u1", "zoe"), ("u2", "omar"), ("u3", "noah"), ("u4", "mia"), ("u5", "sam"), ("u6", "tom")] {
             c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES (?1,?2,?3,'corp.lan',1)", params![id, f.e, user]).unwrap();
         }
-        cred(c, &f.e, "c9", "Summer2024!", 1); // a credential for jay from elsewhere (not in this record)
-        c.execute("UPDATE credentials SET username='JAY' WHERE id='c9'", []).unwrap();
+        cred(c, &f.e, "c9", "Summer2024!", 1); // a credential for zoe from elsewhere (not in this record)
+        c.execute("UPDATE credentials SET username='ZOE' WHERE id='c9'", []).unwrap();
         cred(c, &f.e, "c1", "Winter2024!", 1);
         c.execute("UPDATE credentials SET username='mia' WHERE id='c1'", []).unwrap();
-        // drew: a later entry's attempt; paul: a hand-made access grant; sam: only this entry's own attempt.
+        // omar: a later entry's attempt; noah: a hand-made access grant; sam: only this entry's own attempt.
         attempt(c, &f.e, "a2", "c9", &f.h, "valid", Some("l2"), 1);
         c.execute("UPDATE cred_attempts SET username_id='u2' WHERE id='a2'", []).unwrap();
         c.execute("INSERT INTO access_grants (id,engagement_id,username_id,host_id,level,via,at) VALUES ('g1',?1,'u3','h1','user','rdp',1)", [&f.e]).unwrap();
@@ -775,6 +856,38 @@ mod tests {
         // u4 (mia) went with this entry's credential; u5 only had this entry's attempt.
         assert_eq!(left, vec!["u1", "u2", "u3", "u6"]);
         assert_eq!(count(c, "SELECT count(*) FROM cred_attempts WHERE id='a2'"), 1);
+    }
+
+    #[test]
+    fn undo_keeps_a_username_whose_credential_or_pair_is_in_the_same_domain() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let f = setup(c);
+        c.execute("UPDATE engagements SET domain='corp.lan' WHERE id=?1", [&f.e]).unwrap();
+        log_entry(c, &f.e, "l2");
+        // This save listed zoe, omar, noah and mia under the NetBIOS name.
+        for (id, user) in [("u1", "zoe"), ("u2", "omar"), ("u3", "noah"), ("u4", "mia")] {
+            c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES (?1,?2,?3,'CORP',1)", params![id, f.e, user]).unwrap();
+        }
+        // zoe: a hand-made credential under the engagement's FQDN (the helper stores zoe@corp.lan).
+        cred(c, &f.e, "c9", "Summer2024!", 1);
+        // omar: a later entry's tried pair under the FQDN.
+        c.execute(
+            "INSERT INTO tried_pairs (id,engagement_id,username,domain,secret,secret_kind,host_id,service,auth_mode,log_entry_id,at) \
+             VALUES ('t1',?1,'Omar','corp.lan','Spring2024!','password','h1','smb','domain','l2',1)",
+            [&f.e],
+        )
+        .unwrap();
+        // noah: a credential in another domain whose first label is also CORP; mia: one for a host's account.
+        cred(c, &f.e, "c8", "Autumn2024!", 1);
+        c.execute("UPDATE credentials SET username='noah', domain='corp.local' WHERE id='c8'", []).unwrap();
+        cred(c, &f.e, "c7", "Autumn2024!", 1);
+        c.execute("UPDATE credentials SET username='mia', domain='mia.corp.lan' WHERE id='c7'", []).unwrap();
+        save_now(c, &f, ExtractionRecord { created_username_ids: ["u1", "u2", "u3", "u4"].map(String::from).to_vec(), ..Default::default() });
+        undo(c, "l1").unwrap();
+        let left: Vec<String> =
+            c.prepare("SELECT id FROM usernames ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(|x| x.unwrap()).collect();
+        assert_eq!(left, vec!["u1", "u2"]);
     }
 
     #[test]

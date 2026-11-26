@@ -20,7 +20,7 @@ const legend = () => within(screen.getByRole("list", { name: "Legend" }));
 
 describe("TestGrid legend lists only the states the grid shows", () => {
   it("a password row on SMB and SSH: untested only, no N/A and no dashed entry", () => {
-    grid({ creds: [cred({ id: "c1", username: "jay", domain: "ACME" })] });
+    grid({ creds: [cred({ id: "c1", username: "zoe", domain: "ACME" })] });
     expect(legend().getByText("Untested")).toBeInTheDocument();
     expect(legend().queryByText("Not applicable")).toBeNull();
     expect(legend().queryByText("Other mode untried")).toBeNull();
@@ -36,7 +36,7 @@ describe("TestGrid legend lists only the states the grid shows", () => {
 
   it("shows admin and failed entries when attempts produce them, and each has a cell", () => {
     grid({
-      creds: [cred({ id: "c1", username: "jay", domain: "ACME" })],
+      creds: [cred({ id: "c1", username: "zoe", domain: "ACME" })],
       attempts: [att({ credId: "c1", service: "smb", result: "admin" }), att({ credId: "c1", service: "ssh", result: "failed", authMode: "domain" })],
     });
     expect(legend().getByText("Admin")).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe("TestGrid legend lists only the states the grid shows", () => {
 
   it("the dashed entry appears exactly when a partial cell is rendered", () => {
     grid({
-      creds: [cred({ id: "c1", username: "jay", domain: "ACME" })],
+      creds: [cred({ id: "c1", username: "zoe", domain: "ACME" })],
       attempts: [att({ credId: "c1", service: "smb", result: "failed", authMode: "domain" })],
     });
     const partial = screen.queryAllByTestId("untried-marker").length > 0;
@@ -57,7 +57,7 @@ describe("TestGrid legend lists only the states the grid shows", () => {
   it("a tried row counts: failed and N/A come from its cells", () => {
     grid({
       tried: [{ id: "t1", engagementId: "eng1", username: "sam", domain: null, secret: "x", secretKind: "password", hostId: "h1", service: "ssh", authMode: "domain", logEntryId: null, at: 1 }],
-      creds: [cred({ id: "c1", username: "jay" })],
+      creds: [cred({ id: "c1", username: "zoe" })],
     });
     expect(legend().getByText("Failed")).toBeInTheDocument();
     expect(legend().getByText("Not applicable")).toBeInTheDocument();

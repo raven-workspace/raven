@@ -1,30 +1,38 @@
 // In-memory stand-in for src/lib/api.ts, swapped in by the audit-mode Vite plugin. Reads return the fixtures,
 // writes mutate a private copy and return the resulting record. Reloading the page restores the fixtures.
+// It must pass the same store scenarios as the real store (src/test/storeScenarios), and throw only the app's error codes.
+import { credKey, stripLineBreaks } from "../engines/credentials/keys";
+import { hashCaptureKind } from "../engines/credentials/matrix";
+import { PASSWORD_REUSE_DETAIL, PASSWORD_REUSE_SERVICE } from "../engines/credentials/reuse";
 import type { CommandOverlay, FieldManualSnapshot } from "../engines/fieldManual/merge";
 import { BUILTIN_LIBRARY } from "../engines/library/data";
 import { FIELD_MANUAL_CARDS } from "../engines/library/data/fieldManual";
 import { parseNote } from "../engines/manual";
 import type { Api } from "../lib/api";
-import type { ChecklistItem } from "../types/checklist";
-import type { TriedPair } from "../types/credentials";
-import type { ErrorCode } from "../types/errors";
+import type { ChecklistItem, EntryTick, EntryTicks } from "../types/checklist";
+import type { AttemptService, Credential, CredentialInput, TriedPair, Username, UsernameInput } from "../types/credentials";
+import type { GoalRef } from "../engines/checklist";
+import type { EngagementInput } from "../types/engagement";
+import { BOARD_COLUMNS, type Host, type HostInput } from "../types/host";
 import type { NvdRecord } from "../types/findings";
 import { RavenError } from "../types/errors";
 import type { Report, ReportSection } from "../types/report";
 import type { ServiceVerdict } from "../types/hostFacts";
-import type { Extraction, Progress } from "../types/log";
-import { AUDIT_NOTE_SOURCES, AUDIT_NOW, FIXTURES, FIXTURE_PROGRESS, type AuditFixtures } from "./fixtures";
+import type { Extraction, ExtractionProofs, ExtractionRecord, Filed, PlannedAttemptProof, Progress } from "../types/log";
+import type { Service } from "../types/service";
+import { AUDIT_NOTE_SOURCES, AUDIT_NOW, FIXTURES, type AuditFixtures } from "./fixtures";
 
 export type { Api };
 
 let db: AuditFixtures = structuredClone(FIXTURES);
-let progress: Record<string, Progress> = structuredClone(FIXTURE_PROGRESS);
 let seq = 0;
 
-/** Restores the fixtures. Called once at module load; tests call it to undo their mutations. */
-export function resetAuditState(): void {
-  db = structuredClone(FIXTURES);
-  progress = structuredClone(FIXTURE_PROGRESS);
+/**
+ * Restores the fixtures, or starts from `seed` (`EMPTY_FIXTURES` for an empty store). Called once at module load;
+ * tests call it to undo their mutations.
+ */
+export function resetAuditState(seed: AuditFixtures = FIXTURES): void {
+  db = structuredClone(seed);
   seq = 0;
 }
 resetAuditState();
@@ -53,20 +61,361 @@ const AUDIT_FIELD_MANUAL: FieldManualSnapshot = {
 
 const clone = <T>(v: T): T => structuredClone(v);
 
+type FakeHost = AuditFixtures["hosts"][number];
+/**
+ * A host as the store returns it: `adSetEffective` derived on every read, as `ad_effective_sql` does, so it follows the
+ * switch and every service change. The switch if set, else 88 and 389 both in state exactly `open`.
+ */
+function hostOut(h: FakeHost): FakeHost {
+  return clone({ ...h, adSetEffective: adEffective(h) });
+}
+
+function adEffective(h: FakeHost): boolean {
+  const open = (port: number) => db.services.some((s) => s.hostId === h.id && s.port === port && s.state === "open");
+  return h.adSet ?? (open(88) && open(389));
+}
+
+const notFound = () => new RavenError("not_found", "not found");
+const invalid = (field: string, message: string) => new RavenError("validation", message, field);
+
 function find<T extends { id: string }>(rows: T[], id: string): T {
   const row = rows.find((r) => r.id === id);
-  if (!row) throw new RavenError("not_found", `No record ${id}`);
+  if (!row) throw notFound();
   return row;
 }
+/** Deletes row `id`; `not_found` if there was none, as the store's `delete_by_id`. */
 function remove<T extends { id: string }>(rows: T[], id: string): null {
   const i = rows.findIndex((r) => r.id === id);
-  if (i >= 0) rows.splice(i, 1);
+  if (i < 0) throw notFound();
+  rows.splice(i, 1);
   return null;
 }
+/** The engagement must exist (db.rs `check_scope` with no host). */
+function engagementMustExist(id: string): void {
+  if (!db.engagements.some((e) => e.id === id)) throw notFound();
+}
+// What the desktop app does on disk can't happen in a browser. `io` is the code the app shows as a plain failure.
 const unsupported = (what: string): never => {
-  // "unsupported" is audit-only, so it is not in the real ErrorCode union.
-  throw new RavenError("unsupported" as ErrorCode, `${what} is not available in audit mode`);
+  throw new RavenError("io", `${what} is not available in audit mode`);
 };
+
+const blank = (s: string | null | undefined): string | null => s?.trim() || null;
+
+/** engagements.rs `valid_cidr`: dotted-quad IPv4 with an optional /0-32 prefix, no leading zeros. */
+function validCidr(s: string): boolean {
+  const slash = s.indexOf("/");
+  if (slash >= 0) {
+    const p = s.slice(slash + 1);
+    if (!/^(0|[1-9][0-9]?)$/.test(p) || Number(p) > 32) return false;
+  }
+  const parts = (slash < 0 ? s : s.slice(0, slash)).split(".");
+  return parts.length === 4 && parts.every((o) => /^(0|[1-9][0-9]{0,2})$/.test(o) && Number(o) <= 255);
+}
+/** hosts.rs `single_ip`: one IPv4 address, bare or `/32`, returned bare. */
+function singleIp(s: string): string | null {
+  const bare = s.endsWith("/32") ? s.slice(0, -3) : s;
+  return !bare.includes("/") && validCidr(bare) ? bare : null;
+}
+
+/** engagements.rs `normalise`: every field is replaced, so an absent one is cleared. */
+function cleanEngagement(i: EngagementInput) {
+  const name = i.name.trim();
+  if (!name || [...name].length > 120) throw invalid("name", "name must be 1-120 characters");
+  if (!["exam-sim", "lab", "client"].includes(i.kind)) throw invalid("kind", "kind must be exam-sim, lab or client");
+  const scopeCidrs = (i.scopeCidrs ?? []).map((c) => c.trim());
+  const bad = scopeCidrs.find((c) => !validCidr(c));
+  if (bad !== undefined) throw invalid("scopeCidrs", `invalid IPv4 CIDR: ${bad}`);
+  const startsAt = i.startsAt ?? null;
+  const endsAt = i.endsAt ?? null;
+  if (startsAt !== null && endsAt !== null && endsAt < startsAt) throw invalid("endsAt", "end must not be before start");
+  const exam = i.kind === "exam-sim";
+  const timeboxMinutes = exam ? (i.timeboxMinutes ?? null) : null;
+  if (timeboxMinutes !== null && !(timeboxMinutes >= 1 && timeboxMinutes <= 4320)) throw invalid("timeboxMinutes", "timebox must be 1-4320 minutes");
+  return {
+    name, kind: i.kind, client: blank(i.client), subLabel: blank(i.subLabel), scopeCidrs, domain: blank(i.domain), startsAt, endsAt,
+    timeboxStart: exam ? (i.timeboxStart ?? null) : null, timeboxMinutes,
+  };
+}
+
+/** hosts.rs `normalise`: the name defaults to the IP; os and access are checked; absent dual-homed and AD set keep. */
+function cleanHost(i: HostInput) {
+  const raw = i.ip?.trim();
+  const ip = raw ? singleIp(raw) : null;
+  if (raw && !ip) throw invalid("ip", "must be a single IPv4 address");
+  const name = i.name.trim() || ip || "";
+  if (!name || [...name].length > 80) throw invalid("name", "name must be 1-80 characters");
+  const os = blank(i.os);
+  if (os !== null && !["windows", "linux", "other"].includes(os)) throw invalid("os", "os must be windows, linux or other");
+  const access = blank(i.access) ?? "none";
+  if (!["none", "user", "root"].includes(access)) throw invalid("access", "access must be none, user or root");
+  return { name, ip, os: os as HostInput["os"], access: access as NonNullable<HostInput["access"]> };
+}
+
+const ipTaken = (engagementId: string, ip: string, exceptId: string) =>
+  db.hosts.some((h) => h.engagementId === engagementId && h.ip === ip && h.id !== exceptId);
+
+function newHost(engagementId: string, over: Partial<FakeHost>): FakeHost {
+  const h: FakeHost = {
+    id: nid("h"), engagementId, name: "", ip: null, os: null, boardColumn: "information-gathering", boardManual: false, access: "none",
+    createdAt: now(), updatedAt: now(), dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, ...over,
+  };
+  db.hosts.push(h);
+  return h;
+}
+
+/** hosts.rs `sync_scope`: a host named after its IP for each single-IP scope entry no host has yet. */
+function syncScope(engagementId: string, scope: string[]): void {
+  for (const entry of scope) {
+    const ip = singleIp(entry.trim());
+    if (ip && !ipTaken(engagementId, ip, "")) newHost(engagementId, { name: ip, ip });
+  }
+}
+
+/** hosts.rs `ip_key`: the IPv4 address as a number, for the host list's order. */
+function ipKey(ip: string | null): number | null {
+  const parts = (ip ?? "").split(".").map(Number);
+  return parts.length === 4 && parts.every((p) => Number.isInteger(p) && p >= 0) ? parts.reduce((a, p) => a * 256 + p, 0) : null;
+}
+/** hosts.rs `list`: by IP numerically (hosts without one last), then name, then id. */
+function byIp(a: FakeHost, b: FakeHost): number {
+  const [ka, kb] = [ipKey(a.ip), ipKey(b.ip)];
+  if ((ka === null) !== (kb === null)) return ka === null ? 1 : -1;
+  if (ka !== null && kb !== null && ka !== kb) return ka - kb;
+  const [na, nb] = [a.name.toLowerCase(), b.name.toLowerCase()];
+  if (na !== nb) return na < nb ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+// ---------------------------------------------------------------- progress, as engagements.rs `progress_all`
+
+/**
+ * Every engagement's host and flag progress, worked out from its hosts and flag entries. Two flags (local, proof) per
+ * host; a host is rooted by a proof; a flag found is a distinct host and flag kind. An exam sim with hosts counts each
+ * host outside the AD set that way, and the AD set (`adSetEffective`) as one target with one flag: a proof on any of
+ * its hosts. An exam sim with no hosts keeps the zero row.
+ */
+function progressAll(): Record<string, Progress> {
+  const out: Record<string, Progress> = {};
+  for (const e of db.engagements) {
+    const hosts = db.hosts.filter((h) => h.engagementId === e.id);
+    const flags = db.log.filter((l) => l.engagementId === e.id && l.kind === "flag");
+    const kindOf = (l: (typeof flags)[number]) => (l.content.kind === "flag" ? l.content.flagKind : null);
+    const has = (hostId: string, kind: string) => flags.some((l) => kindOf(l) === kind && l.hostIds.includes(hostId));
+    out[e.id] = {
+      hostsTotal: hosts.length,
+      hostsRooted: new Set(flags.filter((l) => kindOf(l) === "proof").flatMap((l) => l.hostIds)).size,
+      flagsFound: new Set(flags.flatMap((l) => l.hostIds.map((h) => `${h}|${kindOf(l)}`))).size,
+      flagsTotal: hosts.length * 2,
+    };
+    if (e.kind !== "exam-sim" || hosts.length === 0) continue;
+    const p: Progress = { hostsTotal: 0, hostsRooted: 0, flagsFound: 0, flagsTotal: 0 };
+    let adHosts = 0;
+    let adProof = false;
+    for (const h of hosts) {
+      const [local, proof] = [has(h.id, "local"), has(h.id, "proof")];
+      if (adEffective(h)) {
+        adHosts++;
+        adProof ||= proof;
+        continue;
+      }
+      p.hostsTotal += 1;
+      p.flagsTotal += 2;
+      p.hostsRooted += Number(proof);
+      p.flagsFound += Number(local) + Number(proof);
+    }
+    if (adHosts > 0) {
+      p.hostsTotal += 1;
+      p.flagsTotal += 1;
+      p.hostsRooted += Number(adProof);
+      p.flagsFound += Number(adProof);
+    }
+    out[e.id] = p;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- deletes, as the schema's foreign keys cascade them
+// Each mirrors the ON DELETE CASCADE / SET NULL clauses in src-tauri/migrations, so a delete in the fake leaves what
+// a delete in the store leaves.
+
+function dropServices(ids: Set<string>): void {
+  if (!ids.size) return;
+  db.services = db.services.filter((s) => !ids.has(s.id));
+  db.ruledOut = db.ruledOut.filter((r) => !(r.sourceKind === "service" && r.sourceId !== null && ids.has(r.sourceId)));
+  for (const f of db.findings) f.serviceIds = f.serviceIds.filter((id) => !ids.has(id));
+}
+
+function dropLogEntries(ids: Set<string>): void {
+  if (!ids.size) return;
+  const attachments = new Set(
+    db.log.filter((e) => ids.has(e.id)).flatMap((e) => ("attachmentId" in e.content && e.content.attachmentId ? [e.content.attachmentId] : [])),
+  );
+  db.log = db.log.filter((e) => !ids.has(e.id));
+  db.attachments = db.attachments.filter((a) => !attachments.has(a.id));
+  db.extractions = db.extractions.filter((x) => !ids.has(x.logEntryId));
+  for (const f of db.findings) f.stepEntryIds = f.stepEntryIds.filter((id) => !ids.has(id));
+  const unlink = <T extends { logEntryId: string | null }>(rows: T[]) => rows.forEach((r) => r.logEntryId !== null && ids.has(r.logEntryId) && (r.logEntryId = null));
+  unlink(db.hops);
+  unlink(db.accessGrants);
+  unlink(db.credAttempts);
+  unlink(db.failedAttempts);
+  unlink(db.triedPairs);
+  for (const s of db.services) if (s.confirmedEntryId !== null && ids.has(s.confirmedEntryId)) s.confirmedEntryId = null;
+  for (const i of db.hostIdentity) if (i.entryId !== null && ids.has(i.entryId)) i.entryId = null;
+  for (const c of db.cleanup) if (c.sourceEntryId !== null && ids.has(c.sourceEntryId)) c.sourceEntryId = null;
+}
+
+function dropCredentials(ids: Set<string>): void {
+  if (!ids.size) return;
+  db.credentials = db.credentials.filter((c) => !ids.has(c.id));
+  db.credAttempts = db.credAttempts.filter((a) => !ids.has(a.credId));
+  for (const c of db.credentials) {
+    if (c.crackedFrom !== null && ids.has(c.crackedFrom)) c.crackedFrom = null;
+    if (c.fromSecretId !== null && ids.has(c.fromSecretId)) c.fromSecretId = null;
+  }
+}
+
+function dropUsernames(ids: Set<string>): void {
+  if (!ids.size) return;
+  db.usernames = db.usernames.filter((u) => !ids.has(u.id));
+  db.accessGrants = db.accessGrants.filter((g) => !ids.has(g.usernameId));
+  db.credAttempts = db.credAttempts.filter((a) => a.usernameId === null || !ids.has(a.usernameId));
+}
+
+function dropFindings(ids: Set<string>): void {
+  if (!ids.size) return;
+  db.findings = db.findings.filter((f) => !ids.has(f.id));
+  db.findingFiles = db.findingFiles.filter((f) => !ids.has(f.findingId));
+  for (const a of db.failedAttempts) if (a.findingId !== null && ids.has(a.findingId)) a.findingId = null;
+}
+
+function dropHosts(ids: Set<string>): void {
+  if (!ids.size) return;
+  const has = (id: string | null) => id !== null && ids.has(id);
+  db.hosts = db.hosts.filter((h) => !ids.has(h.id));
+  dropServices(new Set(db.services.filter((s) => ids.has(s.hostId)).map((s) => s.id)));
+  db.notes = db.notes.filter((n) => !has(n.hostId));
+  db.ruledOut = db.ruledOut.filter((r) => !has(r.hostId));
+  db.tunnels = db.tunnels.filter((t) => !ids.has(t.viaHostId));
+  db.hops = db.hops.filter((h) => !has(h.fromHostId) && !ids.has(h.toHostId));
+  db.interfaceDismissals = db.interfaceDismissals.filter((d) => !ids.has(d.hostId));
+  db.accessGrants = db.accessGrants.filter((g) => !ids.has(g.hostId));
+  db.credAttempts = db.credAttempts.filter((a) => !ids.has(a.hostId));
+  db.triedPairs = db.triedPairs.filter((t) => !ids.has(t.hostId));
+  db.payloadBuilds = db.payloadBuilds.filter((b) => !ids.has(b.hostId));
+  db.hostIdentity = db.hostIdentity.filter((i) => !ids.has(i.hostId));
+  db.vectors = db.vectors.filter((v) => !ids.has(v.hostId));
+  // checklist_items.owner_id has no foreign key; hosts.rs `delete` clears a host's items by hand.
+  db.checklist = db.checklist.filter((c) => !ids.has(c.ownerId));
+  for (const e of db.engagements) if (has(e.msfHostId)) e.msfHostId = null;
+  for (const c of db.credentials) {
+    if (has(c.localHostId)) c.localHostId = null;
+    if (has(c.sourceHostId)) c.sourceHostId = null;
+  }
+  for (const u of db.usernames) {
+    if (has(u.localHostId)) u.localHostId = null;
+    if (has(u.sourceHostId)) u.sourceHostId = null;
+  }
+  for (const a of db.failedAttempts) if (has(a.hostId)) a.hostId = null;
+  for (const c of db.cleanup) if (has(c.hostId)) c.hostId = null;
+  for (const f of db.findings) f.hostIds = f.hostIds.filter((id) => !ids.has(id));
+  for (const e of db.log) e.hostIds = e.hostIds.filter((id) => !ids.has(id));
+}
+
+function dropEngagement(id: string): void {
+  const mine = <T extends { engagementId: string; id: string }>(rows: T[]) => new Set(rows.filter((r) => r.engagementId === id).map((r) => r.id));
+  dropHosts(mine(db.hosts));
+  dropLogEntries(mine(db.log));
+  dropCredentials(mine(db.credentials));
+  dropUsernames(mine(db.usernames));
+  dropFindings(mine(db.findings));
+  const reports = mine(db.reports);
+  db.reports = db.reports.filter((r) => !reports.has(r.id));
+  db.reportSections = db.reportSections.filter((s) => !reports.has(s.reportId));
+  const rest = <T extends { engagementId: string }>(rows: T[]) => rows.filter((r) => r.engagementId !== id);
+  db.notes = rest(db.notes);
+  db.ruledOut = rest(db.ruledOut);
+  db.tunnels = rest(db.tunnels);
+  db.hops = rest(db.hops);
+  db.interfaceDismissals = rest(db.interfaceDismissals);
+  db.accessGrants = rest(db.accessGrants);
+  db.credAttempts = rest(db.credAttempts);
+  db.triedPairs = rest(db.triedPairs);
+  db.payloadBuilds = rest(db.payloadBuilds);
+  db.extractions = rest(db.extractions);
+  db.failedAttempts = rest(db.failedAttempts);
+  db.cleanup = rest(db.cleanup);
+  db.checklist = db.checklist.filter((c) => c.ownerId !== id);
+  db.engagements = db.engagements.filter((e) => e.id !== id);
+}
+
+// ---------------------------------------------------------------- checklist, as checklist.rs
+
+const MAX_ITEMS = 500;
+
+/** The owner must be the engagement itself or one of its hosts; otherwise `not_found`. */
+function checkOwned(engagementId: string, ownerId: string): void {
+  if (ownerId !== engagementId && !db.hosts.some((h) => h.id === ownerId && h.engagementId === engagementId)) throw notFound();
+}
+
+function checkGoalRefs(engagementId: string, field: string, set: GoalRef[], revert: GoalRef[]): void {
+  if (set.length + revert.length > MAX_ITEMS * 4) throw invalid(field, "too many items");
+  engagementMustExist(engagementId);
+  for (const g of [...set, ...revert]) {
+    checkOwned(engagementId, g.ownerId);
+    if (!g.goalId.trim()) throw invalid("goalId", "goal id is required");
+  }
+}
+
+const checklistRow = (g: GoalRef) => db.checklist.find((c) => c.ownerId === g.ownerId && c.goalId === g.goalId);
+
+/** A conditional write's new row (checklist.rs `apply_cover` and `apply_facts` insert these). */
+function insertChecklist(g: GoalRef, status: "na" | "done", completedAt: number | null): void {
+  db.checklist.push({
+    ownerId: g.ownerId, goalId: g.goalId, status, notes: null, completedAt, auto: true, autoFrom: null, statusManual: false, evidence: [], updatedAt: now(),
+  });
+}
+
+/** checklist.rs `replace_entry_ticks`: one entry's ticks re-derived on the engagement's rows as they are now. */
+function replaceEntryTicks(engagementId: string, e: EntryTicks): void {
+  const wanted: EntryTick[] = [];
+  for (const t of e.ticks) if (!wanted.some((w) => w.ownerId === t.ownerId && w.goalId === t.goalId)) wanted.push(t);
+  const owners = new Set(listChecklist(engagementId).map((r) => r.ownerId));
+  const stamp = { updatedAt: now() };
+  for (const r of db.checklist.filter((c) => owners.has(c.ownerId))) {
+    const i = r.evidence.findIndex((x) => x.entryId === e.entryId);
+    if (i === -1) continue;
+    const t = wanted.find((w) => w.ownerId === r.ownerId && w.goalId === r.goalId);
+    if (t) {
+      if ((r.evidence[i]!.commandId ?? null) !== (t.commandId ?? null)) {
+        r.evidence = r.evidence.map((x, j) => (j === i ? { ...x, commandId: t.commandId ?? null } : x));
+        Object.assign(r, stamp);
+      }
+      continue;
+    }
+    r.evidence = r.evidence.filter((x) => x.entryId !== e.entryId);
+    if (r.auto && r.evidence.length === 0) {
+      const status = r.autoFrom === "na" || r.autoFrom === "in_progress" ? r.autoFrom : "todo";
+      Object.assign(r, { status, completedAt: null, auto: false, autoFrom: null });
+    }
+    Object.assign(r, stamp);
+  }
+  for (const t of wanted) {
+    let r = checklistRow(t);
+    if (!r) {
+      r = { ownerId: t.ownerId, goalId: t.goalId, status: "todo", notes: null, completedAt: null, auto: false, autoFrom: null, statusManual: false, evidence: [], updatedAt: now() };
+      db.checklist.push(r);
+    }
+    if (r.evidence.some((x) => x.entryId === e.entryId)) continue;
+    r.evidence = [...r.evidence, { entryId: e.entryId, commandId: t.commandId ?? null }];
+    if (r.status !== "done") {
+      const coverMarked = r.status === "na" && r.auto && !r.statusManual;
+      const autoFrom = r.status === "in_progress" || (r.status === "na" && !coverMarked) ? r.status : null;
+      Object.assign(r, { status: "done", completedAt: e.at, auto: true, autoFrom });
+    }
+    Object.assign(r, stamp);
+  }
+}
 
 /** Create/update helper: merges `input` over the row, ignoring undefined so "absent keeps the current value" holds. */
 function assign<T extends object>(row: T, input: object, extra: Partial<T> = {}): T {
@@ -74,9 +423,92 @@ function assign<T extends object>(row: T, input: object, extra: Partial<T> = {})
   return Object.assign(row, extra);
 }
 
+/**
+ * The store's same-domain rule (credentials.rs `same_domain`), so the audit backend dedupes as the real one does:
+ * equal ignoring case, or the engagement's own FQDN and its first label.
+ */
+function sameDomainIn(engagementId: string, a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+  const [x, y] = [norm(a), norm(b)];
+  if (x === y) return true;
+  const fqdn = norm(db.engagements.find((e) => e.id === engagementId)?.domain);
+  const label = fqdn.includes(".") ? fqdn.slice(0, fqdn.indexOf(".")) : "";
+  if (!label || !x || !y) return false;
+  return (x === fqdn && y === label) || (y === fqdn && x === label);
+}
+
+/** The stored credential that is the same credential as `c` (credentials.rs `find_duplicate`). */
+function storedSame(c: Credential): Credential | undefined {
+  if (!(c.type === "hash" ? c.secret.trim() : stripLineBreaks(c.secret))) return undefined;
+  const key = (x: Credential) => `${credKey({ ...x, domain: null })}|${x.scope === "local" ? (x.localHostId ?? "") : ""}`;
+  const same = db.credentials.filter((x) => x.engagementId === c.engagementId && x.secret && key(x) === key(c));
+  return same.find((x) => sameDomainIn(c.engagementId, x.domain, c.domain));
+}
+
+/**
+ * A credential input's scope and local host, checked as credentials.rs `build` does: absent scope is `domain`; a local
+ * credential needs its host only when scope or host is being set or changed (`current` is the stored credential on
+ * update), so one whose host was deleted stays editable; only a local credential has a host.
+ */
+function scopeAndHost(input: CredentialInput, current?: Credential): Pick<Credential, "scope" | "localHostId"> {
+  const scope = input.scope || "domain";
+  const localHostId = input.localHostId || null;
+  const keeps = current !== undefined && current.scope === scope && current.localHostId === localHostId;
+  if (scope === "local" && !localHostId && !keeps) throw invalid("localHostId", "a local credential needs its host");
+  if (scope !== "local" && localHostId) throw invalid("localHostId", "only a local credential has a host");
+  return { scope, localHostId };
+}
+
+/**
+ * A username input's scope and host, checked as credentials.rs `username_scope` does: absent scope is `unknown`; a
+ * local username has a host in the engagement, and only a local one has.
+ */
+function usernameScope(engagementId: string, input: UsernameInput): Pick<Username, "scope" | "localHostId"> {
+  const scope = input.scope?.trim() || "unknown";
+  if (scope !== "domain" && scope !== "local" && scope !== "unknown") throw invalid("scope", "scope must be domain, local or unknown");
+  const localHostId = input.localHostId?.trim() || null;
+  if (scope === "local" && !localHostId) throw invalid("localHostId", "a local username needs its host");
+  if (scope !== "local" && localHostId) throw invalid("localHostId", "only a local username has a host");
+  if (localHostId && !db.hosts.some((h) => h.id === localHostId && h.engagementId === engagementId)) throw notFound();
+  return { scope, localHostId };
+}
+
+/**
+ * The stored username that is the same username (credentials.rs `username_find`): the name ignoring case, the same
+ * scope, and for unknown the same domain (blank only blank), for domain the same domain with a blank one standing for
+ * the engagement's own, for local the same host. Of duplicates, the one spelled the same wins.
+ */
+function storedUsername(engagementId: string, u: Pick<Username, "username" | "domain" | "scope" | "localHostId">): Username | undefined {
+  const lc = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+  const same = db.usernames
+    .filter((x) => x.engagementId === engagementId && x.scope === u.scope && lc(x.username) === lc(u.username))
+    .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+  if (u.scope === "local") return same.find((x) => u.localHostId !== null && x.localHostId === u.localHostId);
+  const anchor = db.engagements.find((e) => e.id === engagementId)?.domain?.trim() || null;
+  const own = (d: string | null) => (u.scope === "domain" ? d?.trim() || anchor : d);
+  return same.find((x) => lc(own(x.domain)) === lc(own(u.domain))) ?? same.find((x) => sameDomainIn(engagementId, own(x.domain), own(u.domain)));
+}
+
+/**
+ * Password reuse (credentials.rs `find_reused_local`): for a new local credential, the stored local credential for
+ * another host with the same account and secret. Never a captured hash, nor one whose host was deleted.
+ */
+function reusedLocal(engagementId: string, input: CredentialInput): Credential | undefined {
+  type Account = Pick<Credential, "type" | "username" | "secret" | "hashType">;
+  const probe: Account = { type: input.type, username: input.username ?? "", secret: input.secret ?? "", hashType: input.hashType ?? null };
+  const reusable = (c: Account, scope: string | undefined, host: string | null | undefined) =>
+    scope === "local" && !!host && (c.type === "password" || c.type === "hash") && !hashCaptureKind(c) &&
+    !!(c.type === "hash" ? c.secret.trim() : stripLineBreaks(c.secret));
+  if (!reusable(probe, input.scope, input.localHostId)) return undefined;
+  const account = (c: Account) => credKey({ ...c, domain: null });
+  return db.credentials.find((c) =>
+    c.engagementId === engagementId && reusable(c, c.scope, c.localHostId) && c.localHostId !== input.localHostId && account(c) === account(probe));
+}
+
 function listChecklist(engagementId: string): ChecklistItem[] {
   const owners = new Set([engagementId, ...db.hosts.filter((h) => h.engagementId === engagementId).map((h) => h.id)]);
-  return clone(db.checklist.filter((c) => owners.has(c.ownerId)));
+  // The store always sends `statusManual`; a fixture row may leave it out.
+  return clone(db.checklist.filter((c) => owners.has(c.ownerId)).map((c) => ({ ...c, statusManual: c.statusManual ?? false })));
 }
 
 /** The one CVE the audit fake knows; any other ID is `not_found`. */
@@ -91,6 +523,202 @@ const AUDIT_NVD_RECORD: NvdRecord = {
   published: "2021-12-10T10:15:09.143",
   lastModified: "2025-02-04T15:15:13.773",
 };
+
+/**
+ * `extraction_file` over this fake's own writes: files the proofs and stores the extraction, its record found by
+ * comparing the rows before and after. Unlike the store it is not all or nothing, skips the tried-pair check on
+ * failed username results, and leaves username re-keys and secret links out.
+ */
+async function fileExtraction(engagementId: string, logEntryId: string, p: ExtractionProofs): Promise<Filed> {
+  if (db.extractions.some((x) => x.logEntryId === logEntryId)) throw new RavenError("conflict", "this entry's extraction is already recorded");
+  const at = find(db.log, logEntryId).at;
+  const mine = <T extends { engagementId: string }>(rows: T[]) => clone(rows.filter((r) => r.engagementId === engagementId));
+  const was = { credentials: mine(db.credentials), usernames: mine(db.usernames), attempts: mine(db.credAttempts), tried: mine(db.triedPairs) };
+  const hostIds: Record<string, string> = {};
+  const host = (id: string | null | undefined) => (id ? (hostIds[id] ?? id) : null);
+  const record: ExtractionRecord = {
+    createdHostIds: [...p.createdHostIds], createdServiceIds: [], servicesBefore: [], hostOsBefore: [], identityBefore: [], createdCredentialIds: [],
+    credentialsBefore: [], createdUsernameIds: [], createdAttemptIds: [], attemptsBefore: [], createdTriedPairIds: [], createdVectorIds: [],
+    outputTicks: [], reprovedCredentialIds: [], reprovedUsernameIds: [], promotedTriedPairs: [],
+  };
+  const reprove = (ids: string[], stored: { id: string }[], id: string) => {
+    if (stored.some((x) => x.id === id) && !ids.includes(id)) ids.push(id);
+  };
+  for (const h of p.newHosts) {
+    let id = db.hosts.find((x) => x.engagementId === engagementId && x.ip === h.ip)?.id;
+    if (!id) {
+      id = (await base.hostCreate(engagementId, { name: h.ip, ip: h.ip })).id;
+      record.createdHostIds.push(id);
+    }
+    hostIds[h.key] = id;
+  }
+  const scans: Filed["scans"] = [];
+  for (const s of p.scans) {
+    const hostId = host(s.hostId)!;
+    const before = clone(db.services.filter((x) => x.hostId === hostId));
+    const scanned = (await base.servicesUpsertScan(hostId, s.ports)).filter((x) => s.ports.some((pt) => pt.port === x.port && pt.protocol === x.protocol));
+    for (const x of scanned) {
+      const old = before.find((b) => b.id === x.id);
+      if (old) record.servicesBefore.push(old);
+      else record.createdServiceIds.push(x.id);
+    }
+    const h = find(db.hosts, hostId);
+    const osSet = !h.os && !!s.os;
+    if (osSet) {
+      record.hostOsBefore.push({ hostId, os: h.os });
+      await base.hostUpdate(hostId, { name: h.name, ip: h.ip, os: s.os as Host["os"], access: h.access });
+    }
+    scans.push({ hostId, services: scanned.length, osSet });
+  }
+  let identityChanged = false;
+  if (p.identity) {
+    const hostId = host(p.identity.hostId)!;
+    const before = clone(db.hostIdentity.find((i) => i.hostId === hostId) ?? null);
+    const fields = (i: { username: string; privileges: string[]; groups: string[] }) => JSON.stringify([i.username, i.privileges, i.groups]);
+    if (!before || fields(before) !== fields(p.identity)) {
+      await base.hostIdentitySet({ ...p.identity, hostId, entryId: logEntryId });
+      record.identityBefore.push({ hostId, identity: before });
+      identityChanged = true;
+    }
+  }
+  // filing.rs `create_credential`: a local account stored for another host with the same secret is password reuse,
+  // the stored credential, found again on this one.
+  const createOrReuse = async (c: CredentialInput) => {
+    const input = { ...c, localHostId: host(c.localHostId), sourceHostId: host(c.sourceHostId) };
+    const reused = reusedLocal(engagementId, input);
+    const { credential, existed } = reused ? { credential: reused, existed: true } : await base.credentialCreate(engagementId, input);
+    if (existed) reprove(record.reprovedCredentialIds, was.credentials, credential.id);
+    return { id: credential.id, reusedOn: reused ? input.localHostId : null };
+  };
+  const create = async (c: CredentialInput) => (await createOrReuse(c)).id;
+  const proofIds: string[] = [];
+  for (const c of p.credentials) {
+    const { id, reusedOn: on } = await createOrReuse(c);
+    proofIds.push(id);
+    if (on) {
+      await base.credAttemptsUpsert(engagementId, [
+        { credId: id, hostId: on, service: PASSWORD_REUSE_SERVICE, result: "valid", authMode: "local", detail: PASSWORD_REUSE_DETAIL, logEntryId, at },
+      ]);
+    }
+  }
+  const cracked: Filed["cracked"] = [];
+  for (const k of p.cracks) {
+    for (const id of new Set([...k.credentialIds, ...k.proofCredentials.map((i) => proofIds[i]!)])) {
+      if (find(db.credentials, id).crackStatus === "cracked") reprove(record.reprovedCredentialIds, was.credentials, id);
+      else {
+        await base.credentialCrack(id, k.plaintext);
+        cracked.push({ hashId: id, plaintext: k.plaintext });
+      }
+    }
+  }
+  // filing.rs `scoped`: the scope capture output gives a username, unless the proof sets one.
+  const scoped = (u: UsernameInput): UsernameInput => {
+    const out = { ...u, sourceHostId: host(u.sourceHostId), localHostId: host(u.localHostId) };
+    if (out.scope) return out;
+    const domain = (out.domain ?? "").trim();
+    const named = (label: string) => {
+      const hits = db.hosts.filter((h) => h.engagementId === engagementId && !/^\d{1,3}(\.\d{1,3}){3}$/.test(h.name.trim()) && !h.name.includes(":") &&
+        h.name.trim().split(".")[0]!.toLowerCase() === label.toLowerCase());
+      return hits.length === 1 ? hits[0]!.id : null;
+    };
+    const local = domain === "" ? null : domain === "." ? out.sourceHostId : named(domain);
+    const anchor = db.engagements.find((e) => e.id === engagementId)?.domain?.trim() || null;
+    if (local) return { ...out, scope: "local", localHostId: local, domain: null };
+    return { ...out, scope: domain && anchor && sameDomainIn(engagementId, domain, anchor) ? "domain" : "unknown" };
+  };
+  for (const u of p.usernames) {
+    reprove(record.reprovedUsernameIds, was.usernames, (await base.usernameCreate(engagementId, scoped(u))).id);
+  }
+  if (p.intake) {
+    const plan = p.intake;
+    // filing.rs `reuse_only`: a planned local account that is only password reuse files no username.
+    const lc = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+    const reused = new Set<string>();
+    const otherSecret = new Set<string>();
+    for (const a of plan.attempts) {
+      if (a.usernameId || a.usernameKey) continue;
+      const c = was.credentials.find((x) => x.id === a.credId);
+      const on = host(a.hostId)!;
+      if (c?.scope === "local" && c.localHostId && c.localHostId !== on) reused.add(`${on}|${lc(c.username)}`);
+    }
+    for (const c of plan.credentials) {
+      const on = c.input.scope === "local" ? host(c.input.localHostId) : null;
+      if (!on) continue;
+      const account = `${on}|${lc(c.input.username)}`;
+      if (c.accepted && reusedLocal(engagementId, { ...c.input, localHostId: on })) reused.add(account);
+      else otherSecret.add(account);
+    }
+    const needed = new Set([
+      ...[...plan.attempts, ...plan.credentials.flatMap((c) => [...c.attempts, ...c.ifDeclined])].flatMap((a) => (a.usernameKey ? [a.usernameKey] : [])),
+      ...plan.credentials.flatMap((c) => (c.fromUsername?.usernameKey ? [c.fromUsername.usernameKey] : [])),
+    ]);
+    const userIds = new Map<string, string>();
+    for (const u of plan.usernames) {
+      const input = scoped(u.input);
+      const account = `${input.localHostId}|${lc(input.username)}`;
+      if (input.localHostId && reused.has(account) && !otherSecret.has(account) && !needed.has(u.key)) continue;
+      userIds.set(u.key, (await base.usernameCreate(engagementId, input)).id);
+    }
+    const upsert = async (rows: PlannedAttemptProof[], credId?: string) => {
+      const inputs = rows.flatMap((a) => {
+        const usernameId = a.usernameId ?? (a.usernameKey ? userIds.get(a.usernameKey) : undefined);
+        if (a.usernameKey && !usernameId) return [];
+        return [{ ...a, credId: credId ?? a.credId ?? "", usernameId: usernameId ?? null, hostId: host(a.hostId)!, logEntryId, at }];
+      });
+      if (inputs.length) await base.credAttemptsUpsert(engagementId, inputs);
+    };
+    const ids: (string | null)[] = [];
+    for (const c of plan.credentials) ids.push(c.accepted ? await create(c.input) : null);
+    await upsert(plan.attempts);
+    for (const [i, c] of plan.credentials.entries()) await (ids[i] ? upsert(c.attempts, ids[i]!) : upsert(c.ifDeclined));
+    for (const h of plan.hashes) await create(h);
+    for (const id of plan.reprovedCredentialIds) reprove(record.reprovedCredentialIds, was.credentials, id);
+    for (const id of plan.reprovedUsernameIds) reprove(record.reprovedUsernameIds, was.usernames, id);
+  }
+  if (p.triedPairs.length) await base.triedPairsUpsert(engagementId, p.triedPairs.map((t) => ({ ...t, hostId: host(t.hostId)!, logEntryId, at })));
+  const vectors: Filed["vectors"] = [];
+  for (const v of p.vectors) {
+    const hostId = host(v.hostId)!;
+    const known = db.vectors.some((x) => x.hostId === hostId && x.title === v.title.trim());
+    const row = await base.vectorUpsert(hostId, { title: v.title, status: "try", source: "auto" });
+    if (!known) {
+      record.createdVectorIds.push(row.id);
+      vectors.push(row);
+    }
+  }
+  // What the summary counts is read before the promotion, whose failures earlier entries recorded.
+  const attempts = mine(db.credAttempts).filter((a) => was.attempts.find((b) => b.id === a.id)?.result !== a.result);
+  const triedPairsAdded = mine(db.triedPairs).filter((t) => !was.tried.some((b) => b.id === t.id)).length;
+  for (const c of mine(db.credentials).filter((x) => !was.credentials.some((b) => b.id === x.id))) {
+    const pairs = db.triedPairs.filter(
+      (t) => t.engagementId === engagementId && t.username.toLowerCase() === c.username.toLowerCase() && t.secret === c.secret && sameDomainIn(engagementId, t.domain, c.domain),
+    );
+    if (!pairs.length) continue;
+    const rows = await base.credAttemptsUpsert(engagementId, pairs.map((t) => ({
+      credId: c.id, hostId: t.hostId, service: t.service as AttemptService, result: "failed" as const, authMode: t.authMode, logEntryId: t.logEntryId, at: t.at,
+    })));
+    db.triedPairs = db.triedPairs.filter((t) => !pairs.includes(t));
+    const stored = pairs.filter((t) => was.tried.some((b) => b.id === t.id));
+    if (stored.length) record.promotedTriedPairs!.push({ credentialId: c.id, triedPairs: clone(stored), attempts: rows.filter((a) => a.credId === c.id) });
+  }
+  for (const c of mine(db.credentials)) {
+    const old = was.credentials.find((b) => b.id === c.id);
+    if (!old) record.createdCredentialIds.push(c.id);
+    else if (JSON.stringify(old) !== JSON.stringify(c)) record.credentialsBefore.push(old);
+  }
+  record.createdUsernameIds = mine(db.usernames).filter((u) => !was.usernames.some((b) => b.id === u.id)).map((u) => u.id);
+  for (const a of mine(db.credAttempts)) {
+    const old = was.attempts.find((b) => b.id === a.id);
+    if (!old) record.createdAttemptIds.push(a.id);
+    else if (JSON.stringify(old) !== JSON.stringify(a)) record.attemptsBefore.push(old);
+  }
+  record.createdTriedPairIds = mine(db.triedPairs).filter((t) => !was.tried.some((b) => b.id === t.id)).map((t) => t.id);
+  const named = new Set([...record.createdCredentialIds, ...record.credentialsBefore.map((c) => c.id), ...attempts.map((a) => a.credId)]);
+  const extraction: Extraction = { logEntryId, engagementId, summary: { wins: [], counts: [], ticks: [] }, record, createdAt: now(), undoneAt: null };
+  db.extractions.push(extraction);
+  const credentials = mine(db.credentials).filter((c) => named.has(c.id));
+  return clone({ extraction, hostIds, scans, identityChanged, attempts, credentials, triedPairsAdded, cracked, vectors });
+}
 
 const base = {
   vaultStatus: async () => ({ exists: true, unlocked: true }),
@@ -128,23 +756,63 @@ const base = {
   fieldManualSave: async () => null,
   fieldManualLoad: async () => clone(AUDIT_FIELD_MANUAL),
   openObsidian: async () => {},
+  // The export can't compile a PDF in the browser: it answers as the app would, with a fixed size and MD5, so the
+  // audit sees the result panel. The real PDF is judged from `cargo run --example export_report`.
+  reportExport: async (reportId: string, input) => {
+    const report = find(db.reports, reportId);
+    // What the button sent, with its screenshots, for `audit/export-report.mjs` to compile with the real backend.
+    (globalThis as { __ravenLastExport?: unknown }).__ravenLastExport = {
+      input: clone(input),
+      images: Object.fromEntries(input.attachmentIds.map((id: string) => [id, db.attachments.find((a) => a.id === id)?.dataBase64 ?? null])),
+    };
+    report.exportedAt = now();
+    const archiveBytes = 1_284_096;
+    return {
+      pdfPath: `${input.folder}/${input.fileStem}.pdf`,
+      pdfBytes: 1_402_880,
+      archivePath: `${input.folder}/${input.fileStem}.7z`,
+      archiveBytes,
+      md5: "5d41402abc4b2a76b9719d911017c592",
+      pages: 31,
+      tooLarge: false,
+    };
+  },
+  pickFolder: async () => "/Users/sam/Documents/OSCP exam",
+  revealInFinder: async () => {},
   backupRestore: async () => unsupported("Restore"),
   backupRestoreLocked: async () => unsupported("Restore"),
 
   engagementsList: async () => clone(db.engagements),
   engagementGet: async (id: string) => clone(find(db.engagements, id)),
   engagementCreate: async (input) => {
-    const e = assign(
-      { id: nid("e"), client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active" as const, createdAt: now(), updatedAt: now(), lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null } as unknown as (typeof db.engagements)[number],
-      input,
-    );
+    const e: (typeof db.engagements)[number] = {
+      ...cleanEngagement(input), id: nid("e"), status: "active", createdAt: now(), updatedAt: now(), lastActivityAt: null, lastRanOn: null,
+      msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
+    };
     db.engagements.push(e);
+    syncScope(e.id, e.scopeCidrs);
     return clone(e);
   },
-  engagementUpdate: async (id: string, input) => clone(assign(find(db.engagements, id), input, { updatedAt: now() })),
-  engagementSetStatus: async (id: string, status) => clone(assign(find(db.engagements, id), { status }, { updatedAt: now() })),
-  engagementSetMsfHost: async (engagementId: string, hostId: string | null) =>
-    clone(assign(find(db.engagements, engagementId), { msfHostId: hostId }, { updatedAt: now() })),
+  engagementUpdate: async (id: string, input) => {
+    const clean = cleanEngagement(input);
+    const e = find(db.engagements, id);
+    // hosts.rs `sync_scope_added`: only IPs the old scope did not list become hosts, so a deleted host stays deleted.
+    const before = new Set(e.scopeCidrs.flatMap((c) => singleIp(c.trim()) ?? []));
+    const added = clean.scopeCidrs.filter((c) => { const ip = singleIp(c.trim()); return ip !== null && !before.has(ip); });
+    const noTimebox = clean.timeboxStart === null || clean.timeboxMinutes === null;
+    Object.assign(e, clean, { updatedAt: now() }, noTimebox ? { timeboxPausedMs: 0, timeboxPausedAt: null } : {});
+    syncScope(id, added);
+    return clone(e);
+  },
+  engagementSetStatus: async (id: string, status) => {
+    if (status !== "active" && status !== "archived") throw invalid("status", "status must be active or archived");
+    return clone(assign(find(db.engagements, id), { status }, { updatedAt: now() }));
+  },
+  engagementSetMsfHost: async (engagementId: string, hostId: string | null) => {
+    engagementMustExist(engagementId);
+    if (hostId !== null && !db.hosts.some((h) => h.id === hostId && h.engagementId === engagementId)) throw notFound();
+    return clone(assign(find(db.engagements, engagementId), { msfHostId: hostId }, { updatedAt: now() }));
+  },
   engagementSetTimeboxPaused: async (id: string, paused: boolean) => {
     const e = find(db.engagements, id);
     const t = now();
@@ -153,36 +821,44 @@ const base = {
       return clone(assign(e, { timeboxPausedMs: e.timeboxPausedMs + (t - e.timeboxPausedAt), timeboxPausedAt: null }, { updatedAt: t }));
     return clone(e);
   },
-  engagementDelete: async (id: string) => remove(db.engagements, id),
+  engagementDelete: async (id: string) => {
+    engagementMustExist(id);
+    dropEngagement(id);
+    return null;
+  },
 
-  hostsList: async (engagementId: string) => clone(db.hosts.filter((h) => h.engagementId === engagementId)),
+  hostsList: async (engagementId: string) => db.hosts.filter((h) => h.engagementId === engagementId).sort(byIp).map(hostOut),
   hostCreate: async (engagementId: string, input) => {
-    const h = assign(
-      { id: nid("h"), engagementId, ip: null, os: null, boardColumn: "information-gathering", boardManual: false, access: "none", createdAt: now(), updatedAt: now(), dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } as unknown as (typeof db.hosts)[number],
-      input,
-    );
-    h.adSetEffective = h.adSet === true;
-    db.hosts.push(h);
-    return clone(h);
+    const c = cleanHost(input);
+    engagementMustExist(engagementId);
+    if (c.ip && ipTaken(engagementId, c.ip, "")) throw invalid("ip", "A host with this IP already exists");
+    return hostOut(newHost(engagementId, { ...c, dualHomed: input.dualHomed ?? false, adSet: input.adSet ?? null }));
   },
   hostUpdate: async (id: string, input) => {
-    const h = assign(find(db.hosts, id), input, { updatedAt: now() });
-    if (input.adSet !== undefined) h.adSetEffective = input.adSet === true;
-    return clone(h);
+    const c = cleanHost(input);
+    const h = find(db.hosts, id);
+    if (c.ip && ipTaken(h.engagementId, c.ip, id)) throw invalid("ip", "A host with this IP already exists");
+    return hostOut(Object.assign(h, c, {
+      updatedAt: now(), ...(input.dualHomed !== undefined ? { dualHomed: input.dualHomed } : {}), ...(input.adSet !== undefined ? { adSet: input.adSet } : {}),
+    }));
   },
-  hostMove: async (id: string, column) => clone(assign(find(db.hosts, id), {}, { boardColumn: column, boardManual: true, updatedAt: now() })),
+  hostMove: async (id: string, column) => {
+    if (!BOARD_COLUMNS.includes(column)) throw invalid("column", "column must be one of the six PEN-200 stages");
+    return hostOut(assign(find(db.hosts, id), {}, { boardColumn: column, boardManual: true, updatedAt: now() }));
+  },
+  // hosts.rs `sync_board`: a new derived column moves the card and ends a hand placement, except that a card placed
+  // by hand before any column was derived only records it.
   hostSyncBoard: async (hostId: string, derived) => {
+    if (!BOARD_COLUMNS.includes(derived)) throw invalid("derived", "column must be one of the six PEN-200 stages");
     const h = find(db.hosts, hostId);
-    if (!h.boardManual) h.boardColumn = derived;
-    h.boardDerived = derived;
-    return clone(h);
+    if (h.boardDerived === derived) return hostOut(h);
+    if (h.boardDerived == null && h.boardManual) return hostOut(Object.assign(h, { boardDerived: derived, updatedAt: now() }));
+    return hostOut(Object.assign(h, { boardColumn: derived, boardManual: false, boardDerived: derived, updatedAt: now() }));
   },
   hostDelete: async (id: string) => {
-    db.services = db.services.filter((x) => x.hostId !== id);
-    db.vectors = db.vectors.filter((v) => v.hostId !== id);
-    db.hostIdentity = db.hostIdentity.filter((i) => i.hostId !== id);
-    db.ruledOut = db.ruledOut.filter((r) => r.hostId !== id);
-    return remove(db.hosts, id);
+    find(db.hosts, id);
+    dropHosts(new Set([id]));
+    return null;
   },
 
   servicesList: async (hostId: string) => clone(db.services.filter((s) => s.hostId === hostId)),
@@ -200,18 +876,39 @@ const base = {
     return clone(db.services.filter((s) => s.hostId === hostId));
   },
   serviceCreate: async (hostId: string, input) => {
-    const s = { id: nid("s"), hostId, port: input.port, protocol: input.protocol ?? "tcp", state: "open", nmapService: input.nmapService ?? null, nmapVersion: input.nmapVersion ?? null, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: now(), updatedAt: now() };
+    // services.rs `create`: port and protocol checked, the host must exist, one service per port and protocol.
+    if (!(input.port >= 1 && input.port <= 65535)) throw invalid("port", "port must be 1-65535");
+    const protocol = (input.protocol ?? "tcp").trim().toLowerCase() as Service["protocol"];
+    if (protocol !== "tcp" && protocol !== "udp") throw invalid("protocol", "protocol must be tcp or udp");
+    find(db.hosts, hostId);
+    if (db.services.some((x) => x.hostId === hostId && x.port === input.port && x.protocol === protocol)) {
+      throw invalid("port", "A service on this port and protocol already exists");
+    }
+    const s = { id: nid("s"), hostId, port: input.port, protocol, state: "open", nmapService: input.nmapService ?? null, nmapVersion: input.nmapVersion ?? null, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: now(), updatedAt: now() };
     db.services.push(s);
     return clone(s);
   },
-  serviceUpdate: async (id: string, input) => clone(assign(find(db.services, id), input, { updatedAt: now() })),
+  serviceUpdate: async (id: string, input) => {
+    // services.rs `update`: a full update, checked as `create` is, and refused if another service on the host has the
+    // same port and protocol.
+    if (!(input.port >= 1 && input.port <= 65535)) throw invalid("port", "port must be 1-65535");
+    const protocol = (input.protocol ?? "tcp").trim().toLowerCase() as Service["protocol"];
+    if (protocol !== "tcp" && protocol !== "udp") throw invalid("protocol", "protocol must be tcp or udp");
+    const s = find(db.services, id);
+    if (db.services.some((x) => x.id !== id && x.hostId === s.hostId && x.port === input.port && x.protocol === protocol)) {
+      throw invalid("port", "That port is already listed");
+    }
+    const fields = { port: input.port, protocol, nmapService: blank(input.nmapService), nmapVersion: blank(input.nmapVersion) };
+    return clone(Object.assign(s, fields, { updatedAt: now() }));
+  },
   serviceConfirm: async (id: string, input) =>
     clone(assign(find(db.services, id), {}, { confirmedProduct: input.product, confirmedVersion: input.version ?? null, confirmedEntryId: input.entryId ?? null, updatedAt: now() })),
   serviceUnconfirm: async (id: string) =>
     clone(assign(find(db.services, id), {}, { confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, updatedAt: now() })),
   serviceDelete: async (id: string) => {
-    db.ruledOut = db.ruledOut.filter((r) => !(r.sourceKind === "service" && r.sourceId === id));
-    return remove(db.services, id);
+    find(db.services, id);
+    dropServices(new Set([id]));
+    return null;
   },
   serviceSetVerdict: async (id: string, verdict: ServiceVerdict | null, reason?: string) => {
     const s = find(db.services, id);
@@ -293,21 +990,81 @@ const base = {
     if (clearPayload) Object.assign(rest, { payloadId: null, payloadValues: null });
     return clone(assign(find(db.log, id), rest, { kind: rest.content.kind, ...(at != null ? { at } : {}), updatedAt: now() }));
   },
-  logDelete: async (id: string) => remove(db.log, id),
+  logDelete: async (id: string) => {
+    find(db.log, id);
+    dropLogEntries(new Set([id]));
+    return null;
+  },
 
   checklistList: async (engagementId: string) => listChecklist(engagementId),
   checklistPut: async (engagementId: string, items) => {
+    // checklist.rs `put`: every item is checked before any is written, so a bad one writes nothing.
+    if (items.length > MAX_ITEMS) throw invalid("items", "too many items (max 500)");
+    engagementMustExist(engagementId);
     for (const it of items) {
-      const base: ChecklistItem = { notes: null, completedAt: null, auto: false, autoFrom: null, evidence: [], ...it, updatedAt: now() };
+      if (!it.goalId.trim()) throw invalid("goalId", "goal id is required");
+      if (!["todo", "in_progress", "done", "na"].includes(it.status)) throw invalid("status", "status must be todo, in_progress, done or na");
+      if (it.autoFrom != null && it.autoFrom !== "na" && it.autoFrom !== "in_progress") throw invalid("autoFrom", "autoFrom must be na or in_progress");
+      checkOwned(engagementId, it.ownerId);
+    }
+    for (const it of items) {
       const i = db.checklist.findIndex((c) => c.ownerId === it.ownerId && c.goalId === it.goalId);
-      if (i >= 0) db.checklist[i] = base;
-      else db.checklist.push(base);
+      // A write that leaves `statusManual` out keeps the stored value (auto ticks never clear a status set by hand).
+      const row: ChecklistItem = {
+        ownerId: it.ownerId, goalId: it.goalId, status: it.status, notes: it.notes ?? null, completedAt: it.completedAt ?? null, auto: it.auto ?? false,
+        autoFrom: it.autoFrom ?? null, statusManual: it.statusManual ?? (i >= 0 ? db.checklist[i]!.statusManual : undefined) ?? false,
+        evidence: it.evidence ?? [], updatedAt: now(),
+      };
+      if (i >= 0) db.checklist[i] = row;
+      else db.checklist.push(row);
     }
     return listChecklist(engagementId);
   },
-  // The cover and fact ticks are derived by engines the fake does not reimplement: the fixtures already carry their result.
-  checklistApplyCover: async (engagementId: string) => listChecklist(engagementId),
-  checklistApplyFacts: async (engagementId: string) => listChecklist(engagementId),
+  // checklist.rs `apply_cover`: `cover` goals become na/auto only where untouched; `revert` only undoes cover marks.
+  checklistApplyCover: async (engagementId: string, cover, revert) => {
+    checkGoalRefs(engagementId, "cover", cover, revert);
+    for (const g of revert) {
+      const r = checklistRow(g);
+      if (r && r.status === "na" && r.auto && !r.statusManual) Object.assign(r, { status: "todo", auto: false, autoFrom: null, completedAt: null, updatedAt: now() });
+    }
+    for (const g of cover) {
+      const r = checklistRow(g);
+      if (!r) insertChecklist(g, "na", null);
+      else if (r.status === "todo" && !r.auto && !r.statusManual) Object.assign(r, { status: "na", auto: true, autoFrom: null, completedAt: null, updatedAt: now() });
+    }
+    return listChecklist(engagementId);
+  },
+  // checklist.rs `apply_facts`: `done` goals become done/auto only where untouched; `revert` only undoes fact marks.
+  checklistApplyFacts: async (engagementId: string, done, revert) => {
+    checkGoalRefs(engagementId, "facts", done, revert);
+    for (const g of revert) {
+      const r = checklistRow(g);
+      if (r && r.status === "done" && r.auto && !r.statusManual && r.evidence.length === 0) {
+        Object.assign(r, { status: "todo", auto: false, autoFrom: null, completedAt: null, updatedAt: now() });
+      }
+    }
+    for (const g of done) {
+      const r = checklistRow(g);
+      if (!r) insertChecklist(g, "done", now());
+      else if (r.status === "todo" && !r.auto && !r.statusManual) Object.assign(r, { status: "done", auto: true, autoFrom: null, completedAt: now(), updatedAt: now() });
+    }
+    return listChecklist(engagementId);
+  },
+
+  // checklist.rs `apply_entry_ticks`: each entry's ticks re-derived on the rows as they are now, all or nothing.
+  checklistApplyEntryTicks: async (engagementId: string, entries) => {
+    if (entries.length > MAX_ITEMS || entries.reduce((n, e) => n + e.ticks.length, 0) > MAX_ITEMS * 4) throw invalid("entries", "too many entries or ticks");
+    engagementMustExist(engagementId);
+    for (const e of entries) {
+      if (!e.entryId.trim()) throw invalid("entryId", "entry id is required");
+      for (const t of e.ticks) {
+        checkOwned(engagementId, t.ownerId);
+        if (!t.goalId.trim()) throw invalid("goalId", "goal id is required");
+      }
+    }
+    for (const e of entries) replaceEntryTicks(engagementId, e);
+    return listChecklist(engagementId);
+  },
 
   notesGet: async (engagementId: string, hostId: string | null) => {
     const ownerId = hostId ?? engagementId;
@@ -354,41 +1111,79 @@ const base = {
   },
   hopUpdate: async (id: string, input) => clone(assign(find(db.hops, id), input, { updatedAt: now() })),
   hopDelete: async (id: string) => remove(db.hops, id),
-  hostMarkAccessReviewed: async (hostId: string) => clone(assign(find(db.hosts, hostId), {}, { accessReviewedAt: now() })),
+  hostMarkAccessReviewed: async (hostId: string) => hostOut(assign(find(db.hosts, hostId), {}, { accessReviewedAt: now() })),
 
   credentialsList: async (engagementId: string) => clone(db.credentials.filter((c) => c.engagementId === engagementId)),
   credentialCreate: async (engagementId: string, input) => {
     const c = {
-      username: "", domain: null, secret: "", hashType: null, scope: "domain" as const, localHostId: null, sourceHostId: null, source: null, notes: null,
+      username: "", domain: null, secret: "", hashType: null, sourceHostId: null, source: null, notes: null,
       crackStatus: input.type === "hash" ? ("uncracked" as const) : null, crackedFrom: null, fromSecretId: null,
-      ...input, id: nid("c"), engagementId, createdAt: now(), updatedAt: now(),
+      ...input, ...scopeAndHost(input), id: nid("c"), engagementId, createdAt: now(), updatedAt: now(),
     };
+    const stored = storedSame(c);
+    if (stored) return { credential: clone(stored), existed: true };
     db.credentials.push(c);
-    return clone(c);
+    return { credential: clone(c), existed: false };
   },
-  credentialUpdate: async (id: string, input) => clone(assign(find(db.credentials, id), input, { updatedAt: now() })),
-  credentialDelete: async (id: string) => remove(db.credentials, id),
+  sameDomains: async (engagementId: string, pairs) => pairs.map(([a, b]) => sameDomainIn(engagementId, a, b)),
+  credentialUpdate: async (id: string, input) => {
+    const c = find(db.credentials, id);
+    return clone(assign(c, input, { ...scopeAndHost(input, c), updatedAt: now() }));
+  },
+  credentialDelete: async (id: string) => {
+    find(db.credentials, id);
+    dropCredentials(new Set([id]));
+    return null;
+  },
+  // credentials.rs `crack`: a password linked to its hash by `crackedFrom` (or the stored same password, linked if it
+  // wasn't yet), and the hash marked cracked.
   credentialCrack: async (hashId: string, plaintext: string) => {
-    const hash = assign(find(db.credentials, hashId), {}, { crackStatus: "cracked", updatedAt: now() });
-    const c = { ...hash, id: nid("c"), type: "password" as const, secret: plaintext, hashType: null, crackStatus: null, crackedFrom: null, fromSecretId: hash.id, createdAt: now(), updatedAt: now() };
-    db.credentials.push(c);
-    return clone(c);
+    const hash = find(db.credentials, hashId);
+    if (hash.type !== "hash") throw invalid("type", "only a hash can be cracked");
+    const secret = stripLineBreaks(plaintext);
+    if (!secret.trim()) throw invalid("plaintext", "plaintext is required");
+    const c: Credential = {
+      ...hash, id: nid("c"), type: "password", secret, hashType: null, notes: null, crackStatus: null, crackedFrom: hash.id, fromSecretId: null,
+      createdAt: now(), updatedAt: now(),
+    };
+    const stored = storedSame(c);
+    if (stored && stored.crackedFrom === null) Object.assign(stored, { crackedFrom: hash.id, updatedAt: now() });
+    else if (!stored) db.credentials.push(c);
+    Object.assign(hash, { crackStatus: "cracked", updatedAt: now() });
+    return clone(stored ?? c);
   },
   credentialSetCrackStatus: async (id: string, status) => clone(assign(find(db.credentials, id), {}, { crackStatus: status, updatedAt: now() })),
   credentialConvertToAccess: async (credId: string, grant) => {
     const c = find(db.credentials, credId);
     let u = db.usernames.find((x) => x.engagementId === c.engagementId && x.username === c.username && x.domain === c.domain);
-    if (!u) db.usernames.push((u = { id: nid("u"), engagementId: c.engagementId, username: c.username, domain: c.domain, sourceHostId: c.sourceHostId, source: c.source, createdAt: now() }));
+    if (!u) {
+      u = { id: nid("u"), engagementId: c.engagementId, username: c.username, domain: c.domain, sourceHostId: c.sourceHostId, source: c.source, createdAt: now(), scope: "unknown", localHostId: null };
+      db.usernames.push(u);
+    }
     db.accessGrants.push({ id: nid("ag"), engagementId: c.engagementId, usernameId: u.id, hostId: grant.hostId, level: grant.level, via: grant.via, logEntryId: grant.logEntryId ?? null, at: grant.at ?? now() });
     return clone(u);
   },
   usernamesList: async (engagementId: string) => clone(db.usernames.filter((u) => u.engagementId === engagementId)),
+  // credentials.rs `username_create`: a local username keeps no domain, its host says whose account it is.
   usernameCreate: async (engagementId: string, input) => {
-    const u = { domain: null, sourceHostId: null, source: null, ...input, id: nid("u"), engagementId, createdAt: now() };
+    const username = input.username.trim();
+    if (!username) throw invalid("username", "username is required");
+    const { scope, localHostId } = usernameScope(engagementId, input);
+    const domain = scope === "local" ? null : input.domain?.trim() || null;
+    const stored = storedUsername(engagementId, { username, domain, scope, localHostId });
+    if (stored) return clone(stored);
+    const u: Username = {
+      id: nid("u"), engagementId, username, domain, sourceHostId: input.sourceHostId || null, source: input.source?.trim() || null, createdAt: now(),
+      scope, localHostId,
+    };
     db.usernames.push(u);
     return clone(u);
   },
-  usernameDelete: async (id: string) => remove(db.usernames, id),
+  usernameDelete: async (id: string) => {
+    find(db.usernames, id);
+    dropUsernames(new Set([id]));
+    return null;
+  },
   credAttemptsList: async (engagementId: string) => clone(db.credAttempts.filter((a) => a.engagementId === engagementId)),
   credAttemptsUpsert: async (engagementId: string, inputs) => {
     for (const i of inputs) {
@@ -403,7 +1198,10 @@ const base = {
     return clone(db.credAttempts.filter((a) => a.engagementId === engagementId));
   },
   credAttemptDelete: async (id: string) => remove(db.credAttempts, id),
-  payloadBuildsList: async (engagementId: string) => clone(db.payloadBuilds.filter((b) => b.engagementId === engagementId)),
+  payloadBuildsList: async (engagementId: string) => {
+    engagementMustExist(engagementId);
+    return clone(db.payloadBuilds.filter((b) => b.engagementId === engagementId));
+  },
   payloadBuildRecord: async (input) => {
     if (!input.payloadId.trim()) throw new RavenError("validation", "payload id is required", "payloadId");
     const host = db.hosts.find((h) => h.id === input.hostId && h.engagementId === input.engagementId);
@@ -430,8 +1228,15 @@ const base = {
     const report = db.reports.find((r) => r.id === id);
     if (!report) throw new RavenError("not_found", "Not found");
     if (patch.title !== undefined && !patch.title.trim()) throw new RavenError("validation", "title is required", "title");
-    for (const [k, v] of Object.entries(patch)) if (v !== undefined) (report as unknown as Record<string, unknown>)[k] = clone(v);
-    report.updatedAt = now();
+    // As the backend: a field left out keeps its value.
+    Object.assign(report, {
+      candidateName: patch.candidateName ?? report.candidateName,
+      email: patch.email ?? report.email,
+      osid: patch.osid ?? report.osid,
+      title: patch.title ?? report.title,
+      meta: patch.meta === undefined ? report.meta : clone(patch.meta),
+      updatedAt: now(),
+    });
     return clone(report);
   },
   reportSectionsList: async (reportId: string) =>
@@ -463,6 +1268,16 @@ const base = {
     });
     return null;
   },
+  reportSectionsSave: async (reportId: string, writes, deletePage = null) => {
+    const mine = writes.map((w) => db.reportSections.find((s) => s.id === w.id && s.reportId === reportId));
+    if (mine.some((s) => !s)) throw new RavenError("not_found", "Not found");
+    const gone = deletePage === null ? -1 : db.reportSections.findIndex((s) => s.id === deletePage && s.reportId === reportId);
+    if (deletePage !== null && gone === -1) throw new RavenError("not_found", "Not found");
+    if (gone !== -1 && db.reportSections[gone].kind !== "page") throw new RavenError("validation", "only pages can be deleted", "kind");
+    writes.forEach((w, i) => Object.assign(mine[i]!, { doc: clone(w.doc), meta: clone(w.meta), updatedAt: now() }));
+    if (gone !== -1) db.reportSections.splice(gone, 1);
+    return mine.map((s) => clone(s!));
+  },
   reportSectionDelete: async (reportId: string, id: string) => {
     const at = db.reportSections.findIndex((s) => s.id === id && s.reportId === reportId);
     if (at === -1) throw new RavenError("not_found", "Not found");
@@ -470,13 +1285,16 @@ const base = {
     db.reportSections.splice(at, 1);
     return null;
   },
-  triedPairsList: async (engagementId: string) => clone(db.triedPairs.filter((t) => t.engagementId === engagementId)),
+  triedPairsList: async (engagementId: string) => {
+    engagementMustExist(engagementId);
+    return clone(db.triedPairs.filter((t) => t.engagementId === engagementId));
+  },
   triedPairsUpsert: async (engagementId: string, inputs) => {
     const out: TriedPair[] = [];
     for (const i of inputs) {
       const authMode = i.authMode ?? "domain";
       const same = (t: TriedPair) =>
-        t.engagementId === engagementId && t.username.toLowerCase() === i.username.toLowerCase() && (t.domain ?? "").toLowerCase() === (i.domain ?? "").toLowerCase() &&
+        t.engagementId === engagementId && t.username.toLowerCase() === i.username.toLowerCase() && sameDomainIn(engagementId, t.domain, i.domain) &&
         t.secret === i.secret && t.hostId === i.hostId && t.service === i.service && t.authMode === authMode;
       let row = db.triedPairs.find(same);
       if (!row) {
@@ -490,7 +1308,7 @@ const base = {
   triedPairDelete: async (id: string) => remove(db.triedPairs, id),
   triedPairPromote: async (engagementId: string, username: string, domain: string | null, secret: string) => {
     const hit = (t: TriedPair) =>
-      t.engagementId === engagementId && t.username.toLowerCase() === username.toLowerCase() && (t.domain ?? "").toLowerCase() === (domain ?? "").toLowerCase() && t.secret === secret;
+      t.engagementId === engagementId && t.username.toLowerCase() === username.toLowerCase() && sameDomainIn(engagementId, t.domain, domain) && t.secret === secret;
     const n = db.triedPairs.filter(hit).length;
     db.triedPairs = db.triedPairs.filter((t) => !hit(t));
     return n;
@@ -501,8 +1319,18 @@ const base = {
     db.extractions.push(row);
     return clone(row);
   },
+  extractionFile: async (engagementId: string, logEntryId: string, p: ExtractionProofs) => fileExtraction(engagementId, logEntryId, p),
+  extractionFinish: async (logEntryId: string, summary, outputTicks) => {
+    const row = db.extractions.find((x) => x.logEntryId === logEntryId);
+    if (!row) throw new RavenError("not_found", `No extraction for ${logEntryId}`);
+    Object.assign(row,{ summary: clone(summary), record: { ...row.record, outputTicks: clone(outputTicks) }, createdAt: now() });
+    return clone(row);
+  },
   extractionGet: async (logEntryId: string) => clone(db.extractions.find((x) => x.logEntryId === logEntryId) ?? null),
-  extractionsList: async (engagementId: string) => clone(db.extractions.filter((x) => x.engagementId === engagementId)),
+  extractionsList: async (engagementId: string) => {
+    engagementMustExist(engagementId);
+    return clone(db.extractions.filter((x) => x.engagementId === engagementId));
+  },
   extractionUndo: async (logEntryId: string) => {
     const row = db.extractions.find((e) => e.logEntryId === logEntryId);
     if (!row) throw new RavenError("not_found", `No extraction for ${logEntryId}`);
@@ -520,6 +1348,7 @@ const base = {
       if (i >= 0) db.credAttempts[i] = clone(before);
     }
     db.triedPairs = db.triedPairs.filter((t) => !r.createdTriedPairIds.includes(t.id));
+    for (const p of r.promotedTriedPairs ?? []) db.triedPairs.push(...clone(p.triedPairs));
     db.vectors = db.vectors.filter((v) => !r.createdVectorIds.includes(v.id));
     db.services = db.services.filter((s) => !r.createdServiceIds.includes(s.id));
     db.hosts = db.hosts.filter((h) => !r.createdHostIds.includes(h.id));
@@ -539,7 +1368,10 @@ const base = {
   },
   accessGrantDelete: async (id: string) => remove(db.accessGrants, id),
 
-  findingsList: async (engagementId: string) => clone(db.findings.filter((f) => f.engagementId === engagementId)),
+  findingsList: async (engagementId: string) => {
+    engagementMustExist(engagementId);
+    return clone(db.findings.filter((f) => f.engagementId === engagementId));
+  },
   findingCreate: async (engagementId: string, input) => {
     const f = {
       severity: null, cvssVector: null, cvssScore: null, status: "draft" as const, description: "", impact: "", remediation: "", exploitNotes: "",
@@ -549,8 +1381,15 @@ const base = {
     return clone(f);
   },
   findingUpdate: async (id: string, input) => clone(assign(find(db.findings, id), input, { updatedAt: now() })),
-  findingDelete: async (id: string) => remove(db.findings, id),
-  findingFilesList: async (findingId: string) => clone(db.findingFiles.filter((f) => f.findingId === findingId)),
+  findingDelete: async (id: string) => {
+    find(db.findings, id);
+    dropFindings(new Set([id]));
+    return null;
+  },
+  findingFilesList: async (findingId: string) => {
+    find(db.findings, findingId);
+    return clone(db.findingFiles.filter((f) => f.findingId === findingId));
+  },
   findingFileCreate: async (findingId: string, input) => {
     const f = { language: null, modified: false, originalUrl: null, originalContent: null, ...input, id: nid("ff"), findingId, createdAt: now(), updatedAt: now() };
     db.findingFiles.push(f);
@@ -558,7 +1397,10 @@ const base = {
   },
   findingFileUpdate: async (id: string, input) => clone(assign(find(db.findingFiles, id), input, { updatedAt: now() })),
   findingFileDelete: async (id: string) => remove(db.findingFiles, id),
-  failedAttemptsList: async (engagementId: string) => clone(db.failedAttempts.filter((f) => f.engagementId === engagementId)),
+  failedAttemptsList: async (engagementId: string) => {
+    engagementMustExist(engagementId);
+    return clone(db.failedAttempts.filter((f) => f.engagementId === engagementId));
+  },
   failedAttemptCreate: async (engagementId: string, input) => {
     const f = { hostId: null, findingId: null, logEntryId: null, ...input, id: nid("fa"), engagementId, private: input.reasonKind === "operator", createdAt: now(), updatedAt: now() };
     db.failedAttempts.push(f);
@@ -593,7 +1435,7 @@ const base = {
     for (const c of db.cleanup) if (c.status === "open") counts[c.engagementId] = (counts[c.engagementId] ?? 0) + 1;
     return counts;
   },
-  engagementsProgress: async () => clone(progress),
+  engagementsProgress: async () => progressAll(),
 } satisfies Api;
 
 export type AuditScenario = "full" | "empty" | "loading" | "error";

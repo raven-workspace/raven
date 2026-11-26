@@ -7,6 +7,7 @@ import { KIND_LABELS } from "../../log/kindLabels";
 import { LogEntryBody } from "../../log/LogEntryBody/LogEntryBody";
 import { useLog } from "../../log/queries";
 import { clockTime } from "../../engagements/format";
+import { AddScreenshot } from "./AddScreenshot";
 import "./FindingSteps.scss";
 
 
@@ -24,7 +25,12 @@ function move<T>(list: T[], from: number, to: number): T[] {
   return next;
 }
 
-/** Ordered reproduction steps: log entries to add, reorder, expand and remove. */
+/** What the panel under the steps is doing: picking a log entry (any, or a screenshot to link), or adding a new
+ *  screenshot. */
+type Adding = null | "entry" | "screenshot-link" | "screenshot-new";
+
+/** Ordered reproduction steps: log entries to add, reorder, expand and remove, and screenshots to add straight from
+ *  the finding (a normal screenshot log entry on its hosts) or link from the log. */
 export function FindingSteps({ eid, hostIds, value, onChange }: {
   eid: string;
   /** The finding's hosts: the picker starts filtered to their entries. */
@@ -33,7 +39,14 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
   onChange: (ids: string[]) => void;
 }) {
   const log = useLog(eid);
-  const [picking, setPicking] = useState(false);
+  const [adding, setAdding] = useState<Adding>(null);
+  const picking = adding === "entry" || adding === "screenshot-link";
+  // A screenshot saved, but a step after the save failed: said under the steps until the next add.
+  const [failed, setFailed] = useState<string | null>(null);
+  const toggle = (what: Exclude<Adding, null>) => {
+    setFailed(null);
+    setAdding((a) => (a === what ? null : what));
+  };
   const [query, setQuery] = useState("");
   const [allHosts, setAllHosts] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -67,6 +80,7 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
   const filterHosts = hostIds.length > 0 && !allHosts;
   const candidates = (log.data ?? [])
     .filter((e) => !ids.includes(e.id))
+    .filter((e) => adding !== "screenshot-link" || e.kind === "screenshot")
     .filter((e) => !filterHosts || e.hostIds.some((h) => hostIds.includes(h)))
     .filter((e) => q === "" || e.title.toLowerCase().includes(q) || KIND_LABELS[e.kind].toLowerCase().includes(q))
     .sort((a, b) => a.at - b.at);
@@ -75,9 +89,14 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
     <div role="group" aria-label="Reproduction steps section" className="finding-steps">
       <div className="finding-steps__bar">
         <span className={fieldLabelClass}>Reproduction steps</span>
-        <Button size="sm" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
-          {picking ? "Done adding" : "Add step"}
-        </Button>
+        <div className="finding-steps__adds">
+          <Button size="sm" aria-expanded={adding === "screenshot-new"} onClick={() => toggle("screenshot-new")}>
+            Add screenshot
+          </Button>
+          <Button size="sm" aria-expanded={picking} onClick={() => toggle("entry")}>
+            {picking ? "Done adding" : "Add step"}
+          </Button>
+        </div>
       </div>
 
       {steps.length === 0 && value.length > 0 && log.isError ? (
@@ -139,16 +158,37 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
         </ol>
       )}
 
+      {adding === "screenshot-new" && (
+        <AddScreenshot
+          eid={eid}
+          hostIds={hostIds}
+          onAdded={(id, why) => {
+            onChange([...ids, id]);
+            setAdding(null);
+            setFailed(why);
+          }}
+          onLink={() => setAdding("screenshot-link")}
+          onClose={() => setAdding(null)}
+        />
+      )}
+
+      {failed && (
+        <p role="alert" className="finding-steps__error">
+          {failed}
+        </p>
+      )}
+
       {picking && (
         <div className="finding-steps__picker">
+          {adding === "screenshot-link" && <p className="finding-steps__hint">Screenshots in the log: linking one adds it as a step, never a copy.</p>}
           <div className="finding-steps__bar">
-            <Input aria-label="Search log" placeholder="Search the log" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <Input aria-label="Search log" placeholder={adding === "screenshot-link" ? "Search the screenshots" : "Search the log"} value={query} onChange={(e) => setQuery(e.target.value)} />
             {hostIds.length > 0 && <Toggle on={allHosts} onChange={setAllHosts}>All hosts</Toggle>}
           </div>
           {log.isError ? (
             <p role="alert" className="finding-steps__error">Couldn't load the log: {log.error.message}</p>
           ) : candidates.length === 0 ? (
-            <p className="finding-steps__hint">{log.data ? "No matching entries." : "Loading the log."}</p>
+            <p className="finding-steps__hint">{!log.data ? "Loading the log." : adding === "screenshot-link" ? "No matching screenshots." : "No matching entries."}</p>
           ) : (
             <ul className={`finding-steps__candidates ${SCROLL_PANE}`}>
               {candidates.map((e) => (

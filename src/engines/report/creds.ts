@@ -1,8 +1,12 @@
 import type { AccessGrant, Credential, Username } from "../../types/credentials";
 import type { ReportData } from "./types";
+import { isReuseAttempt, reuseWording } from "../credentials/reuse";
 import { escapeRegExp } from "../regex";
 
-/** A credential tied to a target, with each way it is tied ("works on SSH, files03", "found on web01"). */
+/**
+ * A credential tied to a target, with each way it is tied ("works on SSH, files03", "found on web01", password reuse
+ * as "reused on sql01 (same password as web01)").
+ */
 export interface TargetCredential {
   key: string;
   username: string;
@@ -29,6 +33,24 @@ const FAILED_LOGIN = /\[-\]|Permission denied|LOGON_FAILURE|Authentication faile
 /** A login whose output says it failed, unless it also says one worked (`[+]`, a spray over several hosts). */
 const loginFailed = (output: string) => FAILED_LOGIN.test(output) && !output.includes("[+]");
 
+/** A host's IP or name as a whole word of a line (not `10.0.0.50` for `10.0.0.5`). */
+const namesHost = (line: string, h: { ip?: string | null; name?: string | null }) =>
+  [h.ip, h.name].some((t) => t && new RegExp(`(?<![\\w.-])${escapeRegExp(t)}(?![\\w-]|\\.\\w)`, "i").test(line));
+
+/**
+ * The entry's hosts a login worked on, by its output: each whose IP or name is on a line that says `[+]` (a spray over
+ * several hosts, some failing). With no such line naming one of them, the entry's one host; none when it has several.
+ */
+function workedOn(data: ReportData, output: string, hostIds: string[]): string[] {
+  const lines = output.split("\n").filter((l) => l.includes("[+]"));
+  const named = hostIds.filter((id) => {
+    const h = data.hosts.find((x) => x.id === id);
+    return h !== undefined && lines.some((l) => namesHost(l, h));
+  });
+  if (named.length > 0) return named;
+  return hostIds.length === 1 ? hostIds : [];
+}
+
 /** The username as a whole word of the command (not `bobby` for `bob`). */
 const namesUser = (cmd: string, username: string) => new RegExp(`(?<![\\w.-])${escapeRegExp(username)}(?![\\w-])`, "i").test(cmd);
 
@@ -51,7 +73,8 @@ function passesSecret(cmd: string, c: Credential): boolean {
  *  - a credential local to one of them, or found on one of them;
  *  - a credential used in a non-private command on one of them: its username and secret both in the command, the secret
  *    as a whole word (`evil-winrm -u bob -p pw`, `xfreerdp /u:bob /p:pw`, `psexec corp/bob:pw@ip`, `-hashes :<nt>`);
- *    or, when the command passes no secret at all, its username at one of their IPs or names (`ssh bob@10.0.0.5`, the
+ *    tied to each of the entry's hosts its output says it worked on (`workedOn`: a spray's `[+]` lines, else its one
+ *    host); or, when the command passes no secret at all, its username at one of their IPs or names (`ssh bob@10.0.0.5`, the
  *    password typed at the prompt), only when that username has exactly one credential. A direct login leaves no
  *    attempt or grant; one whose output says it failed (`[-]`, "Permission denied") ties nothing, nor does a
  *    credential with a failed attempt on that host;
@@ -78,7 +101,10 @@ export function targetCredentials(data: ReportData, hostIds: string[]): { creden
     if (!ids.has(a.hostId) || (a.result !== "valid" && a.result !== "admin")) continue;
     const c = credOf(a.credId);
     if (!c) continue;
-    const why = `${a.result === "admin" ? "admin" : "works"} on ${a.service.toUpperCase()}, ${name(a.hostId)}`;
+    // Password reuse is no service result: it names the host the credential is stored for instead.
+    const why = isReuseAttempt(a)
+      ? reuseWording(name(a.hostId), data.hosts.find((h) => h.id === c.localHostId)?.name ?? null)
+      : `${a.result === "admin" ? "admin" : "works"} on ${a.service.toUpperCase()}, ${name(a.hostId)}`;
     // A username tried with this credential's secret: that username is the one that works.
     const user = a.usernameId ? data.usernames.find((u) => u.id === a.usernameId) : undefined;
     if (user) tie(`${user.id}:${c.id}`, { username: user.username, domain: user.domain, type: c.type, at: a.at }, why);
@@ -107,7 +133,9 @@ export function targetCredentials(data: ReportData, hostIds: string[]): { creden
         (c) => c.username.trim() !== "" && c.secret.trim() !== "" && namesUser(cmd, c.username) && !failedOn(c, onIds),
       );
       const bySecret = named.filter((c) => passesSecret(cmd, c));
-      for (const c of bySecret) tie(c.id, { username: c.username, domain: c.domain, type: c.type, at: c.createdAt }, `used on ${name(on)}`);
+      // A spray: only the hosts it worked on, by its output.
+      const worked = bySecret.length > 0 ? workedOn(data, b.output ?? "", e.hostIds).filter((h) => ids.has(h)) : [];
+      for (const c of bySecret) for (const h of worked) tie(c.id, { username: c.username, domain: c.domain, type: c.type, at: c.createdAt }, `used on ${name(h)}`);
       // `ssh bob@10.0.0.5`: the password is typed at the prompt, so the command names only the account. It ties the
       // credential only when no secret is passed at all, none matched, and the account has exactly one credential.
       if (passesAnySecret(cmd)) continue;

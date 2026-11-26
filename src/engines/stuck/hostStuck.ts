@@ -66,8 +66,8 @@ export function hostStuck(input: {
   state: ChecklistState;
   entries: LogEntry[];
   hostNote: string;
-  /** Defaults to the built-in library. */
-  library?: LibraryCommand[];
+  /** The command library: in exam sims a goal none of whose commands is legal is not "to do". */
+  library: LibraryCommand[];
 }): HostStuck {
   const { host, state } = input;
   const services = (input.servicesByHost.get(host.id) ?? []).filter(isOpenService);

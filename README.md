@@ -1,21 +1,75 @@
 # Raven
 
-Raven is a local-only macOS desktop app (Tauri 2, React, TypeScript) for managing penetration-test engagements. Data is stored in an encrypted local database; the app makes no network calls at runtime.
+Raven is a local-only macOS desktop app for penetration testers. You keep one engagement in it from start to finish: hosts and services, every command and screenshot as you take it, checklists that tick themselves from what you logged, credentials, findings, a command library with your values filled in, and the exam report written from that record.
 
-## Development
+It's built for one person preparing for the OSCP and doing lab and client work afterwards, so it's keyboard-first, fast to capture into, and quiet on screen. `PRODUCT.md` describes who it's for and every feature in detail.
+
+Everything stays on the machine. Data lives in an encrypted SQLite vault unlocked by a password, and the only network call is an optional NIST NVD lookup for CVE details.
+
+## Getting started
+
+You need macOS, Node 22 with npm, and Rust stable (through rustup).
 
 ```sh
-npm install
-npm run tauri dev      # run the desktop app
-npm test               # frontend tests (Vitest)
-npm run typecheck      # tsc -b
-npm run lint           # ESLint
-(cd src-tauri && cargo test)   # Rust tests
+npm install            # also points git at the repo's hooks in .githooks/
+npm run tauri dev      # build and open the desktop app
 ```
 
-Requires Node 22, npm, and Rust stable (via rustup).
+On first launch Raven asks you to create a vault password. The vault is at `~/Library/Application Support/app.raven.desktop/raven.db`; it's yours and never leaves the machine.
 
-`npm install` also points git at the hooks in `.githooks/` (slop-stop): they reject AI attribution in commit
-messages and other AI tools' files (`.cursor/`, `.aider*` and the like) in commits. Claude Code and Codex files
-(`.claude/`, `CLAUDE.md`, `AGENTS.md`, `.mcp.json`) are allowed: they carry the shared agent instructions. The same check
-runs on every pull request, so `--no-verify` only defers the failure.
+You don't need the desktop app or a vault to work on most of the UI:
+
+```sh
+npm run dev:audit      # the UI in a browser at http://localhost:5199, with a fake backend and synthetic data
+```
+
+Audit mode serves the same React app against an in-memory backend (`src/audit/fakeApi.ts`) filled with stress fixtures (`src/audit/fixtures.ts`). In any dev build, `/__ui` shows the shared UI primitives.
+
+The fake and the real store must pass the same [store scenarios](src/test/storeScenarios/README.md), so the fake can't drift from the store. New UI tests run on the fake through [`src/test/support/fakeStore.tsx`](src/test/support/fakeStore.tsx).
+
+## Checking your work
+
+```sh
+npm test                        # Vitest, including the convention tests
+npm run typecheck               # tsc -b
+npm run lint                    # ESLint
+(cd src-tauri && cargo test)    # Rust tests
+npm run audit:visual            # Playwright audit of every screen at four widths
+npm run audit:baseline          # record a local pixel baseline (before a UI change)
+npm run audit:pixel             # pixel diff against that baseline (after it)
+```
+
+The visual audit and its pass/fail rules are described in [`audit/README.md`](audit/README.md).
+
+## Repo map
+
+```text
+src/
+├── features/<feature>/   # screens and their parts; each component in its own folder with its .scss
+├── ui/                   # shared primitives: Button, IconButton, Chip, Dialog, Kbd, …
+├── engines/              # pure logic with no React: payloads, report drafting, parsers, checklist rules
+├── styles/               # tokens.css (the one source of design tokens) and shared SCSS
+├── audit/                # fake backend and synthetic fixtures for audit mode
+└── test/                 # Vitest tests, including conventions.test.ts
+src-tauri/
+├── src/                  # Rust backend: one module per domain, the vault, migrations
+└── migrations/           # numbered SQL migrations
+audit/                    # Playwright visual audit
+docs/
+├── specs/                # design specs per feature round, with the reasoning behind them
+└── agents/               # issue tracker and triage conventions
+```
+
+## Documentation
+
+| Read | For |
+|---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How work is tracked, branched, committed and reviewed; code, style and data-safety rules |
+| [`PRODUCT.md`](PRODUCT.md) | Who Raven is for, what each feature does, the rules marked binding that the code must keep, and the product principles |
+| [`DESIGN.md`](DESIGN.md) | The Ink design system: tokens, type roles, layout rules, do's and don'ts (full version in `.impeccable/design-full.md`) |
+| [`docs/specs/`](docs/specs/README.md) | Why features work the way they do |
+| [`AGENTS.md`](AGENTS.md) | Instructions for AI coding agents working in the repo |
+
+## Licence
+
+Raven Workspace Community Edition is licensed under the [GNU AGPL-3.0](LICENSE) (`AGPL-3.0-only`). Copyright (C) 2026 Keegan Techentin. Trademark and third-party notices are in [`NOTICE`](NOTICE). Before contributing, read [Licence and ownership](CONTRIBUTING.md#licence-and-ownership).

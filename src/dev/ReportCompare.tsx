@@ -118,7 +118,7 @@ export default function ReportCompare() {
   return (
     <div className="report-compare" data-testid="report-compare">
       <section aria-label="Sample report, section 4.1">
-        <p className="report-compare-label">Sample: Mock exam A — model report, §4.1</p>
+        <p className="report-compare-label">Sample: model report, §4.1</p>
         <div className="report-page" data-page="target">
           <div className="report-page-doc">
             <div className="ProseMirror">

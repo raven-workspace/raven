@@ -1,13 +1,17 @@
 import type { ChecklistState } from "../../types/checklist";
 import type { CredAttempt, Credential, Username } from "../../types/credentials";
+import { credName } from "../credentials/labels";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import type { Tunnel } from "../../types/network";
-import { applicableGoals, adHosts } from "../checklist";
+import { adSetHosts, applicableGoals } from "../checklist";
 import type { LibraryCommand } from "../library/types";
 import { hasFoothold, hasLegalCommand } from "./shared";
 import { ROUTINE_STEPS, accessFlags, cellFor, hostSprayServices, isSprayable, routineStepApplies } from "../credentials";
+
+/** A credential as a Stuck subject: its name with the domain (`CORP\\admin` and a local `admin` read apart). */
+const credSubject = (cred: Credential): string => (cred.username ? credName(cred) : "secret with no owner");
 
 export interface StuckLine {
   area: "foothold" | "credentials" | "privesc" | "lateral";
@@ -29,7 +33,7 @@ const ASREP_GOALS = ["e-ad-user-asrep", "e-ad-nocreds-asrep"];
 const nameOf = (h: Host) => h.name || h.ip || h.id;
 
 /**
- * Where to look next, sorted by area (spec §6.7): hosts with no foothold and enumeration still to do, untested
+ * Where to look next, sorted by area (foundation spec §6.4, stuck check): hosts with no foothold and enumeration still to do, untested
  * credential cells, credentials never sprayed, usernames not AS-REP-checked, open access flags and dual-homed
  * hosts without a tunnel. Derived on every call.
  */
@@ -42,8 +46,8 @@ export function engagementStuck(input: {
   attempts: CredAttempt[];
   usernames: Username[];
   tunnels: Tunnel[];
-  /** Defaults to the built-in library. */
-  library?: LibraryCommand[];
+  /** The command library: in exam sims a goal none of whose commands is legal is not "to do". */
+  library: LibraryCommand[];
 }): StuckLine[] {
   const { engagement, hosts, servicesByHost, byOwner } = input;
   const credentials = input.credentials.filter((c) => c.engagementId === engagement.id);
@@ -99,7 +103,7 @@ export function engagementStuck(input: {
     if (cells > 0 && firstHost) {
       out.push({
         area: "credentials",
-        subject: cred.username,
+        subject: credSubject(cred),
         text: `${cells} host/service cell${cells === 1 ? "" : "s"} untested`,
         hostId: firstHost.id,
       });
@@ -110,14 +114,14 @@ export function engagementStuck(input: {
       if (!routineStepApplies("spray-users", cred, hosts, servicesByHost, usernames)) continue;
       out.push({
         area: "credentials",
-        subject: cred.username || "secret with no owner",
+        subject: credSubject(cred),
         text: "never sprayed at the usernames",
         hostId: null,
         goalId: SPRAY_USERS_ITEM,
       });
     }
   }
-  if (usernames.length > 0 && adHosts(hosts, servicesByHost).length > 0 && !ASREP_GOALS.some((id) => statusOf(engagement.id, id) === "done")) {
+  if (usernames.length > 0 && adSetHosts(hosts).length > 0 && !ASREP_GOALS.some((id) => statusOf(engagement.id, id) === "done")) {
     const id = ASREP_GOALS.find((g) => byOwner.get(engagement.id)?.[g]) ?? ASREP_GOALS[0]!;
     out.push({
       area: "credentials",

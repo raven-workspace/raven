@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { filterForKind } from "../../../engines/checklist/index";
+import { examList } from "../../../engines/exam";
 import { searchArsenal, type ArsenalHit } from "../../../engines/library/arsenalSearch";
 import { allCategories, categoryLabel, categoryOf } from "../../../engines/library/categories";
-import { getCards, getLibrary, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary } from "../../../engines/library/store";
+import type { CardMeta } from "../../../engines/library/types";
 import { isDialogOpen, isTypingTarget, useEscapeBack, useKeydown } from "../../../lib/keys";
 import { Button, HintLine, Select, type Hint } from "../../../ui/index";
 import { useCredPickStore } from "../../checklist/credPick";
-import { useFillBase } from "../../palette/fillData";
+import { useFillBase } from "../../commands/fillData";
 import { GENERATORS } from "../../palette/generators";
 import { browseList, OTHER_TOOLS, type BrowseSection } from "../browseList";
 import { CardView, CommandPane } from "../CardView/CardView";
@@ -36,19 +37,19 @@ const hitRow = (hit: ArsenalHit, searching: boolean, withTool = searching): Row 
   stack: withTool && hit.type === "command",
 });
 const sameHit = (h: ArsenalHit, p: Pick | null): boolean => p !== null && h.type === p.kind && h.id === p.id;
-const hitCategory = (h: ArsenalHit, cards: ReturnType<typeof getCards>): string =>
+const hitCategory = (h: ArsenalHit, cards: CardMeta[]): string =>
   h.type === "card" ? h.card.category : h.type === "generator" ? h.category : categoryOf(h.command, cards);
 const SEARCH_ID = "arsenal-search";
 const READING_ID = "arsenal-reading";
 
 /** `/arsenal`: categories | the category's list | the open item in full. Fills for the engagement and host you came from. */
 export function ArsenalBrowse() {
-  const version = useLibraryVersion();
+  const lib = useLibrary();
   const [params] = useSearchParams();
   const [query, setQuery] = useState(() => params.get("q") ?? "");
   const { engagementId, hostId } = useFillScope();
   const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
-  const { d, host, cred, credOwnerId, examReady } = useFillBase(engagementId, hostId);
+  const { d, host, cred, credOwnerId, examReady, exam } = useFillBase(engagementId, hostId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const hostRef = useRef<HostChipHandle>(null);
   const credRef = useRef<CredChipHandle>(null);
@@ -85,42 +86,30 @@ export function ArsenalBrowse() {
     }
   });
 
-  // What the exam rules leave: until they are known, nothing at all (fail closed).
-  /* eslint-disable react-hooks/exhaustive-deps */
+  // A list under the exam rules: what they leave (until the engagement's kind is known, no command that needs a verdict).
   const { cards, library } = useMemo(() => {
-    if (!examReady) return { cards: [], library: [] };
-    const kind = d.engagement?.kind;
-    const scope = { hostId: host?.id ?? "", msfHostId: d.engagement?.msfHostId ?? null };
-    const all = getLibrary();
+    const all = lib.commands;
     return {
-      library: kind ? filterForKind(all, kind, scope).shown : all,
-      cards: getCards().filter((c) => {
-        if (!kind) return true;
-        // A card whose every command the exam bans has nothing to show.
+      library: examList(all, exam).shown,
+      cards: lib.cards.filter((c) => {
+        // A card whose every command the exam rules hide has nothing to show.
         const cmds = all.filter((x) => x.cardId === c.id);
-        return cmds.length === 0 || filterForKind(cmds, kind, scope).shown.length > 0;
+        return cmds.length === 0 || examList(cmds, exam).shown.length > 0;
       }),
     };
-  }, [d.engagement, examReady, host, version]);
+  }, [exam, lib]);
   const lists = useMemo(() => {
     const out = new Map<string, BrowseSection[]>();
     for (const c of allCategories(cards)) {
-      const sections = browseList(c, library, cards, examReady ? GENERATORS : []);
+      const sections = browseList(c, library, cards, GENERATORS);
       if (sections.length > 0) out.set(c, sections);
     }
     return out;
-  }, [cards, library, examReady]);
+  }, [cards, library]);
   const groups = useMemo(
-    () =>
-      examReady && query.trim() !== ""
-        ? searchArsenal(query, {
-            library: getLibrary(), cards: getCards(), generators: GENERATORS,
-            ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
-          })
-        : [],
-    [query, host, d.engagement, examReady, version],
+    () => (query.trim() !== "" ? searchArsenal(query, { library: lib.commands, cards: lib.cards, generators: GENERATORS, exam }) : []),
+    [query, exam, lib],
   );
-  /* eslint-enable react-hooks/exhaustive-deps */
   const searching = query.trim() !== "";
 
   const counts = new Map<string, number>([...lists].map(([c, s]) => [c, s.reduce((n, x) => n + x.rows.length, 0)]));
@@ -154,7 +143,7 @@ export function ArsenalBrowse() {
   };
   const clearSearch = () => {
     // The category of what was open stays listed.
-    if (open) setCategory(hitCategory(open, getCards()));
+    if (open) setCategory(hitCategory(open, lib.cards));
     setQuery("");
   };
   // Esc clears a typed search first; registered before the leave-Esc, which then sees it handled.
@@ -302,7 +291,7 @@ export function ArsenalBrowse() {
           {engagementId ? (
             <>
               <HostChip
-                ref={hostRef} align="start" hosts={d.hosts} value={host?.id ?? null} className="arsenal-browse__host"
+                ref={hostRef} align="start" hosts={d.hosts} loadError={d.hostsError} value={host?.id ?? null} className="arsenal-browse__host"
                 onChange={(id) => {
                   setHostId(id);
                   setOverrides({});

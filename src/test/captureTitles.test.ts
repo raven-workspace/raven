@@ -3,13 +3,14 @@ import { buildDraft, flagTitle } from "../engines/capture";
 import { resolveCapture } from "../features/capture/resolve";
 import { EMPTY_DRAFT } from "../features/capture/useCaptureStore";
 import type { Host } from "../types/host";
+import { TEST_LIBRARY } from "./support/library";
 
 const host: Host = {
   id: "h1", engagementId: "e1", name: "web07", ip: "192.0.2.7", os: null, boardColumn: "information-gathering",
   boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
   access: "none", createdAt: 1, updatedAt: 1,
 };
-const ctx = { hosts: [host], scope: ["192.0.2.0/24"], domain: "", machines: [], lastRanOn: null, presetHostId: "h1" };
+const ctx = { hosts: [host], scope: ["192.0.2.0/24"], domain: "", machines: [], lastRanOn: null, library: TEST_LIBRARY, presetHostId: "h1" };
 const JOINER = / · | — | → /;
 
 describe("generated titles", () => {
@@ -21,7 +22,7 @@ describe("generated titles", () => {
     expect(flag.autoTitle).toBe("proof.txt".replace("proof", flag.flagKind));
     const cmd = buildDraft({
       text: "nmap -p- -Pn 192.0.2.7", image: null, kind: "command", hosts: [{ id: "h1", name: "web07", ip: "192.0.2.7", column: "information-gathering" }],
-      scope: ["192.0.2.0/24"], domain: "", machines: [], lastRanOn: null,
+      scope: ["192.0.2.0/24"], domain: "", machines: [], lastRanOn: null, library: TEST_LIBRARY,
     });
     for (const t of [shot.autoTitle, flag.autoTitle, cmd.title, flagTitle("local"), flagTitle("proof")]) {
       expect(t).not.toMatch(JOINER);
@@ -36,7 +37,7 @@ describe("generated titles", () => {
     expect(shot.autoTitle).toBe("Admin panel login page");
     const bare = buildDraft({
       text: "", image: { mime: "image/png" }, kind: "screenshot", hosts: [{ id: "h1", name: "web07", ip: "192.0.2.7", column: "information-gathering" }],
-      scope: ["192.0.2.0/24"], domain: "", machines: [], lastRanOn: null,
+      scope: ["192.0.2.0/24"], domain: "", machines: [], lastRanOn: null, library: TEST_LIBRARY,
     });
     expect(bare.title).toBe("Screenshot");
   });

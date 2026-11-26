@@ -25,6 +25,18 @@ export interface Credential {
   updatedAt: number;
 }
 
+/**
+ * Mirrors the Rust `CreatedCredential`: what creating a credential returns. The store decides whether the input is a
+ * credential it already holds (the same credential, GLOSSARY); then `existed` is true and nothing was written.
+ */
+export interface CreatedCredential {
+  credential: Credential;
+  existed: boolean;
+}
+
+/** Two domain spellings to ask the store about (`sameDomains`). */
+export type DomainPair = [string | null, string | null];
+
 /** Mirrors the Rust `CredentialInput` (create and full update). */
 export interface CredentialInput {
   type: CredentialType;
@@ -48,6 +60,12 @@ export interface CredentialInput {
   fromSecretId?: string | null;
 }
 
+/**
+ * A username's scope: a domain account, a local account on one host, or unknown (either; usernames stored before
+ * scope existed are unknown). The store decides identity by it.
+ */
+export type UsernameScope = "domain" | "local" | "unknown";
+
 /** Mirrors the Rust `Username`. */
 export interface Username {
   id: string;
@@ -57,6 +75,9 @@ export interface Username {
   sourceHostId: string | null;
   source: string | null;
   createdAt: number;
+  scope: UsernameScope;
+  /** The host of a local username; null otherwise, and once that host is deleted. */
+  localHostId: string | null;
 }
 
 /** Mirrors the Rust `UsernameInput`. */
@@ -65,6 +86,10 @@ export interface UsernameInput {
   domain?: string | null;
   sourceHostId?: string | null;
   source?: string | null;
+  /** Absent means "unknown". */
+  scope?: UsernameScope;
+  /** Required iff scope is "local". */
+  localHostId?: string | null;
 }
 
 /** Mirrors the Rust `AccessGrant`. `logEntryId` is null when the proof entry was deleted. */

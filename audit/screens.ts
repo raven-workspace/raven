@@ -27,7 +27,7 @@ const openGroup = (name: string) => async (page: Page) => {
   // The host page measures itself first; groups fold (stacked) or stay open (two columns) only after that.
   // With no data (the `empty` state run) there is no host to measure, only "Host not found".
   await page.locator("[data-host-layout]").or(page.getByText("Host not found")).first().waitFor();
-  const toggle = page.locator(`button[title^='Open ${name}']`);
+  const toggle = page.getByRole("region", { name, exact: true }).locator("button.fact-group__toggle[aria-expanded='false']");
   if ((await toggle.count()) > 0) await toggle.first().click();
 };
 const FS01 = `${E}/h/${AUDIT_IDS.fileHost}`;
@@ -52,7 +52,8 @@ const MANUAL_LONG = `/manual/${AUDIT_NOTE_IDS.long}`;
 const REPORT = `/e/${AUDIT_IDS.examEngagement}/s/report`;
 /** A tab of the report's tab row, by its label: a target is numbered ("2 ms01"), the rest read as named ("Appendix A"). */
 export const reportTab = (page: Page, label: string) => {
-  const exact = new RegExp(`^(\\d+ )?${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+  // A target's tab leads with its count ("1 ms01"), a free page's with its section number ("§6 Tools and versions").
+  const exact = new RegExp(`^(§?\\d+ )?${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
   return page.getByRole("tablist", { name: "Report pages" }).getByRole("tab").filter({ has: page.locator("[data-tab-label]", { hasText: exact }) });
 };
 /**
@@ -84,8 +85,8 @@ export const openGarnet = async (page: Page) => {
   await openReportItem("garnet")(page);
   await page.locator(GARNET_HEADING).waitFor();
 };
-/** garnet's "Confirm the repository is readable" output on the page: one plain code block copied from the log. */
-export const garnetOutput = (page: Page) => page.locator(".report-page .report-codeblock").filter({ hasText: /^ref: refs\/heads\/main/ });
+/** garnet's "Identify the Jenkins version" output on the page: one plain code block copied from the log. */
+export const garnetOutput = (page: Page) => page.locator(".report-page .report-codeblock").filter({ hasText: /^X-Jenkins: 2\.401\.3/ });
 /** Clicks into a block's text and moves to the end of the clicked line, ready to type. ProseMirror takes up a click's
  *  selection a moment after mouseup; a key pressed sooner acts at the old selection. */
 export const caretAtEnd = async (page: Page, block: Locator) => {
@@ -181,6 +182,14 @@ export const SCREENS: Screen[] = [
     setup: async (page) => {
       await page.getByRole("button", { name: /^Edit Domain compromise via Kerberoastable/ }).click();
       await page.getByRole("region", { name: "Finding" }).waitFor();
+    },
+  },
+  {
+    id: "finding-add-screenshot", path: `${E}/s/findings`, ready: "role=group[name='Add a screenshot']",
+    // Adding a screenshot from a finding's steps: the drop zone, the caption, the actions.
+    setup: async (page) => {
+      await page.getByRole("button", { name: /^Edit Domain compromise via Kerberoastable/ }).click();
+      await page.getByRole("region", { name: "Finding" }).getByRole("button", { name: "Add screenshot" }).click();
     },
   },
   {
@@ -339,7 +348,7 @@ export const SCREENS: Screen[] = [
         await page.getByRole("option", { name: /Shells & transfers/ }).click();
       }
       await page.getByRole("option", { name: /Transfer a file/ }).click();
-      await page.getByRole("button", { name: /^(Host |No host$)/ }).click();
+      await page.getByRole("button", { name: /^Fill for host/ }).click();
       await page.getByRole("listbox", { name: "Fill for host" }).getByRole("option").nth(1).click();
     },
   },

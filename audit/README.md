@@ -8,7 +8,7 @@ Drives the real UI against the in-memory fake backend (`npm run dev:audit`, port
 - Report sections say "Did not run" (or "Did not run at: <widths>") for anything without an issue file or screenshot.
 - Output (gitignored): `audit-output/report.md` (summary table, then one section per screen), `report.json`,
   `shots/<screen>@<width>.png`, and raw `issues/<screen>@<width>.json`.
-- **The gate.** These checks fail the run, on every screen and width and on the `~empty|loading|error` state runs (spec §2.5):
+- **The gate.** These checks fail the run, on every screen and width and on the `~empty|loading|error` state runs:
   `tiny-text` (under 12px; under 13px for anything that is not a label or chip, `.section-label`, or a key cap, `kbd`),
   `small-target` (under 24px; a checkbox or radio inside its `<label>` is measured by the label), `overlap`,
   `page-overflow`, `document-scroll`, `overflow`, `clipped` and `mid-token-wrap`. The list lives in `FAILING_CHECKS` (`audit/types.ts`).

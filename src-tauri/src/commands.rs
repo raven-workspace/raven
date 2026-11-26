@@ -6,18 +6,19 @@
 
 use crate::attempts::{self, CredAttempt, CredAttemptInput};
 use crate::payload_builds::{self, PayloadBuild};
+use crate::export::{self, ExportInput, ExportResult};
 use crate::reports::{self, Report, ReportDefaults, ReportPatch, ReportSection, SectionInput};
 use crate::tried_pairs::{self, TriedPair, TriedPairInput};
-use crate::extractions::{self, Extraction, ExtractionRecord, ExtractionSummary};
+use crate::extractions::{self, Extraction, ExtractionProofs, ExtractionRecord, ExtractionSummary, Filed, OutputTick};
 use crate::backup::{self, BackupInfo};
 use crate::cleanup::{self, CleanupInput, CleanupItem};
 use crate::findings::{
     self, FailedAttempt, FailedAttemptInput, Finding, FindingFile, FindingFileInput, FindingInput,
 };
 use crate::credentials::{
-    self, AccessGrant, AccessGrantInput, Credential, CredentialInput, Username, UsernameInput,
+    self, AccessGrant, AccessGrantInput, CreatedCredential, Credential, CredentialInput, Username, UsernameInput,
 };
-use crate::checklist::{self, ChecklistItem, ChecklistItemInput, GoalRef};
+use crate::checklist::{self, ChecklistItem, ChecklistItemInput, EntryTicks, GoalRef};
 use crate::engagements::{self, Engagement, EngagementInput, Progress};
 use crate::network::{self, Hop, HopInput, InterfaceDismissal, Tunnel, TunnelInput};
 use crate::notes::{self, Note, RuledOut, RuledOutInput};
@@ -409,6 +410,15 @@ pub async fn checklist_apply_facts(
 }
 
 #[tauri::command]
+pub async fn checklist_apply_entry_ticks(
+    app: AppHandle,
+    engagement_id: String,
+    entries: Vec<EntryTicks>,
+) -> AppResult<Vec<ChecklistItem>> {
+    with_vault(app, move |v| checklist::apply_entry_ticks(v.conn()?, &engagement_id, &entries)).await
+}
+
+#[tauri::command]
 pub async fn notes_get(app: AppHandle, engagement_id: String, host_id: Option<String>) -> AppResult<Note> {
     with_vault(app, move |v| notes::get(v.conn()?, &engagement_id, host_id.as_deref())).await
 }
@@ -494,8 +504,14 @@ pub async fn credentials_list(app: AppHandle, engagement_id: String) -> AppResul
 }
 
 #[tauri::command]
-pub async fn credential_create(app: AppHandle, engagement_id: String, input: CredentialInput) -> AppResult<Credential> {
+pub async fn credential_create(app: AppHandle, engagement_id: String, input: CredentialInput) -> AppResult<CreatedCredential> {
     with_vault(app, move |v| credentials::create(v.conn()?, &engagement_id, input)).await
+}
+
+/// For each pair of domain spellings, whether the store counts them as the same domain in this engagement.
+#[tauri::command]
+pub async fn same_domains(app: AppHandle, engagement_id: String, pairs: Vec<(Option<String>, Option<String>)>) -> AppResult<Vec<bool>> {
+    with_vault(app, move |v| credentials::same_domains(v.conn()?, &engagement_id, &pairs)).await
 }
 
 #[tauri::command]
@@ -749,6 +765,27 @@ pub async fn extraction_save(
     with_vault(app, move |v| extractions::save(v.conn()?, &log_entry_id, &engagement_id, &summary, &record)).await
 }
 
+/// Files what a saved entry's output proved and stores its extraction, all in one transaction.
+#[tauri::command]
+pub async fn extraction_file(
+    app: AppHandle,
+    engagement_id: String,
+    log_entry_id: String,
+    proofs: ExtractionProofs,
+) -> AppResult<Filed> {
+    with_vault(app, move |v| extractions::file(v.conn()?, &engagement_id, &log_entry_id, &proofs)).await
+}
+
+#[tauri::command]
+pub async fn extraction_finish(
+    app: AppHandle,
+    log_entry_id: String,
+    summary: ExtractionSummary,
+    output_ticks: Vec<OutputTick>,
+) -> AppResult<Extraction> {
+    with_vault(app, move |v| extractions::finish(v.conn()?, &log_entry_id, &summary, &output_ticks)).await
+}
+
 #[tauri::command]
 pub async fn extraction_get(app: AppHandle, log_entry_id: String) -> AppResult<Option<Extraction>> {
     with_vault(app, move |v| extractions::get(v.conn()?, &log_entry_id)).await
@@ -774,6 +811,21 @@ pub async fn report_get_or_create(app: AppHandle, engagement_id: String) -> AppR
     .await
 }
 
+/// Exports the report (docs/adr/0002): reads its screenshots from the vault, compiles the PDF and writes it and its
+/// `.7z` off the main thread without holding the vault, then records the export. Nothing leaves the machine.
+#[tauri::command]
+pub async fn report_export(app: AppHandle, report_id: String, input: ExportInput) -> AppResult<ExportResult> {
+    let ids = input.attachment_ids.clone();
+    let images = with_vault(app.clone(), move |v| export::load_images(v.conn()?, &ids)).await?;
+    let result = off_main(move || {
+        let (pdf, pages) = export::compile_pdf(&input.source, images)?;
+        export::write_export(std::path::Path::new(&input.folder), &input.file_stem, &pdf, pages)
+    })
+    .await?;
+    with_vault(app, move |v| reports::mark_exported(v.conn()?, &report_id)).await?;
+    Ok(result)
+}
+
 #[tauri::command]
 pub async fn report_update(app: AppHandle, id: String, patch: ReportPatch) -> AppResult<Report> {
     with_vault(app, move |v| reports::update(v.conn()?, &id, patch)).await
@@ -792,6 +844,11 @@ pub async fn report_section_upsert(app: AppHandle, report_id: String, input: Sec
 #[tauri::command]
 pub async fn report_section_save(app: AppHandle, id: String, doc: serde_json::Value, meta: serde_json::Value) -> AppResult<ReportSection> {
     with_vault(app, move |v| reports::section_save(v.conn()?, &id, doc, meta)).await
+}
+
+#[tauri::command]
+pub async fn report_sections_save(app: AppHandle, report_id: String, writes: Vec<reports::SectionWrite>, delete: Option<String>) -> AppResult<Vec<ReportSection>> {
+    with_vault(app, move |v| reports::sections_save(v.conn()?, &report_id, writes, delete)).await
 }
 
 #[tauri::command]

@@ -21,6 +21,14 @@ export function isOpenService(s: Service): boolean {
   return !state.startsWith('closed') && !state.startsWith('filtered');
 }
 
+/**
+ * A service in state exactly `open`, as the store's AD set rule counts it. The AD set and DC tests use this, never
+ * `isOpenService`: a UDP scan reports `open|filtered` for most ports, which would make every UDP-scanned host a DC.
+ */
+export function isStrictlyOpen(s: Service): boolean {
+  return s.state === 'open';
+}
+
 /** Open TCP/UDP ports from scanned services that are not closed/filtered. */
 export function openPorts(services: Service[]): Set<number> {
   const ports = new Set<number>();
@@ -87,17 +95,24 @@ export function hostOs(os: HostOs | null): HostFacts['os'] {
 
 type ServicesByHost = Map<string, Service[]>;
 
-/** Hosts with both 88 (Kerberos) and 389 (LDAP) open. There is no DC pin. */
-export function adHosts(hosts: Host[], servicesByHost: ServicesByHost): Host[] {
-  return hosts.filter((h) => {
-    const ports = openPorts(servicesByHost.get(h.id) ?? []);
-    return ports.has(88) && ports.has(389);
-  });
+/** The AD set (GLOSSARY.md): the store's `adSetEffective`, the switch if set, else 88 and 389 both open. Never recomputed here. */
+export function adSetHosts(hosts: Host[]): Host[] {
+  return hosts.filter((h) => h.adSetEffective);
 }
 
-/** The engagement's domain controller: the only AD host, else null. */
-export function findDcHost(hosts: Host[], servicesByHost: ServicesByHost): Host | null {
-  const found = adHosts(hosts, servicesByHost);
+const kerberosAndLdapOpen = (services: Service[]): boolean =>
+  [88, 389].every((port) => services.some((s) => s.port === port && isStrictlyOpen(s)));
+
+/** AD set members with Kerberos (88) and LDAP (389) both strictly open: the DC candidates. */
+const dcCandidates = (hosts: Host[], servicesByHost: ServicesByHost): Host[] =>
+  adSetHosts(hosts).filter((h) => kerberosAndLdapOpen(servicesByHost.get(h.id) ?? []));
+
+/**
+ * The engagement's DC (GLOSSARY.md): the only AD set member with 88 and 389 both strictly open. An exam AD set is three
+ * machines with one DC, so the other members are not DCs. None or several candidates means no DC. There is no DC pin.
+ */
+export function findDc(hosts: Host[], servicesByHost: ServicesByHost): Host | null {
+  const found = dcCandidates(hosts, servicesByHost);
   return found.length === 1 ? found[0] : null;
 }
 
@@ -107,10 +122,9 @@ const namedLikeDc = (h: Host): boolean => DC_NAME.test((h.name ?? '').trim().spl
 const one = (hs: Host[]): Host | null => (hs.length === 1 ? hs[0] : null);
 
 /**
- * The DC that fills `{DC_IP}` / `{DC_HOST}`. Wider than `findDcHost`, which needs exactly one host with 88 and 389
- * open: an exam DC often sits behind a pivot and is never scanned from Kali. In order: the only 88+389 host; among
- * several, the only one named like a DC; the only host with Kerberos (88) open; the only host named like a DC.
- * Anything still ambiguous fills nothing.
+ * The DC that fills `{DC_IP}` / `{DC_HOST}`. Wider than `findDc`: an exam DC often sits behind a pivot and is never
+ * scanned from Kali. In order: the DC (`findDc`); among several DC candidates, the only one named like a DC; the only
+ * host with Kerberos (88) open; the only host named like a DC. Anything still ambiguous fills nothing.
  */
 export function dcForFill(hosts: Host[], servicesByHost: ServicesByHost): Host | null {
   return dcFillChoice(hosts, servicesByHost).dc;
@@ -118,10 +132,10 @@ export function dcForFill(hosts: Host[], servicesByHost: ServicesByHost): Host |
 
 /** `dcForFill` plus whether the host's name decided it (the UI shows "DC (by name)"). */
 export function dcFillChoice(hosts: Host[], servicesByHost: ServicesByHost): { dc: Host | null; byName: boolean } {
-  const ad = adHosts(hosts, servicesByHost);
-  if (ad.length === 1) return { dc: ad[0], byName: false };
-  if (ad.length > 1) {
-    const dc = one(ad.filter(namedLikeDc));
+  const candidates = dcCandidates(hosts, servicesByHost);
+  if (candidates.length === 1) return { dc: candidates[0], byName: false };
+  if (candidates.length > 1) {
+    const dc = one(candidates.filter(namedLikeDc));
     return { dc, byName: dc !== null };
   }
   const kerberos = one(hosts.filter((h) => openPorts(servicesByHost.get(h.id) ?? []).has(88)));
@@ -141,9 +155,8 @@ export function hostFacts(
   // A confirmed service speaks only through its confirmed identity: its port no longer counts.
   const ports = openPorts(services.filter((s) => !s.confirmedProduct));
   const scanned = openPorts(services).size > 0;
-  // Joined: the host is itself a DC-like host (88/389), or a Windows host in an engagement with any AD host.
-  const domainJoined =
-    ports.has(88) || ports.has(389) || (os === 'windows' && adHosts(hosts, servicesByHost).length > 0);
+  // Joined: the host is in the AD set, or is a Windows host in an engagement with any AD set member.
+  const domainJoined = host.adSetEffective || (os === 'windows' && adSetHosts(hosts).length > 0);
   return {
     os,
     ports,
@@ -155,19 +168,15 @@ export function hostFacts(
   };
 }
 
-/** Facts for engagement-level goals: no OS or ports of its own, domain-joined when any host is AD. */
-export function engagementFacts(
-  engagement: Pick<Engagement, 'kind'>,
-  hosts: Host[],
-  servicesByHost: ServicesByHost,
-): HostFacts {
+/** Facts for engagement-level goals: no OS or ports of its own, domain-joined when the AD set has any member. */
+export function engagementFacts(engagement: Pick<Engagement, 'kind'>, hosts: Host[]): HostFacts {
   return {
     os: null,
     ports: new Set(),
     services: new Set(),
     scanned: false,
     dualHomed: false,
-    domainJoined: adHosts(hosts, servicesByHost).length > 0,
+    domainJoined: adSetHosts(hosts).length > 0,
     kind: engagement.kind,
   };
 }

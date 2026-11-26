@@ -7,7 +7,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { DRAFT_LAYOUT, sourceOf, type ReportNode } from "../engines/report";
-import { ReportSectionView } from "../features/report/ReportSection/ReportSection";
+import { RAIL_OPEN_KEY, ReportSectionView } from "../features/report/ReportSection/ReportSection";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
@@ -33,6 +33,7 @@ vi.mock("../features/report/editor/ReportEditor/ReportEditor", async (importOrig
 });
 
 afterEach(() => {
+  localStorage.removeItem(RAIL_OPEN_KEY);
   vi.restoreAllMocks();
   editors.length = 0;
   resetAuditState();
@@ -237,9 +238,9 @@ describe("Evidence rail: the log column", () => {
 
   it("lists a credential found elsewhere that nxc showed works on the target, with no source host or grant", async () => {
     await seed();
-    const found = await api.credentialCreate("e-exam", { type: "password", username: "svc_backup", secret: "Backup#2026", source: "paste" });
+    const { credential: found } = await api.credentialCreate("e-exam", { type: "password", username: "svc_backup", secret: "Backup#2026", source: "paste" });
     await api.credAttemptsUpsert("e-exam", [{ credId: found.id, hostId: LNX, service: "ssh", port: 22, result: "valid", authMode: "local" }]);
-    const failed = await api.credentialCreate("e-exam", { type: "password", username: "eve", secret: "nope" });
+    const { credential: failed } = await api.credentialCreate("e-exam", { type: "password", username: "eve", secret: "nope" });
     await api.credAttemptsUpsert("e-exam", [{ credId: failed.id, hostId: LNX, service: "ssh", port: 22, result: "failed" }]);
     mount();
     await ready();
@@ -253,7 +254,7 @@ describe("Evidence rail: the log column", () => {
 
   it("says no credential or access only when nothing ties one to the target", async () => {
     await seed();
-    const found = await api.credentialCreate("e-exam", { type: "password", username: "svc_backup", secret: "Backup#2026" });
+    const { credential: found } = await api.credentialCreate("e-exam", { type: "password", username: "svc_backup", secret: "Backup#2026" });
     await api.credAttemptsUpsert("e-exam", [{ credId: found.id, hostId: "h-exam-ms01", service: "ssh", result: "valid" }]);
     for (const c of await api.credentialsList("e-exam")) if (c.localHostId === LNX || c.sourceHostId === LNX) await api.credentialDelete(c.id);
     for (const g of await api.accessGrantsList("e-exam")) if (g.hostId === LNX) await api.accessGrantDelete(g.id);
@@ -329,6 +330,46 @@ describe("Evidence rail: the log column", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("complementary", { name: "Evidence" })));
   });
 
+  it("remembers whether the column was left open, for the next report; a drawer still starts closed (RAV-32)", async () => {
+    await seed();
+    let width = 1100;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const w = this.getAttribute("aria-label") === "Report" ? width : 0;
+      return { width: w, height: 0, top: 0, left: 0, right: w, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
+    const column = () => screen.queryByRole("complementary", { name: "Evidence" });
+    const visit = async () => {
+      editors.length = 0;
+      const view = mount();
+      await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+      return view;
+    };
+
+    // Docked: closed by default; opened, the next report opens with it open.
+    let view = await visit();
+    expect(column()).toBeNull();
+    fireEvent.keyDown(window, { key: "e" });
+    expect(await screen.findByRole("complementary", { name: "Evidence" })).toBeInTheDocument();
+    view.unmount();
+    view = await visit();
+    expect(column()).not.toBeNull();
+    // Closed, the next report opens with it closed.
+    fireEvent.click(screen.getByRole("button", { name: "Evidence" }));
+    await waitFor(() => expect(column()).toBeNull());
+    view.unmount();
+    view = await visit();
+    expect(column()).toBeNull();
+    fireEvent.keyDown(window, { key: "e" });
+    await screen.findByRole("complementary", { name: "Evidence" });
+    view.unmount();
+
+    // A drawer would cover the page: left open, it still starts closed.
+    width = 900;
+    view = await visit();
+    expect(column()).toBeNull();
+    view.unmount();
+  });
+
   it("Esc meant for a field, a menu, a list or a popover leaves the drawer open", async () => {
     await seed();
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
@@ -365,6 +406,27 @@ describe("Evidence rail: the log column", () => {
     // Nothing else open (the page's closed ProseKit menus and lists stay in the DOM, marked closed): Esc closes it.
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(drawerOpen()).toBe(false));
+  });
+
+  it("one Esc closes the drawer while a tooltip shows: a tooltip is no popup", async () => {
+    await seed();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const w = this.getAttribute("aria-label") === "Report" ? 900 : 0;
+      return { width: w, height: 0, top: 0, left: 0, right: w, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
+    mount();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("button", { name: "Evidence" }));
+    expect(await screen.findByRole("tab", { name: /Unused/ })).toBeInTheDocument();
+    const drawerOpen = () => screen.queryByRole("complementary", { name: "Evidence" }) !== null;
+    // A showing Radix tooltip: its popper wrapper holds the tooltip's content.
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("data-radix-popper-content-wrapper", "");
+    wrapper.innerHTML = '<div data-state="delayed-open">Close<span role="tooltip">Close</span></div>';
+    document.body.append(wrapper);
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(drawerOpen()).toBe(false));
+    wrapper.remove();
   });
 });
 
@@ -435,18 +497,6 @@ describe("Evidence rail: the log column on a plain page", () => {
     await waitFor(() => expect(titles()).not.toContain("smbclient list"));
     // Focus moved on to the next row instead of falling to the page.
     expect(document.activeElement).toBe(row("winpeas run"));
-  });
-
-  it("with no cursor, a screenshot that came along with a step joins the step holding that entry", async () => {
-    const { screenshot } = await seed();
-    mount();
-    await ready();
-    const editor = editors[0];
-    fireEvent.click(screen.getByRole("button", { name: "Add ssh shell screenshot" }));
-    expect((await shapeOf(editor)).slice(5)).toEqual(["[ssh login,ssh shell screenshot]", "[]", "h:Also tested"]);
-    const figures: string[] = [];
-    editor.state.doc.descendants((n) => void (n.type.name === "figure" && figures.push(n.attrs.entryId as string)));
-    expect(figures).toEqual([screenshot.id]);
   });
 
   it("a screenshot goes into the step holding the cursor, as a figure", async () => {

@@ -1,18 +1,16 @@
 import { useId, useState, type FormEvent } from "react";
 import {
-  asCredential,
   credLabel,
-  findDuplicateCredential,
   identifyHash,
   defaultHashType,
+  isHostDeleted,
   parseCredentialPaste,
-  usernameKey,
 } from "../../../engines/credentials/index";
 import type { Credential, CredentialInput, CredentialScope, CredentialType } from "../../../types/credentials";
 import type { Host } from "../../../types/host";
 import { Button, ChipSet, Dialog, Field, Input, Select, Textarea, Toggle, labelClass } from "../../../ui/index";
 import { AccessFields, EMPTY_ACCESS, type AccessDraft } from "../AccessGrants/AccessGrants";
-import { useAccessGrantMutations, useCredentialMutations, useUsernameMutations, useUsernames } from "../queries";
+import { useAccessGrantMutations, useCredentialMutations, useUsernameMutations } from "../queries";
 import { parseUsername } from "../UsernamesList/UsernamesList";
 import { RavenError } from "../../../types/errors";
 import { hostLabel } from "../../../lib/hostName";
@@ -33,10 +31,9 @@ const SCOPES: { value: CredentialScope; label: string }[] = [
 
 type Errors = Partial<Record<"username" | "secret" | "localHostId" | "hostId" | "via" | "form", string>>;
 
-export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved }: {
+export function CredentialForm({ eid, hosts, edit, onClose, onSaved }: {
   eid: string;
   hosts: Host[];
-  credentials: Credential[];
   /** Edit this credential; add when absent. */
   edit?: Credential;
   onClose: () => void;
@@ -47,7 +44,6 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
   const cm = useCredentialMutations(eid);
   const um = useUsernameMutations(eid);
   const gm = useAccessGrantMutations(eid);
-  const usernames = useUsernames(eid).data ?? [];
   const [mode, setMode] = useState<Mode>(edit && !edit.username ? "secret" : "credential");
   const [username, setUsername] = useState(edit?.username ?? "");
   const [domain, setDomain] = useState(edit?.domain ?? "");
@@ -64,6 +60,8 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
   const [busy, setBusy] = useState(false);
 
   const ownerless = mode === "secret";
+  // Editing a local credential whose host was deleted, leaving scope and host as they are: the store allows it.
+  const hostStillDeleted = edit !== undefined && isHostDeleted(edit) && scope === "local" && localHostId === "";
   const candidates = type === "hash" ? identifyHash(secret, "windows") : [];
 
   async function submit(e: FormEvent) {
@@ -78,7 +76,7 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
     } else {
       if (mode === "credential" && username.trim() === "") errs.username = "Give it a username";
       if (mode === "secret" && secret.trim() === "") errs.secret = "Enter the secret";
-      if (scope === "local" && localHostId === "") errs.localHostId = "Pick the host this local account belongs to";
+      if (scope === "local" && localHostId === "" && !hostStillDeleted) errs.localHostId = "Pick the host this local account belongs to";
     }
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -87,9 +85,8 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
     try {
       if (mode === "username") {
         const parsed = domain.trim() === "" ? parseUsername(username) : { username: username.trim(), domain: domain.trim() };
-        const key = usernameKey({ engagementId: eid, ...parsed });
-        const existing = usernames.find((u) => usernameKey(u) === key);
-        const u = existing ?? (await um.create.mutateAsync({ username: parsed.username, domain: parsed.domain ?? null, source: source.trim() || null }));
+        // The store returns the username it lists already when this is the same username.
+        const u = await um.create.mutateAsync({ username: parsed.username, domain: parsed.domain ?? null, source: source.trim() || null });
         await gm.create.mutateAsync({ usernameId: u.id, grant: { hostId: access.hostId, level: access.level, via: access.via.trim() } });
         onClose();
         return;
@@ -107,20 +104,20 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
         notes: notes.trim() || null,
         ...(type === "hash" && hashType.trim() ? { hashType: hashType.trim() } : {}),
       };
-      // Never create a duplicate: offer the existing one instead.
-      const dup = findDuplicateCredential(credentials.filter((c) => c.id !== edit?.id), asCredential({ ...input, engagementId: eid }));
-      if (dup) {
-        setDuplicate(dup);
-        return;
-      }
+      // An edit that makes this another stored credential is refused by the store (a `secret` field error).
       if (edit) {
         const updated = await cm.update.mutateAsync({ id: edit.id, input });
         onSaved?.(updated);
         onClose();
         return;
       }
-      const created = await cm.create.mutateAsync(input);
-      onSaved?.(created);
+      // The store never creates a duplicate: it returns the credential it holds, offered instead.
+      const { credential, existed } = await cm.create.mutateAsync(input);
+      if (existed) {
+        setDuplicate(credential);
+        return;
+      }
+      onSaved?.(credential);
       onClose();
     } catch (err) {
       const field = RavenError.from(err).field;
@@ -202,7 +199,7 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
             {scope === "local" && (
               <Field label="Local host" error={errors.localHostId}>
                 <Select
-                  placeholder="Pick a host"
+                  placeholder={hostStillDeleted ? "Host deleted" : "Pick a host"}
                   options={hosts.map((h) => ({ value: h.id, label: hostLabel(h) }))}
                   value={localHostId || undefined}
                   onValueChange={setLocalHostId}

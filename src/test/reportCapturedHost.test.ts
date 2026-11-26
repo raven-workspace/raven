@@ -1,13 +1,14 @@
+import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { capturedHost, editsOf, XFER, XFER_CAPTURES, XFER_DOMAIN, XFER_MACHINES, XFER_SCOPE } from "../audit/capturedHost";
+import { BUILTIN_LIBRARY } from "../engines/library/data";
 import { resolveCapture } from "../features/capture/resolve";
 import { EMPTY_DRAFT } from "../features/capture/useCaptureStore";
 import { FIXTURES } from "../audit/fixtures";
 import { AUDIT_PNGS } from "../audit/images";
 import {
   buildPlainTarget,
-  entryIdsIn,
   sourceOf,
   groupChecks,
   proofCompanions,
@@ -16,9 +17,13 @@ import {
   type ReportData,
   type ReportNode,
   type ReportTarget,
+  placedIn,
 } from "../engines/report";
 import { saveCapture } from "../features/capture/saveCapture";
 import type { LogContent } from "../types/log";
+
+/** The entries a page or block places. */
+const entriesOnPage = (n: ReportNode) => placedIn(n).entries;
 
 vi.mock("../lib/api", () => import("../audit/fakeApi"));
 
@@ -68,11 +73,11 @@ describe("xfer03, captured through the real pipeline", () => {
       const image = c.image ? { mime: "image/png", dataBase64: AUDIT_PNGS[c.image as keyof typeof AUDIT_PNGS].base64, objectUrl: "" } : null;
       const r = resolveCapture(
         { ...EMPTY_DRAFT, text: c.image ? "" : c.text, caption: c.image ? c.text : "", image, kind: c.kind ?? null, flagKind: c.flagKind ?? null, observations: c.observations ?? "" },
-        { hosts, scope: XFER_SCOPE, domain: XFER_DOMAIN, machines: XFER_MACHINES, lastRanOn: "Kali (VM)", presetHostId: c.preset ? host.id : null },
+        { hosts, scope: XFER_SCOPE, domain: XFER_DOMAIN, machines: XFER_MACHINES, lastRanOn: "Kali (VM)", library: BUILTIN_LIBRARY, presetHostId: c.preset ? host.id : null },
       );
       const e = editsOf(c, hosts, host.id);
       expect({ ...r.edits, content: shape(r.edits.content) }, c.key).toMatchObject({ kind: e.kind, title: e.title, hostIds: e.hostIds, ranOn: e.ranOn, content: shape(e.content) });
-      const { entry } = await saveCapture({
+      const { entry } = await saveCapture(new QueryClient(), {
         engagementId: eng.id,
         draft: r.draft,
         edits: r.edits,
@@ -127,7 +132,7 @@ describe("xfer03's report page makes no false claim", () => {
     const after = (key: string, n: number) => shown.slice(shown.indexOf(id(key)), shown.indexOf(id(key)) + n);
     expect(after("local", 2)).toEqual([id("local"), id("local-shot")]);
     expect(after("proof", 3)).toEqual([id("proof"), id("proof-read"), id("proof-shot")]);
-    expect(entryIdsIn(doc).has(id("proof-read"))).toBe(true);
+    expect(entriesOnPage(doc).has(id("proof-read"))).toBe(true);
   });
 
   it("raises no proof fail and at most the one screenshot reminder", () => {

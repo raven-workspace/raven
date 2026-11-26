@@ -1,7 +1,7 @@
 import type { AccessGrant } from "../../types/credentials";
 import type { Severity } from "../../types/findings";
 import type { FlagKind } from "../../types/log";
-import { hostEntry, machinesInOrder, severityRank, findingPhaseMap } from "./draft";
+import { hostEntry, machinesInOrder, placementPlan, severityRank } from "./placement";
 import { byTime, hostName } from "./prove";
 import { expectedFlags } from "./meta";
 import type { ReportData, ReportMeta, ReportTarget } from "./types";
@@ -59,12 +59,16 @@ export function resultLine(data: ReportData, target: ReportTarget, hostId: strin
     const firstWord = levelWord(data, hostId, first.level);
     // A machine entered already elevated names its level: "shell as `x` (root)", "WinRM as `x` (local administrator)".
     parts.push(`${hop ? hop.via : "shell"} as \`${userName(data, first.usernameId)}\`${firstWord ? ` (${lineWord(firstWord)})` : ""}`);
-    // Each later grant adds its level once: a level the line already ends on (the first grant's own included) is not
-    // repeated, whoever it was granted to.
+    // Each later grant adds its level once. Root and SYSTEM name no account: a level the line already ends on (the
+    // first grant's own included) is not repeated. Local administrator names one: each account gets one clause, so a
+    // second account made local administrator is told, the same account again is not.
     let last = firstWord;
+    const admins = new Set(firstWord === "Administrator" ? [first.usernameId] : []);
     for (const g of grants.slice(1)) {
       const w = levelWord(data, hostId, g.level);
-      if (!w || w === last) continue;
+      if (!w) continue;
+      if (w === "Administrator" ? admins.has(g.usernameId) : w === last) continue;
+      if (w === "Administrator") admins.add(g.usernameId);
       last = w;
       parts.push(w === "Administrator" ? `${lineWord(w)} as \`${userName(data, g.usernameId)}\`` : lineWord(w));
     }
@@ -110,13 +114,14 @@ function resultOf(data: ReportData, target: ReportTarget, hostId: string, phase:
   }
 }
 
-/** Every finding on a report target's machines, once, most severe first, then in the targets' grading order. */
+/** Every finding on a report target's machines, once, most severe first, then in the targets' grading order, then in
+ *  machine order (an AD set's attack path). */
 export function findingRows(data: ReportData, targets: ReportTarget[]): FindingRow[] {
   const seen = new Set<string>();
-  const rows: (Omit<FindingRow, "n"> & { rank: number; targetIndex: number; created: number })[] = [];
+  const rows: (Omit<FindingRow, "n"> & { rank: number; targetIndex: number; machine: number; created: number })[] = [];
   targets.forEach((target, targetIndex) => {
     const machines = machinesInOrder(data, target);
-    for (const [findingId, { hostId, phase }] of findingPhaseMap(data, target)) {
+    for (const [findingId, { hostId, phase }] of placementPlan(data, target).findings) {
       const f = data.findings.find((x) => x.id === findingId);
       if (!f || seen.has(findingId)) continue;
       seen.add(findingId);
@@ -129,11 +134,13 @@ export function findingRows(data: ReportData, targets: ReportTarget[]): FindingR
         result: resultOf(data, target, hostId, phase),
         rank: severityRank(f),
         targetIndex,
+        // An AD set's findings follow its machines (attack-path order); a standalone target has one.
+        machine: machines.indexOf(hostId),
         created: f.createdAt,
       });
     }
   });
-  rows.sort((a, b) => a.rank - b.rank || a.targetIndex - b.targetIndex || a.created - b.created || a.title.localeCompare(b.title));
+  rows.sort((a, b) => a.rank - b.rank || a.targetIndex - b.targetIndex || a.machine - b.machine || a.created - b.created || a.title.localeCompare(b.title));
   return rows.map((r, i) => ({ n: i + 1, findingId: r.findingId, host: r.host, title: r.title, severity: r.severity, result: r.result }));
 }
 

@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { filterForKind } from "../../../engines/checklist/index";
+import { examList } from "../../../engines/exam";
 import { categoryLabel } from "../../../engines/library/categories";
-import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary, useToolkit } from "../../../engines/library/store";
 import type { LibraryCommand } from "../../../engines/library/types";
 import { isTypingTarget } from "../../../lib/keys";
 import { reportError } from "../../../lib/lockSignal";
+import { useFontsLoaded } from "../../../lib/useFontsLoaded";
 import { api } from "../../../lib/api";
 import { cx } from "../../../lib/cx";
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { Button, Disclosure, IconButton } from "../../../ui/index";
-import { fillLibraryCommand } from "../../checklist/goalCommands";
+import { fillLibraryCommand } from "../../commands/filledCommand";
 import { CommandList } from "../../checklist/CommandList/CommandList";
-import { useFillBase } from "../../palette/fillData";
+import { useFillBase } from "../../commands/fillData";
 import type { SuggestContext } from "../../palette/suggest";
 import { shortHostName } from "../../../lib/hostName";
 import { WikiText } from "../WikiText/WikiText";
@@ -45,8 +46,8 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   /** Opens a card a `[[link]]` in a note points at; without it, links show as plain text. */
   onOpenCard?: (cardId: string) => void;
 }) {
-  const { d, host, cred, makeInput, examReady } = useFillBase(engagementId, hostId);
-  const kind = d.engagement?.kind;
+  const { d, host, cred, makeInput, exam } = useFillBase(engagementId, hostId);
+  const { toolkit } = useToolkit();
   const fieldEls = useRef(new Map<string, HTMLInputElement>());
   const root = useRef<HTMLDivElement>(null);
   // The block whose copy was held back (focus went to a fill field or the credential chip): Enter there copies it anyway.
@@ -55,19 +56,14 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   const hostName = host ? shortHostName(host.name) : null;
   const blockEl = (id: string) => document.getElementById(`block-${id}`);
 
-  const visible = (list: LibraryCommand[]) => {
-    // Fail closed: nothing until the engagement's exam rules are known.
-    if (!examReady) return { shown: [], msfMarker: new Set<string>() };
-    if (!kind) return { shown: list, msfMarker: new Set<string>() };
-    return filterForKind(list, kind, { hostId: host?.id ?? "", msfHostId: d.engagement?.msfHostId ?? null });
-  };
-  const main = visible(commands);
-  const extra = visible(also);
+  // A list under the exam rules (until the engagement's kind is known, no command that needs a verdict).
+  const main = examList(commands, exam);
+  const extra = examList(also, exam);
   const input = useMemo(() => makeInput(overrides), [makeInput, overrides]);
   const templates = [...main.shown, ...extra.shown].map((c) => c.template);
   const tokens = tokensOf(templates);
   const auto = autoFill(tokens, makeInput({}));
-  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
+  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit };
 
   // The outline of the block the card opened at, until the next keypress.
   const [seenFocus, setSeenFocus] = useState(focusBlockId);
@@ -178,12 +174,21 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
 
   // Keep the current entry visible in a strip that scrolls sideways.
   const stripRow = useRef<HTMLDivElement>(null);
+  const fontsLoaded = useFontsLoaded();
+  /** Where this last scrolled the strip to, and for which entry. */
+  const stripPlaced = useRef<{ id: string; left: number } | null>(null);
   useEffect(() => {
     const row = stripRow.current;
     const el = inView ? row?.querySelector<HTMLElement>(`[data-for="${inView}"]`) : null;
-    if (!row || !el) return;
-    if (el.offsetLeft < row.scrollLeft || el.offsetLeft + el.offsetWidth > row.scrollLeft + row.clientWidth) row.scrollLeft = el.offsetLeft - 8;
-  }, [inView]);
+    if (!row || !el || !inView) return;
+    const hidden = el.offsetLeft < row.scrollLeft || el.offsetLeft + el.offsetWidth > row.scrollLeft + row.clientWidth;
+    // A web font swapped in late (font-display: swap) moves the labels: a strip still where this put it lines up again.
+    const placed = stripPlaced.current;
+    const ours = placed !== null && placed.id === inView && placed.left === row.scrollLeft;
+    if (!hidden && !ours) return;
+    row.scrollLeft = el.offsetLeft - 8;
+    stripPlaced.current = { id: inView, left: row.scrollLeft };
+  }, [inView, fontsLoaded]);
 
   // The strip hides its scrollbar (an overlay one sat over the labels); a faded edge says there is more that way.
   const [edges, setEdges] = useState({ start: false, end: false });
@@ -292,18 +297,15 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
   autoFocus?: boolean;
   onOpenCard?: (cardId: string) => void;
 }) {
-  const version = useLibraryVersion();
-  const card = getCards().find((c) => c.id === cardId);
+  const library = useLibrary();
+  const card = library.cards.find((c) => c.id === cardId);
   const [obsidianError, setObsidianError] = useState<string>();
-  // getLibrary() changes only with the library version.
-  /* eslint-disable react-hooks/exhaustive-deps */
-  const commands = useMemo(() => getLibrary().filter((c) => c.cardId === cardId), [cardId, version]);
+  const commands = useMemo(() => library.commands.filter((c) => c.cardId === cardId), [cardId, library]);
   const also = useMemo(() => {
     const goals = new Set(commands.flatMap((c) => c.goals));
     const ids = new Set(commands.map((c) => c.id));
-    return getLibrary().filter((c) => (c.source === "raven" || c.source === "oscp-notes") && !ids.has(c.id) && c.goals.some((g) => goals.has(g)));
-  }, [commands, version]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+    return library.commands.filter((c) => (c.source === "raven" || c.source === "oscp-notes") && !ids.has(c.id) && c.goals.some((g) => goals.has(g)));
+  }, [commands, library]);
 
   if (!card) return <p className="card-view__missing">That card is not in the library.</p>;
   const openInObsidian = () => {

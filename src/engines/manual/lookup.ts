@@ -1,9 +1,40 @@
+import { hasPlaceholders } from "../checklist/template";
 import { parseMarkdown, type Inline } from "./markdown";
 import type { ManualNote } from "./types";
 
 /** An inline value's plain text. */
 export const plain = (parts: Inline[]): string =>
   parts.map((p) => ("text" in p ? p.text : "code" in p ? p.code : "strong" in p ? plain(p.strong) : "em" in p ? plain(p.em) : p.link.label)).join("");
+
+/** Where a command was taken out of an action cell's text. */
+const SEAM = "\uE000";
+
+/**
+ * What a lookup row's action cell says besides its commands (they have rows of their own): links and single-token code
+ * stay. Only where a command was taken out are the separators tidied: orphaned ones fold ("or , then" reads "or, then",
+ * "it: , then" reads "it: then"), and separators at either end go. Every other comma, semicolon and space is kept as
+ * written ("TCP,UDP" stays). Null when nothing but punctuation is left.
+ */
+export function leftover(action: Inline[], commands: string[]): Inline[] | null {
+  const kept: Inline[] = [];
+  for (const part of action) {
+    const p = "code" in part && commands.includes(part.code) ? { text: SEAM } : part;
+    const last = kept[kept.length - 1];
+    if ("text" in p && last && "text" in last) kept[kept.length - 1] = { text: last.text + p.text };
+    else kept.push(p);
+  }
+  const out = kept
+    .map((p, i) => {
+      if (!("text" in p)) return p;
+      // A seam with the spaces and separators around it reads as its first separator (a colon, comma or semicolon) and a space.
+      let t = p.text.replace(/[\s,;:]*\uE000[\s,;:\uE000]*/g, (run) => `${/[:,;]/.exec(run)?.[0] ?? ""} `);
+      if (i === 0) t = t.replace(/^[\s,;]+/, "");
+      if (i === kept.length - 1) t = t.replace(/[\s,;]+$/, "");
+      return { text: t };
+    })
+    .filter((p) => !("text" in p) || p.text !== "");
+  return /[\p{L}\p{N}]/u.test(plain(out)) ? out : null;
+}
 
 /** A key cell (a flag, an error code, a port, a privilege, a path) up to this many characters keeps to one line. */
 const KEY_MAX = 32;
@@ -26,10 +57,8 @@ export function isKeyCell(parts: Inline[]): boolean {
 /** The vault suffixes most Foundations titles with " — Reference"; in the rail it only crowds out the name. */
 export const shortTitle = (title: string): string => title.replace(/\s+[—–-]\s+Reference$/i, "");
 
-const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
-
-/** A code span worth offering as a command: it has a `{PLACEHOLDER}` or a space. A bare flag or error code does not, and neither does anything starting with "-" (`-m MODE` is a flag with its value, not a command). */
-export const isInlineCommand = (code: string): boolean => !code.startsWith("-") && (PLACEHOLDER.test(code) || /\s/.test(code));
+/** A code span worth offering as a command: it has a placeholder (`{TARGET_IP}`, `<TARGET>`) or a space. A bare flag or error code does not, and neither does anything starting with "-" (`-m MODE` is a flag with its value, not a command). */
+export const isInlineCommand = (code: string): boolean => !code.startsWith("-") && (hasPlaceholders(code) || /\s/.test(code));
 
 export const ACTION_HEADER = /^(do( this)?|what to try next|fix)$/i;
 export const MEANS_HEADER = /^(means( for an attacker)?|what it means)$/i;

@@ -17,8 +17,8 @@ const FROM_VERDICT: Record<NonNullable<RuledOut["sourceKind"]>, string> = {
  * What this note's scope ruled out, private items included. A hand-written item (a thread closed as a dead end) can be
  * deleted here; one a verdict made goes when that verdict is undone, so it only says where it came from.
  */
-export function RuledOutList({ engagementId, items }: { engagementId: string; items: RuledOut[] }) {
-  const remove = useRuledOutDelete(engagementId);
+export function RuledOutList({ items }: { items: RuledOut[] }) {
+  const remove = useRuledOutDelete();
   const [deleting, setDeleting] = useState<RuledOut>();
   if (items.length === 0) return null;
   return (

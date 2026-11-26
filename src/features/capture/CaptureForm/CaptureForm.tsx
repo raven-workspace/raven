@@ -2,13 +2,13 @@ import * as RD from "@radix-ui/react-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
 import { metasploitHostIds, metasploitWarning } from "../../../engines/checklist/index";
+import { useLibrary } from "../../../engines/library/store";
 import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 import { KeyIcon, XIcon } from "@phosphor-icons/react";
 import { Button, Chip, Field, IconButton, Input, Kbd, Select, Textarea, Toggle, Toolbar } from "../../../ui/index";
-import { hostsKey, useHosts } from "../../hosts/queries";
-import { invalidateAfterSave } from "../../log/extractions";
+import { useHosts } from "../../hosts/queries";
 import { useLog } from "../../log/queries";
 import { HostChips } from "../HostChips/HostChips";
 import { clipboardImage, readImage, releaseImage } from "../imagePaste";
@@ -16,9 +16,8 @@ import { KindChips } from "../KindChips/KindChips";
 import { KindFields } from "../KindFields/KindFields";
 import { PasteArea } from "../PasteArea/PasteArea";
 import { KINDS, resolveCapture } from "../resolve";
-import { useSaveSummaryStore } from "../useSaveSummaryStore";
-import { PartialSaveError, saveCapture } from "../saveCapture";
-import { reportError } from "../../../lib/lockSignal";
+import { saveCapture } from "../saveCapture";
+import { EntryChangeError } from "../../log/entryChange";
 import { EMPTY_DRAFT, useCaptureStore, type PanelDraft } from "../useCaptureStore";
 import { useSettings } from "../../settings/queries";
 import { RavenError } from "../../../types/errors";
@@ -30,8 +29,10 @@ const NO_MACHINES: string[] = [];
 export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; pasteRef: RefObject<HTMLElement | null> }) {
   const id = engagement.id;
   const qc = useQueryClient();
-  const listed = useHosts(id).data ?? NO_HOSTS;
+  const hostsQ = useHosts(id);
+  const listed = hostsQ.data ?? NO_HOSTS;
   const machines = useSettings().data?.machines ?? NO_MACHINES;
+  const library = useLibrary();
   const pd = useCaptureStore((s) => s.drafts[id]) ?? EMPTY_DRAFT;
   // Hosts a failed save already created count as known, even before the list refetches.
   const hosts = useMemo(
@@ -54,10 +55,11 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         domain: engagement.domain ?? "",
         machines,
         lastRanOn: engagement.lastRanOn,
+        library: library.commands,
         presetHostId,
         log,
       }),
-    [pd, hosts, machines, engagement, presetHostId, log],
+    [pd, hosts, machines, engagement, presetHostId, log, library],
   );
   const kind = r.edits.kind;
   // Exam sims: warn (without blocking) when this entry uses Metasploit off the locked host.
@@ -80,16 +82,15 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     }
   }, [pd.image]);
 
-  const refresh = () => invalidateAfterSave(qc, id);
-
   async function save() {
     if (saving || !r.canSave) return;
     setSaving(true);
     setError(null);
     const store = useCaptureStore.getState();
     const image = pd.image && (kind === "screenshot" || kind === "flag") ? { mime: pd.image.mime, dataBase64: pd.image.dataBase64 } : null;
+    // The save reports its own store change, summary and errors (the entry change); this form shows what's left.
     try {
-      const saved = await saveCapture({
+      await saveCapture(qc, {
         engagementId: id,
         draft: r.draft,
         draftInput: r.draftInput,
@@ -101,21 +102,15 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           set({ created: [...cur, h] });
         },
       });
-      refresh();
       store.discard(id);
       store.close();
-      useSaveSummaryStore.getState().show(saved.entry.id, saved.summary);
     } catch (e) {
-      // A `locked` rejection must reach the vault gate, as query and mutation errors do.
-      for (const reason of e instanceof PartialSaveError ? e.reasons : [e]) reportError(reason);
-      if (e instanceof PartialSaveError) {
-        refresh();
+      if (e instanceof EntryChangeError) {
+        // The entry is saved: the draft goes, so Save does not create it twice.
         store.discard(id);
         store.setNotice(e.message);
-        // The extraction was stored all the same: its summary (and Undo) still shows.
-        useSaveSummaryStore.getState().show(e.entry.id, e.summary);
       } else {
-        void qc.invalidateQueries({ queryKey: hostsKey(id) });
+        // Nothing was saved; the draft stays for a retry.
         setError(RavenError.from(e).message);
       }
     } finally {
@@ -228,7 +223,10 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           captionRef={captionRef}
         />
 
-        <HostChips hosts={hosts} linked={r.edits.hostIds} onLinked={(hostIds) => set({ hostIds })} />
+        <HostChips
+          hosts={hosts} linked={r.edits.hostIds} onLinked={(hostIds) => set({ hostIds })}
+          loadError={hostsQ.isError ? { retry: () => void hostsQ.refetch() } : null}
+        />
         {r.servicesLine && <p className="capture-form__services">{r.servicesLine}</p>}
         {r.credentialsLine && (
           // The only cue that saving writes credential rows: foreground text with a key, unlike the services line.

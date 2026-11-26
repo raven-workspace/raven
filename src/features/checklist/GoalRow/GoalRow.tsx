@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DA_COVER_LABEL, isCoverMarked, type ChecklistGoal } from "../../../engines/checklist/index";
-import { getCards, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary } from "../../../engines/library/store";
 import type { ChecklistStatus, ItemState } from "../../../types/checklist";
 import { ArrowSquareOut, CaretRightIcon } from "@phosphor-icons/react";
 import { cx } from "../../../lib/cx";
 import { Button, CARET_TURN, ChipSet, Collapse, Disclosure, IconButton, Textarea, fieldLabelClass } from "../../../ui/index";
 import { ToggleGroup, ToggleGroupItem } from "../../../ui/shadcn/toggle-group";
 import { useArsenalStore } from "../../arsenal/useArsenalStore";
-import { CommandList, type FilledCommand } from "../CommandList/CommandList";
+import { CommandList } from "../CommandList/CommandList";
+import type { FilledCommand } from "../../commands/filledCommand";
 import { FileChip } from "../FileChip/FileChip";
 import { PortChip } from "../PortChip/PortChip";
 import { EvidenceLinks, type EvidenceLink } from "../EvidenceLinks/EvidenceLinks";
@@ -57,9 +58,7 @@ export interface GoalRowProps {
 
 /** One button per distinct Arsenal card behind a step's commands, and a way into the rest of the Arsenal. */
 function CardLinks({ commands }: { commands: FilledCommand[] }) {
-  // Re-render after an import so card titles follow the vault.
-  useLibraryVersion();
-  const cards = getCards();
+  const { cards } = useLibrary();
   const ids = [...new Set(commands.map((c) => c.cardId).filter((id): id is string => !!id))];
   if (ids.length === 0) return null;
   return (

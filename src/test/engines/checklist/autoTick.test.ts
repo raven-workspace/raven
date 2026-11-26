@@ -3,12 +3,8 @@ import type { Engagement } from '../../../types/engagement';
 import type { Host } from '../../../types/host';
 import type { Service } from '../../../types/service';
 import type { LogEntry } from '../../../types/log';
-import type { ChecklistState } from '../../../types/checklist';
 import { BUILTIN_LIBRARY } from '../../../engines/library/data';
 import {
-  applyTicks,
-  removeEntryTicks,
-  replaceEntryTicks,
   ticksForEntry,
   type Tick,
   type TickContext,
@@ -29,7 +25,7 @@ const svc = (hostId: string, port: number): Service => ({
   confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0,
 });
 
-const dc = host('dc', 'DC01', '10.0.0.1', 'windows');
+const dc = { ...host('dc', 'DC01', '10.0.0.1', 'windows'), adSetEffective: true };
 const ms01 = host('ms01', 'MS01', '10.0.0.5', 'windows');
 const ms02 = host('ms02', 'MS02', '10.0.0.6', 'windows');
 const web = host('web', 'WEB01', '10.0.0.50', 'linux');
@@ -296,97 +292,5 @@ describe('ticksForEntry (pasted scan output)', () => {
   it('output lines never tick target-side or engagement goals', () => {
     const t = ticksForEntry(withBlocks([{ command: '', output: 'whoami /priv\nsudo ntpdate 10.0.0.1' }], { ranOn: 'MS01' }), ctxFor());
     expect(t).toEqual([]);
-  });
-});
-
-const tick = (over: Partial<Tick> = {}): Tick => ({
-  ownerId: 'ms01', goalId: 'h-enum-full-tcp', commandId: 'enum-nmap-full-tcp', entryId: 'log-1', ...over,
-});
-const NOW = 1_800_000_000_000;
-const LATER = NOW + 86_400_000;
-
-describe('applyTicks / removeEntryTicks', () => {
-  it('ticks a todo goal as auto done with evidence', () => {
-    const s = applyTicks(undefined, [tick()], NOW);
-    expect(s['h-enum-full-tcp']).toEqual({
-      status: 'done', completedAt: NOW, auto: true,
-      evidence: [{ entryId: 'log-1', commandId: 'enum-nmap-full-tcp' }],
-    });
-  });
-
-  it('applyTicks keeps a hand-ticked done and adds evidence', () => {
-    const before: ChecklistState = { 'h-enum-full-tcp': { status: 'done', completedAt: 5, notes: 'by hand' } };
-    const s = applyTicks(before, [tick()], NOW);
-    expect(s['h-enum-full-tcp']).toEqual({
-      status: 'done', completedAt: 5, notes: 'by hand', evidence: [{ entryId: 'log-1', commandId: 'enum-nmap-full-tcp' }],
-    });
-  });
-
-  it('applying the same tick twice adds evidence once and returns the same state', () => {
-    const once = applyTicks(undefined, [tick()], NOW);
-    expect(applyTicks(once, [tick()], NOW)).toBe(once);
-  });
-
-  it('removeEntryTicks reverts auto goals with no evidence left', () => {
-    const s = removeEntryTicks(applyTicks({ 'h-enum-full-tcp': { status: 'todo', notes: 'n' } }, [tick()], NOW), 'log-1');
-    expect(s['h-enum-full-tcp']).toEqual({ status: 'todo', notes: 'n' });
-  });
-
-  it('removeEntryTicks keeps auto goals that still have other evidence', () => {
-    const both = applyTicks(undefined, [tick(), tick({ entryId: 'log-2' })], NOW);
-    const s = removeEntryTicks(both, 'log-1');
-    expect(s['h-enum-full-tcp']).toMatchObject({ status: 'done', auto: true, evidence: [{ entryId: 'log-2' }] });
-  });
-
-  it('removeEntryTicks keeps a hand-ticked goal done and drops only its evidence', () => {
-    const before: ChecklistState = { 'h-enum-full-tcp': { status: 'done', completedAt: 5 } };
-    const s = removeEntryTicks(applyTicks(before, [tick()], NOW), 'log-1');
-    expect(s['h-enum-full-tcp']).toEqual({ status: 'done', completedAt: 5 });
-  });
-
-  it('removeEntryTicks returns the same state when the entry left no evidence', () => {
-    const s: ChecklistState = { 'h-enum-full-tcp': { status: 'done' } };
-    expect(removeEntryTicks(s, 'log-9')).toBe(s);
-  });
-
-  it('N/A goal auto-ticked then entry removed returns to N/A', () => {
-    const before: ChecklistState = { 'h-enum-full-tcp': { status: 'na', notes: 'filtered' } };
-    const ticked = applyTicks(before, [tick()], NOW);
-    expect(ticked['h-enum-full-tcp']).toMatchObject({ status: 'done', auto: true, autoFrom: 'na' });
-    expect(removeEntryTicks(ticked, 'log-1')['h-enum-full-tcp']).toEqual({ status: 'na', notes: 'filtered' });
-    expect(replaceEntryTicks(ticked, 'log-1', [], NOW)['h-enum-full-tcp']).toEqual({ status: 'na', notes: 'filtered' });
-  });
-
-  it('undo restores in progress', () => {
-    const before: ChecklistState = { 'h-enum-full-tcp': { status: 'in_progress' } };
-    const ticked = applyTicks(before, [tick()], NOW);
-    expect(ticked['h-enum-full-tcp']).toMatchObject({ status: 'done', auto: true, autoFrom: 'in_progress' });
-    expect(removeEntryTicks(ticked, 'log-1')['h-enum-full-tcp']).toEqual({ status: 'in_progress' });
-  });
-
-  it('a todo goal records no autoFrom', () => {
-    expect(applyTicks(undefined, [tick()], NOW)['h-enum-full-tcp'].autoFrom).toBeUndefined();
-  });
-});
-
-describe('replaceEntryTicks', () => {
-  it('replaceEntryTicks keeps completedAt for goals still ticked and drops evidence for goals no longer ticked', () => {
-    const versions = { goalId: 'h-enum-versions', commandId: 'enum-nmap-versions' };
-    const before = applyTicks(undefined, [tick(), tick(versions)], NOW);
-    // Same ticks: nothing changes at all.
-    expect(replaceEntryTicks(before, 'log-1', [tick(), tick(versions)], LATER)).toBe(before);
-    // One goal still ticked (new command id), the other no longer ticked.
-    const s = replaceEntryTicks(before, 'log-1', [tick({ commandId: 'enum-rustscan-full' })], LATER);
-    expect(s['h-enum-full-tcp']).toEqual({
-      status: 'done', completedAt: NOW, auto: true, evidence: [{ entryId: 'log-1', commandId: 'enum-rustscan-full' }],
-    });
-    expect(s['h-enum-versions']).toEqual({ status: 'todo' });
-  });
-
-  it('a newly ticked goal gets the current time', () => {
-    const before = applyTicks(undefined, [tick()], NOW);
-    const s = replaceEntryTicks(before, 'log-1', [tick(), tick({ goalId: 'h-enum-versions', commandId: 'enum-nmap-versions' })], LATER);
-    expect(s['h-enum-full-tcp'].completedAt).toBe(NOW);
-    expect(s['h-enum-versions'].completedAt).toBe(LATER);
   });
 });

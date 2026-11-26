@@ -1,17 +1,16 @@
 import { Fragment, memo, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
-import { classifyExam } from "../../../engines/fieldManual/classifyExam";
-import type { CardMeta } from "../../../engines/library/store";
-import type { LibraryCommand } from "../../../engines/library/types";
+import type { CardMeta } from "../../../engines/library/types";
 import type { ManualNote } from "../../../engines/manual/index";
+import { fillsBlock, isOutputBlock, manualCommand } from "../../../engines/manual/commands";
 import { resolveLink } from "../../../engines/manual/links";
-import { isInlineCommand, lookupColumns, shortTitle } from "../../../engines/manual/lookup";
+import { isInlineCommand, lookupColumns, plain, shortTitle } from "../../../engines/manual/lookup";
 import { cx } from "../../../lib/cx";
 import { parseMarkdown, type Block, type Inline } from "../../../engines/manual/markdown";
-import { matchRanges, matchRegex } from "../../../engines/manual/search";
+import { maskPlaceholders, matchRanges, matchRegex } from "../../../engines/manual/search";
 import { highlight } from "../../../ui/index";
 import { useArsenalStore } from "../../arsenal/useArsenalStore";
-import { useFillBase } from "../../palette/fillData";
+import { useFillBase } from "../../commands/fillData";
 import { InlineCommand } from "../InlineCommand/InlineCommand";
 import { ManualCommand, type FillBase } from "../ManualCommand/ManualCommand";
 import { NoteTable } from "../NoteTable/NoteTable";
@@ -27,9 +26,6 @@ const isLabel = (parts: Inline[]) => {
   if (!solid.length || !("strong" in solid[0])) return false;
   return solid.slice(1).every((p) => "text" in p && /^[:.]$/.test(p.text.trim()));
 };
-const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
-/** Fence languages that hold output to read, not a command to run: Copy only (no fill, no log, no exam rule). */
-const OUTPUT_LANGS = new Set(["text", "txt", "output", "console", "plaintext", "plain"]);
 /** Inline code up to this length with no space is one token: it keeps to one line (the narrowest line holds 40 characters). */
 const TOKEN_MAX = 40;
 const LINK_CLASS = "note-view__link";
@@ -49,86 +45,109 @@ export interface Ctx {
   plainCode?: boolean;
 }
 
-/** Plain text with the search's matches marked. */
-const marked = (text: string, re: RegExp | null): ReactNode => (re ? highlight(text, 0, matchRanges(text, re)) : text);
-
 /** Punctuation right after a link: it stays on the link's line (a card link is an inline-block, so a line may break before it). */
 const TRAIL = /^[,.;:!?)\]]+/;
 
+/** Stands for an inline command in a run's text: it marks its own matches, on its filled text, so none crosses into it. */
+const OPAQUE = "\u0000";
+
+const isCommand = (code: string, ctx: Ctx) => !ctx.plainCode && isInlineCommand(code);
+
+/** An inline code span as a library command: it logs as its table row, else as its note and section. */
+const inlineCommand = (code: string, { note, section, rowTitle }: Ctx) =>
+  manualCommand({ kind: "inline", note, code, section, ...(rowTitle !== undefined ? { rowTitle } : {}) });
+
+/** Where a link goes and the title it shows: its alias, else the title of what it points at (never its file name). */
+function linkOf(link: { target: string; heading?: string; label: string }, ctx: Ctx) {
+  const { target, heading, label } = link;
+  const to = resolveLink(target, ctx.notes, ctx.cards, heading);
+  const aliased = label !== target;
+  if (to.kind === "note") return { to, title: aliased ? label : shortTitle(ctx.notes.find((n) => n.id === to.noteId)?.title ?? label) };
+  if (to.kind === "card") {
+    const card = ctx.cards.find((c) => c.id === to.cardId);
+    return { to, title: aliased ? label : (card?.title ?? label), cardTitle: card?.title ?? label };
+  }
+  return { to, title: aliased ? label : label.replace(/-/g, " ") };
+}
+
+/** The text one inline part shows, as the run's matches are found in it. */
+const shownOf = (p: Inline, ctx: Ctx): string =>
+  "text" in p ? p.text
+    : "code" in p ? (isCommand(p.code, ctx) ? OPAQUE : p.code)
+    : "strong" in p ? p.strong.map((q) => shownOf(q, ctx)).join("")
+    : "em" in p ? p.em.map((q) => shownOf(q, ctx)).join("")
+    : linkOf(p.link, ctx).title;
+
+/** The search's matches in one inline run, as `[start, end)` offsets into the run's shown text. */
+type Ranges = [number, number][];
+
+/** Text that starts at `at` in its run, with the run's matches marked (a match across parts is marked in each piece). */
+const marked = (text: string, at: number, ranges: Ranges): ReactNode => (ranges.length > 0 ? highlight(text, at, ranges) : text);
+
+/**
+ * An inline run with the search's matches marked. Matches are found in the run's whole shown text, so a phrase that
+ * crosses bold, a link or a code span is one match; placeholders never match, as in ⌘K's search.
+ */
 export function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
+  const ranges = ctx.re ? matchRanges(maskPlaceholders(parts.map((p) => shownOf(p, ctx)).join("")), ctx.re) : [];
+  return <Run parts={parts} ctx={ctx} at={0} ranges={ranges} />;
+}
+
+function Run({ parts, ctx, at, ranges }: { parts: Inline[]; ctx: Ctx; at: number; ranges: Ranges }): ReactNode {
+  const starts: number[] = [];
+  let pos = at;
+  for (const p of parts) {
+    starts.push(pos);
+    pos += shownOf(p, ctx).length;
+  }
   let cut = 0;
   return parts.map((p, i) => {
+    const start = starts[i]!;
     if ("text" in p) {
       const text = p.text.slice(cut);
+      const from = start + cut;
       cut = 0;
-      return <Fragment key={i}>{marked(text, ctx.re)}</Fragment>;
+      return <Fragment key={i}>{marked(text, from, ranges)}</Fragment>;
     }
     const next = parts[i + 1];
     const trail = "link" in p && next && "text" in next ? TRAIL.exec(next.text)?.[0] : undefined;
-    if (!trail) return <InlinePart key={i} p={p} ctx={ctx} />;
+    if (!trail) return <InlinePart key={i} p={p} ctx={ctx} at={start} ranges={ranges} />;
     cut = trail.length;
-    return <span key={i} className="note-view__nowrap"><InlinePart p={p} ctx={ctx} />{marked(trail, ctx.re)}</span>;
+    return (
+      <span key={i} className="note-view__nowrap">
+        <InlinePart p={p} ctx={ctx} at={start} ranges={ranges} />{marked(trail, starts[i + 1]!, ranges)}
+      </span>
+    );
   });
 }
 
-/** One non-text inline part: code, emphasis, or a link (to a note, to a card, or unresolved). */
-function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx }): ReactNode {
+/** One non-text inline part, starting at `at` in its run: code, emphasis, or a link (to a note, to a card, or unresolved). */
+function InlinePart({ p, ctx, at, ranges }: { p: Exclude<Inline, { text: string }>; ctx: Ctx; at: number; ranges: Ranges }): ReactNode {
   if ("code" in p) {
     // A short single token (a status code, a flag, a path) never breaks inside: not at a backslash or dot either.
-    if (!ctx.plainCode && isInlineCommand(p.code)) return <InlineCommand command={inlineOf(p.code, ctx)} base={ctx.base} highlight={ctx.re} />;
+    if (isCommand(p.code, ctx)) return <InlineCommand command={inlineCommand(p.code, ctx)} base={ctx.base} highlight={ctx.re} />;
     const token = p.code.length <= TOKEN_MAX && !/\s/.test(p.code);
-    return <code className={cx("note-view__code", token && "note-view__code--token")}>{marked(p.code, ctx.re)}</code>;
+    return <code className={cx("note-view__code", token && "note-view__code--token")}>{marked(p.code, at, ranges)}</code>;
   }
-  if ("strong" in p) return <strong className="note-view__strong"><InlineView parts={p.strong} ctx={ctx} /></strong>;
-  if ("em" in p) return <em><InlineView parts={p.em} ctx={ctx} /></em>;
-  const { target, heading, label } = p.link;
-  const to = resolveLink(target, ctx.notes, ctx.cards, heading);
-  // An alias is kept; otherwise a link reads as what it points at (the note's or card's title), never its file name.
-  const aliased = label !== target;
+  if ("strong" in p) return <strong className="note-view__strong"><Run parts={p.strong} ctx={ctx} at={at} ranges={ranges} /></strong>;
+  if ("em" in p) return <em><Run parts={p.em} ctx={ctx} at={at} ranges={ranges} /></em>;
+  const { to, title, cardTitle } = linkOf(p.link, ctx);
   if (to.kind === "note") {
-    const title = aliased ? label : shortTitle(ctx.notes.find((n) => n.id === to.noteId)?.title ?? label);
-    return <Link to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`${LINK_CLASS} note-view__note-link`}>{marked(title, ctx.re)}</Link>;
+    return <Link to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`${LINK_CLASS} note-view__note-link`}>{marked(title, at, ranges)}</Link>;
   }
   if (to.kind === "card") {
-    const card = ctx.cards.find((c) => c.id === to.cardId);
-    const title = aliased ? label : (card?.title ?? label);
     return (
       <button
-        type="button" title={`Open the card ${card?.title ?? label} in the Arsenal`}
+        type="button" title={`Open the card ${cardTitle} in the Arsenal`}
         onClick={() => useArsenalStore.getState().openCard(to.cardId, undefined, { from: "manual" })}
         className={`${LINK_CLASS} note-view__card-link`}
       >
-        {marked(title, ctx.re)}
+        {marked(title, at, ranges)}
       </button>
     );
   }
   // Unresolved: plain muted text, never a dead link.
-  return <span className="note-view__unresolved">{marked(aliased ? label : label.replace(/-/g, " "), ctx.re)}</span>;
-}
-
-/** Each note's inline commands, by log title and code: the same object every render, so their fill is not redone. */
-const inlineCache = new WeakMap<ManualNote, Map<string, LibraryCommand>>();
-
-/**
- * An inline code span as a library command: it runs from Kali, and logs as its table row, else as its note and section.
- * Memoized per note, code and log title (a re-render hands `useNoteCommand` the same command, so its fill is kept).
- */
-export function inlineOf(code: string, ctx: Ctx): LibraryCommand {
-  const { note, section, rowTitle } = ctx;
-  const title = rowTitle ?? (section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title));
-  let byNote = inlineCache.get(note);
-  if (!byNote) inlineCache.set(note, (byNote = new Map()));
-  const key = `${title}\u0000${code}`;
-  const known = byNote.get(key);
-  if (known) return known;
-  const command: LibraryCommand = {
-    id: `manual:${note.id}:inline:${code}`, title,
-    tool: code.trim().split(/\s+/)[0] ?? "", template: code, os: "any", runFrom: "attacker", goals: [], source: "field-manual",
-  };
-  const exam = classifyExam(code);
-  if (exam) command.exam = exam;
-  byNote.set(key, command);
-  return command;
+  return <span className="note-view__unresolved">{marked(title, at, ranges)}</span>;
 }
 
 /** The first line of a code block, shortened: it names a block that has no title. */
@@ -136,30 +155,6 @@ const firstLine = (text: string) => {
   const line = text.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 };
-
-const WINDOWS_LANGS = new Set(["cmd", "bat", "batch", "powershell", "ps1", "ps", "pwsh"]);
-const LINUX_LANGS = new Set(["bash", "sh", "zsh", "shell"]);
-
-/** Inline Markdown as plain text (a heading's words, markers gone). */
-const plain = (parts: Inline[]): string =>
-  parts.map((p) => ("text" in p ? p.text : "code" in p ? p.code : "strong" in p ? plain(p.strong) : "em" in p ? plain(p.em) : p.link.label)).join("");
-
-/**
- * A code block as a library command. The fence title is where it runs, as on a card (`parseCard`): `Kali…` is the
- * attacker, any other title (`Target — PowerShell`, `Pivot — bash`) the target. An untitled block runs from Kali,
- * unless its language is a Windows shell (Kali has none): then it runs on the target. The fence language gives the OS
- * (Windows shells, Unix shells off Kali), and the log title is the section it sits in.
- */
-function commandOf(block: Extract<Block, { kind: "code" }>, note: ManualNote, n: number, section: string): LibraryCommand {
-  const lang = block.lang.toLowerCase();
-  const kali = block.title ? /^kali\b/i.test(block.title) : !WINDOWS_LANGS.has(lang);
-  const os = WINDOWS_LANGS.has(lang) ? "windows" : LINUX_LANGS.has(lang) && !kali ? "linux" : "any";
-  return {
-    id: `manual:${note.id}:${n}`,
-    title: section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title), tool: block.text.trim().split(/\s+/)[0] ?? "",
-    template: block.text, os, runFrom: kali ? "attacker" : "target", goals: [], source: "field-manual",
-  };
-}
 
 /** Each block's section: the nearest `##`/`###` heading at or above it, as plain text ("" before the first). */
 function sectionsOf(blocks: Block[]): string[] {
@@ -227,15 +222,13 @@ function BlockView({ block, n, ctx: shared, base, section, tableName, tableAncho
         />
       );
     case "code": {
-      const command = commandOf(block, ctx.note, n, section);
-      const output = OUTPUT_LANGS.has(block.lang.toLowerCase());
-      const exam = output ? undefined : classifyExam(block.text);
-      if (exam) command.exam = exam;
+      const command = manualCommand({ kind: "block", note: ctx.note, block, n, section });
+      const output = isOutputBlock(block);
       const line = firstLine(block.text);
       return (
         <ManualCommand
           command={command} label={section && line ? `${section}: ${line}` : line || command.title} caption={block.title}
-          fill={!output && PLACEHOLDER.test(block.text)} output={output} base={base} highlight={ctx.re}
+          fill={fillsBlock(block)} output={output} base={base} highlight={ctx.re}
         />
       );
     }

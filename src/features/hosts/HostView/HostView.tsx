@@ -4,7 +4,7 @@ import { SCROLL_PANE } from "../../../ui/controlStyles";
 import { useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../../lib/keys";
 import { cx } from "../../../lib/cx";
-import { Button, EmptyState, Kbd, LoadingState, queryState, usePageShortcuts, type Hint } from "../../../ui/index";
+import { Button, EmptyState, Kbd, LoadingState, queryState, Tooltip, usePageShortcuts, type Hint } from "../../../ui/index";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../ui/shadcn/tabs";
 import type { Finding } from "../../../types/findings";
 import { FindingSplit } from "../../findings/FindingSplit/FindingSplit";
@@ -230,9 +230,11 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
             <div className="host-view__tab-bar">
               <TabsList aria-label="Host work">
                 {TABS.map((t, i) => (
-                  <TabsTrigger key={t.id} value={t.id} title={`${t.label} (⌥${i + 1})`} onClick={() => selectTab(t.id)}>
-                    {t.label}
-                  </TabsTrigger>
+                  <Tooltip key={t.id} content={<span>{t.label}<span className="tooltip__key">⌥{i + 1}</span></span>}>
+                    <TabsTrigger value={t.id} onClick={() => selectTab(t.id)}>
+                      {t.label}
+                    </TabsTrigger>
+                  </Tooltip>
                 ))}
               </TabsList>
               {/* The tab's own control, then Stuck?: the work column's way out when the next steps run dry. */}

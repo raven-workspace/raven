@@ -4,9 +4,10 @@ import type { Host } from "../../types/host";
 import type { Hop } from "../../types/network";
 import type { Service } from "../../types/service";
 import { domainAdminConfirmed } from "../checklist/daCover";
-import { adHosts, findDcHost } from "../checklist/facts";
+import { adSetHosts, findDc } from "../checklist/facts";
 import type { PlaybookId } from "../checklist/types";
 import { hostSprayServices, isSprayable } from "./matrix";
+import { isReuseAttempt } from "./reuse";
 
 const isDomainCred = (c: Credential): boolean => c.scope === "domain";
 const hasAccess = (a: CredAttempt): boolean => a.result === "valid" || a.result === "admin";
@@ -29,7 +30,7 @@ export function playbookTriggers(input: {
     input.credentials.filter((c) => c.engagementId === engagement.id && isDomainCred(c)).map((c) => c.id),
   );
   const domainWorks = mine.some((a) => hasAccess(a) && a.authMode === "domain" && domainIds.has(a.credId));
-  const dc = findDcHost(hosts, servicesByHost);
+  const dc = findDc(hosts, servicesByHost);
   const daByAttempt = domainAdminConfirmed(hosts, servicesByHost, mine);
   const daByHop = !!dc && input.hops.some((h) => h.engagementId === engagement.id && h.toHostId === dc.id);
   // Lateral movement: a host reaches another network, or a usable credential has not been tried on a host with something to try it on.
@@ -43,7 +44,7 @@ export function playbookTriggers(input: {
   );
   return {
     lateral: hosts.some((h) => h.dualHomed === true) || untried,
-    nocreds: adHosts(hosts, servicesByHost).length > 0 && !domainWorks,
+    nocreds: adSetHosts(hosts).length > 0 && !domainWorks,
     user: domainWorks,
     da: daByAttempt || daByHop,
   };
@@ -62,6 +63,8 @@ export interface AccessFlag {
   service: string;
   result: "admin" | "valid";
   at: number;
+  /** Password reuse found in a dump, not a result on `service`. */
+  reuse?: true;
 }
 
 /**
@@ -91,6 +94,7 @@ export function accessFlags(input: { hosts: Host[]; attempts: CredAttempt[]; cre
           service: a.service,
           result,
           at: a.at,
+          ...(isReuseAttempt(a) ? { reuse: true as const } : {}),
         });
       }
     }

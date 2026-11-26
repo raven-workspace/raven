@@ -23,6 +23,7 @@ for (const [name, target] of Object.entries(alias)) if (found[target]) found[nam
 
 const lines = [
   '// Bundled from the GTFOBins repository: https://github.com/GTFOBins/GTFOBins.github.io (_gtfobins/*).',
+  '// GTFOBins is licensed GPL-3.0. Only the binary-to-mechanism mapping is bundled here; see NOTICE.',
   `// Commit ${commit}, fetched ${new Date().toISOString().slice(0, 10)}.`,
   "// Generated from each entry's `contexts:` keys (suid, sudo, capabilities, limited-suid); aliases copy their target.",
   '// This commit has no limited-suid contexts and no `sh` entry; the type keeps limited-suid for the interface.',

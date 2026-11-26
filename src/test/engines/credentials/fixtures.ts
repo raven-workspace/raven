@@ -15,9 +15,9 @@ export const svc = (hostId: string, port: number, nmapService = "", state = "ope
   nmapVersion: null, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0,
 });
 
-/** A host with an ip and open services on the given ports. */
+/** A host with an ip and open services on the given ports, in the AD set when 88 and 389 are open (as the store derives it). */
 export const hostWith = (id: string, ip: string, ports: number[]): { host: Host; services: Service[] } => ({
-  host: host(id, { ip }),
+  host: host(id, { ip, adSetEffective: ports.includes(88) && ports.includes(389) }),
   services: ports.map((p) => svc(id, p)),
 });
 
@@ -37,5 +37,5 @@ export const att = (extra: Partial<CredAttempt> = {}): CredAttempt => ({
 });
 
 export const user = (id: string, username: string, extra: Partial<Username> = {}): Username => ({
-  id, engagementId: "eng1", username, domain: null, sourceHostId: null, source: null, createdAt: 0, ...extra,
+  id, engagementId: "eng1", username, domain: null, sourceHostId: null, source: null, createdAt: 0, scope: "unknown", localHostId: null, ...extra,
 });

@@ -1,5 +1,6 @@
 import type { SectionKind } from "../../types/report";
 import { DRAFTED_SUBSECTIONS } from "./frontMatter";
+import { blockSource } from "./page/block";
 import type { PageMeta, ReportNode, ReportTarget } from "./types";
 
 /** A heading as the page prints it: its number ("4.1.2", or null for an unnumbered one) and its words. */
@@ -15,7 +16,7 @@ export interface HeadingLabel {
 export function targetNumbers(doc: ReportNode, target: ReportTarget, base: string): Map<number, string> {
   const out = new Map<number, string>();
   (doc.content ?? []).forEach((n, i) => {
-    if (n.type !== "heading" || !/^facts:/.test(String(n.attrs?.source ?? ""))) return;
+    if (n.type !== "heading" || blockSource(n)?.kind !== "facts") return;
     out.set(i, target.kind === "ad-set" ? `${base}.${out.size + 1}` : base);
   });
   return out;

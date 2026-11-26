@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CaptureDraft } from "../engines/capture";
 import { saveCapture, type CaptureEdits } from "../features/capture/saveCapture";
@@ -6,6 +7,7 @@ import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { HostIdentity } from "../types/hostFacts";
 import type { LogEntry, LogEntryInput } from "../types/log";
+import { filed } from "./features/capture/filed";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
@@ -30,7 +32,13 @@ beforeEach(() => {
   m.servicesListEngagement.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
+  m.checklistApplyEntryTicks.mockResolvedValue([]);
+  m.extractionFile.mockResolvedValue(filed());
 });
+
+/** What each save gave the store to file: the identity, and the vectors. */
+const identities = () => m.extractionFile.mock.calls.map(([, , p]) => p.identity);
+const vectors = () => m.extractionFile.mock.calls.flatMap(([, , p]) => p.vectors);
 
 function capture(command: string, output: string, ranOn = "dc01", hostIds = ["h1"]) {
   const content = { kind: "command" as const, blocks: [{ command, output }] };
@@ -38,7 +46,7 @@ function capture(command: string, output: string, ranOn = "dc01", hostIds = ["h1
   const edits: CaptureEdits = {
     kind: "command", title: "t", titleEdited: false, hostIds, ranOn, observations: "", returnedNothing: false, private: false, content,
   };
-  return saveCapture({ engagementId: "e1", draft, edits, image: null, hosts: [DC] });
+  return saveCapture(new QueryClient(), { engagementId: "e1", draft, edits, image: null, hosts: [DC] });
 }
 
 describe("identity capture gaps", () => {
@@ -46,35 +54,38 @@ describe("identity capture gaps", () => {
     m.hostIdentityGet.mockResolvedValue(null);
     await capture("whoami", "'whoam' is not recognized as an internal or external command");
     await capture("id", "bash: id: command not found");
-    expect(m.hostIdentitySet).not.toHaveBeenCalled();
-    expect(m.vectorUpsert).not.toHaveBeenCalled();
+    expect(identities().filter(Boolean)).toEqual([]);
+    expect(vectors()).toEqual([]);
   });
 
   it("empty identity output is a no-op", async () => {
     m.hostIdentityGet.mockResolvedValue(null);
     await capture("whoami", "   \n");
     await capture("whoami /priv", "");
-    expect(m.hostIdentitySet).not.toHaveBeenCalled();
+    expect(identities().filter(Boolean)).toEqual([]);
   });
 
   it("a block that ran on another box (Ran on mismatch) does not speak for this host", async () => {
     m.hostIdentityGet.mockResolvedValue(null);
     await capture("id", "uid=1000(kali) gid=1000(kali) groups=1000(kali),27(sudo)", "Kali (VM)");
     await capture("id", "uid=1000(other) gid=1000(other) groups=1000(other)", "web01");
-    expect(m.hostIdentitySet).not.toHaveBeenCalled();
+    expect(identities().filter(Boolean)).toEqual([]);
   });
 
-  it("an unchanged identity is not written again", async () => {
+  it("an identity the output only repeats is proved as stored (the store writes it only when it differs)", async () => {
     const same: HostIdentity = { hostId: "h1", username: "corp\\svc", privileges: [], groups: [], entryId: "l0", updatedAt: 1 };
     m.hostIdentityGet.mockResolvedValue(same);
     await capture("whoami", "corp\\svc\r\n");
-    expect(m.hostIdentitySet).not.toHaveBeenCalled();
+    expect(identities()).toEqual([{ hostId: "h1", username: "corp\\svc", privileges: [], groups: [] }]);
   });
 
   it("with no username known, the placeholder is the literal 'unknown' and a later whoami replaces it", async () => {
     let stored: HostIdentity | null = null;
     m.hostIdentityGet.mockImplementation(async () => stored);
-    m.hostIdentitySet.mockImplementation(async (input) => (stored = { ...input, updatedAt: 2 }));
+    m.extractionFile.mockImplementation(async (_e, entryId, p) => {
+      if (p.identity) stored = { ...p.identity, entryId, updatedAt: 2 };
+      return filed();
+    });
     await capture("whoami /priv", "Privilege Name  Description  State\n=== === ===\nSeDebugPrivilege  Debug programs  Enabled");
     expect(stored).toMatchObject({ username: "unknown", privileges: ["SeDebugPrivilege"] });
     await capture("whoami", "corp\\svc");

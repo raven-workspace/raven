@@ -175,3 +175,42 @@ describe("parseInline: emphasis around inline code", () => {
     expect(parseInline("***zz***")).toEqual([{ em: [{ strong: [{ text: "zz" }] }] }]);
   });
 });
+
+describe("RAV-19: parser edge cases", () => {
+  const tableOf = (body: string) => parseMarkdown(body).find((b) => b.kind === "table");
+
+  it("emphasis is near linear: a 200,000-character line of `*a` parses well under a second", () => {
+    const line = "*a".repeat(100_000);
+    parseInline("*a".repeat(1_000));
+    const t = performance.now();
+    const out = parseInline(line);
+    // About 30 ms on an idle machine; the quadratic matcher took about 5 s. The bound leaves room for a loaded machine.
+    expect(performance.now() - t).toBeLessThan(1_000);
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  it("a table without outer pipes is a table", () => {
+    const t = tableOf("a | b\n--- | ---\n1 | 2");
+    expect(t).toEqual({ kind: "table", head: [[{ text: "a" }], [{ text: "b" }]], rows: [[[{ text: "1" }], [{ text: "2" }]]] });
+  });
+
+  it("prose with a pipe over a rule, or over a separator of another width, is no table", () => {
+    expect(kinds(parseMarkdown("this | that\n---\nafter"))).toEqual(["paragraph", "paragraph"]);
+    expect(tableOf("a | b | c\n--- | ---\n1 | 2 | 3")).toBeUndefined();
+    // A prose line with a pipe inside a paragraph stays in it.
+    expect(parseMarkdown("one line\nthis | that\nand more")).toEqual([{ kind: "paragraph", inline: [{ text: "one line this | that and more" }] }]);
+  });
+
+  it("a longer fence holds a shorter one: one code block, the inner fence lines kept", () => {
+    const blocks = parseMarkdown(["````md", "```sh", "id", "```", "````", "after"].join("\n"));
+    expect(blocks).toEqual([
+      { kind: "code", lang: "md", text: "```sh\nid\n```" },
+      { kind: "paragraph", inline: [{ text: "after" }] },
+    ]);
+  });
+
+  it("a fence line with an info string never closes a fence; an unclosed fence runs to the end", () => {
+    expect(parseMarkdown("```\n```bash\nid\n```")).toEqual([{ kind: "code", lang: "", text: "```bash\nid" }]);
+    expect(parseMarkdown("~~~\nid\n```")).toEqual([{ kind: "code", lang: "", text: "id\n```" }]);
+  });
+});

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
 import { api, resetAuditState, scenarioFromSearch, setAuditScenario } from "../../audit/fakeApi";
-import { RavenError } from "../../types/errors";
+import { isAppError, RavenError } from "../../types/errors";
 import { AUDIT_NOTE_SOURCES, FIXTURES } from "../../audit/fixtures";
 import { AUDIT_PNGS } from "../../audit/images";
 import { makeQueryClient } from "../../lib/queryClient";
@@ -17,6 +17,17 @@ describe("audit fake api", () => {
   it("implements every Api command", async () => {
     const real = await vi.importActual<typeof import("../../lib/api")>("../../lib/api");
     expect(Object.keys(api).sort()).toEqual(Object.keys(real.api).sort());
+  });
+
+  it("throws only error codes the app knows: every RavenError takes a literal code, never a cast", async () => {
+    const source = (await import("../../audit/fakeApi.ts?raw")).default;
+    expect(source).not.toMatch(/as ErrorCode/);
+    const codes = [...source.matchAll(/new RavenError\(([^,]+),/g)].map((m) => m[1]!.trim());
+    expect(codes.length).toBeGreaterThan(0);
+    for (const code of codes) {
+      expect(code).toMatch(/^"[a-z_]+"$/);
+      expect(isAppError({ code: JSON.parse(code), message: "" }), code).toBe(true);
+    }
   });
 
   it("serves verdicts, identity and vectors, and links dead ends to ruled-out items", async () => {
@@ -150,8 +161,34 @@ describe("audit fake api", () => {
     // A realistic import: the built-in cards and a command overlay, so Settings reads like a real import.
     expect(fm?.cards.length).toBeGreaterThan(0);
     expect(Object.keys(fm?.overlay ?? {}).length).toBeGreaterThan(0);
-    await expect(api.backupNow()).rejects.toMatchObject({ code: "unsupported" });
-    await expect(api.fieldManualScan()).rejects.toMatchObject({ code: "unsupported" });
+    await expect(api.backupNow()).rejects.toMatchObject({ code: "io" });
+    await expect(api.fieldManualScan()).rejects.toMatchObject({ code: "io" });
+  });
+
+  it("derives adSetEffective as the store does: the switch, else 88 and 389 open, following every service change", async () => {
+    const effective = async (id: string) => (await api.hostsList("e-lab")).find((h) => h.id === id)!.adSetEffective;
+    const h = await api.hostCreate("e-lab", { name: "dc09", ip: "192.0.2.40" });
+    expect(h.adSetEffective).toBe(false);
+    const kerberos = await api.serviceCreate(h.id, { port: 88 });
+    expect(await effective(h.id)).toBe(false);
+    const ldap = await api.serviceCreate(h.id, { port: 389 });
+    expect(await effective(h.id)).toBe(true);
+    await api.serviceUpdate(ldap.id, { port: 636 });
+    expect(await effective(h.id)).toBe(false);
+    await api.serviceUpdate(ldap.id, { port: 389 });
+    expect(await effective(h.id)).toBe(true);
+    expect((await api.hostUpdate(h.id, { name: "dc09", adSet: false })).adSetEffective).toBe(false);
+    expect((await api.hostUpdate(h.id, { name: "dc09", adSet: null })).adSetEffective).toBe(true);
+    // A UDP scan's open|filtered is not open.
+    await api.servicesUpsertScan(h.id, [{ port: 88, protocol: "tcp", state: "open|filtered", service: "kerberos-sec", version: "" }]);
+    expect(await effective(h.id)).toBe(false);
+    await api.servicesUpsertScan(h.id, [{ port: 88, protocol: "tcp", state: "open", service: "kerberos-sec", version: "" }]);
+    expect(await effective(h.id)).toBe(true);
+    await api.serviceDelete(kerberos.id);
+    expect(await effective(h.id)).toBe(false);
+    expect((await api.hostUpdate(h.id, { name: "dc09", adSet: true })).adSetEffective).toBe(true);
+    const created = await api.hostCreate("e-lab", { name: "ms09", adSet: true });
+    expect(created.adSetEffective).toBe(true);
   });
 
   it("mutations persist until reload", async () => {

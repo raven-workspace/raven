@@ -8,9 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { reportSchema } from "../features/report/editor/extension";
+import { PROGRAMMATIC } from "../features/report/editor/pageActions";
 import { ReportSectionView } from "../features/report/ReportSection/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
-import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, placedIdsIn, type ReportNode, type SectionMeta } from "../engines/report";
+import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, type ReportNode, type SectionMeta, placedIn, removalKeys } from "../engines/report";
 import { discardReports, flushReports, queueReportSave } from "../features/report/saveQueue";
 import { ReportTabs, type TabItem } from "../features/report/ReportTabs/ReportTabs";
 import { CheckList, TodoPanel } from "../features/report/TodoPanel/TodoPanel";
@@ -20,6 +21,9 @@ import { RavenError } from "../types/errors";
 import { TooltipProvider } from "../ui";
 import layout3Json from "./fixtures/report-layout3-owner.json";
 import layout5Json from "./fixtures/report-layout5-web01.json";
+
+/** What a page places, as `removedEntryIds` records it. */
+const placedKeys = (n: ReportNode) => new Set(removalKeys(placedIn(n)));
 
 vi.mock("../lib/api", () => import("../audit/fakeApi"));
 // The audit fixture also stores web01's layout-5 page (the audit's Restore screens); these tests store their own
@@ -90,6 +94,8 @@ const targetRows = () => tabEls().filter((t) => /^\d+ /.test(labelOf(t)));
 const targetLabels = () => targetRows().map(labelOf);
 const tab = (label: string) => tabEls().find((t) => labelOf(t) === label)!;
 const rowFor = (name: string) => targetRows().find((t) => labelOf(t).replace(/^\d+ /, "") === name)!;
+/** A free page's tab by its title, without the "§6 " its label leads with. */
+const pageTab = (title: string) => tabEls().find((t) => labelOf(t).replace(/^§\d+ /, "") === title)!;
 /** Opens a part of Front matter or Closing: the tab, then the part in its segmented row. */
 const openPart = (group: "Front matter" | "Closing", part: RegExp) => {
   fireEvent.click(tab(group));
@@ -641,6 +647,33 @@ describe("Report view", () => {
     await waitFor(() => expect(screen.queryByText(/Couldn't build this page's draft/)).not.toBeInTheDocument());
   });
 
+  it("a page whose draft fails to build stops no other page; its Retry clears only its own failure", async () => {
+    const real = api.reportSectionUpsert;
+    let failing: string | null = null;
+    vi.spyOn(api, "reportSectionUpsert").mockImplementation(async (rid, input) => {
+      // The first page to build its draft fails, every time, until Retry.
+      if (input.draftBuiltAt !== null && (failing ??= input.targetKey) === input.targetKey) throw new Error("db busy");
+      return real(rid, input);
+    });
+    mount();
+    await ready();
+    expect(await screen.findByText(/Couldn't build this page's draft/)).toBeInTheDocument();
+    const first = targetRows().find((t) => t.getAttribute("aria-selected") === "true")!;
+    const other = targetRows().find((t) => t !== first)!;
+    fireEvent.click(other);
+    await waitFor(() => expect(other).toHaveAttribute("aria-selected", "true"));
+    // The other page builds: its draft is on the page, and it says nothing about the first page's failure.
+    await waitFor(() => expect(document.querySelector(".report-page .ProseMirror")).not.toBeNull());
+    expect(screen.queryByText(/Couldn't build this page's draft/)).toBeNull();
+    // Back on the first, its failure still shows; Retry builds it.
+    fireEvent.click(first);
+    expect(await screen.findByText(/Couldn't build this page's draft/)).toBeInTheDocument();
+    failing = "none";
+    fireEvent.click(screen.getByRole("button", { name: "Retry building the draft" }));
+    await waitFor(() => expect(screen.queryByText(/Couldn't build this page's draft/)).not.toBeInTheDocument());
+    await waitFor(() => expect(document.querySelector(".report-page .ProseMirror")).not.toBeNull());
+  });
+
   it("shows a placeholder for client engagements", async () => {
     mount("e-old");
     expect(await screen.findByText("Client reports come after the exam")).toBeInTheDocument();
@@ -1043,7 +1076,7 @@ describe("Report view: the result", () => {
       fireEvent.click(rowFor("web01"));
       await waitFor(() => expect(draftUpserts(upsert, WEB)).toHaveLength(1));
       const [, input] = draftUpserts(upsert, WEB)[0] as [string, { meta: SectionMeta; doc: ReportNode }];
-      const placed = placedIdsIn(input.doc);
+      const placed = placedKeys(input.doc);
       for (const id of removed) expect(placed.has(id)).toBe(false);
       // The rest of the draft is there: the entries the owner kept.
       expect(placed.has("l-exam-web01-tar")).toBe(true);
@@ -1300,7 +1333,7 @@ describe("Report view: the result", () => {
       const save = vi.spyOn(api, "reportSectionSave");
       mount();
       await ready();
-      fireEvent.click(tab("Owner notes"));
+      fireEvent.click(pageTab("Owner notes"));
       await waitFor(() => expect(paper().textContent).toContain("The sudo rule is the way to root."));
       expect(paper().textContent).toContain("Every tool ran from the attacking machine unless the step says otherwise.");
       // The flattened page is saved once, the page as stored kept in the meta.
@@ -1335,7 +1368,7 @@ describe("Report view: the result", () => {
         const save = vi.spyOn(api, "reportSectionSave");
         mount();
         await ready();
-        fireEvent.click(tab("Broken notes"));
+        fireEvent.click(pageTab("Broken notes"));
         expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't convert this page to the new format");
         expect(screen.getByRole("alert")).toHaveTextContent("Invalid content for node list");
         expect(document.querySelector(".ProseMirror")).toBeNull();
@@ -1368,7 +1401,7 @@ describe("Report view: the result", () => {
       const save = vi.spyOn(api, "reportSectionSave");
       mount();
       await ready();
-      fireEvent.click(tab("Private notes"));
+      fireEvent.click(pageTab("Private notes"));
       await waitFor(() => expect(paper().textContent).toContain("Owner intro"));
       await waitFor(() => expect(save.mock.calls.some(([id]) => id === page.id)).toBe(true));
       const [, doc] = save.mock.calls.filter(([id]) => id === page.id)[0] as unknown as [string, ReportNode];
@@ -1510,8 +1543,9 @@ describe("Report view: appendix pages and free pages (+ Page)", () => {
     mount();
     await ready();
     await addPage("Free page");
-    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "Untitled page", "Closing"]));
-    expect(detailOf(tab("Untitled page"))).toBe("Section 6");
+    // The tab leads with the section number the page prints under, marked § (RAV-32), and its name says it.
+    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "§6 Untitled page", "Closing"]));
+    expect(tab("§6 Untitled page")).toHaveAccessibleName(/^§6 Untitled page/);
     await waitFor(() => expect(h1()).toBe("6Untitled page"));
   });
 
@@ -1530,16 +1564,37 @@ describe("Report view: appendix pages and free pages (+ Page)", () => {
     expect(document.activeElement).toBe(input);
     fireEvent.change(input, { target: { value: "Port knocking" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(tabLabels()).toContain("Port knocking"));
+    await waitFor(() => expect(tabLabels()).toContain("§6 Port knocking"));
     await waitFor(() => expect(h1()).toBe("6Port knocking"));
-    expect(document.activeElement).toBe(tab("Port knocking"));
+    expect(document.activeElement).toBe(tab("§6 Port knocking"));
     // F2 on the focused tab renames too; Esc keeps the title.
-    fireEvent.keyDown(tab("Port knocking"), { key: "F2" });
+    fireEvent.keyDown(tab("§6 Port knocking"), { key: "F2" });
     const again = screen.getByRole("textbox", { name: "Page title" });
     fireEvent.change(again, { target: { value: "Something else" } });
     fireEvent.keyDown(again, { key: "Escape" });
-    expect(tabLabels()).toContain("Port knocking");
+    expect(tabLabels()).toContain("§6 Port knocking");
     await waitFor(async () => expect((await pages())[0].meta).toMatchObject({ title: "Port knocking", placement: "body" }));
+  });
+
+  it("⌥→ on a free page's tab moves it later: its tab number and printed number move together (RAV-32)", async () => {
+    mount();
+    await ready();
+    await addPage("Free page");
+    await waitFor(() => expect(tabLabels()).toContain("§6 Untitled page"));
+    // Tell them apart: rename the first, then add a second.
+    fireEvent.keyDown(tab("§6 Untitled page"), { key: "F2" });
+    const input = screen.getByRole("textbox", { name: "Page title" });
+    fireEvent.change(input, { target: { value: "Alpha" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(tabLabels()).toContain("§6 Alpha"));
+    await addPage("Free page");
+    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "§6 Alpha", "§7 Untitled page", "Closing"]));
+    fireEvent.keyDown(tab("§6 Alpha"), { key: "ArrowRight", altKey: true });
+    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "§6 Untitled page", "§7 Alpha", "Closing"]));
+    fireEvent.click(tab("§7 Alpha"));
+    await waitFor(() => expect(h1()).toBe("7Alpha"));
+    fireEvent.click(tab("§6 Untitled page"));
+    await waitFor(() => expect(h1()).toBe("6Untitled page"));
   });
 
   it("⌥→ on an appendix page's tab moves it later: the letters follow; ⌫ on the tab asks to delete", async () => {
@@ -1589,6 +1644,105 @@ describe("Report view: appendix pages and free pages (+ Page)", () => {
     const [back] = await pages();
     expect(JSON.stringify(back.doc)).toContain("Every user dumped from the DC");
     expect(back.meta).toMatchObject({ title: "Untitled appendix", placement: "appendix" });
+  });
+});
+
+describe("Report view: undoing a page delete", () => {
+  const addPage = async (kind: "Appendix page" | "Free page") => {
+    fireEvent.click(screen.getByRole("button", { name: "+ Page" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: kind }));
+  };
+  const ordered = async () => {
+    const report = await api.reportGetOrCreate("e-exam");
+    return (await api.reportSectionsList(report.id)).sort((a, b) => a.position - b.position);
+  };
+
+  it("puts the page back at its old place, every position still unique, after a page was added meanwhile", async () => {
+    mount();
+    await ready();
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toContain("Appendix A"));
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toContain("Appendix B"));
+    const before = await ordered();
+    const victim = before.filter((s) => s.kind === "page").at(-1)!;
+    const oldIndex = before.findIndex((s) => s.id === victim.id);
+
+    fireEvent.keyDown(tab("Appendix B"), { key: "Backspace" });
+    const dialog = await screen.findByRole("dialog", { name: "Delete Untitled appendix? Its text goes with it." });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete page" }));
+    await waitFor(() => expect(tabLabels()).not.toContain("Appendix B"));
+    // A page added meanwhile takes the deleted page's position.
+    await addPage("Free page");
+    await waitFor(() => expect(tabLabels().some((l) => /^§\d+ Untitled page$/.test(l))).toBe(true));
+
+    const notice = (await screen.findAllByRole("status")).find((n) => n.textContent?.includes("Deleted Untitled appendix"))!;
+    fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(tabLabels()).toContain("Appendix B"));
+    await waitFor(async () => {
+      const after = await ordered();
+      expect(new Set(after.map((s) => s.position)).size).toBe(after.length);
+      expect(after.findIndex((s) => s.targetKey === victim.targetKey)).toBe(oldIndex);
+    });
+  });
+});
+
+describe("Report view: Move to appendix", () => {
+  const paper = () => document.querySelector<HTMLElement>(".report-page")!;
+  const h1 = () => within(paper()).queryByRole("heading", { level: 1 })?.textContent;
+  const sources = (n: ReportNode): string[] => [...(typeof n.attrs?.source === "string" ? [n.attrs.source] : []), ...(n.content ?? []).flatMap(sources)];
+  const pages = async () => (await api.reportSectionsList((await api.reportGetOrCreate("e-exam")).id)).filter((s) => s.kind === "page");
+
+  it("moves a block to a new appendix page and back with the notice's Undo; the page it left doesn't add it again", async () => {
+    await seedLnx();
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    const editor = pageEditor();
+    await waitFor(() => expect(editor.mounted).toBe(true));
+    // The scan's output is its only block on the page: its command goes first, as the page's own change.
+    act(() => {
+      let at = -1;
+      editor.state.doc.descendants((node, pos) => {
+        if (at === -1 && /^entry:.+:command$/.test(String(node.attrs.source))) at = pos;
+        return at === -1;
+      });
+      editor.view.dispatch(editor.state.tr.delete(at, at + editor.state.doc.nodeAt(at)!.nodeSize).setMeta(PROGRAMMATIC, true));
+    });
+    let block: { node: import("prosekit/pm/model").Node; pos: number } | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (!block && node.type.name === "codeBlock" && /^entry:.+:output$/.test(String(node.attrs.source))) block = { node, pos };
+      return !block;
+    });
+    expect(block).not.toBeNull();
+    const source = String(block!.node.attrs.source);
+    const entryId = source.split(":")[1];
+    const root = document.querySelector("prosekit-block-handle-root")!;
+    act(() => void root.dispatchEvent(Object.assign(new Event("stateChange"), { detail: block })));
+    fireEvent.click(screen.getByRole("button", { name: "Block actions", hidden: true }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Move to appendix…" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "New appendix page" }));
+
+    await waitFor(() => expect(tabLabels()).toContain("Appendix A"));
+    const notice = (await screen.findAllByRole("status")).find((n) => n.textContent?.includes("Moved to Appendix A"))!;
+    expect(notice).toBeDefined();
+    expect(sources(editor.getDocJSON() as ReportNode)).not.toContain(source);
+    const [stored] = await pages();
+    expect(stored.meta).toMatchObject({ placement: "appendix" });
+    expect(sources(stored.doc!)).toEqual([source]);
+    // Its entry is in the report, on the appendix page: Add new evidence doesn't put it back, and it isn't removed.
+    fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
+    await act(() => flushReports());
+    expect(sources(editor.getDocJSON() as ReportNode).some((s) => s.startsWith(`entry:${entryId}`))).toBe(false);
+    const report = await api.reportGetOrCreate("e-exam");
+    const target = (await api.reportSectionsList(report.id)).find((s) => s.kind === "target" && s.targetKey === LNX)!;
+    expect((target.meta as SectionMeta).removedEntryIds ?? []).not.toContain(entryId);
+
+    fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(tabLabels()).not.toContain("Appendix A"));
+    expect(await pages()).toEqual([]);
+    expect(sources(editor.getDocJSON() as ReportNode)).toContain(source);
+    expect(h1()).not.toMatch(/Appendix/);
   });
 });
 

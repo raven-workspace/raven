@@ -1,5 +1,5 @@
-// xfer03: a mock-exam host captured the way the owner really captures (real engagement "Mock exam A", host Vega,
-// 2026-11-12), built by running the pastes through Raven's own capture code rather than by writing log rows by hand:
+// xfer03: a mock-exam host captured the way the owner really captures,
+// built by running the pastes through Raven's own capture code rather than by writing log rows by hand:
 // the draft builder (`buildDraft`, the kind, title, host and content a save stores), the pasted-credential reader and
 // the nxc intake planner (`planCredentialIntake`, the credential results a save files). The capture form's own rules
 // (src/features/capture/resolve.ts: the host preset when capture is opened from the host's view, the flag kind from the
@@ -12,6 +12,7 @@
 // attacker 192.0.2.10).
 import { buildDraft, credentialsInPaste, findFlagInPaste, flagTitle, noteTitle, screenshotFileName, type DraftInput } from "../engines/capture";
 import { planCredentialIntake } from "../engines/credentials";
+import { BUILTIN_LIBRARY } from "../engines/library/data";
 import type { ChecklistItem } from "../types/checklist";
 import type { CredAttempt, Credential, TriedPair, Username } from "../types/credentials";
 import type { Finding } from "../types/findings";
@@ -147,6 +148,7 @@ export function draftInputOf(c: Capture, hosts: Host[]): DraftInput {
     domain: XFER_DOMAIN,
     machines: XFER_MACHINES,
     lastRanOn: "Kali (VM)",
+    library: BUILTIN_LIBRARY,
   };
 }
 
@@ -170,7 +172,7 @@ export function editsOf(c: Capture, hosts: Host[], hostId = XFER) {
     const fileName = screenshotFileName({ ip: host?.ip ?? null, hostName: host?.name ?? null, column: host?.boardColumn ?? null, caption: c.text, mime: "image/png" });
     content = { ...content, fileName };
   }
-  const credentials = draft.kind === "note" ? credentialsInPaste(c.text, hosts.map((h) => h.name)) : [];
+  const credentials = draft.kind === "note" ? credentialsInPaste(c.text, BUILTIN_LIBRARY, hosts.map((h) => h.name)) : [];
   if (credentials.length > 0) title = `${credentials.length === 1 ? "Credential" : "Credentials"} for ${credentials.map((p) => p.username).join(", ")}`;
   return {
     draft,
@@ -226,7 +228,12 @@ export function capturedHost(now: number, hosts: Host[]) {
     const plan = planCredentialIntake({ blocks: content.blocks, engagement: { id: E }, hosts, credentials, usernames });
     if (!plan) continue;
     for (const u of plan.newUsernames) {
-      usernames.push({ id: `u-exam-xfer-${u.username}`, engagementId: E, username: u.username, domain: u.domain ?? null, sourceHostId: u.sourceHostId ?? null, source: u.source ?? null, createdAt: at });
+      // As the store files it: `.\user` is the answering host's own account.
+      const local = u.domain === "." && u.sourceHostId ? u.sourceHostId : null;
+      usernames.push({
+        id: `u-exam-xfer-${u.username}`, engagementId: E, username: u.username, domain: local ? null : (u.domain ?? null),
+        sourceHostId: u.sourceHostId ?? null, source: u.source ?? null, createdAt: at, scope: local ? "local" : "unknown", localHostId: local,
+      });
     }
     for (const a of plan.attempts) {
       credAttempts.push({

@@ -86,7 +86,7 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
       <div className="context-chips__runs">
       <ChipSet className="context-chips__run">
         {engagementId ? (
-          <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={onHost} align="start" className="context-chips__host" {...mouse} />
+          <HostChip ref={hostRef} hosts={fit.d.hosts} loadError={fit.d.hostsError} value={fit.host?.id ?? null} onChange={onHost} align="start" className="context-chips__host" {...mouse} />
         ) : (
           <span className="context-chips__no-host">No host</span>
         )}

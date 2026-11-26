@@ -1,5 +1,6 @@
 import { inlineMarkdown } from "./findingText";
 import { testedLine, testedNotExploited } from "./coverage";
+import { source as src } from "./page/source";
 import { stamp } from "./stamp";
 import { findingRows, scopeRows } from "./tables";
 import { para, text, textTable } from "./nodes";
@@ -19,7 +20,7 @@ export const hintPara = (hint: string, source?: string): ReportNode => ({ type: 
 
 /** One report-level table's blocks. With no rows, only a hint paragraph that prints nothing. */
 export function plainTable(kind: PlainTableKind, data: ReportData, meta: ReportMeta): ReportNode[] {
-  const source = `table:${kind}`;
+  const source = src.table(kind);
   const targets = () => reportTargets(data, meta);
   const blocks = ((): ReportNode[] | string => {
     switch (kind) {
@@ -73,5 +74,5 @@ export function msfLine(data: ReportData): ReportNode {
     const modules = [...new Set(rows.map((r) => r.module))];
     line = `Metasploit was used on ${named.join(" and ")}${modules.length > 0 ? `: ${modules.join(", ")}.` : "."}`;
   }
-  return stamp([para([text(line)], "msf")])[0];
+  return stamp([para([text(line)], src.msf)])[0];
 }

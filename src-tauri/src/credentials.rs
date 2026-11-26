@@ -65,6 +65,9 @@ pub struct CredentialInput {
     pub from_secret_id: Option<String>,
 }
 
+/// A username: a name, an optional domain, and its scope. `domain` is a domain account, `local` an account on one host
+/// (`local_host_id`, cleared when that host is deleted), `unknown` either; usernames stored before scope existed are
+/// unknown. Scope decides identity (`username_find`).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Username {
@@ -75,6 +78,8 @@ pub struct Username {
     pub source_host_id: Option<String>,
     pub source: Option<String>,
     pub created_at: i64,
+    pub scope: String,
+    pub local_host_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -87,6 +92,12 @@ pub struct UsernameInput {
     pub source_host_id: Option<String>,
     #[serde(default)]
     pub source: Option<String>,
+    /// `domain`, `local` or `unknown`; absent means `unknown`.
+    #[serde(default)]
+    pub scope: Option<String>,
+    /// Required iff scope is `local`.
+    #[serde(default)]
+    pub local_host_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -171,29 +182,144 @@ fn derive_hash_type(secret: &str) -> Option<String> {
     }
 }
 
-/// Identity of a credential inside one engagement: type, username, secret (hashes lower-cased),
-/// domain, and the local host for local-scope credentials.
-fn cred_key(c: &Credential) -> (String, String, String, String, String) {
-    let secret = clean_secret(&c.kind, &c.secret);
-    let secret = if c.kind == "hash" { secret.to_lowercase() } else { secret.to_string() };
+/// The kind of a hash captured from a challenge or a ticket (Kerberoast, AS-REP, NetNTLM). Such a hash differs on
+/// every capture but cracks to the same password, so the account and the kind identify it, not the text. NT and
+/// stored hashes have none. Agrees with TS `hashCaptureKind`.
+fn capture_kind(c: &Credential) -> Option<&'static str> {
+    if c.kind != "hash" {
+        return None;
+    }
+    let s = c.secret.trim();
+    let starts = |s: &str, p: &str| s.get(..p.len()).is_some_and(|h| h.eq_ignore_ascii_case(p));
+    if starts(s, "$krb5tgs$") {
+        return Some("krb5tgs");
+    }
+    if starts(s, "$krb5asrep$") {
+        return Some("krb5asrep");
+    }
+    if c.hash_type.as_deref().is_some_and(|t| starts(t, "netntlm")) || is_netntlm_shape(s) {
+        return Some("netntlm");
+    }
+    None
+}
+
+/// `user::domain:<16 hex>:...`, the shape Responder and friends print for a NetNTLM capture.
+fn is_netntlm_shape(s: &str) -> bool {
+    let Some(i) = s.find("::") else { return false };
+    let user = &s[..i];
+    if user.is_empty() || user.chars().any(|c| c == ':' || c.is_whitespace()) {
+        return false;
+    }
+    let Some((_, rest)) = s[i + 2..].split_once(':') else { return false };
+    rest.get(..16).is_some_and(|h| h.chars().all(|c| c.is_ascii_hexdigit())) && rest.as_bytes().get(16) == Some(&b':')
+}
+
+/// The domain-free part of a credential's identity inside one engagement: type, username, secret (hashes
+/// lower-cased, a captured hash by its kind), and the local host for local-scope credentials. Two credentials are
+/// the same when their keys are equal and their domains are the same domain.
+fn cred_key(c: &Credential) -> (String, String, String, String) {
+    let secret = match capture_kind(c) {
+        Some(kind) => format!("capture:{kind}"),
+        None if c.kind == "hash" => clean_secret(&c.kind, &c.secret).to_lowercase(),
+        None => clean_secret(&c.kind, &c.secret).to_string(),
+    };
     (
         c.kind.clone(),
         c.username.trim().to_lowercase(),
         secret,
-        c.domain.as_deref().unwrap_or("").trim().to_lowercase(),
         if c.scope == "local" { c.local_host_id.clone().unwrap_or_default() } else { String::new() },
     )
 }
 
-/// An existing credential (other than `except_id`) with the same key. Empty secrets never match.
+/// Whether two domain spellings name the same domain, inside an engagement whose own domain is `engagement_domain`
+/// (an FQDN such as `corp.lan`). They are the same when equal ignoring case and surrounding whitespace, or when one is
+/// the engagement's domain and the other its first label (`CORP` for `corp.lan`). With no engagement domain only
+/// equal spellings match, and a NetBIOS name never matches any other FQDN (`CORP` is not `corp.local`, `WEB01` is not
+/// `web01.corp.lan`). A blank domain matches only a blank one.
+pub fn same_domain(engagement_domain: Option<&str>, a: Option<&str>, b: Option<&str>) -> bool {
+    let norm = |s: Option<&str>| s.unwrap_or("").trim().to_lowercase();
+    let (x, y) = (norm(a), norm(b));
+    if x == y {
+        return true;
+    }
+    let fqdn = norm(engagement_domain);
+    let Some((label, _)) = fqdn.split_once('.') else { return false };
+    if label.is_empty() || x.is_empty() || y.is_empty() {
+        return false;
+    }
+    (x == fqdn && y == label) || (y == fqdn && x == label)
+}
+
+/// The engagement's own domain, the anchor of `same_domain`. None when it has none (or there is no such engagement).
+pub(crate) fn engagement_domain(conn: &Connection, engagement_id: &str) -> AppResult<Option<String>> {
+    Ok(conn
+        .query_row("SELECT domain FROM engagements WHERE id = ?1", [engagement_id], |r| r.get::<_, Option<String>>(0))
+        .optional()?
+        .flatten())
+}
+
+/// For each pair of domain spellings, whether they are the same domain in the engagement (`same_domain`). Lets the
+/// frontend ask the store instead of keeping its own copy of the rule.
+pub fn same_domains(conn: &Connection, engagement_id: &str, pairs: &[(Option<String>, Option<String>)]) -> AppResult<Vec<bool>> {
+    check_scope(conn, engagement_id, None)?;
+    let anchor = engagement_domain(conn, engagement_id)?;
+    Ok(pairs.iter().map(|(a, b)| same_domain(anchor.as_deref(), a.as_deref(), b.as_deref())).collect())
+}
+
+/// Of `rows`, the first whose domain is the same domain as `domain`, preferring an equal spelling so that of
+/// duplicates stored before the store owned identity, the one spelled the same wins.
+pub(crate) fn pick_same_domain<T>(rows: Vec<T>, domain_of: impl Fn(&T) -> Option<&str>, anchor: Option<&str>, domain: Option<&str>) -> Option<T> {
+    let at = rows
+        .iter()
+        .position(|r| same_domain(None, domain_of(r), domain))
+        .or_else(|| rows.iter().position(|r| same_domain(anchor, domain_of(r), domain)))?;
+    rows.into_iter().nth(at)
+}
+
+/// An existing credential (other than `except_id`) that is the same credential: an equal key and the same domain.
+/// Empty secrets never match.
 pub(crate) fn find_duplicate(conn: &Connection, probe: &Credential, except_id: &str) -> AppResult<Option<Credential>> {
     if clean_secret(&probe.kind, &probe.secret).is_empty() {
         return Ok(None);
     }
     let key = cred_key(probe);
-    Ok(list(conn, &probe.engagement_id)?
+    let anchor = engagement_domain(conn, &probe.engagement_id)?;
+    let candidates: Vec<Credential> = list(conn, &probe.engagement_id)?
         .into_iter()
-        .find(|c| c.id != except_id && !clean_secret(&c.kind, &c.secret).is_empty() && cred_key(c) == key))
+        .filter(|c| c.id != except_id && !clean_secret(&c.kind, &c.secret).is_empty() && cred_key(c) == key)
+        .collect();
+    Ok(pick_same_domain(candidates, |c| c.domain.as_deref(), anchor.as_deref(), probe.domain.as_deref()))
+}
+
+/// Password reuse: for a new local credential (`input`), the stored local credential for another host with the same
+/// account and secret. The name matches ignoring case and the secret by the credential identity rule: exactly for a
+/// password, the hash value ignoring case for a hash. A captured hash (Kerberoast, AS-REP, NetNTLM) is never reuse, and
+/// neither is a stored local credential whose host was deleted.
+pub(crate) fn find_reused_local(conn: &Connection, engagement_id: &str, input: &CredentialInput) -> AppResult<Option<Credential>> {
+    let probe = build(conn, engagement_id, input.clone(), None)?;
+    let reusable = |c: &Credential| {
+        c.scope == "local"
+            && c.local_host_id.is_some()
+            && matches!(c.kind.as_str(), "password" | "hash")
+            && capture_kind(c).is_none()
+            && !clean_secret(&c.kind, &c.secret).is_empty()
+    };
+    if !reusable(&probe) {
+        return Ok(None);
+    }
+    // The credential's key without its host.
+    let account = |c: &Credential| {
+        let (kind, user, secret, _) = cred_key(c);
+        (kind, user, secret)
+    };
+    Ok(list(conn, engagement_id)?
+        .into_iter()
+        .find(|c| reusable(c) && c.local_host_id != probe.local_host_id && account(c) == account(&probe)))
+}
+
+/// Whether two credentials are the same credential, in an engagement whose domain is `anchor`.
+fn same_credential(anchor: Option<&str>, a: &Credential, b: &Credential) -> bool {
+    cred_key(a) == cred_key(b) && same_domain(anchor, a.domain.as_deref(), b.domain.as_deref())
 }
 
 pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Credential>> {
@@ -207,8 +333,9 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<Credential> {
     conn.query_row(&format!("SELECT {CRED_COLS} FROM credentials WHERE id = ?1"), [id], cred_row).optional()?.ok_or(AppError::NotFound)
 }
 
-/// Validates and normalises an input into a Credential (id and timestamps filled by the caller).
-fn build(conn: &Connection, engagement_id: &str, i: CredentialInput) -> AppResult<Credential> {
+/// Validates and normalises an input into a Credential (id and timestamps filled by the caller). `current` is the
+/// stored credential on update, None on create.
+fn build(conn: &Connection, engagement_id: &str, i: CredentialInput, current: Option<&Credential>) -> AppResult<Credential> {
     if !matches!(i.kind.as_str(), "password" | "hash" | "ticket" | "key" | "token" | "other") {
         return Err(AppError::validation("type", "type must be password, hash, ticket, key, token or other"));
     }
@@ -217,8 +344,13 @@ fn build(conn: &Connection, engagement_id: &str, i: CredentialInput) -> AppResul
         return Err(AppError::validation("scope", "scope must be domain, local or app"));
     }
     let local_host_id = blank_to_none(i.local_host_id.as_deref());
+    // A local credential needs its host only when scope or host is being set or changed: deleting a host leaves its
+    // local credentials with none (the schema's set-null), and an edit that keeps scope and host stays allowed.
+    let keeps_scope_and_host = current.is_some_and(|c| c.scope == scope && c.local_host_id == local_host_id);
     match (scope == "local", &local_host_id) {
-        (true, None) => return Err(AppError::validation("localHostId", "a local credential needs its host")),
+        (true, None) if !keeps_scope_and_host => {
+            return Err(AppError::validation("localHostId", "a local credential needs its host"))
+        }
         (false, Some(_)) => return Err(AppError::validation("localHostId", "only a local credential has a host")),
         _ => {}
     }
@@ -284,30 +416,42 @@ fn insert(conn: &Connection, c: &Credential) -> AppResult<()> {
     Ok(())
 }
 
-/// Creates a credential, or returns the existing one with the same key (never an error for a duplicate).
-pub fn create(conn: &Connection, engagement_id: &str, input: CredentialInput) -> AppResult<Credential> {
+/// What `create` returns: the stored credential, and whether it was stored already (the same credential), in which
+/// case nothing was written.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedCredential {
+    pub credential: Credential,
+    pub existed: bool,
+}
+
+/// Creates a credential, or returns the stored one that is the same credential (never an error for a duplicate).
+pub fn create(conn: &Connection, engagement_id: &str, input: CredentialInput) -> AppResult<CreatedCredential> {
     check_scope(conn, engagement_id, None)?;
-    let mut c = build(conn, engagement_id, input)?;
+    let mut c = build(conn, engagement_id, input, None)?;
     if c.kind == "hash" && c.crack_status.is_none() {
         c.crack_status = Some("uncracked".into());
     }
     if let Some(existing) = find_duplicate(conn, &c, "")? {
-        return Ok(existing);
+        return Ok(CreatedCredential { credential: existing, existed: true });
     }
     let now = now_ms();
     c.id = uuid::Uuid::new_v4().to_string();
     c.created_at = now;
     c.updated_at = now;
     insert(conn, &c)?;
-    get(conn, &c.id)
+    Ok(CreatedCredential { credential: get(conn, &c.id)?, existed: false })
 }
 
 /// Full update. `sourceHostId`, `crackStatus`, `crackedFrom` and `fromSecretId` keep their current values
 /// when absent.
 pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<Credential> {
     let current = get(conn, id)?;
-    let c = build(conn, &current.engagement_id, input)?;
-    if find_duplicate(conn, &c, id)?.is_some() {
+    let c = build(conn, &current.engagement_id, input, Some(&current))?;
+    // An edit that keeps the credential's identity is always allowed, so a duplicate stored before the store owned
+    // identity stays editable; one that makes it another stored credential is refused.
+    let anchor = engagement_domain(conn, &current.engagement_id)?;
+    if !same_credential(anchor.as_deref(), &current, &c) && find_duplicate(conn, &c, id)?.is_some() {
         return Err(AppError::validation("secret", "A credential with these values already exists"));
     }
     for link in [&c.cracked_from, &c.from_secret_id] {
@@ -367,7 +511,7 @@ pub fn crack(conn: &Connection, hash_id: &str, plaintext: &str) -> AppResult<Cre
     if plaintext.trim().is_empty() {
         return Err(AppError::validation("plaintext", "plaintext is required"));
     }
-    let tx = conn.unchecked_transaction()?;
+    let tx = crate::db::atomic(conn)?;
     let now = now_ms();
     let pw = Credential {
         id: uuid::Uuid::new_v4().to_string(),
@@ -408,7 +552,7 @@ pub fn crack(conn: &Connection, hash_id: &str, plaintext: &str) -> AppResult<Cre
 
 // ---------------------------------------------------------------- usernames
 
-const USER_COLS: &str = "id, engagement_id, username, domain, source_host_id, source, created_at";
+const USER_COLS: &str = "id, engagement_id, username, domain, source_host_id, source, created_at, scope, local_host_id";
 
 fn user_row(r: &Row) -> rusqlite::Result<Username> {
     Ok(Username {
@@ -419,6 +563,8 @@ fn user_row(r: &Row) -> rusqlite::Result<Username> {
         source_host_id: r.get(4)?,
         source: r.get(5)?,
         created_at: r.get(6)?,
+        scope: r.get(7)?,
+        local_host_id: r.get(8)?,
     })
 }
 
@@ -433,34 +579,76 @@ fn username_get(conn: &Connection, id: &str) -> AppResult<Username> {
     conn.query_row(&format!("SELECT {USER_COLS} FROM usernames WHERE id = ?1"), [id], user_row).optional()?.ok_or(AppError::NotFound)
 }
 
-fn username_find(conn: &Connection, engagement_id: &str, username: &str, domain: Option<&str>) -> AppResult<Option<Username>> {
-    Ok(conn.query_row(
-        &format!(
-            "SELECT {USER_COLS} FROM usernames WHERE engagement_id = ?1 AND lower(username) = lower(?2) \
-             AND lower(ifnull(domain,'')) = lower(?3)"
-        ),
-        params![engagement_id, username, domain.unwrap_or("")],
-        user_row,
-    ).optional()?)
+/// A username input's scope and host, checked: absent scope is `unknown`; a local username has a host, and only a
+/// local one has.
+fn username_scope(i: &UsernameInput) -> AppResult<(String, Option<String>)> {
+    let scope = blank_to_none(i.scope.as_deref()).unwrap_or_else(|| "unknown".into());
+    if !matches!(scope.as_str(), "domain" | "local" | "unknown") {
+        return Err(AppError::validation("scope", "scope must be domain, local or unknown"));
+    }
+    let local_host_id = blank_to_none(i.local_host_id.as_deref());
+    match (scope == "local", &local_host_id) {
+        (true, None) => Err(AppError::validation("localHostId", "a local username needs its host")),
+        (false, Some(_)) => Err(AppError::validation("localHostId", "only a local username has a host")),
+        _ => Ok((scope, local_host_id)),
+    }
 }
 
-/// Creates a username, or returns the existing one (case-insensitive on username and domain).
+/// The stored username that is the same username: the name equal ignoring case, the same scope, and
+/// - unknown: the same domain, where a blank domain matches only a blank one;
+/// - domain: the same domain, where a blank domain stands for the engagement's own (and is only blank with none set);
+/// - local: the same host.
+///
+/// Unknown and domain usernames never match each other, and a local one matches neither.
+fn username_find(
+    conn: &Connection,
+    engagement_id: &str,
+    username: &str,
+    domain: Option<&str>,
+    scope: &str,
+    local_host_id: Option<&str>,
+) -> AppResult<Option<Username>> {
+    let mut st = conn.prepare(&format!(
+        "SELECT {USER_COLS} FROM usernames WHERE engagement_id = ?1 AND lower(username) = lower(?2) AND scope = ?3 \
+         ORDER BY created_at, id"
+    ))?;
+    let rows = st.query_map(params![engagement_id, username, scope], user_row)?.collect::<Result<Vec<_>, _>>()?;
+    if scope == "local" {
+        return Ok(rows.into_iter().find(|u| local_host_id.is_some() && u.local_host_id.as_deref() == local_host_id));
+    }
+    let anchor = engagement_domain(conn, engagement_id)?;
+    if scope == "unknown" {
+        return Ok(pick_same_domain(rows, |u| u.domain.as_deref(), anchor.as_deref(), domain));
+    }
+    // A domain username with no domain written is in the engagement's domain.
+    let own = |d: Option<&str>| blank_to_none(d).or_else(|| blank_to_none(anchor.as_deref()));
+    let keyed: Vec<(Option<String>, Username)> = rows.into_iter().map(|u| (own(u.domain.as_deref()), u)).collect();
+    Ok(pick_same_domain(keyed, |(d, _)| d.as_deref(), anchor.as_deref(), own(domain).as_deref()).map(|(_, u)| u))
+}
+
+/// Creates a username, or returns the stored one that is the same username (`username_find`). A local username keeps
+/// no domain: its host says whose account it is.
 pub fn username_create(conn: &Connection, engagement_id: &str, input: UsernameInput) -> AppResult<Username> {
     check_scope(conn, engagement_id, None)?;
     let username = input.username.trim().to_string();
     if username.is_empty() {
         return Err(AppError::validation("username", "username is required"));
     }
-    let domain = blank_to_none(input.domain.as_deref());
+    let (scope, local_host_id) = username_scope(&input)?;
+    check_scope(conn, engagement_id, local_host_id.as_deref())?;
+    let domain = if scope == "local" { None } else { blank_to_none(input.domain.as_deref()) };
     let source_host_id = blank_to_none(input.source_host_id.as_deref());
     check_scope(conn, engagement_id, source_host_id.as_deref())?;
-    if let Some(u) = username_find(conn, engagement_id, &username, domain.as_deref())? {
+    if let Some(u) = username_find(conn, engagement_id, &username, domain.as_deref(), &scope, local_host_id.as_deref())? {
         return Ok(u);
     }
     let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
-        &format!("INSERT INTO usernames ({USER_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7)"),
-        params![id, engagement_id, username, domain, source_host_id, blank_to_none(input.source.as_deref()), now_ms()],
+        &format!("INSERT INTO usernames ({USER_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"),
+        params![
+            id, engagement_id, username, domain, source_host_id, blank_to_none(input.source.as_deref()), now_ms(), scope,
+            local_host_id
+        ],
     )?;
     username_get(conn, &id)
 }
@@ -544,6 +732,8 @@ pub fn convert_to_access(conn: &Connection, cred_id: &str, grant: AccessGrantInp
             domain: cred.domain.clone(),
             source_host_id: cred.source_host_id.clone(),
             source: cred.source.clone(),
+            scope: None,
+            local_host_id: None,
         },
     )?;
     grant_insert(&tx, &cred.engagement_id, &user.id, &grant)?;
@@ -555,6 +745,7 @@ pub fn convert_to_access(conn: &Connection, cred_id: &str, grant: AccessGrantInp
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::attempts;
     use crate::engagements::{self, EngagementInput};
     use crate::hosts::{self, HostInput};
     use crate::paths::DataPaths;
@@ -628,6 +819,157 @@ mod tests {
 
     fn count(c: &Connection, sql: &str) -> i64 {
         c.query_row(sql, [], |r| r.get(0)).unwrap()
+    }
+
+    /// `super::create`'s credential, for tests that don't look at `existed`.
+    fn create(c: &Connection, e: &str, i: CredentialInput) -> AppResult<Credential> {
+        super::create(c, e, i).map(|x| x.credential)
+    }
+
+    /// An engagement whose own domain is `domain`.
+    fn eng_on(c: &Connection, name: &str, domain: Option<&str>) -> String {
+        let e = eng(c, name);
+        c.execute("UPDATE engagements SET domain = ?2 WHERE id = ?1", params![e, domain]).unwrap();
+        e
+    }
+
+    fn on(mut i: CredentialInput, domain: &str) -> CredentialInput {
+        i.domain = Some(domain.into());
+        i
+    }
+
+    #[test]
+    fn same_domain_is_anchored_to_the_engagement() {
+        let corp = Some("corp.lan");
+        // The engagement's FQDN and its first label are one domain, either way round, in any case.
+        assert!(same_domain(corp, Some("CORP"), Some("corp.lan")));
+        assert!(same_domain(corp, Some("corp.lan"), Some("corp")));
+        assert!(same_domain(Some(" Corp.LAN "), Some("CORP"), Some("CORP.LAN")));
+        // With no engagement domain, only equal spellings.
+        assert!(!same_domain(None, Some("CORP"), Some("corp.lan")));
+        assert!(!same_domain(Some("  "), Some("CORP"), Some("corp.lan")));
+        // A NetBIOS name never matches another FQDN, nor a host's DNS name.
+        assert!(!same_domain(corp, Some("CORP"), Some("corp.local")));
+        assert!(!same_domain(corp, Some("WEB01"), Some("web01.corp.lan")));
+        assert!(!same_domain(corp, Some("corp"), Some("corporate.com")));
+        // An engagement domain that isn't an FQDN anchors nothing.
+        assert!(!same_domain(Some("CORP"), Some("corp"), Some("corp.lan")));
+        // Case and surrounding whitespace are ignored; blank matches only blank.
+        assert!(same_domain(None, Some(" Corp.Local "), Some("corp.local")));
+        assert!(same_domain(corp, None, Some("  ")));
+        assert!(!same_domain(corp, None, Some("corp.lan")));
+        assert!(!same_domain(corp, None, Some("CORP")));
+    }
+
+    #[test]
+    fn create_returns_the_stored_credential_in_either_spelling() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        let first = super::create(c, &e, on(cin("password", "zoe", "Winter2024!"), "CORP")).unwrap();
+        assert!(!first.existed);
+        let again = super::create(c, &e, on(cin("password", "ZOE", "Winter2024!"), "corp.lan")).unwrap();
+        assert_eq!((again.credential.id.as_str(), again.existed), (first.credential.id.as_str(), true));
+        // Another FQDN with the same first label, or no domain, is another credential.
+        assert!(!super::create(c, &e, on(cin("password", "zoe", "Winter2024!"), "corp.local")).unwrap().existed);
+        assert!(!super::create(c, &e, cin("password", "zoe", "Winter2024!")).unwrap().existed);
+        // Nothing was written for the duplicate.
+        assert_eq!(list(c, &e).unwrap().len(), 3);
+        // A crack finds the password stored in the other spelling.
+        let hash = create(c, &e, on(cin("hash", "zoe", &"ab".repeat(16)), "corp.lan")).unwrap();
+        assert_eq!(crack(c, &hash.id, "Winter2024!").unwrap().id, first.credential.id);
+
+        // With no engagement domain the two spellings are two credentials.
+        let e2 = eng_on(c, "b", None);
+        let a = super::create(c, &e2, on(cin("password", "zoe", "Winter2024!"), "CORP")).unwrap();
+        let b = super::create(c, &e2, on(cin("password", "zoe", "Winter2024!"), "corp.lan")).unwrap();
+        assert!(!a.existed && !b.existed);
+        assert_ne!(a.credential.id, b.credential.id);
+    }
+
+    #[test]
+    fn a_recaptured_hash_is_one_credential_per_account_and_kind() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        let tgs = |s: &str| on(cin("hash", "svc_sql", &format!("$krb5tgs$23$*svc_sql$CORP.LAN$cifs/sql01*${s}")), "corp.lan");
+        let roast = super::create(c, &e, tgs("aaaa$bbbb")).unwrap();
+        let reroast = super::create(c, &e, tgs("cccc$dddd")).unwrap();
+        assert_eq!((reroast.credential.id.as_str(), reroast.existed), (roast.credential.id.as_str(), true));
+        // ...in either spelling of the domain.
+        let mut netbios = tgs("eeee$ffff");
+        netbios.domain = Some("CORP".into());
+        assert!(super::create(c, &e, netbios).unwrap().existed);
+        // AS-REP is another kind; another account is another credential.
+        let asrep = |u: &str, s: &str| on(cin("hash", u, &format!("$krb5asrep$23$svc_sql@CORP.LAN:{s}")), "corp.lan");
+        let a1 = super::create(c, &e, asrep("svc_sql", "11$22")).unwrap();
+        assert!(!a1.existed);
+        assert!(super::create(c, &e, asrep("svc_sql", "33$44")).unwrap().existed);
+        assert!(!super::create(c, &e, on(cin("hash", "svc_web", "$krb5tgs$23$*svc_web$CORP.LAN$http/web01*$aa$bb"), "corp.lan")).unwrap().existed);
+        // NetNTLM, by its shape or by its hash type.
+        let ntlmv2 = |chal: &str| on(cin("hash", "zoe", &format!("zoe::CORP:{chal}:0101aa:0101bb")), "CORP");
+        let n1 = super::create(c, &e, ntlmv2("1122334455667788")).unwrap();
+        assert!(!n1.existed);
+        assert!(super::create(c, &e, ntlmv2("8877665544332211")).unwrap().existed);
+        let mut typed = on(cin("hash", "zoe", "opaque-capture-bytes"), "corp.lan");
+        typed.hash_type = Some("NetNTLMv2".into());
+        assert_eq!(super::create(c, &e, typed).unwrap().credential.id, n1.credential.id);
+        // An NT hash is identified by its value.
+        let nt1 = super::create(c, &e, on(cin("hash", "zoe", &"ab".repeat(16)), "corp.lan")).unwrap();
+        let nt2 = super::create(c, &e, on(cin("hash", "zoe", &"cd".repeat(16)), "corp.lan")).unwrap();
+        assert!(!nt1.existed && !nt2.existed);
+    }
+
+    #[test]
+    fn update_refuses_a_collision_but_a_stored_duplicate_stays_editable() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        // Two rows for one credential, stored before the store owned identity.
+        for (id, domain) in [("c1", "CORP"), ("c2", "corp.lan")] {
+            c.execute(
+                "INSERT INTO credentials (id,engagement_id,type,username,domain,secret,scope,created_at,updated_at) \
+                 VALUES (?1,?2,'password','zoe',?3,'Winter2024!','domain',1,1)",
+                params![id, e, domain],
+            )
+            .unwrap();
+        }
+        let mut notes = on(cin("password", "zoe", "Winter2024!"), "CORP");
+        notes.notes = Some("from the share".into());
+        assert_eq!(update(c, "c1", notes).unwrap().notes.as_deref(), Some("from the share"));
+        assert_eq!(list(c, &e).unwrap().len(), 2);
+        // Creating it again returns the row spelled the same.
+        let again = super::create(c, &e, on(cin("password", "zoe", "Winter2024!"), "corp.lan")).unwrap();
+        assert_eq!((again.credential.id.as_str(), again.existed), ("c2", true));
+        // Editing another credential into this one is refused, in either spelling.
+        let other = create(c, &e, on(cin("password", "zoe", "Spring2024!"), "corp.lan")).unwrap();
+        let (field_name, message) = field(update(c, &other.id, on(cin("password", "zoe", "Winter2024!"), "CORP")));
+        assert_eq!((field_name.as_str(), message.as_str()), ("secret", "A credential with these values already exists"));
+    }
+
+    #[test]
+    fn usernames_are_the_same_in_either_spelling_of_the_engagement_domain() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        let mk = |u: &str, d: &str| UsernameInput { username: u.into(), domain: Some(d.into()), source_host_id: None, source: None, scope: None, local_host_id: None };
+        let a = username_create(c, &e, mk("alice", "CORP")).unwrap();
+        assert_eq!(username_create(c, &e, mk("Alice", "corp.lan")).unwrap().id, a.id);
+        assert_ne!(username_create(c, &e, mk("alice", "corp.local")).unwrap().id, a.id);
+        let e2 = eng_on(c, "b", None);
+        let b = username_create(c, &e2, mk("alice", "CORP")).unwrap();
+        assert_ne!(username_create(c, &e2, mk("alice", "corp.lan")).unwrap().id, b.id);
+    }
+
+    #[test]
+    fn same_domains_answers_for_the_engagement() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        let s = |x: &str| Some(x.to_string());
+        let pairs = [(s("CORP"), s("corp.lan")), (s("CORP"), s("corp.local")), (None, None), (None, s("CORP"))];
+        assert_eq!(same_domains(c, &e, &pairs).unwrap(), vec![true, false, true, false]);
+        assert_eq!(same_domains(c, "nope", &pairs), Err(AppError::NotFound));
     }
 
     #[test]
@@ -890,7 +1232,7 @@ mod tests {
         let existing = username_create(
             c,
             &e,
-            UsernameInput { username: "alice".into(), domain: Some("CORP".into()), source_host_id: None, source: None },
+            UsernameInput { username: "alice".into(), domain: Some("CORP".into()), source_host_id: None, source: None, scope: None, local_host_id: None },
         )
         .unwrap();
         let u = convert_to_access(c, &cred.id, ginput(&h)).unwrap();
@@ -945,7 +1287,7 @@ mod tests {
         let c = v.conn().unwrap();
         let e = eng(c, "a");
         let h = host(c, &e, "10.0.0.5");
-        let u = username_create(c, &e, UsernameInput { username: "a".into(), domain: None, source_host_id: Some(h.clone()), source: None }).unwrap();
+        let u = username_create(c, &e, UsernameInput { username: "a".into(), domain: None, source_host_id: Some(h.clone()), source: None, scope: None, local_host_id: None }).unwrap();
         grant_create(c, &e, AccessGrantInput { username_id: u.id.clone(), ..ginput(&h) }).unwrap();
         let mut li = cin("password", "root", "toor");
         li.scope = Some("local".into());
@@ -959,6 +1301,83 @@ mod tests {
         assert_eq!(usernames_list(c, &e).unwrap()[0].source_host_id, None);
     }
 
+    fn local_on(host_id: Option<&str>, user: &str, secret: &str) -> CredentialInput {
+        let mut i = cin("password", user, secret);
+        i.scope = Some("local".into());
+        i.local_host_id = host_id.map(Into::into);
+        i
+    }
+
+    #[test]
+    fn deleting_its_host_keeps_a_local_credential_editable() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let (gone, other) = (host(c, &e, "192.0.2.20"), host(c, &e, "192.0.2.21"));
+        let cred = create(c, &e, local_on(Some(&gone), "administrator", "Local-1")).unwrap();
+        attempts::upsert(
+            c,
+            &e,
+            &[attempts::CredAttemptInput {
+                cred_id: cred.id.clone(),
+                username_id: None,
+                host_id: other.clone(),
+                service: "smb".into(),
+                port: None,
+                result: "valid".into(),
+                auth_mode: Some("local".into()),
+                detail: None,
+                log_entry_id: None,
+                at: Some(1),
+            }],
+        )
+        .unwrap();
+        hosts::delete(c, &gone).unwrap();
+
+        // The credential and its attempts elsewhere stay; only its host link is gone.
+        let kept = get(c, &cred.id).unwrap();
+        assert_eq!((kept.scope.as_str(), kept.local_host_id.as_deref()), ("local", None));
+        assert_eq!(attempts::list(c, &e).unwrap().len(), 1);
+
+        // An edit that leaves scope and host as they are is allowed: its notes, then its secret.
+        let mut notes = local_on(None, "administrator", "Local-1");
+        notes.notes = Some("reused on files01".into());
+        let noted = update(c, &cred.id, notes).unwrap();
+        assert_eq!((noted.notes.as_deref(), noted.local_host_id.as_deref()), (Some("reused on files01"), None));
+        let resecret = update(c, &cred.id, local_on(None, "administrator", "Local-2")).unwrap();
+        assert_eq!((resecret.secret.as_str(), resecret.scope.as_str()), ("Local-2", "local"));
+
+        // A new local credential still needs its host.
+        assert_eq!(field(create(c, &e, local_on(None, "guest", "Guest-1"))), ("localHostId".into(), "a local credential needs its host".into()));
+    }
+
+    #[test]
+    fn setting_or_changing_scope_or_host_still_needs_a_host() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let (gone, live) = (host(c, &e, "192.0.2.30"), host(c, &e, "192.0.2.31"));
+        let orphan = create(c, &e, local_on(Some(&gone), "administrator", "Local-1")).unwrap();
+        hosts::delete(c, &gone).unwrap();
+
+        // A domain credential made local with no host is refused.
+        let dom = create(c, &e, cin("password", "alice", "Winter2026!")).unwrap();
+        assert_eq!(field(update(c, &dom.id, local_on(None, "alice", "Winter2026!"))).0, "localHostId");
+        // A local credential that has a host can't drop it.
+        let held = create(c, &e, local_on(Some(&live), "backup", "Backup-1")).unwrap();
+        assert_eq!(field(update(c, &held.id, local_on(None, "backup", "Backup-1"))).0, "localHostId");
+        // Only a local credential has a host, orphaned or not.
+        let mut hosted_domain = cin("password", "administrator", "Local-1");
+        hosted_domain.local_host_id = Some(live.clone());
+        assert_eq!(field(update(c, &orphan.id, hosted_domain)), ("localHostId".into(), "only a local credential has a host".into()));
+        // An orphaned local credential can be given a new host...
+        assert_eq!(update(c, &orphan.id, local_on(Some(&live), "administrator", "Local-1")).unwrap().local_host_id.as_deref(), Some(live.as_str()));
+        // ...or, orphaned again, made a domain credential.
+        hosts::delete(c, &live).unwrap();
+        let domain = update(c, &orphan.id, cin("password", "administrator", "Local-1")).unwrap();
+        assert_eq!((domain.scope.as_str(), domain.local_host_id), ("domain", None));
+    }
+
     #[test]
     fn deleting_log_entry_keeps_grant_without_proof() {
         let (_d, v) = unlocked();
@@ -970,7 +1389,7 @@ mod tests {
             [&e],
         )
         .unwrap();
-        let u = username_create(c, &e, UsernameInput { username: "a".into(), domain: None, source_host_id: None, source: None }).unwrap();
+        let u = username_create(c, &e, UsernameInput { username: "a".into(), domain: None, source_host_id: None, source: None, scope: None, local_host_id: None }).unwrap();
         let mut gi = ginput(&h);
         gi.username_id = u.id.clone();
         gi.log_entry_id = Some("l1".into());
@@ -1001,6 +1420,8 @@ mod tests {
             domain: d.map(str::to_string),
             source_host_id: None,
             source: None,
+            scope: None,
+            local_host_id: None,
         };
         let a = username_create(c, &e, mk("Alice", Some("CORP"))).unwrap();
         assert_eq!(username_create(c, &e, mk("alice", Some("corp"))).unwrap().id, a.id);
@@ -1016,6 +1437,106 @@ mod tests {
         assert!(raw.is_err());
         username_delete(c, &a.id).unwrap();
         assert_eq!(username_delete(c, &a.id), Err(AppError::NotFound));
+    }
+
+    fn uin(user: &str, domain: Option<&str>, scope: Option<&str>, host: Option<&str>) -> UsernameInput {
+        UsernameInput {
+            username: user.into(),
+            domain: domain.map(str::to_string),
+            scope: scope.map(str::to_string),
+            local_host_id: host.map(str::to_string),
+            source_host_id: None,
+            source: None,
+        }
+    }
+
+    #[test]
+    fn username_identity_follows_its_scope() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng_on(c, "a", Some("corp.lan"));
+        let (web, sql) = (host(c, &e, "192.0.2.10"), host(c, &e, "192.0.2.11"));
+        let mk = |user: &str, domain: Option<&str>, scope: Option<&str>, host: Option<&str>| {
+            username_create(c, &e, uin(user, domain, scope, host)).unwrap()
+        };
+
+        // Domain: a blank domain is the engagement's own, in either spelling.
+        let dom = mk("zoe", None, Some("domain"), None);
+        assert_eq!((dom.scope.as_str(), dom.local_host_id.as_deref()), ("domain", None));
+        assert_eq!(mk("ZOE", Some("CORP"), Some("domain"), None).id, dom.id);
+        assert_eq!(mk("zoe", Some("corp.lan"), Some("domain"), None).id, dom.id);
+        assert_ne!(mk("zoe", Some("corp.local"), Some("domain"), None).id, dom.id);
+
+        // Unknown keeps today's rule, and never merges with a domain username.
+        let unknown = mk("zoe", None, None, None);
+        assert_eq!(unknown.scope, "unknown");
+        assert_ne!(unknown.id, dom.id);
+        let unknown_corp = mk("zoe", Some("CORP"), None, None);
+        assert_ne!(unknown_corp.id, dom.id);
+        assert_ne!(unknown_corp.id, unknown.id);
+        assert_eq!(mk("zoe", Some("corp.lan"), Some("unknown"), None).id, unknown_corp.id);
+        assert_eq!(mk("Zoe", None, Some("unknown"), None).id, unknown.id);
+
+        // Local: one per name on each host, never a domain or unknown one. Its domain is its host, so none is kept.
+        let on_web = mk("zoe", Some("WEB01"), Some("local"), Some(&web));
+        assert_eq!((on_web.scope.as_str(), on_web.local_host_id.as_deref(), on_web.domain.as_deref()), ("local", Some(web.as_str()), None));
+        assert_eq!(mk("ZOE", None, Some("local"), Some(&web)).id, on_web.id);
+        let on_sql = mk("zoe", None, Some("local"), Some(&sql));
+        assert_ne!(on_sql.id, on_web.id);
+        for other in [&dom.id, &unknown.id, &unknown_corp.id] {
+            assert_ne!(&on_web.id, other);
+            assert_ne!(&on_sql.id, other);
+        }
+        assert_eq!(usernames_list(c, &e).unwrap().len(), 6);
+
+        // With no engagement domain, a blank domain is only blank.
+        let e2 = eng_on(c, "b", None);
+        let blank = username_create(c, &e2, uin("zoe", None, Some("domain"), None)).unwrap();
+        assert_ne!(username_create(c, &e2, uin("zoe", Some("CORP"), Some("domain"), None)).unwrap().id, blank.id);
+        assert_eq!(username_create(c, &e2, uin("zoe", Some(" "), Some("domain"), None)).unwrap().id, blank.id);
+    }
+
+    #[test]
+    fn a_username_scope_and_host_are_checked() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let e2 = eng(c, "b");
+        let (h, foreign) = (host(c, &e, "192.0.2.10"), host(c, &e2, "192.0.2.20"));
+        let err = |i: UsernameInput| field(username_create(c, &e, i));
+        assert_eq!(err(uin("zoe", None, Some("local"), None)), ("localHostId".into(), "a local username needs its host".into()));
+        assert_eq!(err(uin("zoe", None, Some("domain"), Some(&h))), ("localHostId".into(), "only a local username has a host".into()));
+        assert_eq!(err(uin("zoe", None, None, Some(&h))).0, "localHostId");
+        assert_eq!(err(uin("zoe", None, Some("app"), None)), ("scope".into(), "scope must be domain, local or unknown".into()));
+        assert_eq!(username_create(c, &e, uin("zoe", None, Some("local"), Some(&foreign))), Err(AppError::NotFound));
+        assert!(usernames_list(c, &e).unwrap().is_empty());
+    }
+
+    #[test]
+    fn deleting_its_host_keeps_a_local_username() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let (web, sql, files) = (host(c, &e, "192.0.2.10"), host(c, &e, "192.0.2.11"), host(c, &e, "192.0.2.12"));
+        let on_web = username_create(c, &e, uin("zoe", None, Some("local"), Some(&web))).unwrap();
+        let on_sql = username_create(c, &e, uin("zoe", None, Some("local"), Some(&sql))).unwrap();
+        grant_create(c, &e, AccessGrantInput { username_id: on_web.id.clone(), ..ginput(&files) }).unwrap();
+        hosts::delete(c, &web).unwrap();
+        hosts::delete(c, &sql).unwrap();
+
+        // Both stay local, with no host; two that lost their hosts never collide; their grants elsewhere stay.
+        let left = usernames_list(c, &e).unwrap();
+        assert_eq!(left.len(), 2);
+        for u in &left {
+            assert_eq!((u.scope.as_str(), u.local_host_id.as_deref()), ("local", None));
+        }
+        assert!(left.iter().any(|u| u.id == on_web.id) && left.iter().any(|u| u.id == on_sql.id));
+        assert_eq!(grants_list(c, &e).unwrap().len(), 1);
+
+        // A new local username still needs its host, and is a new username on that host.
+        assert_eq!(field(username_create(c, &e, uin("zoe", None, Some("local"), None))).0, "localHostId");
+        let on_files = username_create(c, &e, uin("zoe", None, Some("local"), Some(&files))).unwrap();
+        assert!(on_files.id != on_web.id && on_files.id != on_sql.id);
     }
 
     #[test]

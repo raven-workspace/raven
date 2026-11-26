@@ -1,7 +1,7 @@
 import { useRef, type KeyboardEvent } from "react";
 import type { LibraryCommand } from "../../../engines/library/types";
 import { CommandBlock } from "../../../ui/index";
-import { BANNED, useNoteCommand, type FillBase } from "../useNoteCommand";
+import { useNoteCommand, type FillBase } from "../useNoteCommand";
 import { cx } from "../../../lib/cx";
 import "./ManualCommand.scss";
 
@@ -12,8 +12,8 @@ export type { FillBase };
  * an Arsenal card's do (`fillLibraryCommand`); without, the text copies as written. Copy goes through the copy guard
  * (an unfilled token holds the first copy back). With focus on the block, ↵ copies and ⌘↵ copies and logs it.
  *
- * In an exam sim (or until the engagement's rules are known) the text is never hidden: a banned command says so in
- * amber and its first copy is held back, and a Meterpreter command shows the Metasploit lock line.
+ * A reading surface for the exam rules: the text is never hidden. A command the exam forbids shows its exam verdict's
+ * line in amber and its first copy is held back; one that would take the Metasploit lock says so.
  */
 export function ManualCommand({ command, label, caption, fill, output = false, base, highlight }: {
   command: LibraryCommand;
@@ -29,7 +29,7 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
   highlight?: RegExp | null;
 }) {
   const root = useRef<HTMLDivElement>(null);
-  const { cmd, copy, copyAndLog, banned, msf, known } = useNoteCommand(command, { fill, output, base });
+  const { cmd, copy, copyAndLog, examLine } = useNoteCommand(command, { fill, output, base });
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     // Output keeps its lines whole and scrolls sideways: ← → scroll it while the block has focus.
@@ -60,8 +60,7 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
       {/* An untitled block has no caption row (no empty gap above it). Copy results show in the page's status slot. */}
       {caption && <span className="manual-command__caption">{caption}</span>}
       <CommandBlock
-        text={cmd.text}
-        {...(cmd.copyText !== undefined ? { copyText: cmd.copyText } : {})}
+        text={cmd.shown}
         tokens={cmd.tokens ?? []}
         highlight={highlight ?? null}
         wrap={!output}
@@ -74,8 +73,13 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
             return r;
           })}
       />
-      {known && banned && <p className="manual-command__rule manual-command__rule--warn">{BANNED}</p>}
-      {known && msf && <p className={cx("manual-command__rule", msf.breach && "manual-command__rule--warn")}>{msf.text}</p>}
+      <ExamLine line={examLine} />
     </div>
   );
+}
+
+/** The exam verdict's line under a Manual command: amber when it breaks a rule, plain when it only informs. */
+export function ExamLine({ line }: { line: { text: string; breach: boolean } | null }) {
+  if (!line) return null;
+  return <p className={cx("manual-command__rule", line.breach && "manual-command__rule--warn")}>{line.text}</p>;
 }

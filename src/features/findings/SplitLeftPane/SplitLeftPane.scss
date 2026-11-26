@@ -71,8 +71,9 @@
       }
     }
 
-    &:disabled {
+    &[aria-disabled="true"] {
       opacity: 40%;
+      cursor: default;
     }
   }
 
@@ -83,11 +84,6 @@
     display: grid;
     grid-template-rows: minmax(min-content, 1fr);
     border-top: 1px solid var(--line);
-  }
-
-  .split-left-pane__error {
-    @include type(meta);
-    color: var(--warn);
   }
 
   .split-left-pane__hint {

@@ -1,4 +1,4 @@
-import type { CardMeta } from "../library/store";
+import type { CardMeta } from "../library/types";
 import { cardForLink } from "../library/wikilinks";
 import { slug } from "./anchors";
 import type { ManualNote } from "./types";

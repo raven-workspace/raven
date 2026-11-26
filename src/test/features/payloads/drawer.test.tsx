@@ -23,10 +23,6 @@ import { useEffect } from "react";
 import { MemoryRouter, useNavigate, type NavigateFunction } from "react-router";
 
 vi.mock("../../../lib/api");
-vi.mock("../../../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../../../features/checklist/ticks")>()),
-  resyncBoards: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("../../../features/capture/logCommand", () => ({ logCommand: vi.fn() }));
 const m = vi.mocked(api, true);
 
@@ -132,6 +128,19 @@ async function openOn(path: string, settings?: { attackerIp?: string; listenerPo
 }
 
 describe("Payloads drawer", () => {
+  it("hosts that fail to load: the picker says so, and Retry brings it back (RAV-22)", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockRejectedValue(new Error("vault busy"));
+    mount("/e/e1");
+    await screen.findByRole("navigation", { name: "Engagement" });
+    await user.keyboard("p");
+    const d = within(await drawer());
+    expect(await d.findByText("Couldn't load hosts")).toBeInTheDocument();
+    m.hostsList.mockResolvedValue([IIS, BARE]);
+    await user.click(d.getByRole("button", { name: "Retry" }));
+    expect(await d.findByRole("button", { name: /^Fill for host/ })).toBeInTheDocument();
+  });
+
   it("P toggles the drawer and A closes it", async () => {
     const { user } = await openOn("/e/e1/h/h1");
     await user.keyboard("p");
@@ -372,10 +381,10 @@ describe("Payloads drawer", () => {
       await user.keyboard("{Tab}");
       seen.push(document.activeElement?.getAttribute("aria-label") ?? null);
     }
-    expect(seen).toEqual(["Host zzweb01", "OS: Windows", "Paste into: Web shell ?cmd=", `Port: ${LPORT}`]);
+    expect(seen).toEqual(["Fill for host zzweb01", "OS: Windows", "Paste into: Web shell ?cmd=", `Port: ${LPORT}`]);
     // ⌥H, ⌥O and ⌥W still open them.
     await user.keyboard("{Alt>}h{/Alt}");
-    expect(d.getByRole("button", { name: "Host zzweb01" })).toHaveAttribute("aria-expanded", "true");
+    expect(d.getByRole("button", { name: "Fill for host zzweb01" })).toHaveAttribute("aria-expanded", "true");
     await user.keyboard("{Escape}");
     await user.keyboard("{Alt>}o{/Alt}");
     expect(d.getByRole("button", { name: "OS: Windows" })).toHaveAttribute("aria-expanded", "true");
@@ -403,11 +412,11 @@ describe("Payloads drawer", () => {
     expect(d.getByRole("button", { name: "Paste into: cmd.exe" })).toBeInTheDocument();
     expect(payloadText(d)).toBe(buildPayload(def("ps-b64"), "cmd", { LHOST, LPORT }).text);
     // Another host does not get it.
-    await user.click(d.getByRole("button", { name: /^(Host |No host)/ }));
+    await user.click(d.getByRole("button", { name: /^Fill for host/ }));
     await user.click(d.getByRole("option", { name: /zzbare02/ }));
     expect(d.getByRole("button", { name: "Paste into: not set" })).toBeInTheDocument();
     // Back on the first host, after closing and reopening, the override is still there.
-    await user.click(d.getByRole("button", { name: /^(Host |No host)/ }));
+    await user.click(d.getByRole("button", { name: /^Fill for host/ }));
     await user.click(d.getByRole("option", { name: /zzweb01/ }));
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("complementary", { name: "Payloads" })).not.toBeInTheDocument();
@@ -458,7 +467,7 @@ describe("Payloads drawer", () => {
     usePayloadsStore.setState({ generator: "msfvenom", overrides: { h2: { os: "windows" } } });
     const { user, d } = await openOn("/e/e1/h/h1");
     expect(await d.findByRole("heading", { name: "Windows x64 ASPX" })).toBeInTheDocument();
-    await user.click(d.getByRole("button", { name: /^(Host |No host)/ }));
+    await user.click(d.getByRole("button", { name: /^Fill for host/ }));
     await user.click(d.getByRole("option", { name: /zzbare02/ }));
     expect(await d.findByRole("heading", { name: "Java WAR (Tomcat)" })).toBeInTheDocument();
   });
@@ -575,7 +584,7 @@ describe("Payloads drawer: chips and keys", () => {
     await user.type(d.getByRole("textbox", { name: "Custom port" }), "9001");
     act(() => void nav.to("/e/e1/h/h2"));
     const after = within(await drawer());
-    expect(await after.findByRole("button", { name: "Host zzbare02" })).toBeInTheDocument();
+    expect(await after.findByRole("button", { name: "Fill for host zzbare02" })).toBeInTheDocument();
     expect(after.queryByRole("textbox", { name: "Custom port" })).not.toBeInTheDocument();
     expect(usePayloadsStore.getState().overrides.h2?.port).toBeUndefined();
   });

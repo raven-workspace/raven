@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildDraft } from '../../../engines/capture';
+import { TEST_LIBRARY } from '../../support/library';
 
-const base = { image: null, hosts: [], scope: [], domain: '', machines: ['Kali (VM)'], lastRanOn: null };
+const base = { image: null, hosts: [], scope: [], domain: '', machines: ['Kali (VM)'], lastRanOn: null, library: TEST_LIBRARY };
 const EW = '*Evil-WinRM* PS C:\\Users\\carol\\Documents> ';
 
 describe('log titles carry the command, not the prompt', () => {

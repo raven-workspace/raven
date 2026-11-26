@@ -63,9 +63,39 @@ describe("finding files: modified exploit", () => {
     expect(input.originalContent).toBeUndefined();
   });
 
+  it("refuses an original URL over 8 KiB, and says why", async () => {
+    m.findingFilesList.mockResolvedValue([{ ...FILE, modified: true, originalUrl: "https://x.test/1" }]);
+    const user = userEvent.setup();
+    render(<QueryClientProvider client={makeQueryClient()}><Host /></QueryClientProvider>);
+    await user.click(await screen.findByRole("button", { name: "Edit exploit.py" }));
+    const group = screen.getByRole("group", { name: "Finding files" });
+    const url = within(group).getByLabelText("Original URL");
+    await user.clear(url);
+    await user.click(url);
+    await user.paste(`https://e.test/${"a".repeat(8 * 1024)}`);
+    await user.click(within(group).getByRole("button", { name: "Save file" }));
+    expect(await within(group).findByText("The original URL is over 8 KiB")).toBeInTheDocument();
+    expect(m.findingFileUpdate).not.toHaveBeenCalled();
+  });
+
   it("marks a modified file in its row", async () => {
     m.findingFilesList.mockResolvedValue([{ ...FILE, modified: true, originalUrl: "https://x.test/1" }]);
     render(<QueryClientProvider client={makeQueryClient()}><Host /></QueryClientProvider>);
     expect(await screen.findByText("Modified")).toBeInTheDocument();
   });
 });
+
+describe("finding files: load error (RAV-22)", () => {
+  it("a failed load shows the standard error, and Retry loads the files", async () => {
+    const user = userEvent.setup();
+    m.findingFilesList.mockRejectedValue(new Error("vault busy"));
+    render(<QueryClientProvider client={makeQueryClient()}><Host /></QueryClientProvider>);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load files");
+    m.findingFilesList.mockResolvedValue([FILE]);
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("button", { name: "Edit exploit.py" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+

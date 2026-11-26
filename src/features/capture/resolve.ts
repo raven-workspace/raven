@@ -1,4 +1,5 @@
 import { buildDraft, credentialsInPaste, type PastedCredential, detectKind, findFlagInPaste, flagTitle, noteTitle, proofShotFlag, screenshotFileName, type CaptureDraft, type DraftInput, OPEN_STATES } from "../../engines/capture";
+import type { LibraryCommand } from "../../engines/library/types";
 import { OS_LABELS } from "../hosts/columns";
 import { KIND_LABELS } from "../log/kindLabels";
 import { BOARD_COLUMNS, type Host, type HostOs } from "../../types/host";
@@ -26,6 +27,8 @@ export interface CaptureContext {
   domain: string;
   machines: string[];
   lastRanOn: string | null;
+  /** The command library: it names a command and tells a command from a note. */
+  library: LibraryCommand[];
   /** Host preselected because capture was opened from its view. */
   presetHostId: string | null;
   /** The engagement's log: a screenshot right after a flag is named for it, and no two screenshots share a name. */
@@ -56,7 +59,7 @@ export interface Resolved {
 /** Turns the panel's input plus the engine's suggestions into the fields that will be saved. */
 export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   const { hosts } = ctx;
-  const kind = pd.kind ?? detectKind(pd.text, pd.image !== null);
+  const kind = pd.kind ?? detectKind(pd.text, pd.image !== null, ctx.library);
   const draftInput: DraftInput = {
     text: kind === "screenshot" ? pd.caption : pd.text,
     image: pd.image ? { mime: pd.image.mime } : null,
@@ -66,6 +69,7 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
     domain: ctx.domain,
     machines: ctx.machines,
     lastRanOn: ctx.lastRanOn,
+    library: ctx.library,
   };
   const draft = buildDraft(draftInput);
 
@@ -98,7 +102,7 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
 
   // A note of `user:pass` lines offers its credentials, linked to the capture's host.
   const hostNames = hosts.flatMap((h) => [h.name, shortHostName(h.name), h.ip ?? ""]);
-  const credentials = kind === "note" ? credentialsInPaste(pd.text, hostNames) : [];
+  const credentials = kind === "note" ? credentialsInPaste(pd.text, ctx.library, hostNames) : [];
   // A local account (`.\user`) needs its host: with none linked it is not added.
   const adding = pd.asNote ? [] : credentials.filter((c) => !c.local || selectedHost);
   const account = (c: PastedCredential) => (c.local ? `.\\${c.username}` : c.domain ? `${c.domain}\\${c.username}` : c.username);

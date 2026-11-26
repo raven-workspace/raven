@@ -29,9 +29,9 @@ export interface SubstitutionContext {
 }
 
 export interface VariableRange {
-  /** Character offset of the token's opening brace/bracket in the *original* template. */
+  /** Character offset of the token's opening brace in the *original* template. */
   start: number;
-  /** Character offset just past the token's closing brace/bracket. */
+  /** Character offset just past the token's closing brace. */
   end: number;
   /** Token name as written in the template (original case), e.g. `TARGET_IP` or `ip`. */
   raw: string;
@@ -87,15 +87,75 @@ const GLOBAL_FIELD_ALIASES: Record<string, 'domain' | 'dcIp' | 'user' | 'cred' |
   WORDLIST: 'wordlist',
 };
 
-// Matches `{TOKEN}` (not immediately preceded by `$` or `%`, so `${VAR}` and curl's
-// `%{http_code}` write-out are left untouched) or `<TOKEN>`. `$(cmd)` and `%VAR%` never match this pattern at
-// all since neither uses curly/angle brackets, so they're safe by construction.
-// Requires 2+ chars so incidental single-char braces from other tools (e.g.
-// PowerShell's `|%{0}` foreach-object shorthand) are never mistaken for a
-// variable token.
-const TOKEN_RE = /(?<![$%])\{([A-Za-z0-9_-]{2,})\}|<([A-Za-z0-9_-]{2,})>/g;
+/**
+ * THE placeholder grammar: every part of Raven that spots placeholders (the Arsenal, the Manual, search, Payloads, the
+ * checklist) goes through `findPlaceholders`, so they all agree on what one is. A conventions test fails if a
+ * placeholder regex is defined anywhere else.
+ *
+ * A placeholder is `{TOKEN}`, the brace form library and Manual content is written in. It is never immediately preceded
+ * by `$` or `%`, so `${VAR}` and curl's `%{http_code}` write-out are left untouched; `$(cmd)` and `%VAR%` use no braces
+ * at all. `<name>` is never a placeholder: in commands it is XML or HTML (`<script>`, a .Library-ms file). A name is 2+
+ * chars of letters, digits, `_` and `-`, so incidental single-char braces from other tools (e.g. PowerShell's `|%{0}`
+ * foreach-object shorthand) are never mistaken for a token.
+ */
+const TOKEN_RE = /(?<![$%])\{([A-Za-z0-9_-]{2,})\}/g;
+
+/** One `{NAME}` placeholder as written in a text. */
+export interface Placeholder {
+  /** Offset of the opening brace. */
+  start: number;
+  /** Offset just past the closing brace. */
+  end: number;
+  /** The name as written (original case), e.g. `TARGET_IP`, `ip` or `DC-IP`. */
+  raw: string;
+}
+
+/** Every placeholder in `text`, in order. */
+export function findPlaceholders(text: string): Placeholder[] {
+  return [...text.matchAll(TOKEN_RE)].map((m) => ({ start: m.index, end: m.index + m[0].length, raw: m[1] ?? '' }));
+}
+
+/** Whether `text` has at least one placeholder. */
+export const hasPlaceholders = (text: string): boolean => findPlaceholders(text).length > 0;
+
+/** `text` with each placeholder replaced by what `fn` returns for it; the text between is kept. */
+export function replacePlaceholders(text: string, fn: (p: Placeholder) => string): string {
+  let out = '';
+  let last = 0;
+  for (const p of findPlaceholders(text)) {
+    out += text.slice(last, p.start) + fn(p);
+    last = p.end;
+  }
+  return out + text.slice(last);
+}
+
+/**
+ * The upper-case name a placeholder fills as, aliases folded the way `resolveTemplate` reads them: `{TARGET}`, `{IP}`,
+ * `{TARGET-IP}` are TARGET_IP, `{DC-IP}` is DC_IP, and the exact-case payload aliases `{ip}`, `{port}`, `{shell}` are
+ * LHOST, LPORT and SHELL. Any other name is upper-cased.
+ */
+export function canonicalToken(raw: string): string {
+  const exact = EXACT_CASE_FIELDS.get(raw);
+  if (exact) return CANONICAL_LABELS[exact]!;
+  const upper = raw.toUpperCase();
+  if (TARGET_ALIASES.has(upper)) return 'TARGET_IP';
+  const field = GLOBAL_FIELD_ALIASES[upper];
+  return field ? CANONICAL_LABELS[field]! : upper;
+}
+
+/** Secret tokens: the placeholders that hold a secret. Masked in the text shown and never an editable fill field. */
+export const SECRET_TOKENS: ReadonlySet<string> = new Set(['PASS', 'HASH', 'CRED']);
+
+/** Credential tokens: the placeholders filled from the chosen credential (DC_HOST carries the credential's domain). */
+export const CREDENTIAL_TOKENS: ReadonlySet<string> = new Set(['USER', 'DOMAIN', 'PASS', 'HASH', 'DC_HOST']);
 
 const TARGET_ALIASES = new Set(['TARGET_IP', 'TARGET', 'IP', 'TARGET-IP']);
+
+/**
+ * Exact-case (lowercase-only) aliases inherited from ReverseShellGenerator / revshellsData's payload library: `{ip}`,
+ * `{port}`, `{shell}`, keyed to their field.
+ */
+const EXACT_CASE_FIELDS = new Map<string, 'lhost' | 'lport' | 'shell'>([['ip', 'lhost'], ['port', 'lport'], ['shell', 'shell']]);
 
 function effectiveTarget(ctx: SubstitutionContext): string | undefined {
   return ctx.activeTargetIp || ctx.rhost;
@@ -112,10 +172,8 @@ function resolveExactCaseToken(
   raw: string,
   ctx: SubstitutionContext
 ): { value: string | undefined; canonical: string } | null {
-  if (raw === 'ip') return { value: ctx.lhost, canonical: 'lhost' };
-  if (raw === 'port') return { value: ctx.lport, canonical: 'lport' };
-  if (raw === 'shell') return { value: ctx.shell, canonical: 'shell' };
-  return null;
+  const field = EXACT_CASE_FIELDS.get(raw);
+  return field ? { value: ctx[field], canonical: field } : null;
 }
 
 /** Case-insensitive aliases inherited from `helpers.ts#interpolateCommand`. */
@@ -156,11 +214,11 @@ export interface ResolveOptions {
 }
 
 /**
- * Resolve every `{TOKEN}` / `<TOKEN>` placeholder in `template` against
+ * Resolve every `{TOKEN}` placeholder in `template` against
  * `context`. Pure function — same input always yields the same output.
  *
  * - Known fields (LHOST/LPORT/TARGET_IP family/INTERFACE/shell, plus their
- *   lowercase `{ip}`/`{port}`/`{shell}` and Obsidian `<...>` aliases) are
+ *   lowercase `{ip}`/`{port}`/`{shell}` aliases) are
  *   always substituted with the context value, or a readable default when
  *   the context value is empty — but an empty/missing value is still
  *   reported as unresolved.
@@ -168,7 +226,7 @@ export interface ResolveOptions {
  *   by key.
  * - Anything else is left untouched in the output and reported unresolved.
  * - Never substitutes inside `${VAR}` (bash/JS parameter expansion). `$(cmd)`
- *   and `%VAR%` contain no curly/angle syntax, so they are never touched.
+ *   and `%VAR%` contain no braces, so they are never touched.
  */
 export function resolveTemplate(
   template: string,
@@ -181,13 +239,9 @@ export function resolveTemplate(
   const ranges: VariableRange[] = [];
   let result = '';
   let lastIndex = 0;
-  let match: RegExpExecArray | null;
 
-  TOKEN_RE.lastIndex = 0;
-  while ((match = TOKEN_RE.exec(template)) !== null) {
-    const raw = match[1] ?? match[2] ?? '';
-    const start = match.index;
-    const end = start + match[0].length;
+  for (const { start, end, raw } of findPlaceholders(template)) {
+    const written = template.slice(start, end);
     result += template.slice(lastIndex, start);
 
     const known =
@@ -201,7 +255,7 @@ export function resolveTemplate(
         result += value;
         ranges.push({ start, end, raw, canonical, resolved: true });
       } else {
-        result += DEFAULTS[canonical] ?? match[0];
+        result += DEFAULTS[canonical] ?? written;
         unresolvedSet.add(CANONICAL_LABELS[canonical] ?? canonical.toUpperCase());
         ranges.push({ start, end, raw, canonical, resolved: false });
       }
@@ -211,7 +265,7 @@ export function resolveTemplate(
         result += customValue;
         ranges.push({ start, end, raw, canonical: raw, resolved: true });
       } else {
-        result += match[0];
+        result += written;
         unresolvedSet.add(raw);
         ranges.push({ start, end, raw, canonical: null, resolved: false });
       }

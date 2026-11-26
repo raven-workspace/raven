@@ -1,7 +1,7 @@
 import type { ChecklistItem, ChecklistItemInput, ChecklistState, ItemState } from "../../types/checklist";
 import type { Service } from "../../types/service";
 
-// Pure checklist helpers, apart from `queries.ts` so `ticks.ts` and `resync.ts` do not import each other in a cycle.
+// Pure checklist helpers, apart from `queries.ts` so `ticks.ts` and `sync.ts` do not import the query hooks.
 
 export const checklistKey = (engagementId: string) => ["checklist", engagementId] as const;
 

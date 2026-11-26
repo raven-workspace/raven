@@ -56,10 +56,14 @@ function mount(opts: { services?: Service[]; hops?: Hop[]; log?: LogEntry[]; tun
   m.credentialsList.mockResolvedValue(opts.creds ?? []);
   m.credAttemptsList.mockResolvedValue(opts.attempts ?? []);
   m.engagementGet.mockResolvedValue(opts.eng ?? E1);
-  m.hostsList.mockResolvedValue(opts.hosts ?? [H1, H2]);
+  // As the store derives it: the AD set switch, else 88 and 389 both open.
+  const open = (hostId: string, port: number) => (opts.services ?? []).some((s) => s.hostId === hostId && s.port === port && s.state === "open");
+  const hosts = (opts.hosts ?? [H1, H2]).map((h) => ({ ...h, adSetEffective: h.adSet ?? (open(h.id, 88) && open(h.id, 389)) }));
+  m.hostsList.mockResolvedValue(hosts);
   m.checklistList.mockResolvedValue(opts.items ?? []);
   m.checklistApplyFacts.mockResolvedValue(opts.items ?? []);
   m.checklistApplyCover.mockResolvedValue(opts.items ?? []);
+  m.checklistApplyEntryTicks.mockResolvedValue(opts.items ?? []);
   m.servicesListEngagement.mockResolvedValue(opts.services ?? []);
   m.hopsList.mockResolvedValue(opts.hops ?? []);
   m.tunnelsList.mockResolvedValue(opts.tunnels ?? []);
@@ -196,7 +200,7 @@ describe("engagement checklist", () => {
   });
 
   it("a bare-username access flag names the username, not the secret's credential", async () => {
-    m.usernamesList.mockResolvedValue([{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1 }]);
+    m.usernamesList.mockResolvedValue([{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null }]);
     mount({ services: AD, creds: [cred("c1")], attempts: [attempt("a1", "c1", { usernameId: "u1", result: "valid" })] });
     const flags = await screen.findByRole("region", { name: "New access" });
     expect(await within(flags).findByText("dc01: valid over winrm as CORP\\alice")).toBeInTheDocument();
@@ -223,17 +227,21 @@ describe("engagement checklist", () => {
   it("Tick from log re-derives a tick that was missing and reports the count", async () => {
     const user = userEvent.setup();
     mount({ log: [flagEntry] });
+    // The store's entry-tick write, after the rebuild: the flag's tick is back.
+    m.checklistApplyEntryTicks.mockResolvedValue([
+      { ownerId: "h2", goalId: "h-orient-proof", status: "done", notes: null, completedAt: 1000, auto: true, autoFrom: null, evidence: [{ entryId: "f1", commandId: "flag" }], updatedAt: 1 },
+    ]);
     await user.click(await screen.findByRole("button", { name: "Tick from log" }));
     const section = screen.getByRole("region", { name: "Engagement checklist" });
     expect(await within(section).findByText("Updated 1 goal")).toBeInTheDocument();
-    expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ ownerId: "h2", goalId: "h-orient-proof", status: "done" })]);
+    expect(m.checklistApplyEntryTicks).toHaveBeenCalledWith("e1", [{ entryId: "f1", at: 1000, ticks: [expect.objectContaining({ ownerId: "h2", goalId: "h-orient-proof" })] }]);
   });
 
   it("Tick from log re-fetches the checklist and shows the repaired goal as done", async () => {
     const user = userEvent.setup();
     let repaired = false;
     mount({ services: AD });
-    // tickFromLog reads the log; from then on the store holds the repaired tick.
+    // The rebuild reads the log; from then on the store holds the repaired tick.
     m.logList.mockImplementation(async () => {
       repaired = true;
       return [];

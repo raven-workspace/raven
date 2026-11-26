@@ -20,7 +20,7 @@ ADVISORY: This script should be used for authorized penetration testing and/or e
 ═══════════════════════════════╣ Basic information ╠═══════════════════════════════
                                ╚═══════════════════╝
 OS: Linux version 5.15.0-53-generic (builder@build01) #59-Ubuntu SMP Mon Jan 1 00:00:00 UTC 2026
-User & Groups: uid=1000(jay) gid=1000(jay) groups=1000(jay),4(adm),24(cdrom),30(dip),46(plugdev)
+User & Groups: uid=1000(zoe) gid=1000(zoe) groups=1000(zoe),4(adm),24(cdrom),30(dip),46(plugdev)
 Hostname: web01
 
 [+] /usr/bin/ping is available for network discovery (LinPEAS can discover hosts, learn more with -h)
@@ -51,8 +51,8 @@ Thu Jan  1 12:00:00 AM UTC 2026
 
 [1;36m╔══════════╣ [1;32mEnvironment (T1082,T1552.007)[0m
 ╚ Any private information inside environment variables?
-USER=jay
-HOME=/home/jay
+USER=zoe
+HOME=/home/zoe
 DB_PASSWORD=Password123!
 API_TOKEN=Password123!
 SHELL=/bin/bash
@@ -81,14 +81,14 @@ tcp   LISTEN 0      128             [::]:22           [::]:*
                                ╚═══════════════════╝
 [1;36m╔══════════╣ [1;32mMy user (T1033)[0m
 ╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#users
-[1;35muid=1000(jay) gid=1000(jay) groups=1000(jay),4(adm),24(cdrom),30(dip),46(plugdev)[0m
+[1;35muid=1000(zoe) gid=1000(zoe) groups=1000(zoe),4(adm),24(cdrom),30(dip),46(plugdev)[0m
 
 [1;36m╔══════════╣ [1;32mChecking 'sudo -l', /etc/sudoers, and /etc/sudoers.d (T1548.003)[0m
 ╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#sudo-and-suid
-Matching Defaults entries for jay on web01:
+Matching Defaults entries for zoe on web01:
     env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin
 
-User jay may run the following commands on web01:
+User zoe may run the following commands on web01:
     [1;31;103m(ALL) NOPASSWD: /usr/bin/vim[0m
     (root) /usr/bin/crontab -l
 

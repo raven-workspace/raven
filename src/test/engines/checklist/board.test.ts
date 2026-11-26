@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Host } from '../../../types/host';
 import type { ChecklistState } from '../../../types/checklist';
+import type { AccessGrant, AccessLevel } from '../../../types/credentials';
 import { HOST_STAGES, currentStage, derivedColumn } from '../../../engines/checklist';
 
 const host: Host = {
@@ -15,6 +16,10 @@ const closeAll = (...stageIds: string[]): ChecklistState =>
   Object.fromEntries(stageIds.flatMap(ids).map((id) => [id, { status: 'na' as const }]));
 
 const cols = HOST_STAGES.map((s) => s.id);
+
+const grant = (level: AccessLevel, hostId = 'h'): AccessGrant =>
+  ({ id: `g-${level}-${hostId}`, engagementId: 'e', usernameId: 'u', hostId, level, via: 'ssh', logEntryId: null, at: 0 });
+const footholdDone = () => done(...ids('initial-foothold'));
 
 describe('derivedColumn', () => {
   it('information-gathering by default and while any goal there is open', () => {
@@ -93,6 +98,28 @@ describe('derivedColumn', () => {
     const state = { ...done('h-pe-proof'), ...closeAll('post-exploitation', 'reporting') };
     expect(ids('lateral-movement').length).toBeGreaterThan(0);
     expect(derivedColumn(host, state, all)).toBe('reporting');
+  });
+
+  it('a root, SYSTEM or admin grant with only foothold goals done is post-exploitation', () => {
+    for (const level of ['admin', 'system'] as const) {
+      expect(derivedColumn(host, footholdDone(), all, [grant(level)]), level).toBe('post-exploitation');
+    }
+    expect(derivedColumn(host, {}, all, [grant('admin')])).toBe('post-exploitation');
+  });
+
+  it('an elevated grant with every goal done is reporting', () => {
+    expect(derivedColumn(host, done(...HOST_STAGES.flatMap((s) => s.goals.map((g) => g.id))), all, [grant('system')])).toBe('reporting');
+  });
+
+  it('a user grant derives as without one', () => {
+    for (const state of [{}, footholdDone(), done('h-foot-shell')]) {
+      expect(derivedColumn(host, state, all, [grant('user')])).toBe(derivedColumn(host, state, all));
+    }
+    expect(derivedColumn(host, footholdDone(), all, [grant('user')])).toBe('privilege-escalation');
+  });
+
+  it("another host's elevated grant does not move this host", () => {
+    expect(derivedColumn(host, footholdDone(), all, [grant('admin', 'other')])).toBe('privilege-escalation');
   });
 
   it('proof done and no post-exploitation or reporting goals apply is reporting', () => {

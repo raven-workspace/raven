@@ -6,6 +6,7 @@ import { detectOsFromScan } from '../parse/commandOutput';
 import { detectAndParseScan, parseMultiHostScan, type ParsedPort } from '../parse/scan';
 import { splitPaste } from '../parse/logPaste';
 import { ipInScope } from '../parse/scope';
+import type { LibraryCommand } from '../library/types';
 import { httpParts, httpTitle } from './http';
 import { findFlagInPaste } from './flag';
 import { detectKind } from './kind';
@@ -32,6 +33,8 @@ export type DraftInput = {
   domain: string;
   machines: string[];
   lastRanOn: string | null;
+  /** The command library: it names a command's title and tells a command from a note. */
+  library: LibraryCommand[];
 };
 
 function union(lists: HostRef[][]): HostRef[] {
@@ -121,7 +124,7 @@ function scanFor(output: string, target: HostRef, domain: string): CaptureDraft[
 
 export function buildDraft(input: DraftInput): CaptureDraft {
   const { text, hosts, scope, domain, machines } = input;
-  const kind = input.kind ?? detectKind(text, input.image !== null);
+  const kind = input.kind ?? detectKind(text, input.image !== null, input.library);
   const fallbackRanOn = input.lastRanOn ?? machines[0] ?? '';
   const kaliMachine = machines.find(isKaliLabel);
   const empty = { unknownScopeIps: [] as string[], scan: null };
@@ -147,7 +150,7 @@ export function buildDraft(input: DraftInput): CaptureDraft {
     const scan = attributed.length === 1 ? scanFor(blocks.map((b) => b.output).join('\n'), attributed[0], domain) : null;
     return {
       kind,
-      title: commandTitle(blocks),
+      title: commandTitle(blocks, input.library),
       hostIds: attributed.map((h) => h.id),
       ranOn,
       content: { kind: 'command', blocks },

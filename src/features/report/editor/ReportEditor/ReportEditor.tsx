@@ -6,7 +6,7 @@ import type { Node as PMNode } from "prosekit/pm/model";
 import { isHistoryTransaction } from "prosekit/pm/history";
 import { NodeSelection, Plugin, PluginKey, type Command, type Transaction } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
-import { placedIdsIn, type ReportNode } from "../../../../engines/report/index";
+import { blockSource, placedIn, removalKeys, unlinkCopiedFrom, type ReportNode } from "../../../../engines/report/index";
 import { reportError } from "../../../../lib/lockSignal";
 import { RavenError } from "../../../../types/errors";
 import { BlockHandle } from "../BlockHandle/BlockHandle";
@@ -14,7 +14,8 @@ import { BubbleMenu } from "../BubbleMenu/BubbleMenu";
 import { defineReportExtension, type HeldPositions, type SourceGone, type SubNumbers } from "../extension";
 import { FindBar } from "../FindBar/FindBar";
 import { FormatToolbar } from "../FormatToolbar/FormatToolbar";
-import { hostAtPos, insertFigure, PageActionsContext, PROGRAMMATIC, saveScreenshot, type PageActions } from "../pageActions";
+import { hostAtPos, insertFigure, PageActionsContext, PROGRAMMATIC, type PageActions } from "../pageActions";
+import { saveScreenshot } from "../../../log/saveScreenshot";
 import { usePageContext } from "../ReportDataContext/ReportDataContext";
 import { SlashMenu } from "../SlashMenu/SlashMenu";
 import { TableHandles } from "../TableHandles/TableHandles";
@@ -44,15 +45,9 @@ export function keepCopiedText(editor: Editor, entryId: string): boolean {
   return editor.exec((state, dispatch) => {
     const tr = state.tr;
     state.doc.descendants((node, pos) => {
-      const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
-      const fromSource = source === `entry:${entryId}` || source.startsWith(`entry:${entryId}:`);
-      const figure = node.type.name === "figure" && node.attrs.entryId === entryId;
-      if (!fromSource && !figure) return true;
-      const attrs: Record<string, unknown> = { ...node.attrs };
-      if (fromSource) Object.assign(attrs, { source: null, gen: null });
-      if (figure) attrs.entryId = null;
+      const attrs = unlinkCopiedFrom({ type: node.type.name, attrs: node.attrs }, entryId);
       // Same size, so later positions hold; a list or table goes on to its own blocks with their sources.
-      tr.setNodeMarkup(pos, undefined, attrs);
+      if (attrs) tr.setNodeMarkup(pos, undefined, attrs);
       return true;
     });
     if (!tr.docChanged) return false;
@@ -85,14 +80,13 @@ export function selectBlockAt(editor: Editor, pos: number) {
 
 export { PROGRAMMATIC };
 
-/** What a block places itself (its entry by source, a figure's `entryId`, its `also`, a machine's Also tested list by
- *  a `tested:` source), not its children's. */
-const ownEntryIds = (node: PMNode) => placedIdsIn({ type: node.type.name, attrs: node.attrs });
+/** The removal keys of what a block places itself (`placedIn` on the block alone), not its children's. */
+const ownEntryIds = (node: PMNode) => removalKeys(placedIn({ type: node.type.name, attrs: node.attrs }));
 
 /**
  * What a transaction took off the page: entries (and Also tested lists) named by blocks in the ranges it deleted
- * (inside a list item too) that the page no longer names anywhere (`placedIdsIn`'s rule: a source, a figure's entry,
- * an `also`, a `tested:<hostId>` source). None for
+ * (inside a list item too) that the page no longer names anywhere (`placedIn`'s rule: a block's source, a figure's
+ * entry, an `also`, a machine's Also tested bullets). None for
  * the page's own transactions (`PROGRAMMATIC`) and for undo and redo.
  */
 export function removedByTransaction(tr: Transaction): string[] {
@@ -114,6 +108,46 @@ export function removedByTransaction(tr: Transaction): string[] {
     return gone.size > 0;
   });
   return [...gone];
+}
+
+/**
+ * Words the owner deleted across blocks are no longer an entry's: when a user transaction deletes a range that spans
+ * blocks and the block it leaves there is empty and still sourced from an entry (select a note's paragraphs and ⌫
+ * leaves the first one, emptied), that block drops its source, `gen` and `also`: it shows nothing of them. Then the entry is off the
+ * page when nothing else names it, and its removal is recorded. Appended to the owner's transaction, so one undo brings
+ * both back. Clearing one block's own words keeps its link: the owner may be retyping it.
+ */
+export function emptiedBlocksPlugin() {
+  return new Plugin({
+    appendTransaction: (trs, _before, state) => {
+      const spots: number[] = [];
+      trs.forEach((tr, t) => {
+        if (!tr.docChanged || tr.getMeta(PROGRAMMATIC) === true || isHistoryTransaction(tr)) return;
+        tr.steps.forEach((step, i) => {
+          const doc = tr.docs[i];
+          step.getMap().forEach((oldStart, oldEnd, newStart) => {
+            if (oldEnd <= oldStart || doc.resolve(oldStart).parent === doc.resolve(oldEnd).parent) return;
+            // Where that spot is in the final doc: through the rest of this transaction, then the later ones.
+            let pos = tr.mapping.slice(i + 1).map(newStart);
+            for (const later of trs.slice(t + 1)) pos = later.mapping.map(pos);
+            spots.push(pos);
+          });
+        });
+      });
+      const out = state.tr;
+      for (const pos of spots) {
+        if (pos > state.doc.content.size) continue;
+        const at = state.doc.resolve(pos);
+        const node = at.parent;
+        if (at.depth === 0 || !node.isTextblock || node.content.size > 0) continue;
+        if (blockSource({ type: node.type.name, attrs: node.attrs })?.kind !== "entry") continue;
+        const attrs: Record<string, unknown> = { ...node.attrs };
+        for (const key of ["source", "gen", "also"]) if (key in attrs) attrs[key] = null;
+        out.setNodeMarkup(at.before(), undefined, attrs);
+      }
+      return out.docChanged ? out : null;
+    },
+  });
 }
 
 const removalKey = new PluginKey<{ ids: string[] } | null>("ravenRemovedEvidence");
@@ -224,6 +258,7 @@ function PageHooks({
   );
   // Whatever takes evidence off the page is remembered as removed, so Add new evidence never brings it back.
   useExtension(useMemo(() => definePlugin(removedEvidencePlugin(onRemoveEvidence)), [onRemoveEvidence]));
+  useExtension(useMemo(() => definePlugin(emptiedBlocksPlugin()), []));
   useKeymap(BLOCK_KEYS, { priority: Priority.high });
   return null;
 }
@@ -323,7 +358,9 @@ export function ReportEditor({
       const hostId = hostAtPos(editor, spot.pos, target);
       setImageError(null);
       saveScreenshot(qc, data.engagement.id, hostId ? [hostId] : [], file)
-        .then((entry) => {
+        .then(({ entry, failed }) => {
+          // Saved even when a step after the save failed: the figure goes in, and the step's message shows.
+          if (failed) setImageError(failed.message);
           if (!editor.mounted) return;
           // The caption is the page's to write.
           insertFigure(editor, entry, spot.pos);
@@ -331,7 +368,7 @@ export function ReportEditor({
         .finally(() => held?.delete(spot))
         .catch((e: unknown) => {
           reportError(e);
-          setImageError(RavenError.from(e).message);
+          setImageError(`Couldn't save the image as a screenshot: ${RavenError.from(e).message}`);
         });
     };
     return { addImage, pickImage: () => fileInput.current?.click() };
@@ -375,7 +412,7 @@ export function ReportEditor({
         {notices}
         {imageError && (
           <p role="alert" className="report-editor__alert">
-            Couldn't save the image as a screenshot: {imageError}
+            {imageError}
           </p>
         )}
         <input

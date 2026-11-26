@@ -1,10 +1,11 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { servicesSummaryParts } from "../features/hosts/facts/ServicesFacts/ServicesFacts";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { AccessGrant, CredAttempt, Credential, Username } from "../types/credentials";
@@ -93,8 +94,8 @@ function mount(opts: {
 const group = async (name: string) => within(await screen.findByRole("region", { name }));
 /** A folded group is one summary button; an open one has a header that folds it. */
 const toggleOf = async (name: string) =>
-  (await (await group(name)).findAllByRole("button")).find((b) => /^(Open|Fold) /.test(b.title))!;
-const isOpen = async (name: string) => (await (await group(name)).findAllByRole("button")).some((b) => b.getAttribute("aria-expanded") === "true" && b.title.startsWith("Fold"));
+  (await (await group(name)).findAllByRole("button")).find((b) => b.classList.contains("fact-group__toggle"))!;
+const isOpen = async (name: string) => (await (await group(name)).findAllByRole("button")).some((b) => b.getAttribute("aria-expanded") === "true" && b.classList.contains("fact-group__toggle"));
 const summaryOf = async (name: string) => {
   const g = await group(name);
   const b = await g.findByRole("button", { expanded: false });
@@ -118,6 +119,67 @@ beforeEach(() => {
 });
 
 describe("facts by phase", () => {
+  it("a failed services load shows the standard error in Services, and Retry loads them (RAV-22)", async () => {
+    const user = userEvent.setup();
+    mount();
+    m.servicesList.mockRejectedValue(new Error("vault busy"));
+    const group = await screen.findByRole("region", { name: "Services" });
+    const alert = await within(group).findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load services");
+    m.servicesList.mockResolvedValue([NGINX, SMB, SSH]);
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(within(group).queryByRole("alert")).toBeNull());
+    expect(group.querySelector("[data-services-grid]")).not.toBeNull();
+  });
+
+  /** A failed load shows the standard error in `name`; Retry, once the query recovers, brings back what `loaded` finds. */
+  const retries = async (name: string, what: string, recover: () => void, loaded: (g: HTMLElement) => Promise<unknown>) => {
+    const user = userEvent.setup();
+    const g = await screen.findByRole("region", { name });
+    const alert = await within(g).findByRole("alert");
+    expect(alert).toHaveTextContent(`Couldn't load ${what}`);
+    expect(g.querySelector(".fact-group__error")).toBeNull();
+    recover();
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(within(g).queryByRole("alert")).toBeNull());
+    await loaded(g);
+  };
+
+  it("a failed load in Host Credentials, even of a later query, shows the standard error, and Retry loads it (RAV-37)", async () => {
+    mount();
+    m.credAttemptsList.mockRejectedValue(new Error("vault busy"));
+    await retries("Host Credentials", "credentials", () => m.credAttemptsList.mockResolvedValue([]), (g) =>
+      waitFor(() => expect(g.querySelector(".host-creds")).not.toBeNull()));
+  });
+
+  it("a failed checklist load in Coverage shows the standard error, and Retry loads it (RAV-37)", async () => {
+    mount();
+    m.checklistList.mockRejectedValue(new Error("vault busy"));
+    await retries("Coverage", "the checklist", () => m.checklistList.mockResolvedValue([]), (g) =>
+      waitFor(() => expect(g.querySelector(".coverage-facts__row")).not.toBeNull()));
+  });
+
+  it("a failed vectors load in Privesc vectors shows the standard error, and Retry loads them (RAV-37)", async () => {
+    mount({ host: host({ access: "user", boardColumn: "initial-foothold" }) });
+    m.vectorsList.mockRejectedValue(new Error("vault busy"));
+    await retries("Privesc vectors", "the vectors", () => m.vectorsList.mockResolvedValue([vector("v1", "SeImpersonatePrivilege abuse", "try")]), (g) =>
+      within(g).findByText("SeImpersonatePrivilege abuse"));
+  });
+
+  it("a failed identity load in Who am I shows the standard error, and Retry loads it (RAV-37)", async () => {
+    mount({ host: host({ access: "user", boardColumn: "initial-foothold" }) });
+    m.hostIdentityGet.mockRejectedValue(new Error("vault busy"));
+    await retries("Who am I", "who you are here", () => m.hostIdentityGet.mockResolvedValue(IDENTITY), (g) =>
+      within(g).findByText("ms01\\iis_apppool"));
+  });
+
+  it("a failed credentials load in Other accounts shows the standard error, and Retry loads them (RAV-37)", async () => {
+    mount({ host: host({ access: "user", boardColumn: "initial-foothold" }) });
+    m.credentialsList.mockRejectedValue(new Error("vault busy"));
+    await retries("Other accounts", "credentials", () => m.credentialsList.mockResolvedValue([]), (g) =>
+      within(g).findByText(/^None yet\./));
+  });
+
   it("before a foothold: Coverage, Services and Host Credentials are open; the after-foothold groups are folded summaries", async () => {
     mount();
     for (const name of ["Coverage", "Services", "Host Credentials"]) expect(await isOpen(name)).toBe(true);
@@ -273,6 +335,32 @@ describe("services grid", () => {
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s3", "untested", undefined);
   });
 
+  it("E on a focused row marks it exploited without asking", async () => {
+    const user = userEvent.setup();
+    mount();
+    const row = await (await group("Services")).findByRole("button", { name: /^80\/tcp/ });
+    row.focus();
+    await user.keyboard("e");
+    expect(m.serviceSetVerdict).toHaveBeenCalledWith("s1", "exploited", undefined);
+  });
+
+  it("an exploited service reads as exploited on an accent chip and is the summary's entry", async () => {
+    mount({ services: [svc("s4", 21, { nmapService: "ftp", verdict: "candidate" }), SSH, svc("s5", 8080, { nmapService: "http", verdict: "exploited" })] });
+    const g = await group("Services");
+    const chip = await g.findByRole("button", { name: "Verdict for 8080/tcp: exploited" });
+    expect(within(chip).getByText("exploited")).toHaveAttribute("data-variant", "accent");
+    expect(servicesSummaryParts([svc("s4", 21, { nmapService: "ftp", verdict: "candidate" }), svc("s5", 8080, { nmapService: "http", verdict: "exploited" })]).entry).toBe("http on 8080");
+  });
+
+  it("the verdict menu offers Exploited", async () => {
+    const user = userEvent.setup();
+    mount();
+    const g = await group("Services");
+    await user.click(await g.findByRole("button", { name: "Verdict for 80/tcp: candidate" }));
+    await user.click(within(g.getByRole("radiogroup", { name: "Verdict for 80/tcp" })).getByRole("radio", { name: "Exploited" }));
+    expect(m.serviceSetVerdict).toHaveBeenCalledWith("s1", "exploited", undefined);
+  });
+
   it("C and U do nothing on a dead-end row, so its typed reason is never deleted by a stray key", async () => {
     const user = userEvent.setup();
     mount({ services: [svc("s4", 21, { nmapService: "ftp", verdict: "dead_end" })] });
@@ -293,6 +381,24 @@ describe("services grid", () => {
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s3", "candidate", undefined);
   });
 
+  it("a fact group's toggle explains itself in a tooltip on keyboard focus, with its key, not a title (RAV-22)", async () => {
+    mount();
+    const toggle = await toggleOf("Services");
+    expect(toggle).not.toHaveAttribute("title");
+    act(() => toggle.focus());
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent(/^Fold Services/);
+    expect(within(tip).getByText("S")).toHaveClass("tooltip__key");
+  });
+
+  it("a folded run of services explains itself in a tooltip on keyboard focus, not a title (RAV-22)", async () => {
+    mount({ services: Array.from({ length: 7 }, (_, i) => svc(`rpc${i}`, 49664 + i, { nmapService: "msrpc" })) });
+    const fold = await (await group("Services")).findByRole("button", { name: "msrpc ×7" });
+    expect(fold).not.toHaveAttribute("title");
+    act(() => fold.focus());
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Show msrpc ×7");
+  });
+
   it("the verdict chip's hint is a tooltip that keyboard focus opens", async () => {
     mount();
     const g = await group("Services");
@@ -300,7 +406,7 @@ describe("services grid", () => {
     expect(chip).not.toHaveAttribute("title");
     expect(chip).toHaveClass("services-facts__verdict");
     chip.focus();
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Set the verdict (C, U or D on the row)");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Set the verdict (C, U, E or D on the row)");
   });
 
   it("clicking the pressed verdict closes the menu without changing it", async () => {
@@ -479,7 +585,7 @@ describe("who am I and privesc vectors", () => {
     mount({
       host: after(),
       identity: IDENTITY,
-      usernames: [{ id: "u1", engagementId: "e1", username: "iis_apppool", domain: "ms01", sourceHostId: null, source: null, createdAt: 1 }],
+      usernames: [{ id: "u1", engagementId: "e1", username: "iis_apppool", domain: "ms01", sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null }],
       grants: [{ id: "g1", engagementId: "e1", usernameId: "u1", hostId: "h1", level: "user", via: "webshell", logEntryId: null, at: 1 }],
     });
     const who = await group("Who am I");
@@ -518,6 +624,35 @@ describe("who am I and privesc vectors", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Mark untested");
     reopen.focus();
     await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("Reopen as untested"));
+  });
+
+  it("Mark exploited records that a vector got you higher, without asking", async () => {
+    const user = userEvent.setup();
+    m.vectorSetStatus.mockImplementation(async (id, status) => vector(id, "x", status));
+    mount({ host: after(), vectors: [vector("v1", "SeImpersonatePrivilege abuse", "try")] });
+    const vectors = await group("Privesc vectors");
+    await user.click(await vectors.findByRole("button", { name: "Mark SeImpersonatePrivilege abuse exploited" }));
+    expect(m.vectorSetStatus).toHaveBeenCalledWith("v1", "exploited", undefined);
+  });
+
+  it("an exploited vector leads the list on an accent chip, offers only Reopen, and the summary counts it", async () => {
+    const user = userEvent.setup();
+    m.vectorSetStatus.mockImplementation(async (id, status) => vector(id, "x", status));
+    mount({
+      host: after(),
+      vectors: [vector("v1", "SeImpersonatePrivilege abuse", "try"), vector("v2", "AlwaysInstallElevated", "exploited", { createdAt: 9 })],
+    });
+    const vectors = await group("Privesc vectors");
+    const titles = (await vectors.findAllByRole("listitem")).map((li) => li.querySelector(".vectors-facts__title")?.textContent);
+    expect(titles.slice(0, 2)).toEqual(["AlwaysInstallElevated", "SeImpersonatePrivilege abuse"]);
+    const reopen = vectors.getByRole("button", { name: "Reopen AlwaysInstallElevated" });
+    expect(within(reopen).getByText("exploited")).toHaveAttribute("data-variant", "accent");
+    expect(vectors.queryByRole("button", { name: "Rule out AlwaysInstallElevated" })).not.toBeInTheDocument();
+    expect(vectors.queryByRole("button", { name: "Mark AlwaysInstallElevated exploited" })).not.toBeInTheDocument();
+    await user.click(reopen);
+    expect(m.vectorSetStatus).toHaveBeenCalledWith("v2", "untested", undefined);
+    await user.click(vectors.getByRole("button", { expanded: true, name: /^Privesc vectors/ }));
+    expect(await summaryOf("Privesc vectors")).toBe("Privesc vectors1 exploited1 to try");
   });
 
   it("deleting a vector asks first", async () => {

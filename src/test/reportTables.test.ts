@@ -52,7 +52,7 @@ const standalone = (id: string): ReportTarget => ({ key: id, kind: "standalone",
 /** quartz: one shell as ronan, then root, flags; three findings (entry, privesc, none). */
 function lab(): ReportData {
   const d = empty();
-  d.hosts = [host("h1", "quartz", { ip: "172.31.166.144", os: "linux" }), host("h2", "onyx", { ip: "172.31.166.145", os: "windows" })];
+  d.hosts = [host("h1", "quartz", { ip: "10.10.20.144", os: "linux" }), host("h2", "onyx", { ip: "10.10.20.145", os: "windows" })];
   d.usernames = [{ id: "u1", username: "ronan" }, { id: "u2", username: "jo.parker" }] as never;
   d.services = [
     service("h1", 22, { nmapService: "ssh", nmapVersion: "OpenSSH 8" }),
@@ -151,6 +151,20 @@ describe("resultLine", () => {
     expect(resultLine(twoRoots, standalone("h1"), "h1", {}).access).toBe("shell as `ronan`, then root");
   });
 
+  it("names each account that got local administrator, once", () => {
+    const d = lab();
+    d.usernames = [{ id: "a", username: "a" }, { id: "x", username: "x" }, { id: "y", username: "y" }] as never;
+    d.grants = [grant("h2", "user", "a", "g1", 10), grant("h2", "admin", "x", "g2", 20), grant("h2", "admin", "y", "g3", 30)];
+    expect(resultLine(d, standalone("h2"), "h2", {}).access).toBe("shell as `a`, then local administrator as `x`, then local administrator as `y`");
+
+    // The same account again is no new step: one clause.
+    d.grants = [grant("h2", "user", "a", "g1", 10), grant("h2", "admin", "x", "g2", 20), grant("h2", "admin", "x", "g3", 30)];
+    expect(resultLine(d, standalone("h2"), "h2", {}).access).toBe("shell as `a`, then local administrator as `x`");
+    // Nor is the account the first grant already named as local administrator.
+    d.grants = [grant("h2", "admin", "x", "g1", 10), grant("h2", "admin", "x", "g2", 20), grant("h2", "admin", "y", "g3", 30)];
+    expect(resultLine(d, standalone("h2"), "h2", {}).access).toBe("shell as `x` (local administrator), then local administrator as `y`");
+  });
+
   it("is empty with no grants and omits a missing expected flag", () => {
     const d = lab();
     d.grants = [];
@@ -194,6 +208,19 @@ describe("findingRows", () => {
     expect(rows[0].host).toBe("MS01 / DC01");
     expect(rows[0].result).toBe("Domain Admin");
   });
+
+  it("in an AD set, lists same-severity findings in machine order, whenever they were logged", () => {
+    const d = empty();
+    d.hosts = [host("ms01", "MS01", { os: "windows", adSetEffective: true }), host("dc01", "DC01", { os: "windows", adSetEffective: true })];
+    d.usernames = [{ id: "u1", username: "tom" }] as never;
+    d.log = [entry("up", "ms01", 5, cmd), entry("dcsync", "dc01", 90, cmd)];
+    d.hops = [hop(null, "ms01", "up", 5, "upload"), hop("ms01", "dc01", "dcsync", 90, "pass-the-hash")];
+    d.grants = [grant("ms01", "user", "u1", "up", 5), grant("dc01", "admin", "u1", "dcsync", 90)];
+    // The DC's finding was logged first.
+    d.findings = [finding("dc", "On the DC", "high", ["dc01"], ["dcsync"], 1), finding("ms", "On MS01", "high", ["ms01"], ["up"], 2)];
+    const rows = findingRows(d, [{ key: "ad-set", kind: "ad-set", hostIds: ["ms01", "dc01"] }]);
+    expect(rows.map((r) => [r.host, r.title])).toEqual([["MS01", "On MS01"], ["DC01", "On the DC"]]);
+  });
 });
 
 describe("scopeRows", () => {
@@ -202,8 +229,8 @@ describe("scopeRows", () => {
     d.hosts.push(host("a1", "MS01", { ip: "10.10.130.141", os: "windows", adSetEffective: true }));
     const rows = scopeRows(d, [standalone("h1"), standalone("h2"), { key: "ad-set", kind: "ad-set", hostIds: ["a1"] }]);
     expect(rows).toEqual([
-      { host: "quartz", ip: "172.31.166.144", os: "Linux", set: "Independent" },
-      { host: "onyx", ip: "172.31.166.145", os: "Windows", set: "Independent" },
+      { host: "quartz", ip: "10.10.20.144", os: "Linux", set: "Independent" },
+      { host: "onyx", ip: "10.10.20.145", os: "Windows", set: "Independent" },
       { host: "MS01", ip: "10.10.130.141", os: "Windows", set: "AD" },
     ]);
   });

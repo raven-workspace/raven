@@ -11,7 +11,7 @@ export default function UiGallery() {
   return (
     <div data-testid="ui-gallery" className="ui-gallery">
       <h1 className="ui-gallery__title">Ink components</h1>
-      <p className="ui-gallery__lede">Debug builds only. Compare with direction A in docs/design/visual-directions.html.</p>
+      <p className="ui-gallery__lede">Debug builds only. Compare with direction A in visual-directions.html (docs/specs/foundation.md §8 links it).</p>
 
       <div className="ui-gallery__grid">
         <Section title="Button">
@@ -47,7 +47,7 @@ export default function UiGallery() {
         <Section title="Field · Input · Select">
           <div className="ui-gallery__stack">
             <Field label="Name" hint="Shown on the dashboard.">
-              <Input placeholder="Mock exam A" />
+              <Input placeholder="Mock exam" />
             </Field>
             <Field label="Scope" error="10.10.0.300/24 is not a valid CIDR.">
               <Input mono defaultValue="10.10.0.300/24" />
@@ -100,7 +100,7 @@ export default function UiGallery() {
             }
           >
             <Field label="Name">
-              <Input autoFocus placeholder="Mock exam A" />
+              <Input autoFocus placeholder="Mock exam" />
             </Field>
           </Dialog>
         </Section>

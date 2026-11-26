@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { setImported, type CardMeta } from "../engines/library/store";
+import { setImported } from "../engines/library/store";
+import type { CardMeta } from "../engines/library/types";
 import type { LibraryCommand } from "../engines/library/types";
 import { browseList } from "../features/arsenal/browseList";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
@@ -142,15 +143,20 @@ describe("three-pane browse", () => {
     expect(categories().getByRole("tab", { name: /Pivoting/ })).toHaveAttribute("tabindex", "-1");
   });
 
-  it("shows nothing, not even categories, until the engagement kind is known", async () => {
+  it("until the engagement kind is known, lists no command that needs a verdict", async () => {
+    const BANNED = cmd("zz-banned", { title: "Aabanned sweep", tool: "aabanned", template: "sqlmap -u {URL}", category: "Active-Directory", exam: "banned" });
+    setImported({ commands: [KERBRUTE_RAVEN, NXC_RAVEN, FM_CMD_IN_CARD, SOCKS, BANNED], cards: [KERB_CARD, CARD_B] });
     let release!: (e: Engagement) => void;
     useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
     mount((r) => (release = r));
-    await screen.findByRole("button", { name: /^(Host |No host)/ });
-    expect(categories().queryAllByRole("tab")).toHaveLength(0);
-    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    await screen.findByRole("button", { name: /^Fill for host/ });
+    const list = within(await screen.findByRole("listbox", { name: "Arsenal results" }));
+    expect(await list.findByRole("option", { name: /Aakerbrute user enum/ })).toBeInTheDocument();
+    expect(list.queryByRole("option", { name: /Aabanned sweep/ })).not.toBeInTheDocument();
+    // An exam sim keeps it hidden; a lab would have shown it.
     await act(async () => release({ ...E1, kind: "exam-sim" }));
     expect(await screen.findByRole("heading", { name: "Aardvark roasting" })).toBeInTheDocument();
+    expect(list.queryByRole("option", { name: /Aabanned sweep/ })).not.toBeInTheDocument();
   });
 
   it("shows tool headings as plain labels, and a command reads in pane 3", async () => {

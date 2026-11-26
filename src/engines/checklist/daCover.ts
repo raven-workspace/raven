@@ -3,7 +3,7 @@ import type { CredAttempt } from '../../types/credentials';
 import type { Engagement } from '../../types/engagement';
 import type { Host } from '../../types/host';
 import type { Service } from '../../types/service';
-import { applicableGoals, findDcHost, hostFacts } from './facts';
+import { applicableGoals, findDc, hostFacts } from './facts';
 
 type ServicesByHost = Map<string, Service[]>;
 
@@ -11,13 +11,16 @@ export const DA_COVER_LABEL = 'Covered by domain admin';
 
 /** The one definition of "domain admin": an admin result on the engagement's DC. */
 export function domainAdminConfirmed(hosts: Host[], servicesByHost: ServicesByHost, attempts: CredAttempt[]): boolean {
-  const dc = findDcHost(hosts, servicesByHost);
+  const dc = findDc(hosts, servicesByHost);
   return !!dc && attempts.some((a) => a.result === 'admin' && a.hostId === dc.id);
 }
 
-/** Auto-tick never leaves an item `na` with `auto` set, so that pair marks an item the domain admin cover set. */
+/**
+ * Auto-tick never leaves an item `na` with `auto` set, so that pair, on an item not set by hand, marks an item the
+ * domain admin cover set (as the store's revert reads it).
+ */
 export function isCoverMarked(item: ItemState | undefined): boolean {
-  return item?.auto === true && item.status === 'na';
+  return item?.auto === true && item.status === 'na' && !item.statusManual;
 }
 
 const COVERED_STAGES = new Set(['privilege-escalation', 'post-exploitation']);

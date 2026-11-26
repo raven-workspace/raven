@@ -1,4 +1,4 @@
-import type { CardMeta } from '../library/store';
+import type { CardMeta } from '../library/types';
 import { splitFrontmatter } from './frontmatter';
 
 export interface ParsedBlock {

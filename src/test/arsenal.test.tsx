@@ -6,7 +6,8 @@ import { useEffect } from "react";
 import { MemoryRouter, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { setImported, type CardMeta } from "../engines/library/store";
+import { setImported } from "../engines/library/store";
+import type { CardMeta } from "../engines/library/types";
 import type { LibraryCommand } from "../engines/library/types";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
@@ -20,10 +21,6 @@ import type { Host } from "../types/host";
 
 vi.mock("../lib/api");
 vi.mock("../features/palette/generators", () => ({ GENERATORS: [{ id: "shell", title: "Zzgen reverse shell", category: "Shells-and-Transfers" }] }));
-vi.mock("../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../features/checklist/ticks")>()),
-  resyncBoards: vi.fn().mockResolvedValue(undefined),
-}));
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
@@ -109,16 +106,30 @@ const drawer = () => screen.findByRole("complementary", { name: "Arsenal" });
 
 /** What the host scope shows (its visible text, without the hidden native select's options). */
 const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ").trim();
-const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^(Host |No host)/ });
+const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^Fill for host/ });
 
 describe("Arsenal", () => {
+  it("hosts that fail to load: the drawer's picker says so, and Retry brings the picker back (RAV-22)", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockRejectedValue(new Error("vault busy"));
+    mount("/e/e1");
+    await screen.findByRole("navigation", { name: "Engagement" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    expect(await d.findByText("Couldn't load hosts")).toBeInTheDocument();
+    m.hostsList.mockResolvedValue([H1]);
+    await user.click(d.getByRole("button", { name: "Retry" }));
+    expect(await d.findByRole("button", { name: /^Fill for host/ })).toBeInTheDocument();
+    expect(d.queryByText("Couldn't load hosts")).toBeNull();
+  });
+
   it("A opens the drawer filled for the host in view and Esc closes it", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("a");
     const d = within(await drawer());
-    expect(hostChip(d)).toHaveAccessibleName("Host dc01");
+    expect(hostChip(d)).toHaveAccessibleName("Fill for host dc01");
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzprobe");
     await d.findByRole("option", { name: /Zzprobe the target/ });
     await user.keyboard("{ArrowRight}");
@@ -225,7 +236,7 @@ describe("Arsenal", () => {
     expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     // No host until one is picked.
     expect(await block(screen, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^(Host |No host)/ }));
+    await user.click(screen.getByRole("button", { name: /^Fill for host/ }));
     await user.click(screen.getByRole("option", { name: /dc01/ }));
     expect(await block(screen, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
   });
@@ -242,17 +253,18 @@ describe("Arsenal", () => {
     expect(d.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
   });
 
-  it("exam filtering fails closed: no commands until the engagement kind is known", async () => {
+  it("exam filtering fails closed: no command that needs a verdict until the engagement kind is known", async () => {
     let release!: (e: Engagement) => void;
     const user = userEvent.setup();
     mount("/e/e1/h/h1", EXAM);
     m.engagementGet.mockImplementation(() => new Promise<Engagement>((r) => (release = r)));
-    // Drawer.
+    // Drawer: a command with no exam classification needs no kind; a banned one waits.
     await user.keyboard("a");
     const d = within(await drawer());
     const search = d.getByRole("textbox", { name: "Search the Arsenal" });
     await user.type(search, "zz");
-    expect(d.queryAllByRole("option")).toHaveLength(0);
+    expect(await d.findByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
+    expect(d.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
     await user.keyboard("{Escape}");
     // Palette.
     await user.keyboard("{Meta>}k{/Meta}");
@@ -261,8 +273,8 @@ describe("Arsenal", () => {
     expect(screen.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
     await user.clear(box);
     await user.type(box, "zzprobe");
-    expect(screen.queryByRole("option", { name: /Zzprobe/ })).not.toBeInTheDocument();
-    // Once the kind is known, allowed commands appear and banned ones stay hidden.
+    expect(await screen.findByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
+    // Once the kind is known, allowed commands stay and banned ones stay hidden.
     await act(async () => release(EXAM));
     expect(await screen.findByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
     await user.clear(box);
@@ -270,18 +282,17 @@ describe("Arsenal", () => {
     expect(screen.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
   });
 
-  it("browse shows no commands until the engagement kind is known", async () => {
+  it("browse shows no command that needs a verdict until the engagement kind is known", async () => {
     let release!: (e: Engagement) => void;
     useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
     useArsenalStore.setState({ cardId: "zz-card" });
     mount("/arsenal", EXAM);
     m.engagementGet.mockImplementation(() => new Promise<Engagement>((r) => (release = r)));
-    await screen.findByRole("button", { name: "Host dc01" });
-    // Not even categories or cards until the exam rules are known.
-    expect(screen.queryByRole("heading", { name: "Zz Card" })).not.toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Categories" })).queryAllByRole("button")).toHaveLength(0);
+    await screen.findByRole("button", { name: "Fill for host dc01" });
+    // The card and its unclassified command show; the banned one waits for the exam rules.
+    expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
+    expect(await screen.findByText(/zzprobe/)).toBeInTheDocument();
     expect(screen.queryByText(/zzrelay/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/zzprobe/)).not.toBeInTheDocument();
     await act(async () => release(EXAM));
     expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     expect(await block(screen, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
@@ -294,7 +305,7 @@ describe("Arsenal", () => {
     await screen.findByText("Lab A");
     await user.click(screen.getByRole("button", { name: "Arsenal" }));
     const d = within(await drawer());
-    expect(d.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
+    expect(d.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
     expect(within(d.getByRole("search", { name: "Search the Arsenal" })).getByText("for no host")).toBeInTheDocument();
     act(() => useArsenalStore.getState().openCard("zz-card"));
     expect(await block(d, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
@@ -314,7 +325,7 @@ describe("Arsenal", () => {
     // Focusing the text field rings the whole bar in the accent, like every other input.
     expect(barEl).toHaveClass("search-bar");
     expect(readFileSync("src/features/arsenal/SearchBar/SearchBar.scss", "utf8")).toMatch(/&:has\(input:focus-visible\) \{\s*outline: 1px solid var\(--accent\);/);
-    expect(bar.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
+    expect(bar.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
     expect(scopeText(hostChip(d))).toBe("Host dc01");
     const header = d.getByRole("banner");
     for (const el of [bar.getByRole("textbox"), hostChip(d), d.getByRole("button", { name: /^Fill with credential/ }), d.getByRole("button", { name: "Full screen" })]) {
@@ -347,13 +358,24 @@ describe("Arsenal", () => {
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
 
+  it("with no host, the drawer's ⌘↵ hint reads copy and log, no host (RAV-32)", async () => {
+    const user = userEvent.setup();
+    mount("/");
+    await screen.findByText("Lab A");
+    await user.keyboard("a");
+    await drawer();
+    const hints = within(screen.getByLabelText("Arsenal shortcuts"));
+    expect(hints.getByText("copy and log, no host")).toBeInTheDocument();
+    expect(hints.queryByText("log (no host)")).toBeNull();
+  });
+
   it("A opens a hostless drawer on the dashboard and is ignored while typing", async () => {
     const user = userEvent.setup();
     mount("/");
     await screen.findByText("Lab A");
     await user.keyboard("a");
     const d = within(await drawer());
-    expect(d.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
+    expect(d.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "a");
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
     expect(d.getByRole("textbox", { name: "Search the Arsenal" })).toHaveValue("a");
@@ -430,6 +452,19 @@ describe("Arsenal after a Field Manual import (B2)", () => {
     expect(await d.findAllByRole("option")).toHaveLength(filler.length * 2);
   });
 
+  it("an import while the drawer is open updates what a search finds", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    act(() => useArsenalStore.getState().openCard());
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "Zzlate");
+    expect(d.queryByRole("option", { name: /Zzlate card/ })).toBeNull();
+    const late: CardMeta = { id: "zz-late", title: "Zzlate card", stage: "reporting", category: "Qq-Misc", os: "any", file: "02-Cards/Zz/Late.md" };
+    act(() => setImported({ commands: [...cmds, cmd("zz-late-cmd", { title: "Zzlate cmd", cardId: late.id })], cards: [...filler, ...perStage, late] }));
+    expect(await d.findByRole("option", { name: /Zzlate card/ })).toBeInTheDocument();
+  });
+
   it.each(STAGES)("searching the drawer for stage %s finds its card", async (id, title) => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
@@ -496,7 +531,7 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
   it("a remembered engagement that no longer exists falls back to the most recently active one", async () => {
     useLastEngagementStore.setState({ engagementId: "gone", hostId: "hx" });
     mountAt("/arsenal");
-    await userEvent.setup().click(await screen.findByRole("button", { name: /^(Host |No host)/ }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: /^Fill for host/ }));
     expect(await screen.findByRole("option", { name: /dc01/ })).toBeInTheDocument();
     expect(screen.getByText("Lab A")).toBeInTheDocument();
     expect(m.engagementGet).not.toHaveBeenCalledWith("gone");
@@ -516,7 +551,7 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
     mountAt("/e/e2/h/h9");
     await screen.findByRole("tab", { name: "Next" });
     act(() => nav.go("/arsenal"));
-    await userEvent.setup().click(await screen.findByRole("button", { name: /^(Host |No host)/ }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: /^Fill for host/ }));
     expect(await screen.findByRole("option", { name: /web09/ })).toBeInTheDocument();
   });
 });
@@ -888,7 +923,7 @@ describe("drawer list grouped by category (U1)", () => {
     const after = await block(d, "zzprobe 10.10.10.6 from 10.10.14.9");
     expect(after).toHaveAttribute("data-flash");
     expect(d.getByRole("combobox", { name: "Value for TARGET_IP" })).toHaveValue("10.10.10.6");
-    expect(hostChip(d)).toHaveAccessibleName("Host web07");
+    expect(hostChip(d)).toHaveAccessibleName("Fill for host web07");
   });
 
   it("Esc with the host list open closes only the list", async () => {
@@ -904,7 +939,7 @@ describe("drawer list grouped by category (U1)", () => {
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
   });
 
-  it("fails closed while the engagement loads", async () => {
+  it("fails closed while the engagement loads: no command that needs a verdict", async () => {
     const user = userEvent.setup();
     m.engagementGet.mockImplementation(() => new Promise<Engagement>(() => {}));
     m.engagementsList.mockResolvedValue([EXAM]);
@@ -917,9 +952,9 @@ describe("drawer list grouped by category (U1)", () => {
     );
     await user.keyboard("a");
     const d = within(await drawer());
-    expect(d.queryAllByRole("option")).toHaveLength(0);
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zz");
-    expect(d.queryAllByRole("option")).toHaveLength(0);
+    expect(await d.findByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
+    expect(d.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
   });
 });
 

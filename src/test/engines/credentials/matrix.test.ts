@@ -8,10 +8,10 @@ import { att, byHost, cred, host, NT, svc } from "./fixtures";
 describe("credential matrix", () => {
   it("machine accounts are not sprayable", () => {
     expect(isMachineAccount(cred({ username: "DC01$" }))).toBe(true);
-    expect(isMachineAccount(cred({ username: "jay" }))).toBe(false);
+    expect(isMachineAccount(cred({ username: "zoe" }))).toBe(false);
     expect(isSprayable(cred({ username: "DC01$", secret: "pw" }))).toBe(false);
     expect(isSprayable(cred({ type: "hash", username: "DC01$", secret: NT, hashType: "NTLM" }))).toBe(false);
-    expect(isSprayable(cred({ username: "jay", secret: "pw" }))).toBe(true);
+    expect(isSprayable(cred({ username: "zoe", secret: "pw" }))).toBe(true);
   });
 
   it("hostSprayServices reads open services by port and by nmap name", () => {
@@ -172,6 +172,14 @@ describe("a local credential tested as domain", () => {
 
   it("with nothing recorded, both modes are untried (local first)", () => {
     expect(cellFor(mary, ms01, s, "smb", []).untriedModes).toEqual(["local", "domain"]);
+  });
+
+  it("one whose host was deleted is still sprayed on every host, local first", () => {
+    const orphan = cred({ id: "orphan", username: "administrator", secret: "Local-1", scope: "local", localHostId: null });
+    expect(isSprayable(orphan)).toBe(true);
+    expect(authModesFor(orphan, "smb")).toEqual(["local", "domain"]);
+    const cell = cellFor(orphan, ms01, s, "smb", [att({ credId: "orphan", hostId: "ms01", result: "admin", authMode: "local" })]);
+    expect(cell.state).toBe("admin");
   });
 });
 

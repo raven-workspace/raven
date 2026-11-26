@@ -1,135 +1,103 @@
-import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+// Runs on the checked in-browser fake (src/test/support/fakeStore.tsx): the data is seeded through the store's own
+// commands, and what the screen changes is read back from the store.
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import App from "../App";
-import { resyncBoards } from "../features/checklist/ticks";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
-import { api } from "../lib/api";
-import { makeQueryClient } from "../lib/queryClient";
-import type { Engagement } from "../types/engagement";
-import type { Host } from "../types/host";
-import type { Service } from "../types/service";
+import type { EngagementKind } from "../types/engagement";
+import { fake, renderApp, resetFake } from "./support/fakeStore";
 
-vi.mock("../lib/api");
-vi.mock("../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../features/checklist/ticks")>()),
-  resyncBoards: vi.fn(),
-}));
-const m = vi.mocked(api, true);
+vi.mock("../lib/api", () => import("../audit/fakeApi"));
 
-const E1: Engagement = {
-  id: "e1", name: "Lab A", kind: "exam-sim", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
-  domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
-  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
-};
-const host = (id: string, name: string, over: Partial<Host> = {}): Host => ({
-  id, engagementId: "e1", name, ip: "10.10.10.5", os: "windows", boardColumn: "information-gathering", boardManual: false,
-  dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
-});
-const SRV11 = host("h1", "SRV11");
-const WEB = host("h2", "web07", { os: "linux" });
-const svc: Service = {
-  id: "s1", hostId: "h1", port: 445, protocol: "tcp", state: "open", nmapService: "microsoft-ds", nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
-};
-
-function mount(path: string, eng: Engagement) {
-  m.engagementGet.mockResolvedValue(eng);
-  m.engagementsList.mockResolvedValue([eng]);
-  return render(
-    <QueryClientProvider client={makeQueryClient()}>
-      <MemoryRouter initialEntries={[path]}>
-        <App />
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
+/** An engagement with two hosts: SRV11 (Windows, SMB open) and web07 (Linux). */
+async function seed(kind: EngagementKind = "exam-sim") {
+  const eng = await fake.engagementCreate({ name: "Lab A", kind, scopeCidrs: ["192.0.2.0/24"] });
+  const srv11 = await fake.hostCreate(eng.id, { name: "SRV11", ip: "192.0.2.5", os: "windows" });
+  const web07 = await fake.hostCreate(eng.id, { name: "web07", ip: "192.0.2.6", os: "linux" });
+  await fake.serviceCreate(srv11.id, { port: 445, nmapService: "microsoft-ds" });
+  return { eng, srv11, web07 };
 }
+
+const lockOf = async (engagementId: string) => (await fake.engagementGet(engagementId)).msfHostId;
 
 beforeEach(() => {
   localStorage.clear();
-  vi.resetAllMocks();
-  m.hostIdentityGet.mockResolvedValue(null);
-  m.vectorsList.mockResolvedValue([]);
-  vi.mocked(resyncBoards).mockResolvedValue(undefined);
   useCaptureStore.getState().reset();
-  m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [] });
-  m.engagementsProgress.mockResolvedValue({});
-  m.hostsList.mockResolvedValue([SRV11, WEB]);
-  m.servicesList.mockResolvedValue([]);
-  m.servicesListEngagement.mockResolvedValue([svc]);
-  m.checklistList.mockResolvedValue([]);
-  m.checklistPut.mockResolvedValue([]);
-  m.logList.mockResolvedValue([]);
-  m.notesList.mockResolvedValue([]);
-  m.notesGet.mockResolvedValue({ engagementId: "e1", hostId: null, body: "", updatedAt: 1 } as never);
-  m.tunnelsList.mockResolvedValue([]);
+  resetFake();
 });
 
 describe("metasploit lock", () => {
   it("strip shows the msf lock only in exam sims", async () => {
-    const view = mount("/e/e1", E1);
+    const exam = await seed();
+    const view = renderApp(`/e/${exam.eng.id}`);
     expect(await screen.findByRole("button", { name: /Metasploit unused/ })).toBeInTheDocument();
     view.unmount();
-    mount("/e/e1", { ...E1, kind: "lab" });
+    const lab = await fake.engagementCreate({ name: "Lab B", kind: "lab" });
+    renderApp(`/e/${lab.id}`);
     await screen.findByRole("status", { name: "Engagement status" });
     expect(screen.queryByText(/Metasploit/)).not.toBeInTheDocument();
   });
 
   it("shows the locked host name in warn", async () => {
-    mount("/e/e1", { ...E1, msfHostId: "h1" });
+    const { eng, srv11 } = await seed();
+    await fake.engagementSetMsfHost(eng.id, srv11.id);
+    renderApp(`/e/${eng.id}`);
     const btn = await screen.findByRole("button", { name: /Metasploit SRV11/ });
     expect(within(btn).getByText("SRV11")).toHaveClass("msf-lock__host--locked");
   });
 
   it("shows locked, not unused, while the locked host's name is unresolved", async () => {
-    m.hostsList.mockReturnValue(new Promise(() => {}));
-    mount("/e/e1", { ...E1, msfHostId: "h1" });
+    const { eng, srv11 } = await seed();
+    await fake.engagementSetMsfHost(eng.id, srv11.id);
+    vi.spyOn(fake, "hostsList").mockReturnValue(new Promise(() => {}));
+    renderApp(`/e/${eng.id}`);
     const btn = await screen.findByRole("button", { name: /Metasploit locked/ });
     expect(within(btn).getByText("locked")).toHaveClass("msf-lock__host--locked");
   });
 
   it("locks a host from the dialog", async () => {
     const user = userEvent.setup();
-    m.engagementSetMsfHost.mockResolvedValue({ ...E1, msfHostId: "h2" });
-    mount("/e/e1", E1);
+    const { eng, web07 } = await seed();
+    renderApp(`/e/${eng.id}`);
     await user.click(await screen.findByRole("button", { name: /Metasploit unused/ }));
     const dialog = await screen.findByRole("dialog", { name: "Metasploit host" });
     await user.click(within(dialog).getByRole("button", { name: "web07" }));
-    expect(m.engagementSetMsfHost).toHaveBeenCalledWith("e1", "h2");
+    await waitFor(async () => expect(await lockOf(eng.id)).toBe(web07.id));
+    expect(await screen.findByRole("button", { name: /Metasploit web07/ })).toBeInTheDocument();
   });
 
   it("release asks first and clears the lock", async () => {
     const user = userEvent.setup();
-    m.engagementSetMsfHost.mockResolvedValue({ ...E1, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null });
-    mount("/e/e1", { ...E1, msfHostId: "h1" });
+    const { eng, srv11 } = await seed();
+    await fake.engagementSetMsfHost(eng.id, srv11.id);
+    renderApp(`/e/${eng.id}`);
     await user.click(await screen.findByRole("button", { name: /Metasploit SRV11/ }));
     const release = await screen.findByRole("button", { name: "Release lock" });
-    // Neutral at rest (the locked host's name is the screen's amber); amber only on hover, focus and in the confirm.
     // Neutral at rest, amber on hover and focus: the quiet-danger button, not the amber danger one.
     expect(release).toHaveClass("button--quiet-danger");
     expect(release).not.toHaveClass("button--danger");
     await user.click(release);
-    expect(m.engagementSetMsfHost).not.toHaveBeenCalled();
+    expect(await lockOf(eng.id)).toBe(srv11.id);
     const confirm = await screen.findByRole("dialog", { name: /Release the Metasploit lock/ });
     await user.click(within(confirm).getByRole("button", { name: "Release" }));
-    await vi.waitFor(() => expect(m.engagementSetMsfHost).toHaveBeenCalledWith("e1", null));
+    await waitFor(async () => expect(await lockOf(eng.id)).toBeNull());
+    expect(await screen.findByRole("button", { name: /Metasploit unused/ })).toBeInTheDocument();
+  });
+
+  it("deleting the locked host frees the lock", async () => {
+    const { eng, srv11 } = await seed();
+    await fake.engagementSetMsfHost(eng.id, srv11.id);
+    await fake.hostDelete(srv11.id);
+    renderApp(`/e/${eng.id}`);
+    expect(await screen.findByRole("button", { name: /Metasploit unused/ })).toBeInTheDocument();
   });
 });
 
 describe("dual-homed flag", () => {
   it("dual-homed toggle saves, and the pivot goals live on the engagement view, not the host", async () => {
     const user = userEvent.setup();
-    const lab = { ...E1, kind: "lab" as const };
-    let hosts = [SRV11, WEB];
-    m.hostsList.mockImplementation(async () => hosts);
-    m.hostUpdate.mockImplementation(async (_id, input) => {
-      hosts = [{ ...SRV11, dualHomed: input.dualHomed ?? false }, WEB];
-      return hosts[0]!;
-    });
-    mount("/e/e1/h/h1", lab);
+    const { eng, srv11 } = await seed("lab");
+    renderApp(`/e/${eng.id}/h/${srv11.id}`);
     await user.click(await screen.findByRole("button", { name: "Full checklist" }));
     await within(await screen.findByRole("tabpanel")).findByText("Check SMB shares and null/guest access");
     expect(screen.queryByText("Tunnel into the next network")).not.toBeInTheDocument();
@@ -138,15 +106,15 @@ describe("dual-homed flag", () => {
     const dialog = await screen.findByRole("dialog", { name: "Edit host" });
     await user.click(within(dialog).getByRole("button", { name: "Dual-homed (reaches another network)" }));
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
-    expect(m.hostUpdate).toHaveBeenCalledWith("h1", expect.objectContaining({ dualHomed: true }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit host" })).not.toBeInTheDocument());
+    expect((await fake.hostsList(eng.id)).find((h) => h.id === srv11.id)?.dualHomed).toBe(true);
     expect(screen.queryByText("Tunnel into the next network")).not.toBeInTheDocument();
     expect(screen.queryByText("Sweep the new network for hosts")).not.toBeInTheDocument();
 
     // Positive proof the flag took effect: the engagement checklist lists the pivot steps behind this host.
     await user.click(await screen.findByRole("link", { name: /Engagement checklist/ }));
     const section = within(await screen.findByRole("region", { name: "Lateral movement" }));
-    expect(await section.findByRole("heading", { name: `Behind ${SRV11.name}` })).toBeInTheDocument();
+    expect(await section.findByRole("heading", { name: "Behind SRV11" })).toBeInTheDocument();
     expect(document.querySelector('li[data-goal-id="h-pivot-tunnel"]')).not.toBeNull();
     expect(document.querySelector('li[data-goal-id="h-pivot-sweep"]')).not.toBeNull();
   });
@@ -154,21 +122,23 @@ describe("dual-homed flag", () => {
 
 describe("listener on the strip", () => {
   it("shows LHOST:LPORT from settings, and links to Settings", async () => {
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "10.10.64.160", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [] });
     const user = userEvent.setup();
-    mount("/e/e1", { ...E1, kind: "lab" });
-    const link = await screen.findByRole("link", { name: /LHOST 10\.10\.64\.160:4444/ });
+    const { eng } = await seed("lab");
+    await fake.settingsUpdate({ attackerIp: "192.0.2.10", listenerPort: "4444" });
+    renderApp(`/e/${eng.id}`);
+    const link = await screen.findByRole("link", { name: /LHOST 192\.0\.2\.10:4444/ });
     await user.click(link);
     expect(await screen.findByLabelText("Your IP (tun0)")).toBeInTheDocument();
   });
 
   it("says LHOST is not set when the IP is blank, and shows the port alone when only it is set", async () => {
-    const view = mount("/e/e1", E1);
+    const { eng } = await seed();
+    await fake.settingsUpdate({ attackerIp: "", listenerPort: "" });
+    const view = renderApp(`/e/${eng.id}`);
     expect(await screen.findByRole("link", { name: /LHOST not set/ })).toBeInTheDocument();
     view.unmount();
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "443", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [] });
-    mount("/e/e1", E1);
+    await fake.settingsUpdate({ listenerPort: "443" });
+    renderApp(`/e/${eng.id}`);
     expect(await screen.findByRole("link", { name: /LHOST not set, LPORT 443/ })).toBeInTheDocument();
   });
 });
-

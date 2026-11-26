@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import type { RuleId } from "./conventionsPending";
 
 export const ROOT = join(__dirname, "..", "..");
@@ -31,14 +31,58 @@ const isEngine = (file: string) => file.startsWith("src/engines/");
 const isStyle = (file: string) => file.endsWith(".scss");
 const STYLE_RULES: RuleId[] = ["tiny-type", "feature-flex", "unknown-color", "off-scale-spacing"];
 
+/** A spaced separator in a string's text: ` · `, ` — `, ` → `, or their \u escapes. */
+const SPACED_SEPARATOR = /\s(·|—|→|\\u00B7|\\u2014|\\u2192)\s/i;
+
 /**
- * Engines hold prose (field manual, playbook text) where a dash or arrow is punctuation. Only a separator touching a
- * `${…}` interpolation in a template literal is a joined structured value (`${host} — no foothold`).
+ * The single- and double-quoted string literals in `code`, each with where it starts and ends. Template literals are
+ * skipped whole (their `${…}` included), so a quote inside one is never read as a string; a string stops at its line's
+ * end, so a stray quote (in a regex) costs at most that line.
+ */
+function quotedLiterals(code: string): { start: number; end: number; text: string }[] {
+  const out: { start: number; end: number; text: string }[] = [];
+  let i = 0;
+  while (i < code.length) {
+    const c = code[i];
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < code.length && code[j] !== c && code[j] !== "\n") j += code[j] === "\\" ? 2 : 1;
+      out.push({ start: i, end: j + 1, text: code.slice(i + 1, j) });
+      i = j + 1;
+    } else if (c === "`") {
+      let j = i + 1;
+      let depth = 0;
+      while (j < code.length && !(depth === 0 && code[j] === "`")) {
+        if (code[j] === "\\" || (code[j] === "$" && code[j + 1] === "{")) {
+          if (code[j] === "$") depth++;
+          j++;
+        } else if (depth > 0 && code[j] === "}") depth--;
+        j++;
+      }
+      i = j + 1;
+    } else i++;
+  }
+  return out;
+}
+
+/**
+ * Engines hold prose (field manual, playbook text) where a dash or arrow is punctuation. A separator is a joined
+ * structured value only when it glues values together: touching a `${…}` interpolation in a template literal
+ * (`${host} — no foothold`), or in a string concatenated with `+` (`a + " — " + b`) or passed to `.join(…)`
+ * (`parts.join(" · ")`).
  */
 function engineJoined(src: string): boolean {
   const code = stripComments(src);
   for (const m of code.matchAll(/`(?:[^`\\]|\\.)*`/g)) {
     if (/\}\s+(·|—|→)\s|\s(·|—|→)\s+\$\{/.test(m[0])) return true;
+  }
+  for (const lit of quotedLiterals(code)) {
+    if (!SPACED_SEPARATOR.test(lit.text)) continue;
+    // What touches the string on either side (a short window: enough for `.join(` and a `+`).
+    const before = code.slice(Math.max(0, lit.start - 40), lit.start).trimEnd();
+    const after = code.slice(lit.end, lit.end + 40).trimStart();
+    if (before.endsWith("+") || after.startsWith("+")) return true;
+    if (/\.join\(\s*$/.test(before) && after.startsWith(")")) return true;
   }
   return false;
 }
@@ -276,6 +320,33 @@ function offScaleSpacing(file: string, scss: string): string[] {
     });
 }
 
+/** The one module allowed to define the placeholder grammar. */
+export const PLACEHOLDER_GRAMMAR = "src/engines/checklist/template.ts";
+
+/** App source the placeholder rule reads: every .ts and .tsx under src, tests excepted. */
+export const sourceFiles = walk(join(ROOT, "src"), /\.tsx?$/)
+  .map((p) => relative(ROOT, p))
+  .filter((f) => !f.startsWith("src/test/"))
+  .sort();
+
+/**
+ * A regex that spots placeholders, in a regex literal or a `RegExp` string: `\{` (or `\\{`) then a name class or group
+ * (`\{[A-Z`, `\{(FILE|SCRIPT)`, `\{\w`), an escaped literal name (`\{LPORT\}`), or an angle form (`<([A-Z`, `<\w`),
+ * which the grammar dropped and must not come back elsewhere.
+ * Neither a Windows path in a string (`C:\\tmp\\{FILE}`: its closing brace is not escaped) nor a CSS rule (`\.a \{[^}]`)
+ * counts.
+ */
+const PLACEHOLDER_REGEX =
+  /\\{1,2}\{\(?(?:\[(?:A-Z|a-z|\\{1,2}w)|\\{1,2}w|[A-Z][A-Z0-9_|]*(?:\)|\\{1,2}\}))|<\(?(?:\[(?:A-Z|a-z)|\\{1,2}w)/;
+
+/** The code lines of `src` (comments aside) that define a placeholder regex. */
+export function placeholderRegexes(src: string): string[] {
+  return stripComments(src)
+    .split("\n")
+    .filter((line) => PLACEHOLDER_REGEX.test(line))
+    .map((line) => line.trim());
+}
+
 export function breaks(rule: RuleId, file: string, src: string): boolean {
   // Engines render no markup: only the narrow joined-strings check reads them.
   if (isEngine(file)) return rule === "joined-strings" && engineJoined(src);
@@ -305,6 +376,29 @@ export function breaks(rule: RuleId, file: string, src: string): boolean {
         stripComments(src),
       );
   }
+}
+
+/** The library store. Engines take the command library as an argument and never import it (RAV-49). */
+export const LIBRARY_STORE = "src/engines/library/store.ts";
+
+/** Every .ts module under src/engines but the library store itself. */
+export const engineFiles = sourceFiles.filter((f) => isEngine(f) && f !== LIBRARY_STORE);
+
+/** The module specifiers `src` imports or re-exports: static, side-effect and dynamic imports, comments aside. */
+function specifiers(src: string): string[] {
+  const code = stripComments(src);
+  const out: string[] = [];
+  for (const m of code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) out.push(m[1]!);
+  return out;
+}
+
+/** True when `file` imports the library store, by a relative path or the `@/` alias, with or without an extension. */
+export function importsLibraryStore(file: string, src: string): boolean {
+  const target = LIBRARY_STORE.replace(/\.ts$/, "");
+  return specifiers(src).some((spec) => {
+    const path = spec.startsWith("@/") ? join("src", spec.slice(2)) : spec.startsWith(".") ? join(dirname(file), spec) : null;
+    return path !== null && path.replace(/\.[jt]s$/, "") === target;
+  });
 }
 
 export { unknownColors, offScaleSpacing, featureFlex, offRoleSize };

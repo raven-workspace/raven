@@ -5,6 +5,7 @@ import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { Service } from "../../../types/service";
 import type { LibraryCommand } from "../../../engines/library/types";
+import { TEST_LIBRARY } from "../../support/library";
 import { applicableGoals } from "../../../engines/checklist";
 import type { Tunnel } from "../../../types/network";
 import { engagementStuck } from "../../../engines/stuck";
@@ -22,7 +23,7 @@ const cred = (p: Partial<Credential> = {}): Credential => ({
   id: "c1", engagementId: "e1", type: "password", username: "alice", domain: null, secret: "pw", hashType: null, scope: "domain",
   localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null, createdAt: 0, updatedAt: 0, ...p,
 });
-const uname = (id: string): Username => ({ id, engagementId: "e1", username: `u-${id}`, domain: null, sourceHostId: null, source: null, createdAt: 0 });
+const uname = (id: string): Username => ({ id, engagementId: "e1", username: `u-${id}`, domain: null, sourceHostId: null, source: null, createdAt: 0, scope: "unknown", localHostId: null });
 const attempt = (p: Partial<CredAttempt>): CredAttempt => ({
   id: `a${n++}`, engagementId: "e1", credId: "c1", usernameId: null, hostId: "A", service: "ssh", port: 22, result: "valid", authMode: "domain",
   detail: null, logEntryId: null, at: 10, ...p,
@@ -38,7 +39,7 @@ const run = (o: {
     engagement: o.engagement ?? engagement, hosts,
     servicesByHost: new Map(hosts.map((h) => [h.id, o.services?.[h.id] ?? []])),
     byOwner: new Map(Object.entries(o.byOwner ?? {})), credentials: o.credentials ?? [], attempts: o.attempts ?? [],
-    usernames: o.usernames ?? [], tunnels: o.tunnels ?? [], ...(o.library ? { library: o.library } : {}),
+    usernames: o.usernames ?? [], tunnels: o.tunnels ?? [], library: o.library ?? TEST_LIBRARY,
   });
 };
 const FOOT_DONE: ChecklistState = { "h-foot-shell": { status: "done" } };
@@ -86,8 +87,21 @@ describe("engagementStuck lines", () => {
     expect(done.filter((x) => x.text.includes("never sprayed"))).toEqual([]);
   });
 
+  it("credentials read with their domain: CORP\\admin and a local admin are two subjects (RAV-22)", () => {
+    const hosts = [host("A", { os: "windows" })];
+    const l = run({
+      hosts, byOwner: { A: FOOT_DONE }, services: { A: [svc("A", 445, "microsoft-ds")] }, usernames: [uname("u1")],
+      credentials: [cred({ id: "c1", username: "admin", domain: "CORP" }), cred({ id: "c2", username: "admin", domain: null, scope: "local", localHostId: "A" })],
+      attempts: [attempt({ credId: "c1", hostId: "A", service: "smb", port: 445 }), attempt({ credId: "c2", hostId: "A", service: "smb", port: 445 })],
+    }).filter((x) => x.area === "credentials");
+    const subjects = l.map((x) => x.subject);
+    expect(subjects).toContain("CORP\\admin");
+    expect(subjects).toContain("admin");
+    expect(new Set(l.map((x) => `${x.subject}|${x.text}`)).size).toBe(l.length);
+  });
+
   it("usernames not AS-REP-checked", () => {
-    const hosts = [host("DC", { os: "windows" })];
+    const hosts = [host("DC", { os: "windows", adSetEffective: true })];
     const base = { hosts, byOwner: { DC: FOOT_DONE }, services: { DC: [svc("DC", 88, "kerberos-sec"), svc("DC", 389, "ldap")] }, usernames: [uname("u1"), uname("u2")] };
     const l = run(base).filter((x) => x.text.includes("AS-REP"));
     expect(l).toEqual([{ area: "credentials", subject: null, text: "2 usernames not yet AS-REP-checked", hostId: null, goalId: "e-ad-user-asrep" }]);

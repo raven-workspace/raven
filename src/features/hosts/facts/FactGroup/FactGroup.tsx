@@ -1,7 +1,7 @@
 import { ArrowUpRightIcon, CaretRightIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { cx } from "../../../../lib/cx";
-import { Collapse, Toolbar, labelClass } from "../../../../ui/index";
+import { Collapse, Toolbar, Tooltip, labelClass } from "../../../../ui/index";
 import "./FactGroup.scss";
 
 /**
@@ -50,21 +50,21 @@ export function FactGroup({ title, summary, open, onToggle, shortcut, actions, c
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  const hint = shortcut ? ` (${shortcut})` : "";
   return (
     <section aria-label={title}>
       <header className="fact-group__header">
-        <button
-          type="button"
-          aria-expanded={open}
-          title={`${open ? "Fold" : "Open"} ${title}${hint}`}
-          onClick={onToggle}
-          className="fact-group__toggle"
-        >
-          <CaretRightIcon size={16} weight="regular" aria-hidden className={cx("fact-group__caret", open && "fact-group__caret--open")} />
-          <h2 className={cx(labelClass, "fact-group__title")}>{title}</h2>
-          {!open && summary && <span className="fact-group__summary">{summary}</span>}
-        </button>
+        <Tooltip content={<span>{open ? "Fold" : "Open"} {title}{shortcut && <span className="tooltip__key">{shortcut}</span>}</span>}>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={onToggle}
+            className="fact-group__toggle"
+          >
+            <CaretRightIcon size={16} weight="regular" aria-hidden className={cx("fact-group__caret", open && "fact-group__caret--open")} />
+            <h2 className={cx(labelClass, "fact-group__title")}>{title}</h2>
+            {!open && summary && <span className="fact-group__summary">{summary}</span>}
+          </button>
+        </Tooltip>
         {open && actions && <Toolbar>{actions}</Toolbar>}
       </header>
       <Collapse open={open} contentClassName="fact-group__body">{children}</Collapse>

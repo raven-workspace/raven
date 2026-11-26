@@ -1,19 +1,12 @@
-import { fillCommand } from "../../engines/checklist";
+import { canonicalToken, fillCommand, findPlaceholders, SECRET_TOKENS } from "../../engines/checklist";
 import type { FillInput } from "../../engines/checklist";
 
-const TOKEN_RE = /(?<![$%])\{([A-Z][A-Z0-9_-]+)\}|<([A-Z][A-Z0-9_]+)>/g;
-const TARGET_ALIASES = new Set(["TARGET", "IP", "TARGET-IP"]);
-/** Never a field: they come from the picked credential and stay masked. */
-const SECRET_TOKENS = new Set(["PASS", "HASH", "CRED"]);
-
-/** The editable fill tokens a set of templates uses, in first-seen order, aliases folded onto their canonical name. */
+/** The editable fill tokens a set of templates uses, in first-seen order, aliases folded onto their canonical name. Secret tokens are never a field. */
 export function tokensOf(templates: string[]): string[] {
   const out = new Set<string>();
   for (const template of templates) {
-    for (const m of template.matchAll(TOKEN_RE)) {
-      let t = m[1] ?? m[2] ?? "";
-      if (TARGET_ALIASES.has(t)) t = "TARGET_IP";
-      if (t === "DC-IP") t = "DC_IP";
+    for (const p of findPlaceholders(template)) {
+      const t = canonicalToken(p.raw);
       if (!SECRET_TOKENS.has(t)) out.add(t);
     }
   }

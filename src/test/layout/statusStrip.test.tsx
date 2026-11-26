@@ -3,16 +3,11 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
-import { resyncBoards } from "../../features/checklist/ticks";
 import { api } from "../../lib/api";
 import { makeQueryClient } from "../../lib/queryClient";
 import type { Engagement } from "../../types/engagement";
 
 vi.mock("../../lib/api");
-vi.mock("../../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../../features/checklist/ticks")>()),
-  resyncBoards: vi.fn(),
-}));
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
@@ -22,7 +17,6 @@ const E1: Engagement = {
 };
 
 beforeEach(() => {
-  vi.mocked(resyncBoards).mockReset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({ attackerIp: "192.0.2.9", listenerPort: "443", autoLockMinutes: 30 } as never);
   m.engagementGet.mockResolvedValue(E1);
@@ -132,7 +126,13 @@ describe("status strip and title bar", () => {
     const running: Engagement = { ...E1, timeboxStart: Date.now() - 60 * 60_000, timeboxMinutes: 1425 };
     m.engagementGet.mockResolvedValue(running);
     m.engagementsList.mockResolvedValue([running]);
-    m.engagementSetTimeboxPaused.mockResolvedValue({ ...running, timeboxPausedAt: Date.now() });
+    // As the store does: once paused, reading the engagement back gives the paused one.
+    m.engagementSetTimeboxPaused.mockImplementation(async () => {
+      const paused = { ...running, timeboxPausedAt: Date.now() };
+      m.engagementGet.mockResolvedValue(paused);
+      m.engagementsList.mockResolvedValue([paused]);
+      return paused;
+    });
     const strip = await mountStrip();
     const pause = await within(strip).findByRole("button", { name: "Pause timebox" });
     expect(within(strip).getByText(/left$/)).toHaveClass("timebox-text--running");

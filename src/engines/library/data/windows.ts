@@ -164,7 +164,7 @@ const COMMANDS: LibraryCommand[] = [
     why: 'Backup Operators, Server Operators, DnsAdmins, Event Log Readers, Hyper-V Admins: each has a known path.',
     source: 'oscp-notes',
     match: { bins: WHOAMI, all: [String.raw`(^|\s)/groups(?=\s|$)`] },
-    matchExamples: { hit: ['whoami /groups', 'whoami.exe /groups'], miss: ['whoami /priv', 'net user jace'] },
+    matchExamples: { hit: ['whoami /groups', 'whoami.exe /groups'], miss: ['whoami /priv', 'net user ruth'] },
   },
   {
     id: 'win-pe-net-user',

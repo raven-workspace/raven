@@ -23,6 +23,10 @@ export function isDeadEnd(entry: LogEntry, data: ReportData): boolean {
   return entry.returnedNothing || data.attempts.some((a) => a.logEntryId === entry.id);
 }
 
+/** An entry a draft may print beside a step it doesn't prove (a flag's companion, the first port scan): neither kept
+ *  from the report nor a dead end. */
+export const draftable = (data: ReportData, e: LogEntry) => !keptFromReport(data, e) && !isDeadEnd(e, data);
+
 /** The host's non-private, non-dead-end entries that proved something, with every reason they count. */
 export function provingEntries(data: ReportData, hostId: string): Map<string, ProofReason[]> {
   const reasons = new Map<string, ProofReason[]>();
@@ -50,16 +54,5 @@ export function provingEntries(data: ReportData, hostId: string): Map<string, Pr
     const r = reasons.get(e.id);
     if (r && !e.private && e.hostIds.includes(hostId) && !isDeadEnd(e, data)) out.set(e.id, r);
   }
-  return out;
-}
-
-/** The reasons that place an entry on the page (§10.2): goal evidence and service confirmation alone stay in the rail. */
-const PLACING: ReadonlySet<ProofReason> = new Set<ProofReason>(["access", "hop", "flag", "finding-step"]);
-
-/** The host's entries the draft places: proving entries (`provingEntries`) with an access, hop, flag or finding-step
- *  reason. */
-export function placingEntries(data: ReportData, hostId: string): Set<string> {
-  const out = new Set<string>();
-  for (const [id, reasons] of provingEntries(data, hostId)) if (reasons.some((r) => PLACING.has(r))) out.add(id);
   return out;
 }

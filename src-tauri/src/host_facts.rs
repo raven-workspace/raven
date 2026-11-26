@@ -42,7 +42,7 @@ fn host_engagement(conn: &Connection, host_id: &str) -> AppResult<String> {
     conn.query_row("SELECT engagement_id FROM hosts WHERE id = ?1", [host_id], |r| r.get(0)).optional()?.ok_or(AppError::NotFound)
 }
 
-fn clean_list(items: &[String]) -> Vec<String> {
+pub(crate) fn clean_list(items: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for i in items.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
         if !out.iter().any(|o| o == i) {
@@ -120,10 +120,10 @@ pub fn vectors_list(conn: &Connection, host_id: &str) -> AppResult<Vec<PrivescVe
 }
 
 fn check_status(status: &str) -> AppResult<()> {
-    if matches!(status, "try" | "untested" | "ruled_out") {
+    if matches!(status, "try" | "untested" | "ruled_out" | "exploited") {
         Ok(())
     } else {
-        Err(AppError::validation("status", "status must be try, untested or ruled_out"))
+        Err(AppError::validation("status", "status must be try, untested, ruled_out or exploited"))
     }
 }
 
@@ -357,6 +357,44 @@ mod tests {
         let c = v.conn().unwrap();
         let (_e, h) = setup(c);
         assert!(matches!(vector_upsert(c, &h, vin("x", "ruled_out", "manual")), Err(AppError::Validation { field, .. }) if field == "status"));
+    }
+
+    #[test]
+    fn exploited_needs_no_reason_replaces_a_ruling_out_and_survives_a_parser_rerun() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let (e, h) = setup(c);
+        let a = vector_upsert(c, &h, vin("SeImpersonate", "try", "auto")).unwrap();
+        vector_set_status(c, &a.id, "ruled_out", Some("looked patched")).unwrap();
+        assert_eq!(crate::notes::ruled_out_list(c, &e).unwrap().len(), 1);
+        let got = vector_set_status(c, &a.id, "exploited", None).unwrap();
+        assert_eq!((got.status.as_str(), got.source.as_str()), ("exploited", "manual"));
+        // It got you higher, so it is no longer ruled out.
+        assert!(crate::notes::ruled_out_list(c, &e).unwrap().is_empty());
+        let again = vector_upsert(c, &h, vin("SeImpersonate", "try", "auto")).unwrap();
+        assert_eq!(again.status, "exploited");
+    }
+
+    #[test]
+    fn migrates_17_to_18_keeps_vectors_and_allows_exploited() {
+        let mut c = Connection::open_in_memory().unwrap();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        migrations::migrate_with(&mut c, &migrations::MIGRATIONS[..17], &mut |_, _| Ok(())).unwrap();
+        c.execute("INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e1','x','lab','[]','active',1,1)", []).unwrap();
+        c.execute("INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('h1','e1','a','10.0.0.5',1,1)", []).unwrap();
+        c.execute("INSERT INTO privesc_vectors (id,host_id,title,status,source,created_at,updated_at) VALUES ('v1','h1','SeImpersonate','try','auto',1,2)", []).unwrap();
+        assert!(c.execute("UPDATE privesc_vectors SET status='exploited' WHERE id='v1'", []).is_err());
+        let out = migrations::migrate_with(&mut c, &migrations::MIGRATIONS[..18], &mut |_, _| Ok(())).unwrap();
+        assert_eq!(out.to, 18);
+        let got = vector_get(&c, "v1").unwrap();
+        assert_eq!((got.title.as_str(), got.status.as_str(), got.source.as_str(), got.updated_at), ("SeImpersonate", "try", "auto", 2));
+        c.execute("UPDATE privesc_vectors SET status='exploited' WHERE id='v1'", []).unwrap();
+        assert!(c.execute("UPDATE privesc_vectors SET status='bogus' WHERE id='v1'", []).is_err());
+        assert!(c.execute("INSERT INTO privesc_vectors (id,host_id,title,status,source,created_at,updated_at) VALUES ('v2','h1','SeImpersonate','try','auto',1,1)", []).is_err());
+        // Still cascades from hosts.
+        c.execute("DELETE FROM hosts WHERE id='h1'", []).unwrap();
+        let n: i64 = c.query_row("SELECT count(*) FROM privesc_vectors", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
     }
 
     #[test]

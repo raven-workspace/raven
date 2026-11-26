@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseMarkdown } from "../../../engines/manual/markdown";
 import { parseNote, slug } from "../../../engines/manual";
 
 const NOTE = `---
@@ -77,3 +78,29 @@ describe("parseNote", () => {
     expect(slug("Kerberos: AS-REP roasting!")).toBe("kerberos-as-rep-roasting");
   });
 });
+
+describe("RAV-19: outline ids and fences", () => {
+  const ids = (body: string) => parseNote("04-Foundations/Zz Ids.md", body)!.outline.map((o) => o.id);
+  const headingIds = (body: string) => parseMarkdown(body).flatMap((b) => (b.kind === "heading" && b.level > 1 && b.level < 4 ? [b.id] : []));
+
+  it("every anchor id is unique, and the outline and the renderer agree", () => {
+    for (const body of ["## Usage\n## Usage 2\n## Usage", "## Usage\n## Usage\n## Usage 2"]) {
+      const got = ids(body);
+      expect(new Set(got).size, body).toBe(3);
+      expect(headingIds(body), body).toEqual(got);
+    }
+    expect(ids("## Usage\n## Usage 2\n## Usage")).toEqual(["usage", "usage-2", "usage-3"]);
+    expect(ids("## Usage\n## Usage\n## Usage 2")).toEqual(["usage", "usage-2", "usage-2-2"]);
+  });
+
+  it("ids that never clashed stay as they were", () => {
+    expect(ids("## Usage\n## Usage\n## Usage\n**Table 1 — Zz**\n## Other")).toEqual(["usage", "usage-2", "usage-3", "table-1", "other"]);
+  });
+
+  it("a heading inside a longer fence is no outline entry; the one after the fence is", () => {
+    const body = ["## Before", "````md", "```sh", "## Not a heading", "```", "````", "## After"].join("\n");
+    expect(ids(body)).toEqual(["before", "after"]);
+    expect(headingIds(body)).toEqual(["before", "after"]);
+  });
+});
+

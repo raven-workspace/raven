@@ -1,0 +1,83 @@
+{
+  "name": "Deleting an engagement removes everything in it and leaves other engagements alone",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Doomed lab", "kind": "exam-sim", "scopeCidrs": ["192.0.2.60"] }], "as": "gone" },
+    { "do": "engagementCreate", "args": [{ "name": "Kept lab", "kind": "lab", "scopeCidrs": ["192.0.2.60"] }], "as": "kept" },
+    { "do": "hostsList", "args": ["$gone"], "bind": { "h": "0.id" } },
+    { "do": "hostsList", "args": ["$kept"], "bind": { "k": "0.id" } },
+    { "do": "serviceCreate", "args": ["$h", { "port": 80 }], "as": "http" },
+    { "do": "serviceCreate", "args": ["$k", { "port": 80 }] },
+    { "do": "engagementSetMsfHost", "args": ["$gone", "$h"] },
+    {
+      "do": "logCreate",
+      "args": ["$gone", {
+        "title": "Login page", "ranOn": null, "hostIds": ["$h"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "screenshot", "attachmentId": "", "caption": "login", "fileName": "login.png" },
+        "attachment": { "mime": "image/png", "dataBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" }
+      }],
+      "as": "shot",
+      "bind": { "att": "content.attachmentId" }
+    },
+    { "do": "attachmentGet", "args": ["$att"], "expect": { "id": "$att", "mime": "image/png" } },
+    {
+      "do": "logCreate",
+      "args": ["$kept", {
+        "title": "Kept entry", "ranOn": null, "hostIds": ["$k"], "observations": null, "returnedNothing": false, "private": false,
+        "content": { "kind": "note", "text": "stays" }
+      }]
+    },
+    { "do": "noteSave", "args": ["$gone", null, "doomed notes", false] },
+    { "do": "noteSave", "args": ["$gone", "$h", "doomed host notes", true] },
+    { "do": "ruledOutCreate", "args": [{ "engagementId": "$gone", "text": "SQLi", "reason": "parameterised" }] },
+    { "do": "credentialCreate", "args": ["$gone", { "type": "password", "username": "omar", "secret": "Autumn2026!" }], "bind": { "cred": "credential.id" } },
+    { "do": "usernameCreate", "args": ["$gone", { "username": "erin" }], "as": "erin" },
+    { "do": "accessGrantCreate", "args": ["$gone", { "usernameId": "$erin", "hostId": "$h", "level": "admin", "via": "psexec" }] },
+    { "do": "credAttemptsUpsert", "args": ["$gone", [{ "credId": "$cred", "hostId": "$h", "service": "http", "result": "valid" }]] },
+    { "do": "triedPairsUpsert", "args": ["$gone", [{ "username": "frank", "secret": "x", "secretKind": "password", "hostId": "$h", "service": "ssh" }]] },
+    { "do": "findingCreate", "args": ["$gone", { "title": "Default credentials", "hostIds": ["$h"], "serviceIds": ["$http"], "stepEntryIds": ["$shot"] }], "as": "finding" },
+    { "do": "findingFileCreate", "args": ["$finding", { "name": "exploit.py", "content": "print('poc')" }] },
+    { "do": "failedAttemptCreate", "args": ["$gone", { "findingId": "$finding", "title": "Brute force", "reasonKind": "control", "reason": "lockout" }] },
+    { "do": "cleanupCreate", "args": ["$gone", { "hostId": "$h", "kind": "account", "target": "backdoor" }] },
+    { "do": "tunnelCreate", "args": ["$gone", { "kind": "chisel", "viaHostId": "$h", "status": "down" }] },
+    { "do": "hopCreate", "args": ["$gone", { "toHostId": "$h", "via": "http" }] },
+    { "do": "interfaceDismiss", "args": ["$gone", "$h", "203.0.113.0/24"] },
+    { "do": "payloadBuildRecord", "args": [{ "engagementId": "$gone", "hostId": "$h", "payloadId": "nc-exe", "lhost": "192.0.2.99", "lport": "4444", "at": 1 }] },
+    { "do": "checklistPut", "args": ["$gone", [{ "ownerId": "$gone", "goalId": "e-sweep", "status": "done" }, { "ownerId": "$h", "goalId": "h-web", "status": "done" }]] },
+    { "do": "reportGetOrCreate", "args": ["$gone"], "as": "report" },
+    { "do": "reportSectionUpsert", "args": ["$report", { "kind": "target", "targetKey": "192.0.2.60", "position": 1, "doc": { "type": "doc" }, "meta": {} }] },
+    { "do": "reportSectionsList", "args": ["$report"], "expect": [{ "kind": "target", "targetKey": "192.0.2.60" }] },
+
+    { "do": "engagementDelete", "args": ["$gone"] },
+
+    { "do": "engagementsList", "args": [], "expect": [{ "id": "$kept" }] },
+    { "do": "engagementGet", "args": ["$gone"], "error": { "code": "not_found" } },
+    { "do": "hostsList", "args": ["$gone"], "expect": [] },
+    { "do": "servicesList", "args": ["$h"], "expect": [] },
+    { "do": "servicesListEngagement", "args": ["$gone"], "expect": [] },
+    { "do": "logList", "args": ["$gone"], "expect": [] },
+    { "do": "attachmentGet", "args": ["$att"], "error": { "code": "not_found" } },
+    { "do": "notesList", "args": ["$gone"], "expect": [] },
+    { "do": "ruledOutList", "args": ["$gone"], "expect": [] },
+    { "do": "credentialsList", "args": ["$gone"], "expect": [] },
+    { "do": "usernamesList", "args": ["$gone"], "expect": [] },
+    { "do": "accessGrantsList", "args": ["$gone"], "expect": [] },
+    { "do": "credAttemptsList", "args": ["$gone"], "expect": [] },
+    { "do": "triedPairsList", "args": ["$gone"], "error": { "code": "not_found" } },
+    { "do": "findingsList", "args": ["$gone"], "error": { "code": "not_found" } },
+    { "do": "findingFilesList", "args": ["$finding"], "error": { "code": "not_found" } },
+    { "do": "failedAttemptsList", "args": ["$gone"], "error": { "code": "not_found" } },
+    { "do": "cleanupList", "args": ["$gone"], "expect": [] },
+    { "do": "tunnelsList", "args": ["$gone"], "expect": [] },
+    { "do": "hopsList", "args": ["$gone"], "expect": [] },
+    { "do": "interfaceDismissalsList", "args": ["$gone"], "expect": [] },
+    { "do": "payloadBuildsList", "args": ["$gone"], "error": { "code": "not_found" } },
+    { "do": "checklistList", "args": ["$gone"], "expect": [] },
+    { "do": "reportSectionsList", "args": ["$report"], "expect": [] },
+    { "do": "reportGetOrCreate", "args": ["$gone"], "error": { "code": "not_found" } },
+
+    { "do": "hostsList", "args": ["$kept"], "expect": [{ "id": "$k", "ip": "192.0.2.60" }] },
+    { "do": "servicesListEngagement", "args": ["$kept"], "expect": [{ "port": 80 }] },
+    { "do": "logList", "args": ["$kept"], "expect": [{ "title": "Kept entry", "hostIds": ["$k"] }] },
+    { "do": "engagementDelete", "args": ["$gone"], "error": { "code": "not_found" } }
+  ]
+}

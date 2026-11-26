@@ -4,7 +4,7 @@ import { credLabel, dedupeHashCaptures, foldCrackedHashes, usernameLabel } from 
 import { vectorsFromIdentity } from "../../../../engines/facts/index";
 import type { HostIdentity } from "../../../../types/hostFacts";
 import type { Host } from "../../../../types/host";
-import { Button, ChipSet, IconButton, Input, Toolbar } from "../../../../ui/index";
+import { Button, ChipSet, IconButton, Input, queryState, Toolbar } from "../../../../ui/index";
 import { useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../../../credentials/queries";
 import { useLog } from "../../../log/queries";
 import { useHostFactsMutations, useHostIdentity } from "../../queries";
@@ -20,13 +20,12 @@ const isNotablePriv = (p: string) => vectorsFromIdentity({ privileges: [p], grou
 const isNotableGroup = (g: string) => vectorsFromIdentity({ privileges: [], groups: [g] }).length > 0;
 const splitList = (s: string) => s.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
 
-function IdentityForm({ engagementId, host, identity, onDone }: {
-  engagementId: string;
+function IdentityForm({ host, identity, onDone }: {
   host: Host;
   identity: HostIdentity | null;
   onDone: () => void;
 }) {
-  const { setIdentity, upsertVector } = useHostFactsMutations(engagementId, host.id);
+  const { setIdentity, upsertVector } = useHostFactsMutations(host.id);
   const [username, setUsername] = useState(identity?.username ?? "");
   const [privileges, setPrivileges] = useState(identity?.privileges.join(" ") ?? "");
   const [groups, setGroups] = useState(identity?.groups.join(" ") ?? "");
@@ -99,7 +98,7 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
   const logQ = useLog(engagementId);
   const [editing, setEditing] = useState(false);
   const [readError, setReadError] = useState<string>();
-  const { setIdentity, upsertVector } = useHostFactsMutations(engagementId, host.id);
+  const { setIdentity, upsertVector } = useHostFactsMutations(host.id);
   const identity = identityQ.data ?? null;
   const fromLog = useMemo(() => (logQ.data ? identityFromLog(logQ.data, host) : null), [logQ.data, host]);
   const readFromLog = async () => {
@@ -150,9 +149,9 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
       {/* Shown whatever the branch: identity can be saved and a vector upsert still fail. */}
       {readError && <p role="alert" className="fact-group__error">{readError}</p>}
       {identityQ.isError ? (
-        <p role="alert" className="fact-group__error">Couldn't load who you are here: {identityQ.error.message}</p>
+        queryState([identityQ], "who you are here")
       ) : editing ? (
-        <IdentityForm engagementId={engagementId} host={host} identity={identity} onDone={() => setEditing(false)} />
+        <IdentityForm host={host} identity={identity} onDone={() => setEditing(false)} />
       ) : !identity ? (
         <div className="identity-facts__empty">
           <p className="fact-group__note">Not known yet. Log whoami /all or id output on this host.</p>
@@ -244,7 +243,8 @@ export function OtherAccountsFacts({ engagementId, host, open, onToggle }: {
   return (
     <FactGroup title="Other accounts" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="fact-group__error">Couldn't load credentials: {failed.message}</p>
+        // Not the identity: Who am I shows its error, and the list does without it.
+        queryState([credsQ, attemptsQ], "credentials")
       ) : !ready ? null : rows.length === 0 ? (
         <p className="fact-group__note">None yet. Uncracked hashes and credentials found on this host show here.</p>
       ) : (

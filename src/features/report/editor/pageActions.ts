@@ -1,29 +1,28 @@
-import type { QueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
 import { createContext, useContext } from "react";
 import { Fragment, type Node as PMNode } from "prosekit/pm/model";
 import { closeHistory } from "prosekit/pm/history";
-import { NodeSelection } from "prosekit/pm/state";
+import { NodeSelection, type Transaction } from "prosekit/pm/state";
 import { StepMap } from "prosekit/pm/transform";
 import {
   blockHash,
+  blockSource,
   companionStepAt,
+  alsoShows,
   draftedEntryBlocks,
-  draftOf,
+  isCopiedFrom,
+  parseSource,
   phaseInsertAt,
   refreshBlocks,
   refreshFamily,
+  source,
   stamp,
-  type Drafted,
   type ReportData,
   type ReportMeta,
   type ReportNode,
   type ReportTarget,
 } from "../../../engines/report";
-import { api } from "../../../lib/api";
 import type { LogEntry } from "../../../types/log";
-import { readImage, releaseImage } from "../../capture/imagePaste";
-import { logKey } from "../../log/queries";
 import { showsHint } from "./extension";
 
 /** What the page's menus and toolbar ask the page to do beyond ProseKit's own commands. */
@@ -42,8 +41,8 @@ const topIndexAt = (doc: Editor["state"]["doc"], pos: number) => doc.resolve(Mat
 
 /** The machine a top-level block names: a machine heading (`facts:<hostId>`) or a phase heading (`phase:<hostId>:…`). */
 function hostOfBlock(node: PMNode): string | null {
-  const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
-  return /^(?:facts|phase):([^:]+)/.exec(source)?.[1] ?? null;
+  const s = blockSource({ type: node.type.name, attrs: node.attrs });
+  return s?.kind === "facts" || s?.kind === "phase" ? s.hostId : null;
 }
 
 /**
@@ -61,30 +60,6 @@ export function hostAtPos(editor: Editor, pos: number, target: ReportTarget | un
     if (hostId && target.hostIds.includes(hostId)) found = hostId;
   });
   return found ?? target.hostIds[0];
-}
-
-const fileNameOf = (file: File) => file.name || `screenshot.${file.type.split("/")[1] ?? "png"}`;
-
-/**
- * Saves an image as a screenshot log entry for `hostIds` (the attachment storage the capture panel uses), and adds it
- * to the cached log at once so the page can render it before the refetch.
- */
-export async function saveScreenshot(qc: QueryClient, engagementId: string, hostIds: string[], file: File): Promise<LogEntry> {
-  const image = await readImage(file);
-  releaseImage(image);
-  const entry = await api.logCreate(engagementId, {
-    title: "Screenshot",
-    ranOn: null,
-    hostIds,
-    observations: null,
-    returnedNothing: false,
-    private: false,
-    content: { kind: "screenshot", attachmentId: "", caption: "", fileName: fileNameOf(file) },
-    attachment: { mime: image.mime, dataBase64: image.dataBase64 },
-  });
-  qc.setQueryData<LogEntry[]>(logKey(engagementId), (list) => (list ? [...list, entry] : list));
-  void qc.invalidateQueries({ queryKey: logKey(engagementId) });
-  return entry;
 }
 
 /** Where `block` (a node the block handle named at `pos`) stands now: there if it still is, else wherever it moved. */
@@ -109,6 +84,46 @@ export function deleteBlockAt(editor: Editor, block: { node: PMNode; pos: number
     dispatch?.(state.tr.delete(pos, pos + block.node.nodeSize));
     return true;
   });
+}
+
+/**
+ * Move to appendix, the page's side: the transaction taking `block` off the page, not yet dispatched, and the index
+ * path from the doc root where it stood (for Undo). It is the page's own change (`PROGRAMMATIC`, so not the owner's
+ * removal) and stays out of ⌘Z: the move is undone from its notice, both pages at once. Null when the block is gone.
+ */
+export function takeBlock(editor: Editor, block: { node: PMNode; pos: number }): { tr: Transaction; path: number[] } | null {
+  const pos = currentPos(editor, block);
+  if (pos === null) return null;
+  const at = editor.state.doc.resolve(pos);
+  const path = Array.from({ length: at.depth + 1 }, (_, d) => at.index(d));
+  const tr = editor.state.tr.delete(pos, pos + block.node.nodeSize).setMeta(PROGRAMMATIC, true).setMeta("addToHistory", false);
+  return { tr, path };
+}
+
+/**
+ * Move to appendix's Undo, the page's side: the transaction putting `block` back at `path`, not yet dispatched. Where
+ * the page changed since, it goes as near as the page allows: the end of the deepest block on its path that still
+ * stands and takes it, else the end of the page. Null when the page takes it nowhere.
+ */
+export function putBlockBack(editor: Editor, path: readonly number[], block: PMNode): Transaction | null {
+  const doc = editor.state.doc;
+  let parent = doc;
+  let start = 0;
+  let depth = 0;
+  for (; depth < path.length - 1 && path[depth] < parent.childCount; depth++) {
+    let pos = start;
+    for (let i = 0; i < path[depth]; i++) pos += parent.child(i).nodeSize;
+    start = pos + 1;
+    parent = parent.child(path[depth]);
+  }
+  const index = depth === path.length - 1 ? Math.min(path[depth], parent.childCount) : parent.childCount;
+  let pos = start;
+  for (let i = 0; i < index; i++) pos += parent.child(i).nodeSize;
+  if (!parent.canReplaceWith(index, index, block.type)) {
+    if (!doc.canReplaceWith(doc.childCount, doc.childCount, block.type)) return null;
+    pos = doc.content.size;
+  }
+  return editor.state.tr.insert(pos, block).setMeta(PROGRAMMATIC, true).setMeta("addToHistory", false);
 }
 
 /** Marks a transaction the page makes itself (Add new evidence's Undo or a Refresh): what it
@@ -206,15 +221,25 @@ export function collectInserted(editor: Editor, run: () => void): PMNode[] {
 }
 
 /** Inserts `made` at `spot` in one transaction, an undo step of its own (never merged with typing before or after
- *  it); returns the nodes as they stand on the page after it. */
-function insertAtSpot(editor: Editor, spot: (doc: PMNode) => Spot, made: PMNode[]): PMNode[] {
+ *  it); returns the nodes as they stand on the page after it. `drop` names ranges of the page as it was that the same
+ *  transaction takes off (blocks the inserted ones now show: `givesWay`). */
+function insertAtSpot(editor: Editor, spot: (doc: PMNode) => Spot, made: PMNode[], drop: Spot[] = []): PMNode[] {
   let at: number | null = null;
   editor.exec((state, dispatch) => {
     const { from, to } = spot(state.doc);
     at = from;
     if (dispatch) {
-      dispatch(closeHistory(state.tr.replaceWith(from, to, made)).scrollIntoView());
+      const tr = state.tr.replaceWith(from, to, made);
       track(editor, from, to, made);
+      const inserted = tr.mapping.maps.length;
+      // Last first, so the ranges before each stay where they were. A range the blocks went into stays: they'd go with it.
+      const keep = (d: Spot) => !(d.from < from && from < d.to);
+      for (const r of drop.filter(keep).map((d) => ({ from: tr.mapping.map(d.from, 1), to: tr.mapping.map(d.to, -1) })).sort((a, b) => b.from - a.from)) {
+        tr.delete(r.from, r.to);
+        track(editor, r.from, r.to, []);
+      }
+      at = tr.mapping.slice(inserted).map(from);
+      dispatch(closeHistory(tr).scrollIntoView());
     }
     return true;
   });
@@ -234,9 +259,60 @@ const topPos = (doc: PMNode, index: number) => {
 };
 
 /** Puts blocks at a top-level index, one undo step; returns them as they stand on the page. */
-export function insertBlocksAt(editor: Editor, index: number, blocks: ReportNode[]): PMNode[] {
+export function insertBlocksAt(editor: Editor, index: number, blocks: ReportNode[], drop: Spot[] = []): PMNode[] {
   const made = blocks.map((n) => editor.state.schema.nodeFromJSON(n));
-  return insertAtSpot(editor, (doc) => ({ from: topPos(doc, index), to: topPos(doc, index) }), made);
+  return insertAtSpot(editor, (doc) => ({ from: topPos(doc, index), to: topPos(doc, index) }), made, drop);
+}
+
+/** A page block as the Page module reads one. */
+const asBlock = (n: PMNode) => ({ type: n.type.name, attrs: n.attrs });
+
+/**
+ * Where an entry's own blocks stand on the page, to give way to blocks that now show it (a flag added by hand as its
+ * own step, then the step whose output prints it): a numbered step holding nothing else goes whole, else each of the
+ * entry's blocks. None when the owner edited one of them: their words stay.
+ */
+function givesWay(doc: PMNode, entryId: string): Spot[] {
+  const out: Spot[] = [];
+  const nodes: PMNode[] = [];
+  doc.forEach((top, pos) => {
+    if (isCopiedFrom(asBlock(top), entryId)) {
+      out.push({ from: pos, to: pos + top.nodeSize });
+      nodes.push(top);
+      return;
+    }
+    if (top.type.name !== "list") return;
+    const mine: { node: PMNode; offset: number }[] = [];
+    top.forEach((child, offset) => void (isCopiedFrom(asBlock(child), entryId) && mine.push({ node: child, offset })));
+    if (mine.length === 0) return;
+    nodes.push(...mine.map((m) => m.node));
+    if (mine.length === top.childCount) out.push({ from: pos, to: pos + top.nodeSize });
+    else for (const m of mine) out.push({ from: pos + 1 + m.offset, to: pos + 1 + m.offset + m.node.nodeSize });
+  });
+  return isEdited(nodes) ? [] : out;
+}
+
+/** The ranges of the page that `blocks` now show instead: the own blocks of each entry their `also` names. */
+const shownInstead = (doc: PMNode, blocks: ReportNode[]): Spot[] =>
+  [...new Set(blocks.flatMap((b) => alsoShows(b)))].flatMap((id) => givesWay(doc, id));
+
+/**
+ * A flag whose value the page already prints, in another entry's block (the output of the step that read it): that
+ * block, to record the flag in its `also` rather than print the value a second time. The Result line, which names every
+ * flag, doesn't count. Null for any other entry, or when no block prints it.
+ */
+function printsValueOf(doc: PMNode, entry: LogEntry): { node: PMNode; pos: number } | null {
+  const value = entry.content.kind === "flag" ? entry.content.value.trim() : "";
+  if (value === "") return null;
+  let found: { node: PMNode; pos: number } | null = null;
+  doc.descendants((node, pos) => {
+    if (found) return false;
+    if (!node.isTextblock) return true;
+    const s = blockSource(asBlock(node));
+    if (s?.kind === "entry" && s.entryId !== entry.id && node.textContent.includes(value)) found = { node, pos };
+    return false;
+  });
+  return found;
 }
 
 /** Whether the cursor is in a heading, or a heading is the selected block: + add then places by phase. */
@@ -253,8 +329,7 @@ function cursorInHeading(editor: Editor): boolean {
  * cursor's block, inside its list or step: an empty paragraph without a hint is replaced, a hint paragraph never is.
  * Without one, a screenshot that came along with a step on the page joins that step (`companionStepAt`); anything else
  * goes as a new numbered step at the end of the entry's phase (`phaseInsertAt`), after its heading and "Steps to
- * reproduce:" when the page has none yet. The target's draft is built once per call, or once per run by a caller
- * placing many (`drafted`, from `draftOf`).
+ * reproduce:" when the page has none yet. Where it goes is the placement plan's, built once per data and target.
  */
 export function insertEntry(
   editor: Editor,
@@ -263,11 +338,21 @@ export function insertEntry(
   entry: LogEntry,
   atCursor: boolean,
   meta: ReportMeta = {},
-  drafted: Drafted = draftOf(data, target, meta),
 ): PMNode[] {
   const schema = editor.state.schema;
+  // A flag the page already prints: placed in that block's `also`, its value not printed twice.
+  const printed = printsValueOf(editor.state.doc, entry);
+  if (printed) {
+    editor.exec((state, dispatch) => {
+      dispatch?.(closeHistory(state.tr.setNodeAttribute(printed.pos, "also", [...alsoShows(asBlock(printed.node)), entry.id])));
+      return true;
+    });
+    endUndoGroup(editor);
+    return [];
+  }
   if (atCursor && !cursorInHeading(editor)) {
-    const made = draftedEntryBlocks(data, target, meta, entry, drafted).map((n) => schema.nodeFromJSON(n));
+    const blocks = draftedEntryBlocks(data, target, meta, entry);
+    const made = blocks.map((n) => schema.nodeFromJSON(n));
     return insertAtSpot(
       editor,
       (doc) => {
@@ -275,10 +360,11 @@ export function insertEntry(
         return spotAfter(doc, sel.from, sel instanceof NodeSelection && sel.node.isBlock ? sel.node : null, made);
       },
       made,
+      shownInstead(editor.state.doc, blocks),
     );
   }
   const doc = editor.state.doc.toJSON() as ReportNode;
-  const joins = companionStepAt(doc, data, target, meta, entry, drafted);
+  const joins = companionStepAt(doc, data, target, entry);
   if (joins) {
     const made = joins.blocks.map((n) => schema.nodeFromJSON(n));
     return insertAtSpot(
@@ -291,7 +377,8 @@ export function insertEntry(
     );
   }
   const { index, before } = phaseInsertAt(doc, data, target, entry);
-  return insertBlocksAt(editor, index, [...before, { type: "list", attrs: { kind: "ordered" }, content: draftedEntryBlocks(data, target, meta, entry, drafted) }]);
+  const blocks = draftedEntryBlocks(data, target, meta, entry);
+  return insertBlocksAt(editor, index, [...before, { type: "list", attrs: { kind: "ordered" }, content: blocks }], shownInstead(editor.state.doc, blocks));
 }
 
 /**
@@ -300,7 +387,7 @@ export function insertEntry(
  */
 export function insertFigure(editor: Editor, entry: LogEntry, pos: number): PMNode[] {
   if (entry.content.kind !== "screenshot") return [];
-  const [figure] = stamp([{ type: "figure", attrs: { attachmentId: entry.content.attachmentId, entryId: entry.id, source: `entry:${entry.id}` } }]);
+  const [figure] = stamp([{ type: "figure", attrs: { attachmentId: entry.content.attachmentId, entryId: entry.id, source: source.entry(entry.id) } }]);
   const made = [editor.state.schema.nodeFromJSON(figure)];
   return insertAtSpot(editor, (doc) => spotAfter(doc, Math.min(pos, doc.content.size), null, made), made);
 }
@@ -382,7 +469,8 @@ export function refreshRun(editor: Editor, run: SourceRun, data: ReportData, tar
 
 /** The block menu's Refresh item for a source: the log's, a finding's (its file's too), else Raven's own. */
 export function refreshLabel(source: string): "Refresh from log" | "Refresh from finding" | "Refresh from Raven" {
-  if (source.startsWith("entry:")) return "Refresh from log";
-  if (source.startsWith("finding:") || source.startsWith("file:")) return "Refresh from finding";
+  const kind = parseSource(source)?.kind;
+  if (kind === "entry") return "Refresh from log";
+  if (kind === "finding" || kind === "file") return "Refresh from finding";
   return "Refresh from Raven";
 }

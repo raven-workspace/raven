@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { applicableGoals, currentStage, hostViewStages } from "../../../../engines/checklist/index";
 import { cx } from "../../../../lib/cx";
+import { queryState } from "../../../../ui/index";
 import type { ItemState } from "../../../../types/checklist";
 import type { Host } from "../../../../types/host";
 import { useChecklist } from "../../../checklist/queries";
@@ -55,7 +56,7 @@ export function CoverageFacts({ engagementId, host, open, onToggle }: {
   return (
     <FactGroup title="Coverage" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="fact-group__error">Couldn't load the checklist: {failed.message}</p>
+        queryState([hostsQ, engagement, servicesQ, checklistQ], "the checklist")
       ) : (
         <ul className="coverage-facts">
           {rows.map((r) => (

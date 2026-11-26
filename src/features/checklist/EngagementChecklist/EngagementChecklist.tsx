@@ -17,7 +17,7 @@ import type { Host } from "../../../types/host";
 import { Button, labelClass, queryState } from "../../../ui/index";
 import { CleanupPanel } from "../../cleanup/CleanupPanel/CleanupPanel";
 import { EngagementStuckCheck } from "../../stuck/StuckView/StuckView";
-import { hostsKey, useHosts } from "../../hosts/queries";
+import { useHosts } from "../../hosts/queries";
 import { sectionPath } from "../../engagements/sections/sections";
 import { useCredAttempts, useCredentials } from "../../credentials/queries";
 import { useLog } from "../../log/queries";
@@ -26,14 +26,15 @@ import { CredentialPicker } from "../CredentialPicker/CredentialPicker";
 import { newCredLabels, useCredFill } from "../credPick";
 import { useFilePickStore } from "../filePick";
 import { usePortPickStore } from "../portPick";
+import { useLibrary } from "../../../engines/library/store";
 import { goalCommands } from "../goalCommands";
 import { shortHostName } from "../../../lib/hostName";
 import { GoalRow } from "../GoalRow/GoalRow";
 import { PlaybookSection } from "../PlaybookSection/PlaybookSection";
-import { checklistKey, useChecklist, useChecklistMutations } from "../queries";
+import { useChecklist, useChecklistMutations } from "../queries";
 import { useHops, useTunnels } from "../../network/queries";
 import { useEngagementServices } from "../../services/queries";
-import { loadTickContext, tickFromLog } from "../ticks";
+import { syncChecklist } from "../sync";
 import { useSettings, settingsFill } from "../../settings/queries";
 import { useEngagement } from "../../engagements/queries";
 import { RavenError } from "../../../types/errors";
@@ -52,6 +53,7 @@ const EXAM_EMPTY = "Nothing allowed in an exam sim; do it by hand";
 export function EngagementChecklist() {
   useFilePickStore((s) => s.file); // a chip pick refills the rows' commands
   usePortPickStore((s) => s.picks); // a port pick refills them too
+  const library = useLibrary(); // an import refills them too
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -75,7 +77,7 @@ export function EngagementChecklist() {
   const loadState = queryState([hostsQ, engagement, servicesQ, settings, log], "the engagement checklist");
   if (loadState || !hosts || !eng || !servicesQ.data) return loadState;
 
-  const facts = engagementFacts(eng, hosts, servicesByHost);
+  const facts = engagementFacts(eng, hosts);
   const setup = ENGAGEMENT_SETUP.filter((g) => goalApplies(g, facts));
   const state = byOwner.get(eng.id) ?? {};
   const entries = log.data ?? [];
@@ -94,7 +96,7 @@ export function EngagementChecklist() {
   const row = (g: ChecklistGoal, owner?: Host) => {
     const ownerId = owner?.id ?? eng.id;
     const rowInput = owner ? { ...input, host: owner } : input;
-    const { commands, hadAny } = goalCommands(g.id, rowInput, eng);
+    const { commands, hadAny } = goalCommands(g.id, rowInput, eng, library.commands);
     const s = (owner ? byOwner.get(owner.id) ?? {} : state)[g.id];
     return (
       <GoalRow
@@ -130,11 +132,8 @@ export function EngagementChecklist() {
   const runTick = async () => {
     setTick({ ticking: true });
     try {
-      const r = await tickFromLog(id, await loadTickContext(id));
-      setTick({ ticking: false, message: r.message });
-      void qc.invalidateQueries({ queryKey: checklistKey(id) });
-      void qc.invalidateQueries({ queryKey: hostsKey(id) });
-      void qc.invalidateQueries({ queryKey: ["progress"] });
+      const { rebuilt: n } = await syncChecklist({ engagementId: id, change: { entity: "log", id, change: "rebuilt" }, qc });
+      setTick({ ticking: false, message: `Updated ${n} ${n === 1 ? "goal" : "goals"}` });
     } catch (e) {
       setTick({ ticking: false, error: RavenError.from(e).message });
     }

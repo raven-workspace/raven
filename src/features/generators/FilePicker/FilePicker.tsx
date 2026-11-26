@@ -1,5 +1,5 @@
 import { useMemo, type Ref } from "react";
-import { getToolkit } from "../../../engines/library/store";
+import { useToolkit } from "../../../engines/library/store";
 import { TokenInput } from "../../palette/TokenInput/TokenInput";
 import type { Suggestion } from "../../palette/suggest";
 import "./FilePicker.scss";
@@ -18,7 +18,7 @@ export function FilePicker({ name, os, value, onChange, className, placeholder, 
   name: string; os?: "windows" | "linux" | null; value: string; onChange: (value: string) => void;
   className?: string; placeholder?: string; autoValue?: boolean; ref?: Ref<HTMLInputElement>;
 }) {
-  const toolkit = getToolkit();
+  const { toolkit } = useToolkit();
   const files = useMemo(
     () => toolkit.filter((f) => !os || f.os === os).sort((a, b) => Number(b.staged) - Number(a.staged)),
     [toolkit, os],

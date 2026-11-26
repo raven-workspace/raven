@@ -3,6 +3,7 @@ import { credentialsInPaste } from "../../../engines/capture";
 import { resolveCapture } from "../../../features/capture/resolve";
 import { EMPTY_DRAFT, type PanelDraft } from "../../../features/capture/useCaptureStore";
 import type { Host } from "../../../types/host";
+import { TEST_LIBRARY } from "../../support/library";
 
 const NT = "0123456789abcdef0123456789abcdef";
 
@@ -16,53 +17,53 @@ const DC: Host = { ...WEB, id: "h2", name: "dc01.corp.example.test", ip: "192.0.
 
 const resolve = (text: string, over: Partial<PanelDraft> = {}, hosts: Host[] = [WEB]) =>
   resolveCapture({ ...EMPTY_DRAFT, text, ...over }, {
-    hosts, scope: [], domain: "", machines: [], lastRanOn: null, presetHostId: "h1",
+    hosts, scope: [], domain: "", machines: [], lastRanOn: null, library: TEST_LIBRARY, presetHostId: "h1",
   });
 
 describe("credentialsInPaste", () => {
   it("never offers ordinary notes", () => {
     for (const note of ["todo:enumerate smb", "ftp:anon login ok", "Gobuster:found /admin", "creds:in /var/www/config.php", "C:\\Users\\bob:x", "web:/admin", "svc:\\\\share\\x"]) {
-      expect(credentialsInPaste(note), note).toEqual([]);
+      expect(credentialsInPaste(note, TEST_LIBRARY), note).toEqual([]);
     }
   });
 
   it("still offers real credentials", () => {
     for (const c of ["admin:Summer2026!", "CORP\\svc_sql:P@ss", ".\\Administrator:Passw0rd!", "admin:1234"]) {
-      expect(credentialsInPaste(c), c).toHaveLength(1);
+      expect(credentialsInPaste(c, TEST_LIBRARY), c).toHaveLength(1);
     }
   });
 
   it("reads user:pass", () => {
-    expect(credentialsInPaste("admin:Summer2026!")).toEqual([{ username: "admin", domain: null, secret: "Summer2026!", type: "password" }]);
+    expect(credentialsInPaste("admin:Summer2026!", TEST_LIBRARY)).toEqual([{ username: "admin", domain: null, secret: "Summer2026!", type: "password" }]);
   });
 
   it("reads DOMAIN\\user:pass with its domain", () => {
-    expect(credentialsInPaste("CORP\\svc_sql:P@ss")).toEqual([{ username: "svc_sql", domain: "CORP", secret: "P@ss", type: "password" }]);
+    expect(credentialsInPaste("CORP\\svc_sql:P@ss", TEST_LIBRARY)).toEqual([{ username: "svc_sql", domain: "CORP", secret: "P@ss", type: "password" }]);
   });
 
   it("reads user:<32 hex> as a hash", () => {
-    expect(credentialsInPaste(`jdoe:${NT}`)).toEqual([{ username: "jdoe", domain: null, secret: NT, type: "hash" }]);
+    expect(credentialsInPaste(`jdoe:${NT}`, TEST_LIBRARY)).toEqual([{ username: "jdoe", domain: null, secret: NT, type: "hash" }]);
   });
 
   it("reads an account named like a service, which is no command line", () => {
-    expect(credentialsInPaste("ftp:ftp")).toHaveLength(1);
+    expect(credentialsInPaste("ftp:ftp", TEST_LIBRARY)).toHaveLength(1);
   });
 
   it("reads .\\user:pass as a local account, with no domain", () => {
-    expect(credentialsInPaste(".\\Administrator:Passw0rd!")).toEqual([
+    expect(credentialsInPaste(".\\Administrator:Passw0rd!", TEST_LIBRARY)).toEqual([
       { username: "Administrator", domain: null, secret: "Passw0rd!", type: "password", local: true },
     ]);
   });
 
   it("reads an all-digit password unless the name is a known host's", () => {
-    expect(credentialsInPaste("admin:1234", ["web01", "192.0.2.10"])).toEqual([{ username: "admin", domain: null, secret: "1234", type: "password" }]);
-    expect(credentialsInPaste("web01:8080", ["web01", "192.0.2.10"])).toEqual([]);
-    expect(credentialsInPaste("WEB01:8080", ["web01"])).toEqual([]);
-    expect(credentialsInPaste("198.51.100.20:445")).toEqual([]);
+    expect(credentialsInPaste("admin:1234", TEST_LIBRARY, ["web01", "192.0.2.10"])).toEqual([{ username: "admin", domain: null, secret: "1234", type: "password" }]);
+    expect(credentialsInPaste("web01:8080", TEST_LIBRARY, ["web01", "192.0.2.10"])).toEqual([]);
+    expect(credentialsInPaste("WEB01:8080", TEST_LIBRARY, ["web01"])).toEqual([]);
+    expect(credentialsInPaste("198.51.100.20:445", TEST_LIBRARY)).toEqual([]);
   });
 
   it("reads each line of a multi-line paste", () => {
-    expect(credentialsInPaste("admin:Summer2026!\r\n\nCORP\\svc_sql:P@ss\n")).toHaveLength(2);
+    expect(credentialsInPaste("admin:Summer2026!\r\n\nCORP\\svc_sql:P@ss\n", TEST_LIBRARY)).toHaveLength(2);
   });
 
   it.each([
@@ -82,7 +83,7 @@ describe("credentialsInPaste", () => {
     ["a mix of credentials and text", "admin:Summer2026!\nworked on the web login"],
     ["nothing", "  \n "],
   ])("never offers %s", (_what, text) => {
-    expect(credentialsInPaste(text)).toEqual([]);
+    expect(credentialsInPaste(text, TEST_LIBRARY)).toEqual([]);
   });
 });
 

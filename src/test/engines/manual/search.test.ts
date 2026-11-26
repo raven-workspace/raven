@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseNote } from "../../../engines/manual";
-import { matchRanges, searchLookups, searchManual } from "../../../engines/manual/search";
+import { resolveTemplate } from "../../../engines/checklist/template";
+import { maskPlaceholders, matchRanges, searchLookups, searchManual } from "../../../engines/manual/search";
 import { AUDIT_NOTE_SOURCES } from "../../../audit/fixtures";
 
 // Synthetic note text only (RFC 5737 addresses, invented names).
@@ -103,6 +104,94 @@ describe("searchManual: emphasis around code", () => {
   });
 });
 
+describe("searchManual: the snippet reads as the note renders the line (RAV-20)", () => {
+  const note = (lines: string[]) => parseNote("04-Foundations/Zz Render.md", ["# Zz Render", "## Lines", ...lines].join("\n"))!;
+  // A table row is one only under a header and separator.
+  const snippet = (line: string, query: string) =>
+    searchManual(query, [note(line.startsWith("|") ? ["| Code | Means |", "| --- | --- |", line] : [line])])[0]?.line;
+
+  it.each([
+    ["use __bold__ here", "use", "use bold here"],
+    ["a ___x___ word", "word", "a x word"],
+    ["stray ** marker", "marker", "stray ** marker"],
+    ["escaped \\*star\\* text", "text", "escaped *star* text"],
+    ["see [[Aa Other|zz alias]] now", "zz alias", "see zz alias now"],
+    ["| `ZZ_CODE` | **Bad** _input_ |", "bad input", "ZZ_CODE  Bad input"],
+    ["- a `*` or `_` in code", "in code", "a * or _ in code"],
+    ["> [!note] zz quoted *line*", "quoted", "zz quoted line"],
+  ])("%s", (line, query, shown) => {
+    expect(snippet(line, query)).toBe(shown);
+  });
+
+  it("a phrase split by bold is found, and reads without the markers", () => {
+    expect(snippet("the zzgate said access **denied** twice", "access denied")).toBe("the zzgate said access denied twice");
+  });
+});
+
+describe("searchManual: placeholders never match (RAV-20)", () => {
+  const n = parseNote("03-Tools/Zz Fill.md", [
+    "# Zz Fill",
+    "## Run",
+    "```bash",
+    "zzfill --zzport -t {ZZRHOST}",
+    "```",
+    "Then run `zzother {ZZLHOST}` and read {ZZNOTE} here.",
+  ].join("\n"))!;
+
+  it("a query only a placeholder's name matches finds nothing, in a fence or out", () => {
+    expect(searchManual("zzrhost", [n])).toEqual([]);
+    expect(searchManual("zzlhost", [n])).toEqual([]);
+    expect(searchManual("zznote", [n])).toEqual([]);
+  });
+
+  it("the text around a placeholder still matches, and the snippet keeps the line whole", () => {
+    expect(searchManual("zzport", [n])[0]).toMatchObject({ anchor: "run", line: "zzfill --zzport -t {ZZRHOST}" });
+    expect(searchManual("zzother", [n])[0]?.line).toBe("Then run zzother {ZZLHOST} and read {ZZNOTE} here.");
+  });
+
+  it("a match never runs from text into an inline command, as the note marks each apart", () => {
+    expect(searchManual("then run zzother", [n])).toEqual([]);
+  });
+});
+
+describe("maskPlaceholders agrees with fill (RAV-48)", () => {
+  const text = "zzrun -t {TARGET} -u {user} -p {ZZ_PASS} ${ZZHOME} -w %{http_code} |%{0} {DC-IP} '<script>' <TARGET> <zzConnectorList>";
+  const masked = (t: string) => [...maskPlaceholders(t)].flatMap((c, i) => (c === "\u0000" ? [i] : []));
+  const filled = (t: string) => resolveTemplate(t, {}).ranges.flatMap((r) => Array.from({ length: r.end - r.start }, (_, k) => r.start + k));
+
+  it("blanks exactly the spans fill treats as placeholders", () => {
+    expect(masked(text)).toEqual(filled(text));
+    expect(masked(text).length).toBeGreaterThan(0);
+  });
+
+  it("leaves ${VAR}, %{x}, <script>, <TARGET> and XML tags readable", () => {
+    const out = maskPlaceholders(text);
+    expect(out).not.toContain("{TARGET}");
+    for (const kept of ["${ZZHOME}", "%{http_code}", "'<script>'", "<TARGET>", "<zzConnectorList>"]) expect(out).toContain(kept);
+  });
+
+  it("<TARGET> and XML tags are never placeholders: their names are found", () => {
+    const n = parseNote("03-Tools/Zz Angle.md", ["# Zz Angle", "## Run", "```bash", "zzangle -t <ZZTARGET> <zzConnectorList>", "```"].join("\n"))!;
+    expect(searchManual("zztarget", [n])[0]?.line).toBe("zzangle -t <ZZTARGET> <zzConnectorList>");
+    expect(searchManual("zzconnectorlist", [n])).toHaveLength(1);
+  });
+});
+
+describe("searchManual: tables and fences as the note reads them (RAV-19)", () => {
+  it("a table without outer pipes reads as cells; a prose line with a pipe stays prose", () => {
+    const n = parseNote("04-Foundations/Zz Bare.md", "# Zz Bare\n## Codes\nCode | Means\n--- | ---\nZZ_BARE | zzbare thing\n\nkeep zzpipe | as is\n")!;
+    expect(searchManual("zzbare", [n])[0]).toMatchObject({ anchor: "codes", line: "ZZ_BARE  zzbare thing" });
+    expect(searchManual("zzpipe", [n])[0]?.line).toBe("keep zzpipe | as is");
+  });
+
+  it("text after a longer fence's inner fence is code, under the section the note shows", () => {
+    const n = parseNote("04-Foundations/Zz Fence.md", ["# Zz Fence", "## One", "````md", "```sh", "## zzinside", "```", "zzstill code", "````", "## Two", "zzafter"].join("\n"))!;
+    expect(searchManual("zzinside", [n])[0]).toMatchObject({ anchor: "one", line: "## zzinside" });
+    expect(searchManual("zzstill", [n])[0]).toMatchObject({ anchor: "one" });
+    expect(searchManual("zzafter", [n])[0]).toMatchObject({ anchor: "two" });
+  });
+});
+
 describe("matchRanges", () => {
   it("treats `_` and spaces alike, case-insensitively", () => {
     expect(matchRanges("STATUS_ACCESS_DENIED and access denied", "access denied")).toEqual([[7, 20], [25, 38]]);
@@ -146,5 +235,11 @@ describe("searchLookups", () => {
 
   it("an empty query finds nothing", () => {
     expect(searchLookups("  ", [LOOKUP])).toEqual([]);
+  });
+
+  it("a row `keep` drops does not count toward `max`", () => {
+    const all = searchLookups("STATUS_ZZ", [LOOKUP], 10);
+    const dropped = new Set(all.slice(0, 2).map((r) => r.key));
+    expect(searchLookups("STATUS_ZZ", [LOOKUP], 2, (r) => !dropped.has(r.key)).map((r) => r.key)).toEqual(all.slice(2, 4).map((r) => r.key));
   });
 });

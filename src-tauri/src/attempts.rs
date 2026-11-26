@@ -48,6 +48,17 @@ pub struct CredAttemptInput {
     pub at: Option<i64>,
 }
 
+/// The stored marker of password reuse (see GLOSSARY.md): an attempt with this service and this detail is a dumped local
+/// account whose name and secret match a local credential stored for another host, not a result on a service. A dump
+/// names no service, so `other` stands in. The frontend's `PASSWORD_REUSE_DETAIL` is the same text.
+pub const PASSWORD_REUSE_SERVICE: &str = "other";
+pub const PASSWORD_REUSE_DETAIL: &str = "password reuse";
+
+/// Whether an attempt is password reuse rather than a service result. The frontend's `isReuseAttempt` is the same rule.
+pub fn is_reuse(service: &str, detail: Option<&str>) -> bool {
+    service == PASSWORD_REUSE_SERVICE && detail == Some(PASSWORD_REUSE_DETAIL)
+}
+
 const COLS: &str = "id, engagement_id, cred_id, username_id, host_id, service, port, result, auth_mode, detail, log_entry_id, at";
 
 const SERVICES: [&str; 13] =
@@ -215,7 +226,7 @@ fn upsert_clean(conn: &Connection, engagement_id: &str, c: &Clean, id: Option<&s
 pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[CredAttemptInput]) -> AppResult<Vec<CredAttempt>> {
     check_scope(conn, engagement_id, None)?;
     let now = now_ms();
-    let tx = conn.unchecked_transaction()?;
+    let tx = crate::db::atomic(conn)?;
     let mut out = Vec::with_capacity(inputs.len());
     for i in inputs {
         let c = clean(&tx, engagement_id, i, now)?;
@@ -249,7 +260,7 @@ pub fn rekey_username_attempts(
     for s in secret_cred_ids {
         check_in_engagement(conn, "credentials", &engagement_id, s)?;
     }
-    let tx = conn.unchecked_transaction()?;
+    let tx = crate::db::atomic(conn)?;
     let moving: Vec<CredAttempt> = {
         let mut st = tx.prepare(&format!(
             "SELECT {COLS} FROM cred_attempts WHERE username_id = ?1 ORDER BY at, id"
@@ -348,6 +359,7 @@ mod tests {
             },
         )
         .unwrap()
+        .credential
         .id
     }
 
@@ -355,7 +367,7 @@ mod tests {
         credentials::username_create(
             c,
             eid,
-            UsernameInput { username: name.into(), domain: None, source_host_id: None, source: None },
+            UsernameInput { username: name.into(), domain: None, source_host_id: None, source: None, scope: None, local_host_id: None },
         )
         .unwrap()
         .id
@@ -389,6 +401,15 @@ mod tests {
         )
         .unwrap();
         id
+    }
+
+    #[test]
+    fn only_the_reuse_marker_is_password_reuse() {
+        assert!(is_reuse("other", Some("password reuse")));
+        // A real result on another service, with or without a detail, is not reuse; nor is the detail on a named service.
+        assert!(!is_reuse("other", None));
+        assert!(!is_reuse("other", Some("STATUS_ACCOUNT_DISABLED")));
+        assert!(!is_reuse("smb", Some("password reuse")));
     }
 
     #[test]

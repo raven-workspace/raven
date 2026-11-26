@@ -13,8 +13,12 @@ import {
   flattenToPlain,
   isAppendixPage,
   isReady,
+  joinPages,
   isValidOsid,
+  keptFromReport,
   needsFlatten,
+  printedDate,
+  reportTypst,
   numberAppendices,
   reportChecks,
   reportDueAt,
@@ -26,7 +30,10 @@ import {
   targetChecks,
   targetNumbers,
   withoutRemoved,
+  isCopiedFrom,
   type Check,
+  type ExportPage,
+  type ExportSource,
   type FlagKind,
   type PageMeta,
   type ReportData,
@@ -47,6 +54,7 @@ import { usePayloadsStore } from "../../payloads/usePayloadsStore";
 import { ReportDataContext, type ReportDataValue } from "../editor/ReportDataContext/ReportDataContext";
 import { keepCopiedText, openFindBar, posAtPath, ReportEditor, selectBlockAt } from "../editor/ReportEditor/ReportEditor";
 import { AddEvidenceButton } from "../AddEvidenceButton/AddEvidenceButton";
+import { ExportButton } from "../ExportButton/ExportButton";
 import { EvidenceDrawer, EvidenceRail } from "../EvidenceRail/EvidenceRail";
 import { GuidePanel } from "../GuidePanel/GuidePanel";
 import { ReportDetails } from "../ReportDetails/ReportDetails";
@@ -79,6 +87,7 @@ import { useDraftBuild, useEnsureSections, useOpenFlatten } from "../useSectionL
 import { useSettings } from "../../settings/queries";
 import { useEngagement } from "../../engagements/queries";
 import { RavenError } from "../../../types/errors";
+import { moveToAppendix, undoMoveToAppendix, type MovedBlock } from "../moveToAppendix";
 import "./ReportSection.scss";
 
 const HINTS: Hint[] = [
@@ -106,6 +115,9 @@ const RAIL_BREAKPOINT = 1200;
 /** From this pane width (and under 1200) the column, when open, docks beside the page and the paper narrows: 320px of
  *  column still leaves the paper about 560px of text. Narrower, the column is a drawer over the page. */
 const DOCK_BREAKPOINT = 1000;
+/** Whether the evidence column was left open: one per-device state for every report ("1" or "0"). */
+export const RAIL_OPEN_KEY = "raven.report.evidenceOpen";
+
 /** Where the evidence column sits: always beside the page, beside it while open, or a drawer over it while open. */
 type RailMode = "column" | "dock" | "drawer";
 const railModeAt = (width: number): RailMode =>
@@ -501,9 +513,13 @@ function ReportBody({
     const state: TabItem["state"] = !started(e.target!) ? "not-started" : fails > 0 ? "todo" : "ready";
     tabs.push({ id: e.section.id, label: `${i + 1} ${e.item.label}`, state, todo: fails, reorderable: e.item.reorderable });
   });
+  // A free page's tab leads with the section number it prints under ("§6 Lessons learned"), from the same `numbers` as
+  // the page, so the two agree after any reorder. The § keeps it from reading as the next target: target tabs count
+  // the targets (1–6), which print as 4.1, 4.2 and so on.
   for (const e of entries.filter((x) => x.item.group === "pages")) {
     const title = pageTitleOf(e.section);
-    tabs.push({ id: e.section.id, label: title, state: "none", detail: `Section ${numbers.get(e.section.id)?.number ?? ""}`, page: true, title, reorderable: true });
+    const n = numbers.get(e.section.id)?.number;
+    tabs.push({ id: e.section.id, label: n ? `§${n} ${title}` : title, state: "none", page: true, title, reorderable: true });
   }
   if (closingParts.length > 0) tabs.push({ id: CLOSING_TAB, label: "Closing", state: "none" });
   for (const e of entries.filter((x) => x.item.group === "appendix-pages")) {
@@ -669,7 +685,11 @@ function ReportBody({
   const railMode = railModeAt(paneWidth);
   // Under 1200px the column is a toggle (the strip's Evidence button, E); docked or a drawer is the width's call.
   const narrow = railMode !== "column";
-  const [railOpen, setRailOpen] = useState(false);
+  // Open or closed as last left (one state for every report), until toggled on this visit. A drawer would cover the
+  // page, so it starts closed whatever was left.
+  const [railLeftOpen] = useState(() => localStorage.getItem(RAIL_OPEN_KEY) === "1");
+  const [railChoice, setRailOpen] = useState<boolean | null>(null);
+  const railOpen = railChoice ?? (railMode !== "drawer" && railLeftOpen);
   const [railFocus, setRailFocus] = useState(0);
   // The column takes its own grid track (the paper narrows beside it): always when wide, while open when docked.
   const railBeside = railMode === "column" || (railMode === "dock" && railOpen);
@@ -681,6 +701,8 @@ function ReportBody({
       useArsenalStore.getState().close();
       usePayloadsStore.getState().close();
     }
+    // Your own open or close is remembered; another drawer sliding this one out is not.
+    localStorage.setItem(RAIL_OPEN_KEY, open ? "1" : "0");
     setRailOpen(open);
   };
   useEffect(() => {
@@ -749,9 +771,7 @@ function ReportBody({
     // The anchor's node by its index in the page (the checks' own walk), else the first block from its entry: a figure
     // of it, or a block whose source names it.
     const { entryId, nodeIndex } = check.anchor ?? {};
-    const fromEntry = (node: PMNode) =>
-      (node.type.name === "figure" && node.attrs.entryId === entryId) ||
-      (typeof node.attrs.source === "string" && /^entry:([^:]+)/.exec(node.attrs.source)?.[1] === entryId);
+    const fromEntry = (node: PMNode) => entryId !== undefined && isCopiedFrom({ type: node.type.name, attrs: node.attrs }, entryId);
     let index = 0;
     if (pos === null)
       doc.descendants((node, p) => {
@@ -827,6 +847,63 @@ function ReportBody({
     />
   ) : null;
 
+  // Move to appendix (§10.4): the appendix pages a block can move to, in letter order, offered off an appendix page.
+  const appendixSections = useMemo(
+    () => appendix.pages.flatMap((p) => entries.find((e) => e.section.id === p.sectionId)?.section ?? []),
+    [appendix, entries],
+  );
+  const openIsAppendix = openSection ? isAppendixPage(openSection) : false;
+  const moveTargets = useMemo(
+    () =>
+      openIsAppendix
+        ? undefined
+        : appendixSections.map((s, i) => ({
+            sectionId: s.id,
+            label: `Appendix ${appendix.pages[i].letter} – ${(metaOf(s) as Partial<PageMeta>).title || pageTitle("appendix")}`,
+          })),
+    [openIsAppendix, appendixSections, appendix, metaOf],
+  );
+  // The appendix pages other than the open one, as stored: an entry on one is in the report, so this page doesn't
+  // offer it again (the evidence column, the slash menu, Add new evidence).
+  const otherPages = useMemo(() => appendixSections.filter((s) => s.id !== openSection?.id).map(savedDocOf), [appendixSections, openSection, savedDocOf]);
+  // The move's notice offers Undo while the page the block left stays open.
+  const [moved, setMoved] = useState<MovedBlock | null>(null);
+  const [moveFailed, setMoveFailed] = useState<string | null>(null);
+  // A move or its Undo on its way: another waits for it.
+  const [moving, setMoving] = useState(false);
+  const onMoveToAppendix = useCallback(
+    (block: { node: PMNode; pos: number }, appendixId: string | null) => {
+      if (!pageEditor || !openSection || moving) return;
+      setMoving(true);
+      setMoved(null);
+      setMoveFailed(null);
+      moveToAppendix(qc, report, pageEditor, openSection.id, block, appendixId)
+        .then(setMoved)
+        .catch((e: unknown) => {
+          reportError(e);
+          setMoveFailed(`Couldn't move the block: ${RavenError.from(e).message}. Nothing moved.`);
+        })
+        .finally(() => setMoving(false));
+    },
+    [pageEditor, openSection, qc, report, moving],
+  );
+  const undoMove = () => {
+    const m = moved;
+    setMoved(null);
+    if (!m || !pageEditor || openSection?.id !== m.sourceId || moving) return;
+    setMoving(true);
+    undoMoveToAppendix(qc, report, pageEditor, m)
+      .catch((e: unknown) => {
+        reportError(e);
+        setMoveFailed(`Couldn't undo the move: ${RavenError.from(e).message}.`);
+      })
+      .finally(() => setMoving(false));
+  };
+  const closeMoved = useCallback(() => setMoved(null), []);
+  const closeMoveFailed = useCallback(() => setMoveFailed(null), []);
+  // Undo puts the block back on the page it left: the notice shows only while that page is open.
+  const movedHere = moved && moved.sourceId === openSection?.id ? moved : null;
+
   const contextValue = useMemo(
     (): ReportDataValue | null =>
       openSectionMeta
@@ -836,9 +913,12 @@ function ReportBody({
             reportMeta,
             onImageWidth,
             target: openTarget,
+            appendices: moveTargets,
+            onMoveToAppendix,
+            otherPages,
           }
         : null,
-    [data, openSectionMeta, onRemoveEvidence, reportMeta, onImageWidth, openTarget],
+    [data, openSectionMeta, onRemoveEvidence, reportMeta, onImageWidth, openTarget, moveTargets, onMoveToAppendix, otherPages],
   );
 
   const notStarted = open?.target && !started(open.target);
@@ -861,6 +941,8 @@ function ReportBody({
       </div>
     ) : null;
   const railDoc = openSection ? (openLiveDoc ?? savedDocOf(openSection)) : EMPTY_DOC;
+  // What the evidence column counts as in the report: the open page and the appendix pages.
+  const railReportDoc = useMemo(() => (otherPages.length > 0 ? joinPages([railDoc, ...otherPages]) : railDoc), [railDoc, otherPages]);
   const guides =
     openSection && openSection.kind !== "details" && hasCurrentPage(openSection) && contextValue ? (
       <GuidePanel key={openSection.id} kind={openSection.kind} placement={openSection.kind === "page" ? (openSection.meta as Partial<PageMeta>).placement : undefined} doc={railDoc} />
@@ -871,7 +953,7 @@ function ReportBody({
       <EvidenceRail
         target={open?.target}
         data={data}
-        doc={railDoc}
+        doc={railReportDoc}
         editor={pageEditor}
         didWell={openSection?.kind === "summary"}
         meta={reportMeta}
@@ -934,6 +1016,49 @@ function ReportBody({
     </>
   );
 
+  /**
+   * The report as it prints, for Export PDF: every page in outline order (Report details aside: its fields are the front
+   * page), each under the title and with the heading numbers the page shows, the open page as typed. A figure prints
+   * only when its entry may reach the report.
+   */
+  const buildExport = (): ExportSource => {
+    const pages: ExportPage[] = [];
+    for (const e of entries) {
+      const s = e.section;
+      if (s.kind === "details") continue;
+      const doc = openLiveDoc && s.id === openSection?.id ? openLiveDoc : savedDocOf(s);
+      if (isAppendixPage(s)) {
+        pages.push({ doc, title: { number: null, text: `Appendix ${pageLetter(s.id)} – ${pageTitleOf(s)}` }, nested: true });
+        continue;
+      }
+      const n = numbers.get(s.id);
+      const title = n?.title ? { number: n.title.number, text: n.title.text } : null;
+      if (e.target) {
+        const target = e.target;
+        const number = n?.number;
+        pages.push({ doc, title, numbering: number ? (d) => targetNumbers(d, target, number) : undefined, nested: true });
+      } else if (s.kind === "page") {
+        pages.push({ doc, title, nested: true });
+      } else {
+        const kind = s.kind;
+        const number = n?.number;
+        pages.push({ doc, title, numbering: number ? (d) => subsectionNumbers(kind, number, d) : undefined, nested: false });
+      }
+    }
+    const printable = (entryId: string) => {
+      const entry = data.log.find((l) => l.id === entryId);
+      return entry !== undefined && !keptFromReport(data, entry);
+    };
+    const front = {
+      title: report.title,
+      candidate: report.candidateName,
+      osid: report.osid.trim(),
+      email: report.email,
+      date: printedDate(reportMeta.reportDate) || printedDate(new Date().toISOString().slice(0, 10)),
+    };
+    return reportTypst(front, pages, printable);
+  };
+
   return (
     <section ref={sectionRef} aria-label="Report" className="report-section">
       <ReportStrip
@@ -972,7 +1097,7 @@ function ReportBody({
               const s = sections.find((x) => x.id === id);
               if (s) setDeleting(s);
             }}
-            exportSlot={null}
+            exportSlot={<ExportButton report={report} build={buildExport} gaps={gaps} onSaveReport={saveReport} />}
             listRef={navRef}
           />
           <div className={cx("report-section__body", railBeside && "report-section__body--rail")}>
@@ -1012,6 +1137,7 @@ function ReportBody({
                           target={open.target}
                           meta={reportMeta}
                           removed={openSectionMeta?.removedEntryIds ?? []}
+                          elsewhere={otherPages}
                           onAdded={() => void saver.flush()}
                         />
                       )
@@ -1025,7 +1151,7 @@ function ReportBody({
               </div>
             </div>
             {railMode === "drawer" ? (
-              <EvidenceDrawer open={railOpen} focusKey={railFocus} onClose={() => setRailOpen(false)}>
+              <EvidenceDrawer open={railOpen} focusKey={railFocus} onClose={() => toggleRail(false)}>
                 {rail}
               </EvidenceDrawer>
             ) : railBeside ? (
@@ -1074,7 +1200,27 @@ function ReportBody({
             </Button>
           }
         >
-          <p className="report-section__deleted">{`Deleted ${pageTitleOf(deleted)}`}</p>
+          <p className="report-section__notice">{`Deleted ${pageTitleOf(deleted)}`}</p>
+        </TimedNotice>
+      )}
+      {movedHere && (
+        <TimedNotice
+          timerKey={movedHere}
+          onClose={closeMoved}
+          action={
+            <Button size="sm" onClick={undoMove}>
+              Undo
+            </Button>
+          }
+        >
+          <p className="report-section__notice">{`Moved to Appendix ${pageLetter(movedHere.appendixId)}`}</p>
+        </TimedNotice>
+      )}
+      {moveFailed && (
+        <TimedNotice timerKey={moveFailed} onClose={closeMoveFailed}>
+          <p role="alert" className="report-section__notice">
+            {moveFailed}
+          </p>
         </TimedNotice>
       )}
     </section>

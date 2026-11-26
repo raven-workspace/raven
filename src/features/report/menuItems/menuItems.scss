@@ -38,6 +38,14 @@
     }
   }
 
+  // An item naming a page (Move to appendix's picker): a long title is cut short, never wraps.
+  .report-menu__item--page {
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   // Delete: amber on hover and keyboard focus.
   .report-menu__item--destructive {
     @media (hover: hover) {

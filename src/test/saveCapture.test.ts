@@ -1,11 +1,15 @@
+import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CaptureDraft } from "../engines/capture";
-import { PartialSaveError, saveCapture, type CaptureEdits } from "../features/capture/saveCapture";
+import { IDENTITY_FAILED, saveCapture, type CaptureEdits } from "../features/capture/saveCapture";
+import { EntryChangeError, EXTRACTION_FAILED } from "../features/log/entryChange";
 import { api } from "../lib/api";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { HostIdentity } from "../types/hostFacts";
-import type { LogEntry, LogEntryInput } from "../types/log";
+import type { ExtractionProofs, LogEntry, LogEntryInput } from "../types/log";
+import { filed } from "./features/capture/filed";
+import { TEST_LIBRARY } from "./support/library";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
@@ -78,6 +82,9 @@ function entry(input: LogEntryInput): LogEntry {
   };
 }
 
+/** What the save gave the store to file (the first filing). */
+const proofs = (): ExtractionProofs => m.extractionFile.mock.calls[0]![2];
+
 beforeEach(() => {
   vi.resetAllMocks();
   m.logCreate.mockImplementation(async (_e, input) => entry(input));
@@ -87,11 +94,13 @@ beforeEach(() => {
   m.servicesListEngagement.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
+  m.checklistApplyEntryTicks.mockResolvedValue([]);
+  m.extractionFile.mockResolvedValue(filed());
 });
 
 describe("saveCapture", () => {
   it("saveCapture saves the entry; an unknown IP with nothing proven there makes no host", async () => {
-    const saved = await saveCapture({
+    const saved = await saveCapture(new QueryClient(), {
       engagementId: "e1",
       draft: draft({ unknownScopeIps: ["10.10.10.7"] }),
       edits: edits({ observations: "  smb signing off  ", ranOn: "" }),
@@ -111,59 +120,42 @@ describe("saveCapture", () => {
       attachment: null,
     });
     expect(saved.entry.id).toBe("l1");
-    // Nothing in the output was parsed: no summary and no extraction.
+    // Nothing in the output was parsed: no summary, and nothing filed.
     expect(saved.summary).toBeNull();
-    expect(m.extractionSave).not.toHaveBeenCalled();
-    expect(m.servicesUpsertScan).not.toHaveBeenCalled();
+    expect(m.extractionFile).not.toHaveBeenCalled();
   });
 
-  it("saveCapture upserts services and fills os", async () => {
+  it("a scan's open ports and OS go to the store after the entry; an unlinked scan host gets nothing", async () => {
     const order: string[] = [];
     m.logCreate.mockImplementation(async (_e, input) => {
       order.push("log");
       return entry(input);
     });
-    m.servicesUpsertScan.mockImplementation(async () => {
-      order.push("services");
-      return [];
+    m.extractionFile.mockImplementation(async () => {
+      order.push("file");
+      return filed();
     });
-    m.hostUpdate.mockImplementation(async (id, input) => {
-      order.push("host");
-      return host({ id, name: input.name });
-    });
-    await saveCapture({
+    await saveCapture(new QueryClient(), {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: "linux" } }),
       edits: edits(),
       image: null,
       hosts: [DC],
     });
-    expect(order).toEqual(["log", "services", "host"]);
-    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h1", PORTS);
-    expect(m.hostUpdate).toHaveBeenCalledWith("h1", { name: "dc01", ip: "10.10.10.5", os: "linux", access: "user" });
+    expect(order).toEqual(["log", "file"]);
+    expect(m.extractionFile).toHaveBeenCalledWith("e1", "l1", expect.anything());
+    // The store fills the OS only for a host that has none.
+    expect(proofs().scans).toEqual([{ hostId: "h1", ports: PORTS, os: "linux" }]);
 
-    // A host with an OS keeps it; an unlinked scan host gets nothing.
-    m.hostUpdate.mockClear();
-    m.servicesUpsertScan.mockClear();
-    const linux = { ...DC, os: "windows" as const };
-    await saveCapture({
-      engagementId: "e1",
-      draft: draft({ scan: { hostId: "h1", ports: PORTS, os: "linux" } }),
-      edits: edits(),
-      image: null,
-      hosts: [linux],
-    });
-    expect(m.servicesUpsertScan).toHaveBeenCalledTimes(1);
-    expect(m.hostUpdate).not.toHaveBeenCalled();
-    m.servicesUpsertScan.mockClear();
-    await saveCapture({
+    m.extractionFile.mockClear();
+    await saveCapture(new QueryClient(), {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: "linux" } }),
       edits: edits({ hostIds: [] }),
       image: null,
       hosts: [DC],
     });
-    expect(m.servicesUpsertScan).not.toHaveBeenCalled();
+    expect(m.extractionFile).not.toHaveBeenCalled();
   });
 
   it("first scan of a new box re-runs the draft with the created host", async () => {
@@ -176,11 +168,10 @@ describe("saveCapture", () => {
       order.push("log");
       return entry(input);
     });
-    m.servicesUpsertScan.mockImplementation(async () => {
-      order.push("services");
-      return [];
+    m.extractionFile.mockImplementation(async () => {
+      order.push("file");
+      return filed();
     });
-    m.hostUpdate.mockImplementation(async (id, input) => host({ id, name: input.name }));
     const text = [
       "kali@kali:~$ nmap -sCV -p 22,80 10.10.10.9",
       "Nmap scan report for 10.10.10.9",
@@ -198,9 +189,10 @@ describe("saveCapture", () => {
       domain: "",
       machines: ["Kali (VM)"],
       lastRanOn: null,
+      library: TEST_LIBRARY,
     };
     const created: string[] = [];
-    await saveCapture({
+    await saveCapture(new QueryClient(), {
       engagementId: "e1",
       draft: draft({ hostIds: [], scan: null, unknownScopeIps: ["10.10.10.9"] }),
       draftInput,
@@ -209,20 +201,21 @@ describe("saveCapture", () => {
       hosts: [DC],
       onHostCreated: (h) => created.push(h.id),
     });
-    expect(order).toEqual(["host", "log", "services"]);
+    expect(order).toEqual(["host", "log", "file"]);
     expect(created).toEqual(["h9"]);
-    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h9", [
-      expect.objectContaining({ port: 22, service: "ssh" }),
-      expect.objectContaining({ port: 80, service: "http" }),
+    // The host the scan proved is this save's: Undo removes it with the services.
+    expect(proofs().createdHostIds).toEqual(["h9"]);
+    expect(proofs().scans).toEqual([
+      {
+        hostId: "h9",
+        ports: [expect.objectContaining({ port: 22, service: "ssh" }), expect.objectContaining({ port: 80, service: "http" })],
+        os: "linux",
+      },
     ]);
-    expect(m.hostUpdate).toHaveBeenCalledWith("h9", { name: "10.10.10.9", ip: "10.10.10.9", os: "linux", access: "none" });
   });
 
   it("a multi-host scan of new boxes makes each a host with only its own section", async () => {
     m.hostCreate.mockImplementation(async (_e, input) => host({ id: `h-${input.ip}`, name: input.name, ip: input.ip ?? null }));
-    m.logCreate.mockImplementation(async (_e, input) => entry(input));
-    m.servicesUpsertScan.mockResolvedValue([]);
-    m.hostUpdate.mockImplementation(async (id, input) => host({ id, name: input.name }));
     const text = [
       "kali@kali:~$ nmap -sV 10.10.10.9 10.10.10.8",
       "Nmap scan report for 10.10.10.9",
@@ -234,7 +227,7 @@ describe("saveCapture", () => {
       "135/tcp open  msrpc         Microsoft Windows RPC",
       "Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows",
     ].join("\n");
-    await saveCapture({
+    await saveCapture(new QueryClient(), {
       engagementId: "e1",
       draft: draft({ hostIds: [], scan: null, unknownScopeIps: ["10.10.10.9", "10.10.10.8"] }),
       draftInput: {
@@ -246,57 +239,56 @@ describe("saveCapture", () => {
         domain: "",
         machines: ["Kali (VM)"],
         lastRanOn: null,
+        library: TEST_LIBRARY,
       },
       edits: edits({ hostIds: [] }),
       image: null,
       hosts: [DC],
     });
-    expect(m.servicesUpsertScan).toHaveBeenCalledTimes(2);
-    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h-10.10.10.9", [expect.objectContaining({ port: 22 })]);
-    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h-10.10.10.8", [expect.objectContaining({ port: 135 })]);
+    expect(proofs().scans.map((s) => [s.hostId, s.ports.map((p) => p.port)])).toEqual([
+      ["h-10.10.10.9", [22]],
+      ["h-10.10.10.8", [135]],
+    ]);
     expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ hostIds: ["h-10.10.10.9", "h-10.10.10.8"] }));
   });
 
-  it("only open ports are upserted (M1)", async () => {
-    m.logCreate.mockImplementation(async (_e, input) => entry(input));
-    m.servicesUpsertScan.mockResolvedValue([]);
+  it("only open ports are filed (M1)", async () => {
     const ports = [
       ...PORTS,
       { port: 25, protocol: "tcp" as const, state: "closed", service: "smtp", version: "" },
       { port: 161, protocol: "udp" as const, state: "open|filtered", service: "snmp", version: "" },
       { port: 445, protocol: "tcp" as const, state: "filtered", service: "microsoft-ds", version: "" },
     ];
-    await saveCapture({
+    await saveCapture(new QueryClient(), {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports, os: null } }),
       edits: edits(),
       image: null,
       hosts: [{ ...DC, os: "linux" }],
     });
-    expect(m.servicesUpsertScan.mock.calls[0]![1].map((p) => p.port)).toEqual([22, 80, 161]);
+    expect(proofs().scans[0]!.ports.map((p) => p.port)).toEqual([22, 80, 161]);
   });
 
-  it("services failure still keeps the entry", async () => {
-    m.servicesUpsertScan.mockRejectedValue(new Error("db busy"));
-    const err = await saveCapture({
+  it("a filing failure still keeps the entry", async () => {
+    m.extractionFile.mockRejectedValue(new Error("db busy"));
+    const err = await saveCapture(new QueryClient(), {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
       edits: edits(),
       image: { mime: "image/png", dataBase64: "AAAA" },
       hosts: [DC],
     }).catch((e: unknown) => e);
-    expect(err).toMatchObject({
-      message: "Saved, but services didn't update: db busy",
-      entry: { id: "l1" },
-    });
+    expect(err).toMatchObject({ message: EXTRACTION_FAILED, entryId: "l1" });
     expect(m.logCreate).toHaveBeenCalledTimes(1);
     expect(m.logCreate.mock.calls[0]![1].attachment).toEqual({ mime: "image/png", dataBase64: "AAAA" });
+    // Nothing was filed, so there is nothing to finish.
+    expect(m.extractionFinish).not.toHaveBeenCalled();
   });
 
-  it("services and checklist both failing says both", async () => {
-    m.servicesUpsertScan.mockRejectedValue(new Error("db busy"));
-    m.checklistList.mockRejectedValue(new Error("db busy"));
-    const err = await saveCapture({
+  it("filing and checklist both failing says both", async () => {
+    m.extractionFile.mockRejectedValue(new Error("db busy"));
+    m.checklistApplyEntryTicks.mockRejectedValue(new Error("db busy"));
+    const err = await saveCapture(new QueryClient(), {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
       edits: edits(),
@@ -304,39 +296,44 @@ describe("saveCapture", () => {
       hosts: [DC],
     }).catch((e: unknown) => e);
     expect(err).toMatchObject({
-      message: "Saved, but services didn't update: db busy. The checklist didn't update either: use Tick from log on the Engagement checklist.",
-      entry: { id: "l1" },
+      message: `${EXTRACTION_FAILED} The checklist didn't update either: use Tick from log on the Engagement checklist.`,
+      entryId: "l1",
     });
   });
 
-  it("services and extraction both failing says both and carries every cause", async () => {
+  it("identity and filing both failing says both and carries every cause", async () => {
     const busy = new Error("db busy");
     const locked = new Error("locked");
-    m.servicesUpsertScan.mockRejectedValue(busy);
-    m.credentialsList.mockRejectedValue(locked);
-    const nxc = { kind: "command" as const, blocks: [{ command: "nxc smb 10.10.10.5 -u bob -p 'Fake1'", output: "SMB  10.10.10.5  445  DC01  [+] corp\\bob:Fake1" }] };
-    const err = await saveCapture({
+    m.hostIdentityGet.mockRejectedValue(busy);
+    m.extractionFile.mockRejectedValue(locked);
+    const both = {
+      kind: "command" as const,
+      blocks: [
+        { command: "id", output: "uid=1000(bob) gid=1000(bob) groups=1000(bob)" },
+        { command: "nxc smb 10.10.10.5 -u bob -p 'Fake1'", output: "SMB  10.10.10.5  445  DC01  [+] corp\\bob:Fake1" },
+      ],
+    };
+    const err = await saveCapture(new QueryClient(), {
       engagementId: "e1",
-      draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
-      edits: edits({ content: nxc }),
+      draft: draft({ content: both }),
+      edits: edits({ content: both, ranOn: "dc01" }),
       image: null,
       hosts: [DC],
     }).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(PartialSaveError);
+    expect(err).toBeInstanceOf(EntryChangeError);
     expect(err).toMatchObject({
-      message: "Saved, but services didn't update: db busy. Raven couldn't file what it found either: paste the output again to retry.",
+      message: `${IDENTITY_FAILED} Raven couldn't file what it found either: paste the output again to retry.`,
       reason: busy,
       reasons: [busy, locked],
     });
   });
 
-
-  it("services failure with a lock-only follow-up failure uses the lock's message", async () => {
-    m.servicesUpsertScan.mockRejectedValue(new Error("db busy"));
+  it("a filing failure with a lock-only follow-up failure uses the lock's message", async () => {
+    m.extractionFile.mockRejectedValue(new Error("db busy"));
     m.engagementGet.mockResolvedValue({ id: "e1", kind: "exam-sim", domain: null, msfHostId: null } as Engagement);
     m.hostsList.mockResolvedValue([DC]);
     m.engagementSetMsfHost.mockRejectedValue(new Error("db busy"));
-    const err = await saveCapture({
+    const err = await saveCapture(new QueryClient(), {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
       edits: edits({ content: { kind: "command", blocks: [{ command: "msfconsole -q -x 'use exploit/windows/smb/psexec; set RHOSTS 10.10.10.5'", output: "" }] } }),
@@ -344,60 +341,66 @@ describe("saveCapture", () => {
       hosts: [DC],
     }).catch((e: unknown) => e);
     expect(err).toMatchObject({
-      message: "Saved, but services didn't update: db busy. Saved the entry, but the Metasploit lock didn't update.",
+      message: `${EXTRACTION_FAILED} Saved the entry, but the Metasploit lock didn't update.`,
     });
   });
 
   it("checklist failure after the entry saved is a partial save carrying its cause", async () => {
     const cause = new Error("locked");
-    m.checklistPut.mockRejectedValue(cause);
+    m.checklistApplyEntryTicks.mockRejectedValue(cause);
     m.hostsList.mockResolvedValue([DC]);
-    const err = await saveCapture({
+    const err = await saveCapture(new QueryClient(), {
       engagementId: "e1",
       draft: draft(),
       edits: edits({ content: { kind: "flag", flagKind: "local", value: "0123456789abcdef0123456789abcdef" }, kind: "flag" }),
       image: null,
       hosts: [DC],
     }).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(PartialSaveError);
+    expect(err).toBeInstanceOf(EntryChangeError);
     expect(err).toMatchObject({
       message: "Saved the entry, but the checklist didn't update. Use Tick from log on the Engagement checklist.",
-      entry: { id: "l1" },
+      entryId: "l1",
       reason: cause,
     });
   });
 
-  it("a partial save carries the summary of the extraction it stored, and none when storing failed", async () => {
-    const svc = (id: string, port: number) => ({
-      id, hostId: "h1", port, protocol: "tcp" as const, state: "open", nmapService: null, nmapVersion: null, confirmedProduct: null,
-      confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
-    });
-    m.servicesList.mockResolvedValue([]);
-    m.servicesUpsertScan.mockResolvedValue([svc("s1", 22), svc("s2", 80)] as never);
-    m.checklistList.mockRejectedValue(new Error("locked"));
-    m.extractionSave.mockImplementation(async (logEntryId, engagementId, summary, record) => ({
-      logEntryId, engagementId, summary, record, createdAt: 2, undoneAt: null,
-    }));
+  it("the summary and output ticks are stored after the board sync (R7)", async () => {
+    m.hostsList.mockResolvedValue([DC]);
+    m.extractionFile.mockResolvedValue(filed({ scans: [{ hostId: "h1", services: 2, osSet: false }] }));
+    const saved = await saveCapture(new QueryClient(), { engagementId: "e1", draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }), edits: edits(), image: null, hosts: [DC] });
+    expect(saved.summary?.counts).toEqual(["2 services updated on dc01"]);
+    expect(m.extractionFinish).toHaveBeenCalledWith("l1", saved.summary, []);
+    const last = (f: { mock: { invocationCallOrder: number[] } }) => Math.max(0, ...f.mock.invocationCallOrder);
+    expect(m.extractionFinish.mock.invocationCallOrder[0]).toBeGreaterThan(last(m.checklistApplyCover));
+    expect(m.extractionFile.mock.invocationCallOrder[0]).toBeLessThan(m.checklistApplyEntryTicks.mock.invocationCallOrder[0] ?? Infinity);
+  });
+
+  it("a partial save carries the summary of what the store filed, and none when filing failed", async () => {
+    m.checklistApplyEntryTicks.mockRejectedValue(new Error("locked"));
+    m.extractionFile.mockResolvedValue(filed({ scans: [{ hostId: "h1", services: 2, osSet: false }] }));
     const run = () =>
-      saveCapture({ engagementId: "e1", draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }), edits: edits(), image: null, hosts: [DC] })
+      saveCapture(new QueryClient(), { engagementId: "e1", draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }), edits: edits(), image: null, hosts: [DC] })
         .catch((e: unknown) => e);
     const err = await run();
-    expect(err).toBeInstanceOf(PartialSaveError);
-    expect(m.extractionSave).toHaveBeenCalledTimes(1);
-    expect((err as PartialSaveError).summary).toEqual(m.extractionSave.mock.calls[0]![2]);
-    expect((err as PartialSaveError).summary?.counts).toContain("2 services updated on dc01");
+    expect(err).toBeInstanceOf(EntryChangeError);
+    expect((err as EntryChangeError).summary).toEqual(m.extractionFinish.mock.calls[0]![1]);
+    expect((err as EntryChangeError).summary?.counts).toContain("2 services updated on dc01");
 
-    m.extractionSave.mockRejectedValue(new Error("db busy"));
+    // Filed but not finished: still undoable, so the summary still shows.
+    m.extractionFinish.mockRejectedValue(new Error("db busy"));
+    expect(((await run()) as EntryChangeError).summary?.counts).toContain("2 services updated on dc01");
+
+    m.extractionFile.mockRejectedValue(new Error("db busy"));
     const err2 = await run();
-    expect(err2).toBeInstanceOf(PartialSaveError);
-    expect((err2 as PartialSaveError).summary).toBeNull();
+    expect(err2).toBeInstanceOf(EntryChangeError);
+    expect((err2 as EntryChangeError).summary).toBeNull();
   });
 
   describe("identity capture", () => {
     const priv = "PRIVILEGES INFORMATION\n----------------------\n\nPrivilege Name                Description                    State\n============================= ============================== ========\nSeImpersonatePrivilege        Impersonate a client after authentication Enabled\n";
     const run = (hostIds: string[], hosts: Host[]) => {
       const c = { kind: "command" as const, blocks: [{ command: "whoami /priv", output: priv }] };
-      return saveCapture({
+      return saveCapture(new QueryClient(), {
         engagementId: "e1",
         draft: draft({ content: c, hostIds }),
         edits: edits({ content: c, hostIds, ranOn: "dc01" }),
@@ -406,33 +409,31 @@ describe("saveCapture", () => {
       });
     };
 
-    it("sets identity and upserts auto vectors for a single linked host", async () => {
+    it("proves the identity and its auto vectors for a single linked host", async () => {
       m.hostIdentityGet.mockResolvedValue(null);
       await run(["h1"], [DC]);
-      expect(m.hostIdentitySet).toHaveBeenCalledWith(
-        expect.objectContaining({ hostId: "h1", username: "unknown", entryId: "l1", privileges: expect.arrayContaining(["SeImpersonatePrivilege"]) }),
-      );
-      expect(m.vectorUpsert).toHaveBeenCalledWith("h1", { title: "SeImpersonatePrivilege abuse", status: "try", source: "auto" });
+      expect(proofs().identity).toEqual({ hostId: "h1", username: "unknown", privileges: expect.arrayContaining(["SeImpersonatePrivilege"]), groups: [] });
+      expect(proofs().vectors).toEqual([{ hostId: "h1", title: "SeImpersonatePrivilege abuse" }]);
     });
 
     it("records privileges from an Evil-WinRM whoami /priv even when Ran on is Kali", async () => {
       m.hostIdentityGet.mockResolvedValue(null);
       const c = { kind: "command" as const, blocks: [{ command: "whoami /priv", output: priv, shell: "evil-winrm" }] };
       const win = host({ id: "h1", name: "srv13", os: "windows" });
-      await saveCapture({
+      await saveCapture(new QueryClient(), {
         engagementId: "e1",
         draft: draft({ content: c }),
         edits: edits({ content: c, ranOn: "Kali (VM)" }),
         image: null,
         hosts: [win],
       });
-      expect(m.hostIdentitySet).toHaveBeenCalledWith(expect.objectContaining({ hostId: "h1", privileges: expect.arrayContaining(["SeImpersonatePrivilege"]) }));
+      expect(proofs().identity).toMatchObject({ hostId: "h1", privileges: expect.arrayContaining(["SeImpersonatePrivilege"]) });
     });
 
     const groupsOut = "GROUP INFORMATION\n-----------------\n\nGroup Name   Type   SID   Attributes\n============ ====== ===== ==========\nBUILTIN\\Users   Alias   S-1-5-32-545   Enabled group\n";
     const capture = (command: string, output: string) => {
       const c = { kind: "command" as const, blocks: [{ command, output }] };
-      return saveCapture({
+      return saveCapture(new QueryClient(), {
         engagementId: "e1",
         draft: draft({ content: c }),
         edits: edits({ content: c, ranOn: "dc01" }),
@@ -440,11 +441,14 @@ describe("saveCapture", () => {
         hosts: [DC],
       });
     };
-    /** hostIdentityGet returns whatever hostIdentitySet last stored, like the real table. */
+    /** hostIdentityGet returns whatever the last filing stored, like the real table. */
     const storeLikeTheDb = (initial: HostIdentity | null) => {
       let stored = initial;
       m.hostIdentityGet.mockImplementation(async () => stored);
-      m.hostIdentitySet.mockImplementation(async (input) => (stored = { ...input, updatedAt: 2 }));
+      m.extractionFile.mockImplementation(async (_e, entryId, p) => {
+        if (p.identity) stored = { ...p.identity, entryId, updatedAt: 2 };
+        return filed();
+      });
       return () => stored;
     };
 
@@ -455,19 +459,19 @@ describe("saveCapture", () => {
       expect(stored()).toMatchObject({ username: "unknown", privileges: ["SeImpersonatePrivilege"], groups: ["BUILTIN\\Users"] });
     });
 
-    it("a flag capture whose proof holds id output sets the identity and keeps the proof as pasted", async () => {
+    it("a flag capture whose proof holds id output proves the identity and keeps the proof as pasted", async () => {
       m.hostIdentityGet.mockResolvedValue(null);
       const paste = "# id\nuid=0(root) gid=0(root) groups=0(root)\n# cat /root/proof.txt\n44444444444444444444444444444444";
       const c = { kind: "flag" as const, flagKind: "proof" as const, value: "44444444444444444444444444444444", proof: paste };
       const srv11 = host({ id: "h1", name: "Srv11", os: "linux" });
-      const saved = await saveCapture({
+      const saved = await saveCapture(new QueryClient(), {
         engagementId: "e1",
         draft: draft({ kind: "flag", content: c }),
         edits: edits({ kind: "flag", content: c, ranOn: "Srv11" }),
         image: null,
         hosts: [srv11],
       });
-      expect(m.hostIdentitySet).toHaveBeenCalledWith(expect.objectContaining({ hostId: "h1", username: "root", entryId: "l1" }));
+      expect(proofs().identity).toMatchObject({ hostId: "h1", username: "root" });
       expect(saved.entry.content).toEqual(c);
       expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ content: expect.objectContaining({ proof: paste }) }));
     });
@@ -484,26 +488,45 @@ describe("saveCapture", () => {
       expect(stored()).toMatchObject({ username: "corp\\cora", privileges: ["SeBackupPrivilege"], groups: ["BUILTIN\\Users"] });
     });
 
-    it("a vector that fails to save is reported as the extraction, not the identity", async () => {
-      storeLikeTheDb(null);
-      m.vectorUpsert.mockRejectedValue(new Error("db down"));
-      const err = await run(["h1"], [DC]).catch((e) => e);
-      expect(err).toBeInstanceOf(PartialSaveError);
-      expect(err.message).toBe("Saved the entry, but Raven couldn't file what it found. Paste the output again to retry.");
-    });
-
-    it("does nothing with two linked hosts", async () => {
-      await run(["h1", "h2"], [DC, host({ id: "h2", name: "ws01" })]);
-      expect(m.hostIdentitySet).not.toHaveBeenCalled();
-      expect(m.vectorUpsert).not.toHaveBeenCalled();
-    });
-
-    it("keeps the saved entry and reports a partial save when hostIdentitySet rejects", async () => {
+    it("an identity changed by the save is in the summary", async () => {
       m.hostIdentityGet.mockResolvedValue(null);
-      m.hostIdentitySet.mockRejectedValue(new Error("db down"));
+      m.extractionFile.mockResolvedValue(filed({ identityChanged: true }));
+      const saved = await run(["h1"], [DC]);
+      expect(saved.summary?.counts).toEqual(["Identity updated on dc01"]);
+    });
+
+    it("a filing failure is reported as the extraction, not the identity", async () => {
+      m.hostIdentityGet.mockResolvedValue(null);
+      m.extractionFile.mockRejectedValue(new Error("db down"));
       const err = await run(["h1"], [DC]).catch((e) => e);
-      expect(err).toBeInstanceOf(PartialSaveError);
-      expect(err.entry.id).toBe("l1");
+      expect(err).toBeInstanceOf(EntryChangeError);
+      expect(err.message).toBe(EXTRACTION_FAILED);
+      expect(err.entryId).toBe("l1");
+    });
+
+    it("proves nothing about who the user is with two linked hosts", async () => {
+      await run(["h1", "h2"], [DC, host({ id: "h2", name: "ws01" })]);
+      const p = m.extractionFile.mock.calls[0]?.[2];
+      expect(p?.identity ?? null).toBeNull();
+      expect(p?.vectors ?? []).toEqual([]);
+      expect(m.hostIdentityGet).not.toHaveBeenCalled();
+    });
+
+    it("an identity read that fails is reported as the identity, and the rest is still filed", async () => {
+      m.hostIdentityGet.mockRejectedValue(new Error("db down"));
+      const c = {
+        kind: "command" as const,
+        blocks: [
+          { command: "whoami /priv", output: priv },
+          { command: "nxc smb 10.10.10.5 -u bob -p 'Fake1'", output: "SMB  10.10.10.5  445  DC01  [+] corp\\bob:Fake1" },
+        ],
+      };
+      const err = await saveCapture(new QueryClient(), { engagementId: "e1", draft: draft({ content: c }), edits: edits({ content: c, ranOn: "dc01" }), image: null, hosts: [DC] })
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(EntryChangeError);
+      expect(err.message).toBe(IDENTITY_FAILED);
+      expect(proofs().identity).toBeNull();
+      expect(proofs().intake?.credentials.map((x) => x.input.username)).toEqual(["bob"]);
     });
   });
 });

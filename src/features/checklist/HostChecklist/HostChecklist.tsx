@@ -9,6 +9,7 @@ import { CredentialPicker } from "../CredentialPicker/CredentialPicker";
 import { newCredLabels, useCredFill } from "../credPick";
 import { useFilePickStore } from "../filePick";
 import { usePortPickStore } from "../portPick";
+import { useLibrary } from "../../../engines/library/store";
 import { goalCommands } from "../goalCommands";
 import { shortHostName } from "../../../lib/hostName";
 import { GoalRow } from "../GoalRow/GoalRow";
@@ -76,6 +77,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
 }) {
   useFilePickStore((s) => s.file); // a chip pick refills the rows' commands
   usePortPickStore((s) => s.picks); // a port pick refills them too
+  const library = useLibrary(); // an import refills them too
   const hostsQ = useHosts(engagementId);
   const engagement = useEngagement(engagementId);
   const settings = useSettings();
@@ -108,7 +110,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
     listenerPorts: loggedListenerPorts(entries),
   };
 
-  const commandsFor = (goalId: string) => goalCommands(goalId, input, eng);
+  const commandsFor = (goalId: string) => goalCommands(goalId, input, eng, library.commands);
   const isOpen = (goalId: string) => {
     const s = state[goalId]?.status;
     return s === undefined || s === "todo" || s === "in_progress";

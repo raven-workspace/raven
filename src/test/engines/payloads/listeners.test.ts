@@ -10,6 +10,10 @@ const VALUES = {
 };
 
 describe("fillListener", () => {
+  it("${VAR} and <name> are not placeholders (RAV-48)", () => {
+    expect(fillListener("zz ${LPORT} <LPORT> {LPORT}", { LPORT: "4444" })).toBe("zz ${LPORT} <LPORT> 4444");
+  });
+
   const want: Record<ListenerId, string> = {
     penelope: "penelope -O -p 443",
     "rlwrap-nc": "rlwrap nc -lvnp 443",

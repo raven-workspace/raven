@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { api } from "../lib/api";
+import { RavenError } from "../types/errors";
 import { makeQueryClient } from "../lib/queryClient";
 import type { AccessGrant, Credential, CredentialInput, TriedPair, Username } from "../types/credentials";
 import type { Engagement } from "../types/engagement";
@@ -80,10 +81,14 @@ function mount(seed: { creds?: Credential[]; users?: Username[]; services?: Serv
     tried = tried.filter((t) => t.id !== id);
     return null;
   });
+  // The store's answer, stubbed with equal spellings only (the same-credential rule itself is tested in Rust).
   m.credentialCreate.mockImplementation(async (_e, input) => {
     const c = toCred(input);
+    const lc = (s: string | null) => (s ?? "").toLowerCase();
+    const stored = creds.find((x) => x.type === c.type && lc(x.username) === lc(c.username) && lc(x.domain) === lc(c.domain) && x.secret === c.secret);
+    if (stored) return { credential: stored, existed: true };
     creds.push(c);
-    return c;
+    return { credential: c, existed: false };
   });
   m.credentialDelete.mockImplementation(async (id) => {
     creds = creds.filter((c) => c.id !== id);
@@ -97,13 +102,16 @@ function mount(seed: { creds?: Credential[]; users?: Username[]; services?: Serv
   m.credentialConvertToAccess.mockImplementation(async (credId, grant) => {
     const c = creds.find((x) => x.id === credId)!;
     creds = creds.filter((x) => x.id !== credId);
-    const u: Username = { id: "u9", engagementId: "e1", username: c.username, domain: c.domain, sourceHostId: null, source: null, createdAt: 1 };
+    const u: Username = { id: "u9", engagementId: "e1", username: c.username, domain: c.domain, sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null };
     users.push(u);
     grants.push({ id: "g1", engagementId: "e1", usernameId: u.id, hostId: grant.hostId, level: grant.level, via: grant.via, logEntryId: null, at: 1 });
     return u;
   });
   m.usernameCreate.mockImplementation(async (_e, input) => {
-    const u: Username = { id: `u${++seq}`, engagementId: "e1", username: input.username, domain: input.domain ?? null, sourceHostId: null, source: null, createdAt: 1 };
+    const lc = (s: string | null | undefined) => (s ?? "").toLowerCase();
+    const stored = users.find((x) => lc(x.username) === lc(input.username) && lc(x.domain) === lc(input.domain));
+    if (stored) return stored;
+    const u: Username = { id: `u${++seq}`, engagementId: "e1", username: input.username, domain: input.domain ?? null, sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null };
     users.push(u);
     return u;
   });
@@ -250,13 +258,13 @@ describe("credentials section", () => {
     mount({
       creds: [
         cred({ id: "c1", username: "DC01$", domain: "CORP", secret: "x9f3kq2m" }),
-        cred({ id: "c2", username: "jay", domain: "CORP", secret: "Winter2024!" }),
+        cred({ id: "c2", username: "zoe", domain: "CORP", secret: "Winter2024!" }),
       ],
     });
     await openInventory(user);
     const people = await screen.findByRole("region", { name: "Passwords" });
     const machines = screen.getByRole("region", { name: "Machine accounts" });
-    expect(within(people).getByTitle("CORP\\jay")).toBeInTheDocument();
+    expect(within(people).getByTitle("CORP\\zoe")).toBeInTheDocument();
     expect(within(people).queryByTitle("CORP\\DC01$")).not.toBeInTheDocument();
     expect(within(machines).getByTitle("CORP\\DC01$")).toBeInTheDocument();
     expect(people.compareDocumentPosition(machines) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -309,8 +317,10 @@ describe("credentials section", () => {
     await user.type(within(dlg).getByLabelText("Domain"), "CORP");
     await user.type(within(dlg).getByLabelText("Secret"), "Winter2024!");
     await user.click(within(dlg).getByRole("button", { name: "Add" }));
+    // The store says it holds this credential already: nothing is added, the stored one is offered.
     expect(await within(dlg).findByText("Already recorded: CORP\\jsmith")).toBeInTheDocument();
-    expect(m.credentialCreate).not.toHaveBeenCalled();
+    expect(m.credentialCreate).toHaveBeenCalledTimes(1);
+    expect(creds.map((c) => c.id)).toEqual(["c1"]);
     await user.click(within(dlg).getByRole("button", { name: "Use existing" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -402,8 +412,10 @@ describe("credentials section", () => {
 
     await user.type(within(region).getByLabelText("New username"), "corp\\ALICE");
     await user.click(within(region).getByRole("button", { name: "Add username" }));
+    // The store returns the username it lists already.
     expect(await within(region).findByText("corp\\ALICE is already listed")).toBeInTheDocument();
-    expect(m.usernameCreate).toHaveBeenCalledTimes(1);
+    expect(m.usernameCreate).toHaveBeenCalledTimes(2);
+    expect(users).toHaveLength(1);
 
     await user.click(within(region).getByRole("button", { name: "Copy all" }));
     expect(await navigator.clipboard.readText()).toBe("alice");
@@ -423,7 +435,7 @@ describe("credentials section", () => {
 
   it("username delete confirm says its results and grants go with it", async () => {
     const user = userEvent.setup();
-    mount({ users: [{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1 }] });
+    mount({ users: [{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null }] });
     await openInventory(user);
     await user.click(await screen.findByRole("button", { name: "Delete username CORP\\alice" }));
     const dlg = await screen.findByRole("dialog", { name: "Delete username CORP\\alice?" });
@@ -529,9 +541,23 @@ describe("credentials section", () => {
     expect(dlg.textContent).not.toContain("Winter2024!");
   });
 
-  it("editing into another credential shows the collision instead of saving", async () => {
+  it("a local credential whose host was deleted saves an edit that keeps its scope and host", async () => {
     const user = userEvent.setup();
-    m.credentialUpdate.mockResolvedValue(cred({ id: "c2" }));
+    m.credentialUpdate.mockImplementation(async (id, input) => ({ ...creds.find((c) => c.id === id)!, notes: input.notes ?? null }));
+    mount({ creds: [cred({ id: "c1", username: "administrator", secret: "Local-1", scope: "local", localHostId: null })] });
+    await user.click(await within(await findDock()).findByRole("button", { name: "Edit administrator" }));
+    const dlg = await screen.findByRole("dialog");
+    expect(within(dlg).getByLabelText("Local host")).toHaveTextContent("Host deleted");
+    await user.type(within(dlg).getByLabelText("Notes"), "reused on files01");
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.credentialUpdate).toHaveBeenCalledWith("c1", expect.objectContaining({ scope: "local", notes: "reused on files01" })));
+    expect(within(dlg).queryByText("Pick the host this local account belongs to")).not.toBeInTheDocument();
+  });
+
+  it("editing into another credential shows the store's refusal instead of saving", async () => {
+    const user = userEvent.setup();
+    // Rust `update` refuses an edit that makes it another stored credential.
+    m.credentialUpdate.mockRejectedValue(new RavenError("validation", "A credential with these values already exists", "secret"));
     mount({ creds: [
       cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" }),
       cred({ id: "c2", username: "jsmith", domain: "CORP", secret: "Other2024!" }),
@@ -543,14 +569,15 @@ describe("credentials section", () => {
     await user.clear(secret);
     await user.type(secret, "Winter2024!");
     await user.click(within(dlg).getByRole("button", { name: "Save" }));
-    expect(await within(dlg).findByText("Already recorded: CORP\\jsmith")).toBeInTheDocument();
-    expect(m.credentialUpdate).not.toHaveBeenCalled();
+    expect(await within(dlg).findByText("A credential with these values already exists")).toBeInTheDocument();
+    expect(m.credentialUpdate).toHaveBeenCalledWith("c2", expect.objectContaining({ secret: "Winter2024!" }));
+    expect(screen.getByRole("dialog")).toBe(dlg);
   });
 });
 
 const pw = (i: number) => cred({ id: `c${i}`, username: `u${i}`, secret: `Pass${i}!`, createdAt: i });
 const TEN = Array.from({ length: 10 }, (_, i) => pw(i + 1));
-const TWO_USERS: Username[] = ["alice", "bob"].map((u, i) => ({ id: `u-${u}`, engagementId: "e1", username: u, domain: null, sourceHostId: null, source: null, createdAt: i }));
+const TWO_USERS: Username[] = ["alice", "bob"].map((u, i) => ({ id: `u-${u}`, engagementId: "e1", username: u, domain: null, sourceHostId: null, source: null, createdAt: i, scope: "unknown", localHostId: null }));
 const dock = () => screen.getByRole("region", { name: "Credential" });
 const NT_HASH = cred({ id: "h", type: "hash", username: "jsmith", domain: "CORP", secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "NTLM", crackStatus: "uncracked", createdAt: 20 });
 
@@ -648,21 +675,54 @@ describe("credentials dock page", () => {
   it("a cracked password that never appears in the list lets the selection fall back", async () => {
     const user = userEvent.setup();
     mount({ creds: [pw(1), NT_HASH], services: SMB, url: "/e/e1/s/credentials?cred=h" });
-    // The server answers with a password the list never shows.
-    m.credentialCrack.mockImplementation(async (hashId, plaintext) => cred({ id: "ghost", username: "jsmith", domain: "CORP", secret: plaintext, crackedFrom: hashId }));
+    // The server answers, late as under load, with a password the list never shows.
+    m.credentialCrack.mockImplementation(async (hashId, plaintext) => {
+      await new Promise((r) => setTimeout(r, 30));
+      return cred({ id: "ghost", username: "jsmith", domain: "CORP", secret: plaintext, crackedFrom: hashId });
+    });
     const d = await screen.findByRole("region", { name: "Credential" });
     await user.click(within(d).getByRole("button", { name: "Record plaintext" }));
     const dlg = await screen.findByRole("dialog");
     await user.type(within(dlg).getByLabelText("Plaintext"), "password");
     await user.click(within(dlg).getByRole("button", { name: "Save password" }));
     await waitFor(() => expect(m.credentialCrack).toHaveBeenCalledWith("h", "password"));
+    // The crack has answered once its dialog closes. Only then is "the selection is h" a fall-back: the page was
+    // mounted on ?cred=h, so before the answer it is just the starting point.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     // Not stuck on the unknown id: the default (the hash, still listed) is selected and docked again.
     await waitFor(() => expect(search().get("cred")).toBe("h"));
     expect(within(dock()).getByRole("button", { name: "Edit CORP\\jsmith (hash)" })).toBeInTheDocument();
     // And selection still works afterwards.
     await user.click(screen.getByRole("button", { name: "Select u1" }));
+    await waitFor(() => expect(search().get("cred")).toBe("c1"));
+  }, 15_000); // A generous timeout: the full suite runs many files at once.
+
+  it("a credential the owner picks while the new password is still being listed stays picked", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [pw(1), NT_HASH], services: SMB, url: "/e/e1/s/credentials?cred=h" });
+    const d = await screen.findByRole("region", { name: "Credential" });
+    // After the crack, the list is slow to come back: the page holds the hash docked, waiting for the new password.
+    let release!: () => void;
+    const slow = new Promise<void>((r) => (release = r));
+    m.credentialsList.mockImplementation(async () => {
+      await slow;
+      return [...creds];
+    });
+    await user.click(within(d).getByRole("button", { name: "Record plaintext" }));
+    const dlg = await screen.findByRole("dialog");
+    await user.type(within(dlg).getByLabelText("Plaintext"), "password");
+    await user.click(within(dlg).getByRole("button", { name: "Save password" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(search().get("cred")).toBe("c101"));
+    // The owner picks another credential before the list lands.
+    await user.click(screen.getByRole("button", { name: "Select u1" }));
+    await waitFor(() => expect(search().get("cred")).toBe("c1"));
+    release();
+    // The list lands with the new password in it, and never takes the owner's pick away.
+    expect(await screen.findByRole("button", { name: "Select CORP\\jsmith" })).toBeInTheDocument();
     expect(search().get("cred")).toBe("c1");
-  }, 15_000); // Load-sensitive: fast alone, can take over 5s under the full suite (no behaviour change).
+    expect(within(dock()).getByTitle("u1")).toBeInTheDocument();
+  });
 
   it("with only non-sprayable credentials, the newest is docked and the matrix shows the can't-be-sprayed note", async () => {
     const user = userEvent.setup();

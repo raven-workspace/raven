@@ -1,7 +1,10 @@
 import type { LogEntry } from "../../types/log";
-import { ADDITIONAL_HEADING, ENUM_HEADING, entryBlocks, PHASE_TITLE, PLAIN_NODE_TYPES, sourceBlocks, TESTED_HEADING } from "./plain";
+import { ADDITIONAL_HEADING, entryBlocks, PLAIN_NODE_TYPES, sourceBlocks, TESTED_HEADING } from "./plain";
+import { PHASE_TITLE } from "./placement";
 import { hintPara, msfLine, plainTable, type PlainTableKind } from "./plainTables";
 import { sourceOf } from "./stamp";
+import { blockSource } from "./page/block";
+import { source as src } from "./page/source";
 import { portRows } from "./tables";
 import { bold, codeBlock, figure, heading, listItem, para, sourced, text } from "./nodes";
 import { applyKeep, omitted } from "./trim";
@@ -122,16 +125,16 @@ function evidenceCodeBlocks(t: EvidenceText, entryId: string, http: boolean, kee
     const out: ReportNode[] = [];
     const proof = trimEnd(t.proof);
     const value = t.value.trim();
-    if (proof.trim() !== "") out.push(codeBlock(proof, { source: `entry:${entryId}:proof` }));
-    if (value !== "" && !proof.includes(value)) out.push(codeBlock(value, { source: `entry:${entryId}:value` }));
+    if (proof.trim() !== "") out.push(codeBlock(proof, { source: src.entry(entryId, "proof") }));
+    if (value !== "" && !proof.includes(value)) out.push(codeBlock(value, { source: src.entry(entryId, "value") }));
     return out;
   }
   return t.segments.flatMap((seg) => {
     const out: ReportNode[] = [];
     const command = trimEnd(seg.command);
-    if (command.trim() !== "") out.push(codeBlock(command, { source: http ? `entry:${entryId}:request` : `entry:${entryId}:${seg.at}:command` }));
+    if (command.trim() !== "") out.push(codeBlock(command, { source: http ? src.entry(entryId, "request") : src.entryRun(entryId, seg.at, "command") }));
     const output = full ? trimEnd(seg.output) : keptOutput(seg.output, shiftKeep(keep, seg.offset));
-    if (output.trim() !== "") out.push(codeBlock(output, { source: http ? `entry:${entryId}:response` : `entry:${entryId}:${seg.at}:output` }));
+    if (output.trim() !== "") out.push(codeBlock(output, { source: http ? src.entry(entryId, "response") : src.entryRun(entryId, seg.at, "output") }));
     return out;
   });
 }
@@ -171,11 +174,11 @@ function evidence(n: ReportNode, ctx: Ctx): ReportNode[] {
     // The entry's blocks as a draft step holds them, its sentence left out (the step has the owner's); a block of a
     // command entry only its own command and output.
     const blocks = entryBlocks(ctx.data, entry).filter((b) => {
-      const source = sourceOf(b) ?? "";
-      if (source.endsWith(":title") || source.endsWith(":observations")) return false;
+      const s = blockSource(b);
+      const part = s?.kind === "entry" ? s.part : null;
+      if (part && "name" in part && (part.name === "title" || part.name === "observations")) return false;
       if (block === null || entry.content.kind !== "command") return true;
-      const m = /:(\d+):(?:command|output)$/.exec(source);
-      return m ? Number(m[1]) === block : false;
+      return part !== null && "run" in part && part.run === block;
     });
     return unstamped(blocks);
   }
@@ -189,7 +192,7 @@ const notesParagraphs = (notes: string[]): ReportNode[] => notes.filter((t) => t
 /** A layout-4 port table, rebuilt from the data with the owner's Notes written into its Notes cells. Notes for a port no
  *  longer on the table follow it as paragraphs. */
 function portsWithNotes(hostId: string, notes: Record<string, string>, ctx: Ctx & { data: ReportData }): ReportNode[] {
-  const blocks = unstamped(sourceBlocks(`ports:${hostId}`, ctx.data, ctx.target, ctx.meta) ?? []);
+  const blocks = unstamped(sourceBlocks(src.ports(hostId), ctx.data, ctx.target, ctx.meta) ?? []);
   const rows = portRows(ctx.data, hostId);
   const placed = new Set<string>();
   const filled = blocks.map((b) => {
@@ -220,15 +223,15 @@ function generated(n: ReportNode, ctx: Ctx): ReportNode[] {
   switch (kind) {
     case "facts":
     case "result":
-      return hostId ? from(`${kind}:${hostId}`) : [];
+      return hostId ? from(src.host(kind, hostId)) : [];
     case "ports":
     case "port-scan":
       return hostId ? portsWithNotes(hostId, notes, { ...ctx, data }) : notesParagraphs(Object.values(notes));
     case "tested":
-      return hostId ? from(`tested:${hostId}`) : table("tested");
+      return hostId ? from(src.tested(hostId)) : table("tested");
     case "attack-path":
     case "attack-chain":
-      return from("attack-path");
+      return from(src.attackPath);
     case "msf":
       return unstamped([msfLine(data)]);
     case "scope":
@@ -248,7 +251,7 @@ function tableBlock(n: ReportNode, ctx: Ctx): ReportNode[] {
   const kind = str(n.attrs?.kind) ?? "";
   const hostId = str(n.attrs?.hostId);
   const source =
-    (kind === "ports" || kind === "result" || kind === "tested") && hostId ? `${kind}:${hostId}` : kind === "attack-path" ? "attack-path" : `table:${kind}`;
+    (kind === "ports" || kind === "result" || kind === "tested") && hostId ? src.host(kind, hostId) : kind === "attack-path" ? src.attackPath : src.table(kind);
   return sourced((n.content ?? []).flatMap((c) => flat(c, ctx)), source);
 }
 
@@ -257,8 +260,8 @@ function vuln(n: ReportNode, ctx: Ctx): ReportNode[] {
   const id = str(n.attrs?.findingId);
   const { data } = ctx;
   if (!id || !data) return [];
-  return ["explanation", "fix", "severity", "affected", "exploit"].flatMap((part) =>
-    unstamped(sourceBlocks(`finding:${id}:${part}`, data, ctx.target, ctx.meta) ?? []),
+  return (["explanation", "fix", "severity", "affected", "exploit"] as const).flatMap((part) =>
+    unstamped(sourceBlocks(src.finding(id, part), data, ctx.target, ctx.meta) ?? []),
   );
 }
 
@@ -269,11 +272,11 @@ function exploit(n: ReportNode, ctx: Ctx): ReportNode[] {
   const copy = n.attrs?.copy as { content?: unknown } | undefined;
   const content = typeof copy?.content === "string" ? copy.content : (file?.content ?? "");
   const code = content.replace(/\s+$/, "");
-  return code.trim() !== "" ? [codeBlock(code, { language: file?.language ?? "", source: `file:${fileId}` })] : [];
+  return code.trim() !== "" ? [codeBlock(code, { language: file?.language ?? "", source: src.file(fileId) })] : [];
 }
 
 /** Phase headings worded as the plain draft writes them, so a flattened page reads like a rebuilt one. */
-const PHASE_HEADINGS: Partial<Record<Phase, string>> = { ...PHASE_TITLE, enum: ENUM_HEADING, additional: ADDITIONAL_HEADING, tested: TESTED_HEADING };
+const PHASE_HEADINGS: Partial<Record<Phase, string>> = { ...PHASE_TITLE, additional: ADDITIONAL_HEADING, tested: TESTED_HEADING };
 
 /** A phase heading in the sample's wording, a finding's own one named after it. */
 function phase(n: ReportNode, ctx: Ctx): ReportNode[] {
@@ -282,7 +285,7 @@ function phase(n: ReportNode, ctx: Ctx): ReportNode[] {
   const findingId = str(n.attrs?.findingId);
   const title = PHASE_HEADINGS[p as Phase] ?? p;
   const named = findingId ? ctx.data?.findings.find((f) => f.id === findingId)?.title.trim() : undefined;
-  const source = `phase:${hostId}:${p}${findingId ? `:${findingId}` : ""}`;
+  const source = src.phase(hostId, p, findingId);
   // A finding's own heading under Additional findings is its title, one level down; elsewhere the phase names it.
   if (named && p === "additional") return [heading(3, named, source)];
   return [heading(2, named ? `${title}: ${named}` : title, source)];
@@ -310,7 +313,7 @@ function own(n: ReportNode, ctx: Ctx): ReportNode {
   if (attrs && ("fromEntry" in attrs || "fromField" in attrs)) {
     const { fromEntry, fromField, ...rest } = attrs;
     const id = str(fromEntry);
-    if (id && !sourceOf(n)) rest.source = fromField === "observations" ? `entry:${id}:observations` : `entry:${id}:note`;
+    if (id && !sourceOf(n)) rest.source = src.entry(id, fromField === "observations" ? "observations" : "note");
     attrs = Object.keys(rest).length > 0 ? rest : undefined;
   }
   let content = n.content?.flatMap((c) => flat(c, ctx));

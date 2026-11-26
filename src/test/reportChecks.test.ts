@@ -486,6 +486,20 @@ describe("targetChecks", () => {
       expect(groupChecks(run(data({ log: priv }), page).filter((c) => c.id.startsWith("copied"))).map((g) => g.text)).toEqual(["2 blocks on the page come from now-private entries"]);
       expect(groupChecks(run(data({ log: priv }), doc(words("copied words", "entry:n1:note"), ...goodDoc().content!)).filter((c) => c.id.startsWith("copied"))).map((g) => g.text)).toEqual(["Block from a now-private entry"]);
     });
+    it("copied-private: a block from an entry kept from the report by its attempt fails like a private one", () => {
+      const page = doc(code("x", "entry:p1:0:command"), ...goodDoc().content!);
+      for (const attempt of [
+        { id: "a", hostId: "h1", title: "t", reasonKind: "control", reason: "r", private: true, logEntryId: "p1" },
+        { id: "a", hostId: "h1", title: "t", reasonKind: "operator", reason: "r", private: false, logEntryId: "p1" },
+      ]) {
+        expect(copied(run(data({ log: [entry({ id: "p1" }), flag()], attempts: [attempt] as never }), page))).toEqual([["copied-private:p1", "fail", 0]]);
+      }
+    });
+    it("says nothing for a kept entry a block only also shows: the block's words are another entry's", () => {
+      const absorbing: ReportNode = { type: "codeBlock", attrs: { language: "", source: "entry:c1:0:output", also: ["p1"] }, content: [{ type: "text", text: "uid=0" }] };
+      const page = doc(code("id", "entry:c1:0:command"), absorbing, ...goodDoc().content!);
+      expect(copied(run(data({ log: [entry({ id: "c1" }), entry({ id: "p1", private: true }), flag()] }), page))).toEqual([]);
+    });
     it("says nothing while the entries are there", () => {
       const page = doc(words("copied words", "entry:n1:note"), ...goodDoc().content!);
       expect(copied(run(data({ log: [note(), flag()] }), page))).toEqual([]);

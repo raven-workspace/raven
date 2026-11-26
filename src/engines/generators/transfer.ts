@@ -1,4 +1,4 @@
-import type { CardMeta } from '../library/store';
+import type { CardMeta } from '../library/types';
 import type { LibraryCommand } from '../library/types';
 
 export interface TransferMethod {
@@ -13,7 +13,7 @@ export interface TransferMethod {
   target: LibraryCommand[];
 }
 
-/** The card each target OS reads (spec §4). */
+/** The card each target OS reads (arsenal-import spec §4). */
 export const TRANSFER_CARD: Record<'windows' | 'linux', string> = {
   windows: 'shell-file-transfer-to-windows',
   linux: 'shell-file-transfer-to-linux',
@@ -30,7 +30,7 @@ const FOLLOW_UP = /^\s*(?:chmod|md5sum|sha1sum|sha256sum)\b/;
 const labelOf = (title: string): string => title.replace(/^(?:Download|Pull|Fetch)\s+(?:with|using|via)\s+/i, '').trim() || title;
 
 /**
- * The generator's methods for one target OS, read from the transfer card's commands (spec §4):
+ * The generator's methods for one target OS, read from the transfer card's commands (arsenal-import spec §4):
  * an HTTP group gives one method per Target block, each sharing the group's Kali (serve) blocks; any other group is
  * one method with all its blocks; a group with no Target block is Kali-only. Block order is `library`'s order.
  * `cards` is only used to confirm the card exists; with an imported card the library already holds its blocks.

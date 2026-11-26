@@ -5,7 +5,7 @@ import { BUILTIN_LIBRARY } from '../../../engines/library/data';
 import type { LibraryCommand } from '../../../engines/library/types';
 import { firstBinary, matchesCommand } from '../../../engines/library/matcher';
 import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS, LATERAL_MOVEMENT_GOALS } from '../../../engines/checklist';
-import { resolveTemplate } from '../../../engines/checklist/template';
+import { findPlaceholders, resolveTemplate } from '../../../engines/checklist/template';
 
 const lib = BUILTIN_LIBRARY;
 const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
@@ -29,8 +29,8 @@ const KNOWN_TOKENS = new Set([
   'TARGET_IP', 'LHOST', 'LPORT', 'DOMAIN', 'DC_IP', 'DC_HOST', 'USER', 'PASS', 'HASH',
   'WORDLIST', 'INTERFACE', 'SUBNET', 'SUBNET_PREFIX', 'TUNNEL_IP',
 ]);
-/** Same shape resolveTemplate treats as a placeholder: `{TOKEN}` (not `${...}`) or `<TOKEN>`. */
-const TOKEN_RE = /(?<![$%])\{([A-Za-z0-9_-]{2,})\}|<([A-Za-z0-9_-]{2,})>/g;
+/** Each placeholder in a template as written, with its name: the template module's grammar. */
+const tokensIn = (t: string) => findPlaceholders(t).map((p) => ({ written: t.slice(p.start, p.end), name: p.raw }));
 
 const first = (goalId: string) => commandsForGoal(goalId, lib)[0];
 
@@ -164,13 +164,12 @@ describe('built-in command library', () => {
     const LITERAL_PAYLOAD = new Set(['fm-cs-windows-library-file-attack-5']);
     const badShape = lib
       .filter((x) => x.source === 'field-manual' && !LITERAL_PAYLOAD.has(x.id))
-      .flatMap((c) => [...c.template.matchAll(TOKEN_RE)].filter((m) => !/^\{[A-Z][A-Z0-9_]+\}$/.test(m[0])).map((m) => `${c.id}: ${m[0]}`));
+      .flatMap((c) => tokensIn(c.template).filter((m) => !/^\{[A-Z][A-Z0-9_]+\}$/.test(m.written)).map((m) => `${c.id}: ${m.written}`));
     expect(badShape).toEqual([]);
     for (const c of lib.filter((x) => x.source !== 'field-manual')) {
-      for (const m of c.template.matchAll(TOKEN_RE)) {
-        const name = m[1] ?? m[2];
+      for (const { written, name } of tokensIn(c.template)) {
         // `{FILL_<NAME>}` = a value only the operator knows (service name, CA, export path): left highlighted.
-        if (!KNOWN_TOKENS.has(name) && !/^FILL_[A-Z0-9_]+$/.test(name)) unknown.push(`${c.id}: ${m[0]}`);
+        if (!KNOWN_TOKENS.has(name) && !/^FILL_[A-Z0-9_]+$/.test(name)) unknown.push(`${c.id}: ${written}`);
       }
     }
     expect(unknown).toEqual([]);

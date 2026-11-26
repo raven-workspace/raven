@@ -8,6 +8,7 @@ import { reportError } from "../lib/lockSignal";
 import { highlight as highlightText, rangesOf } from "./highlight";
 import { IconButton } from "./IconButton";
 import { escapeRegExp } from "../engines/regex";
+import { findPlaceholders } from "../engines/checklist/template";
 
 export interface CommandBlockProps {
   text: string;
@@ -19,7 +20,7 @@ export interface CommandBlockProps {
   copyText?: string;
   /** Accessible name of the Copy button when "Copy" alone is ambiguous. */
   copyLabel?: string;
-  /** Render `{TOKEN}` placeholders in the warn colour. */
+  /** Render `{TOKEN}` placeholders (as the template module's grammar reads them) in the warn colour. */
   placeholders?: boolean;
   /** Exact strings to render in the warn colour wherever they occur (the unresolved tokens of a filled command). */
   tokens?: string[];
@@ -53,7 +54,8 @@ function marks(token: string, re: RegExp | null): { text: string; warn: boolean 
 
 export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction, highlight, wrap = true, copyTabIndex, attached }: CommandBlockProps) {
   const [copied, flashDone] = useFlash(1200);
-  const pattern = [...(placeholders ? ["\\{[A-Za-z0-9_]+\\}"] : []), ...[...(tokens ?? [])].sort((a, b) => b.length - a.length).map(escapeRegExp)];
+  const warned = placeholders ? findPlaceholders(text).map((p) => text.slice(p.start, p.end)) : [];
+  const pattern = [...new Set([...warned, ...(tokens ?? [])])].sort((a, b) => b.length - a.length).map(escapeRegExp);
   const re = pattern.length > 0 ? new RegExp(`(${pattern.join("|")})`) : null;
   const found = rangesOf(text, highlight);
   const pieces = text.split(/(\s+)/);

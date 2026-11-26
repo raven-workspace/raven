@@ -1,3 +1,5 @@
+import { findPlaceholders } from "../checklist/template";
+
 /** UTF-16LE then base64: the form `powershell -e` expects. */
 export function utf16leBase64(script: string): string {
   const bytes = new Uint8Array(script.length * 2);
@@ -25,6 +27,13 @@ const SHELL_ENCODED: Record<string, string> = {
   "\\": "%5C", "[": "%5B", "]": "%5D", "{": "%7B", "}": "%7D", "^": "%5E", "`": "%60",
 };
 
+const SHELL_UNSAFE = /[ &><|;#'"/%+=?\\[\]{}^`]|[^\x20-\x7e]/gu;
+
+const encodeText = (s: string): string =>
+  s.replace(SHELL_UNSAFE, (c) =>
+    // A lone surrogate (one code unit) has no UTF-8 form; a whole astral character (emoji) is two units and encodes.
+    SHELL_ENCODED[c] ?? (c.length === 1 && /[\uD800-\uDFFF]/.test(c) ? "%EF%BF%BD" : encodeURIComponent(c)));
+
 /**
  * Encodes only what breaks a shell command inside a URL; `-` and `.` stay raw so the command stays readable. Line breaks,
  * tabs, other control characters and non-ASCII are percent-encoded as UTF-8. `keep` names the placeholders still unfilled:
@@ -32,11 +41,14 @@ const SHELL_ENCODED: Record<string, string> = {
  * command's `${IFS}`) is encoded like any text.
  */
 export function urlEncodeShell(s: string, keep: readonly string[] = []): string {
-  return s.replace(/\{([A-Z][A-Z0-9_]*)\}|[ &><|;#'"/%+=?\\[\]{}^`]|[^\x20-\x7e]/gu, (c, name?: string) => {
-    if (name !== undefined) return keep.includes(name) ? c : `%7B${name}%7D`;
-    // A lone surrogate (one code unit) has no UTF-8 form; a whole astral character (emoji) is two units and encodes.
-    return SHELL_ENCODED[c] ?? (c.length === 1 && /[\uD800-\uDFFF]/.test(c) ? "%EF%BF%BD" : encodeURIComponent(c));
-  });
+  let out = "";
+  let last = 0;
+  for (const p of findPlaceholders(s)) {
+    if (!keep.includes(p.raw)) continue;
+    out += encodeText(s.slice(last, p.start)) + s.slice(p.start, p.end);
+    last = p.end;
+  }
+  return out + encodeText(s.slice(last));
 }
 
 /** Doubles single quotes for use inside a SQL string literal. */

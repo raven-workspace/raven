@@ -1,0 +1,49 @@
+{
+  "name": "A username's scope decides its identity: a domain one with no domain is the engagement's domain, unknown keeps the old rule, a local one is per host, and the three never merge",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Synthetic lab", "kind": "lab", "domain": "corp.example" }], "as": "eng" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "WEB01", "ip": "192.0.2.10" }], "as": "web" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "sql01.corp.example", "ip": "192.0.2.11" }], "as": "sql" },
+
+    {
+      "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "scope": "domain" }],
+      "expect": { "username": "zoe", "domain": null, "scope": "domain", "localHostId": null }, "as": "domJen"
+    },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "ZOE", "domain": "CORP", "scope": "domain" }], "expect": { "id": "$domJen" } },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "domain": "corp.example", "scope": "domain" }], "expect": { "id": "$domJen" } },
+
+    { "do": "usernameCreate", "args": ["$eng", { "username": "zoe" }], "expect": { "scope": "unknown", "domain": null }, "as": "unkJen" },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "Zoe", "scope": "unknown" }], "expect": { "id": "$unkJen" } },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "domain": "CORP" }], "expect": { "scope": "unknown", "domain": "CORP" }, "as": "unkCorp" },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "domain": "corp.example" }], "expect": { "id": "$unkCorp" } },
+
+    {
+      "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "domain": "WEB01", "scope": "local", "localHostId": "$web" }],
+      "expect": { "username": "zoe", "domain": null, "scope": "local", "localHostId": "$web" }, "as": "webJen"
+    },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "ZOE", "scope": "local", "localHostId": "$web" }], "expect": { "id": "$webJen" } },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "scope": "local", "localHostId": "$sql" }], "expect": { "scope": "local", "localHostId": "$sql" }, "as": "sqlJen" },
+
+    { "do": "usernameCreate", "args": ["$eng", { "username": "kim", "scope": "local" }], "error": { "code": "validation", "field": "localHostId" } },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "kim", "scope": "domain", "localHostId": "$web" }], "error": { "code": "validation", "field": "localHostId" } },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "kim", "localHostId": "$web" }], "error": { "code": "validation", "field": "localHostId" } },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "kim", "scope": "app" }], "error": { "code": "validation", "field": "scope" } },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "kim", "scope": "local", "localHostId": "no-such-host" }], "error": { "code": "not_found" } },
+
+    {
+      "do": "usernamesList", "args": ["$eng"],
+      "expect": [
+        { "id": "$domJen", "scope": "domain" },
+        { "id": "$unkJen", "scope": "unknown" },
+        { "id": "$unkCorp", "scope": "unknown" },
+        { "id": "$webJen", "scope": "local", "localHostId": "$web" },
+        { "id": "$sqlJen", "scope": "local", "localHostId": "$sql" }
+      ]
+    },
+
+    { "do": "engagementCreate", "args": [{ "name": "No domain set", "kind": "lab" }], "as": "bare" },
+    { "do": "usernameCreate", "args": ["$bare", { "username": "zoe", "scope": "domain" }], "as": "bareJen" },
+    { "do": "usernameCreate", "args": ["$bare", { "username": "zoe", "domain": "CORP", "scope": "domain" }], "as": "bareCorp" },
+    { "do": "usernamesList", "args": ["$bare"], "expect": [{ "id": "$bareJen", "domain": null }, { "id": "$bareCorp", "domain": "CORP" }] }
+  ]
+}

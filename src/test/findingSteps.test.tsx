@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -178,6 +178,112 @@ describe("finding steps", () => {
     await waitFor(() => expect(stepTitles(dlg)).toEqual(["trigger the exploit", "nmap sweep"]));
     await user.click(within(dlg).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.findingUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ stepEntryIds: ["l3", "l1"] })));
+  });
+});
+
+describe("screenshots on a finding", () => {
+  const png = () => new File([new Uint8Array([137, 80, 78, 71])], "proof.png", { type: "image/png" });
+  const shotEntry = (id: string, title: string, hostIds: string[]): LogEntry => ({
+    ...entry(id, title, hostIds), kind: "screenshot", content: { kind: "screenshot", attachmentId: `a-${id}`, caption: title, fileName: `${id}.png` },
+  });
+  const S1 = shotEntry("s1", "admin panel after login", ["h1"]);
+  beforeEach(() => {
+    Object.assign(URL, { createObjectURL: vi.fn(() => "blob:shot"), revokeObjectURL: vi.fn() });
+    m.attachmentGet.mockResolvedValue({ id: "a1", mime: "image/png", dataBase64: "AAAA" });
+    m.logCreate.mockImplementation(async (_e, input) => {
+      const created: LogEntry = {
+        ...entry("new-shot", input.title, input.hostIds), kind: "screenshot", content: { ...input.content, attachmentId: "a-new" } as LogEntry["content"],
+      };
+      // The log as the backend serves it from now on: with the new entry.
+      const before = (await m.logList.getMockImplementation()?.("e1")) ?? [];
+      m.logList.mockResolvedValue([...before, created]);
+      return created;
+    });
+  });
+  async function pasteInto(zone: HTMLElement, file: File) {
+    await act(async () => {
+      fireEvent.paste(zone, { clipboardData: { items: [{ kind: "file", type: file.type, getAsFile: () => file }], files: [file], types: ["Files"], getData: () => "" } });
+    });
+  }
+
+  it("a pasted screenshot with its caption becomes a screenshot log entry on the finding's host, appended to its steps", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload", hostIds: ["h1"], stepEntryIds: ["l1"] })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await within(dlg).findByRole("list", { name: "Reproduction steps" });
+    await user.click(within(dlg).getByRole("button", { name: "Add screenshot" }));
+    const zone = within(dlg).getByLabelText(/^Screenshot: paste/);
+    // The drop zone takes focus, so ⌘V works at once.
+    expect(zone).toHaveFocus();
+    const add = within(dlg).getAllByRole("button", { name: "Add screenshot" }).at(-1)!;
+    expect(add).toBeDisabled();
+    await pasteInto(zone, png());
+    expect(await within(dlg).findByAltText("The screenshot to add")).toBeInTheDocument();
+    await user.type(within(dlg).getByLabelText("Caption"), "admin panel after the upload{Enter}");
+
+    await waitFor(() => expect(m.logCreate).toHaveBeenCalledTimes(1));
+    const [eid, input] = m.logCreate.mock.calls[0];
+    expect(eid).toBe("e1");
+    expect(input).toMatchObject({
+      title: "admin panel after the upload", hostIds: ["h1"], private: false,
+      content: { kind: "screenshot", caption: "admin panel after the upload", fileName: "proof.png" },
+      attachment: { mime: "image/png" },
+    });
+    await waitFor(() => expect(stepTitles(dlg)).toEqual(["nmap sweep", "admin panel after the upload"]));
+    expect(within(dlg).queryByLabelText(/^Screenshot: paste/)).not.toBeInTheDocument();
+
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ stepEntryIds: ["l1", "new-shot"] })));
+  });
+
+  it("a chosen file is added the same way; a file that isn't an image is refused", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload", hostIds: ["h1", "h2"] })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await user.click(within(dlg).getByRole("button", { name: "Add screenshot" }));
+    await user.upload(within(dlg).getByLabelText("Choose an image"), new File(["x"], "notes.txt", { type: "text/plain" }));
+    expect(within(dlg).getByRole("alert")).toHaveTextContent("That isn't an image");
+    await user.upload(within(dlg).getByLabelText("Choose an image"), png());
+    await within(dlg).findByAltText("The screenshot to add");
+    await user.click(within(dlg).getAllByRole("button", { name: "Add screenshot" }).at(-1)!);
+    // Logged on every host of the finding, titled "Screenshot" with no caption.
+    await waitFor(() => expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ title: "Screenshot", hostIds: ["h1", "h2"] })));
+  });
+
+  it("a finding with no host asks for one first", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload" })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await user.click(within(dlg).getByRole("button", { name: "Add screenshot" }));
+    expect(within(dlg).getByText("Pick the finding's host first: the screenshot is logged on it.")).toBeInTheDocument();
+    expect(within(dlg).getByRole("button", { name: "Choose file" })).toBeDisabled();
+    expect(within(dlg).queryByLabelText(/^Screenshot: paste/)).not.toBeInTheDocument();
+  });
+
+  it("Link a screenshot from the log offers only screenshots and links the entry, never a copy", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload", hostIds: ["h1"] })], [], [L1, L2, S1, L4]);
+    const dlg = await openEdit(user, "Shell upload");
+    await user.click(within(dlg).getByRole("button", { name: "Add screenshot" }));
+    await user.click(within(dlg).getByRole("button", { name: "Link a screenshot from the log" }));
+    expect(await within(dlg).findByRole("button", { name: /admin panel after login/ })).toBeInTheDocument();
+    expect(within(dlg).queryByRole("button", { name: /nmap sweep/ })).not.toBeInTheDocument();
+    await user.click(within(dlg).getByRole("button", { name: /admin panel after login/ }));
+    expect(stepTitles(dlg)).toEqual(["admin panel after login"]);
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ stepEntryIds: ["s1"] })));
+    expect(m.logCreate).not.toHaveBeenCalled();
+  });
+
+  it("Escape closes the screenshot panel", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload", hostIds: ["h1"] })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await user.click(within(dlg).getByRole("button", { name: "Add screenshot" }));
+    expect(within(dlg).getByLabelText(/^Screenshot: paste/)).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(within(dlg).queryByLabelText(/^Screenshot: paste/)).not.toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Edit finding" })).toBeInTheDocument();
   });
 });
 

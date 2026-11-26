@@ -25,7 +25,7 @@ const cred = (o: Partial<Credential> & { id: string }): Credential => ({
   fromSecretId: null, createdAt: 1, updatedAt: 1, ...o,
 });
 const NT = "8846f7eaee8fb117ad06bdd830b7586c";
-const user = (id: string, username: string): Username => ({ id, engagementId: "e1", username, domain: null, sourceHostId: null, source: null, createdAt: 1 });
+const user = (id: string, username: string): Username => ({ id, engagementId: "e1", username, domain: null, sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null });
 
 const BASE: Credential[] = [
   cred({ id: "p1", username: "alice", secret: "Winter2024!" }),
@@ -40,7 +40,7 @@ function Search() {
   return <output data-testid="search">{useLocation().search}</output>;
 }
 
-function mount(over: { initial?: string; creds?: Credential[]; selectedId?: string; onSelect?: (id: string) => void; attempts?: CredAttempt[] } = {}) {
+function mount(over: { initial?: string; creds?: Credential[]; selectedId?: string; onSelect?: (id: string) => void; attempts?: CredAttempt[]; usernames?: Username[] } = {}) {
   const creds = over.creds ?? BASE;
   return render(
     <QueryClientProvider client={makeQueryClient()}>
@@ -48,7 +48,7 @@ function mount(over: { initial?: string; creds?: Credential[]; selectedId?: stri
         <Search />
         <InventoryList
           eid="e1" creds={creds} all={creds} hosts={[H1]} servicesByHost={new Map([["h1", [SMB]]])}
-          attempts={over.attempts ?? []} usernames={[user("u1", "carol"), user("u2", "drew")]} grants={[]}
+          attempts={over.attempts ?? []} usernames={over.usernames ?? [user("u1", "carol"), user("u2", "omar")]} grants={[]}
           selectedId={over.selectedId} onSelect={over.onSelect ?? (() => {})}
         />
       </MemoryRouter>
@@ -180,6 +180,30 @@ describe("InventoryList", () => {
     expect(scope).not.toBe(host);
     expect(host.parentElement).toBe(scope.parentElement);
     expect(host).toHaveClass("inventory-list__scope-host"); // display: block
+  });
+
+  it("a local credential whose host was deleted reads local (host deleted), with no empty host name", () => {
+    mount({ creds: [cred({ id: "l2", username: "administrator", scope: "local", localHostId: null, secret: "Local-1" })] });
+    const row = screen.getByTitle("administrator").closest("tr")!;
+    expect(within(row).getByText("local (host deleted)")).toHaveClass("inventory-list__scope-value");
+    expect(row.querySelector(".inventory-list__scope-host")).toBeNull();
+  });
+
+  it("a local username reads local to its host, or local (host deleted) once it is gone; others read no scope", () => {
+    mount({
+      creds: [],
+      usernames: [
+        { ...user("u1", "zoe"), scope: "local", localHostId: "h1" },
+        { ...user("u2", "kim"), scope: "local", localHostId: null },
+        { ...user("u3", "lee"), scope: "domain", domain: "CORP" },
+        user("u4", "max"),
+      ],
+    });
+    const row = (name: string) => screen.getByTitle(name).closest("li")!;
+    expect(within(row("zoe")).getByText("local to dc01")).toHaveClass("usernames-list__scope");
+    expect(within(row("kim")).getByText("local (host deleted)")).toHaveClass("usernames-list__scope");
+    expect(row("CORP\\lee").querySelector(".usernames-list__scope")).toBeNull();
+    expect(row("max").querySelector(".usernames-list__scope")).toBeNull();
   });
 
   it("a 60-character name truncates with a title", () => {

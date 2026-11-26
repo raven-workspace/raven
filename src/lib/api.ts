@@ -1,18 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { FieldManualSnapshot } from "../engines/fieldManual/merge";
 import type { VaultFile } from "../types/fieldManual";
 import type { BackupInfo } from "../types/backup";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
 import type { GoalRef } from "../engines/checklist";
-import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
+import type { ChecklistItem, ChecklistItemInput, EntryTicks } from "../types/checklist";
 import type {
   Attachment,
   Extraction,
+  ExtractionProofs,
   ExtractionRecord,
   ExtractionSummary,
+  Filed,
   LogEntry,
   LogEntryInput,
+  OutputTick,
   Progress,
 } from "../types/log";
 import type {
@@ -30,6 +34,7 @@ import type { Note, RuledOut, RuledOutInput } from "../types/notes";
 import type {
   AccessGrant,
   AccessGrantInput,
+  CreatedCredential,
   Credential,
   CredAttempt,
   CredAttemptInput,
@@ -37,11 +42,12 @@ import type {
   TriedPairInput,
   CredentialInput,
   CrackStatus,
+  DomainPair,
   Username,
   UsernameInput,
 } from "../types/credentials";
 import type { PayloadBuild } from "../types/payloadBuild";
-import type { Report, ReportNode, ReportPatch, ReportSection, SectionInput } from "../types/report";
+import type { ExportInput, ExportResult, Report, ReportNode, ReportPatch, ReportSection, SectionInput } from "../types/report";
 import type { Hop, HopInput, InterfaceDismissal, Tunnel, TunnelInput } from "../types/network";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
@@ -135,7 +141,7 @@ export const api = {
     call<Service>("service_confirm", { id, input }),
   serviceUnconfirm: (id: string) => call<Service>("service_unconfirm", { id }),
   serviceDelete: (id: string) => call<null>("service_delete", { id }),
-  /** `dead_end` needs a non-empty `reason` and adds a linked ruled-out item; leaving it removes that item. */
+  /** `dead_end` needs a non-empty `reason` and adds a linked ruled-out item; leaving it (for `exploited` too) removes that item. */
   serviceSetVerdict: (id: string, verdict: ServiceVerdict | null, reason?: string) =>
     call<Service>("service_set_verdict", { id, verdict, reason: reason ?? null }),
   hostIdentityGet: (hostId: string) => call<HostIdentity | null>("host_identity_get", { hostId }),
@@ -147,6 +153,7 @@ export const api = {
    * An `auto` upsert never changes a vector the user set by hand. It rejects `status: "ruled_out"`: rule a vector out
    * with `vectorSetStatus`, which needs a reason and adds the linked ruled-out item. A manual upsert over a ruled-out
    * vector reopens it and removes that item. Deleting a vector (or a service) removes its linked item too.
+   * `vectorSetStatus` to `exploited` needs no reason; like any status change it removes a linked ruled-out item.
    */
   vectorUpsert: (hostId: string, input: VectorInput) => call<PrivescVector>("vector_upsert", { hostId, input }),
   vectorSetStatus: (id: string, status: VectorStatus, reason?: string) =>
@@ -167,6 +174,9 @@ export const api = {
   /** Ticks driven by the host's own data (identified ports, OS) as conditional writes. */
   checklistApplyFacts: (engagementId: string, done: GoalRef[], revert: GoalRef[]) =>
     call<ChecklistItem[]>("checklist_apply_facts", { engagementId, done, revert }),
+  /** Log entries' ticks as one conditional write: the store re-derives each entry's ticks on its rows as they are now. */
+  checklistApplyEntryTicks: (engagementId: string, entries: EntryTicks[]) =>
+    call<ChecklistItem[]>("checklist_apply_entry_ticks", { engagementId, entries }),
   notesGet: (engagementId: string, hostId: string | null) =>
     call<Note>("notes_get", { engagementId, hostId }),
   notesList: (engagementId: string) => call<Note[]>("notes_list", { engagementId }),
@@ -191,8 +201,11 @@ export const api = {
   hopDelete: (id: string) => call<null>("hop_delete", { id }),
   hostMarkAccessReviewed: (hostId: string) => call<Host>("host_mark_access_reviewed", { hostId }),
   credentialsList: (engagementId: string) => call<Credential[]>("credentials_list", { engagementId }),
+  /** Creates a credential, or returns the stored one that is the same credential with `existed` set. */
   credentialCreate: (engagementId: string, input: CredentialInput) =>
-    call<Credential>("credential_create", { engagementId, input }),
+    call<CreatedCredential>("credential_create", { engagementId, input }),
+  /** For each pair of domain spellings, whether the store counts them as the same domain in the engagement. */
+  sameDomains: (engagementId: string, pairs: DomainPair[]) => call<boolean[]>("same_domains", { engagementId, pairs }),
   credentialUpdate: (id: string, input: CredentialInput) =>
     call<Credential>("credential_update", { id, input }),
   credentialDelete: (id: string) => call<null>("credential_delete", { id }),
@@ -214,11 +227,33 @@ export const api = {
   payloadBuildRecord: (input: PayloadBuild) => call<PayloadBuild>("payload_build_record", { input }),
   reportGetOrCreate: (engagementId: string) => call<Report>("report_get_or_create", { engagementId }),
   reportUpdate: (id: string, patch: ReportPatch) => call<Report>("report_update", { id, patch }),
+  /** Writes the report's PDF and `.7z` into `input.folder` (docs/adr/0002) and records the export. */
+  reportExport: (reportId: string, input: ExportInput) => call<ExportResult>("report_export", { reportId, input }),
+  /** The macOS folder picker; null when the owner cancels. */
+  pickFolder: async (title: string, defaultPath?: string): Promise<string | null> => {
+    try {
+      const picked = await openDialog({ directory: true, multiple: false, title, ...(defaultPath ? { defaultPath } : {}) });
+      return typeof picked === "string" ? picked : null;
+    } catch (raw) {
+      throw RavenError.from(raw);
+    }
+  },
+  /** Shows a file in Finder, selected. */
+  revealInFinder: async (path: string): Promise<void> => {
+    try {
+      await revealItemInDir(path);
+    } catch (raw) {
+      throw RavenError.from(raw);
+    }
+  },
   reportSectionsList: (reportId: string) => call<ReportSection[]>("report_sections_list", { reportId }),
   reportSectionUpsert: (reportId: string, input: SectionInput) => call<ReportSection>("report_section_upsert", { reportId, input }),
   reportSectionSave: (id: string, doc: ReportNode, meta: Record<string, unknown>) =>
     call<ReportSection>("report_section_save", { id, doc, meta }),
   reportSectionsReorder: (reportId: string, ids: string[]) => call<null>("report_sections_reorder", { reportId, ids }),
+  /** Writes several of the report's sections, and deletes one of its pages, all or nothing (Move to appendix). */
+  reportSectionsSave: (reportId: string, writes: { id: string; doc: ReportNode; meta: Record<string, unknown> }[], deletePage: string | null = null) =>
+    call<ReportSection[]>("report_sections_save", { reportId, writes, delete: deletePage }),
   /** Owner-written pages only (kind `page`); any other section is refused. */
   reportSectionDelete: (reportId: string, id: string) => call<null>("report_section_delete", { reportId, id }),
   triedPairsList: (engagementId: string) => call<TriedPair[]>("tried_pairs_list", { engagementId }),
@@ -229,6 +264,12 @@ export const api = {
     call<number>("tried_pair_promote", { engagementId, username, domain, secret }),
   extractionSave: (logEntryId: string, engagementId: string, summary: ExtractionSummary, record: ExtractionRecord) =>
     call<Extraction>("extraction_save", { logEntryId, engagementId, summary, record }),
+  /** Files what a saved entry's output proved and stores its extraction, all or nothing. */
+  extractionFile: (engagementId: string, logEntryId: string, proofs: ExtractionProofs) =>
+    call<Filed>("extraction_file", { engagementId, logEntryId, proofs }),
+  /** The filed extraction's summary and output ticks, once the save's checklist and board follow-ups ran. */
+  extractionFinish: (logEntryId: string, summary: ExtractionSummary, outputTicks: OutputTick[]) =>
+    call<Extraction>("extraction_finish", { logEntryId, summary, outputTicks }),
   extractionGet: (logEntryId: string) => call<Extraction | null>("extraction_get", { logEntryId }),
   extractionsList: (engagementId: string) => call<Extraction[]>("extractions_list", { engagementId }),
   extractionUndo: (logEntryId: string) => call<Extraction>("extraction_undo", { logEntryId }),

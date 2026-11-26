@@ -45,6 +45,10 @@ export function FieldManualSection() {
 
   const importNow = async () => {
     setError(null);
+    if (!path.trim()) {
+      setError("Set the vault folder first.");
+      return;
+    }
     if (!(await savePath())) return;
     imp.mutate(path.trim(), { onError: (e) => setError(e.message) });
   };
@@ -62,7 +66,7 @@ export function FieldManualSection() {
       }
     >
       <Field label="Vault folder">
-        <Input mono value={path} placeholder="~/…/Field-Manual" onChange={(e) => setPath(e.target.value)} onBlur={() => void savePath()} />
+        <Input mono value={path} placeholder="~/…/your Obsidian vault" onChange={(e) => setPath(e.target.value)} onBlur={() => void savePath()} />
       </Field>
       {error && <p role="alert" className="field-manual-section__error">{error}</p>}
       {s && (
@@ -110,7 +114,14 @@ function Lines({ label, lines }: { label: string; lines: string[] }) {
   );
 }
 
-/** Spec §5 drift: where the vault and Raven disagree. */
+/** Where an unfillable token's commands are: "Arsenal ×2, Manual ×1". A report saved before the split has only a count. */
+function whereFrom(u: Drift["unfillable"][number]): string {
+  if (!u.from) return `×${u.count}`;
+  const parts = [u.from.arsenal > 0 && `Arsenal ×${u.from.arsenal}`, u.from.notes > 0 && `Manual ×${u.from.notes}`];
+  return parts.filter(Boolean).join(", ");
+}
+
+/** Arsenal-import spec §5 drift: where the vault and Raven disagree. */
 function DriftReport({ drift: d }: { drift: Drift }) {
   return (
     <div className="field-manual-section__drift">
@@ -121,7 +132,7 @@ function DriftReport({ drift: d }: { drift: Drift }) {
         <Lines label="Raven-only steps" lines={d.ravenOnlySteps} />
         <Lines
           label="Placeholders Raven can't fill"
-          lines={d.unfillable.map((u) => `{${u.token}} ×${u.count}${u.manual ? " (fine: you type these)" : ""}`)}
+          lines={d.unfillable.map((u) => `{${u.token}} ${whereFrom(u)}${u.manual ? " (fine: you type these)" : ""}`)}
         />
         <Lines label="Raven-only commands (in no card)" lines={d.ravenOnlyCommands} />
         <Lines label="Toolkit files no card mentions" lines={d.toolkitUnused} />

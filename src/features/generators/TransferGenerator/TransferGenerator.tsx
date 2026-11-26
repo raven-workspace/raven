@@ -1,18 +1,15 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { fillCommand, filterForKind } from "../../../engines/checklist/index";
+import { examList } from "../../../engines/exam";
 import { isHttp, transferMethods, TRANSFER_CARD, withToolsDirs } from "../../../engines/generators/transfer";
-import { getCards, getLibrary, useLibraryVersion } from "../../../engines/library/store";
-import { copyPlain } from "../../../lib/clipboard";
+import { useLibrary } from "../../../engines/library/store";
 import { isDialogOpen, useKeydown } from "../../../lib/keys";
 import { shortHostName } from "../../../lib/hostName";
 import { reportError } from "../../../lib/lockSignal";
 import { ChipSet, Input, Kbd, Select, labelClass } from "../../../ui/index";
-import { useCopyGuard } from "../../arsenal/copyGuard";
-import { logCommand } from "../../capture/logCommand";
+import { copyTo, useCommandCopy } from "../../commands/useCommandCopy";
 import { CommandList } from "../../checklist/CommandList/CommandList";
-import { fillLibraryCommand } from "../../checklist/goalCommands";
-import { useFillBase } from "../../palette/fillData";
+import { fillLibraryCommand, joinCommands } from "../../commands/filledCommand";
+import { useFillBase } from "../../commands/fillData";
 import { FilePicker } from "../FilePicker/FilePicker";
 import { RavenError } from "../../../types/errors";
 import "./TransferGenerator.scss";
@@ -59,11 +56,10 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
   /** Start in the File field (off while you move through the Workbench's generator list). */
   autoFocus?: boolean;
 }) {
-  const qc = useQueryClient();
-  const version = useLibraryVersion();
+  const library = useLibrary();
   // The host is the screen's own (the browse bar's HostChip); there is no second host control here.
   const hostId = viewHostId;
-  const { d, host, makeInput, examReady } = useFillBase(engagementId, hostId);
+  const { d, host, makeInput, exam } = useFillBase(engagementId, hostId);
   const [osPick, setOsPick] = useState<Os>("windows");
   const os: Os = contextOs ?? osPick;
   const [dirs, setDirs] = useState<Record<Os, string>>(() => ({ windows: readDir("windows"), linux: readDir("linux") }));
@@ -79,20 +75,14 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
     if (startFocused) fileRef.current?.focus();
   }, [startFocused]);
 
-  // getLibrary()/getCards() change only with the library version.
-  /* eslint-disable react-hooks/exhaustive-deps */
   const methods = useMemo(() => {
-    const kind = d.engagement?.kind;
     const cardId = TRANSFER_CARD[os];
-    // Fail closed: no methods until the engagement's exam rules are known.
-    if (!examReady) return [];
-    let pool = getLibrary().filter((c) => c.cardId === cardId);
-    if (kind) pool = filterForKind(pool, kind, { hostId: host?.id ?? "", msfHostId: d.engagement?.msfHostId ?? null }).shown;
+    // A list under the exam rules (until the engagement's kind is known, no command that needs a verdict).
+    const pool = examList(library.commands.filter((c) => c.cardId === cardId), exam).shown;
     // HTTP first, so arrow keys follow the order the pills are drawn in.
-    const all = transferMethods(getCards(), pool, os).filter((m) => m.kali.length + m.target.length > 0);
+    const all = transferMethods(library.cards, pool, os).filter((m) => m.kali.length + m.target.length > 0);
     return [...all.filter((m) => isHttp(m.group)), ...all.filter((m) => !isHttp(m.group))];
-  }, [os, d.engagement, examReady, host, version]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+  }, [os, exam, library]);
   const method = methods.find((m) => m.id === methodId) ?? methods[0];
 
   const effectiveDir = dir.trim() || DEFAULT_DIR[os];
@@ -103,27 +93,24 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
   }
   const input = makeInput(overrides);
   const usesPort = !!method && [...method.kali, ...method.target].some((c) => c.template.includes("{PORT}"));
-  const fill = (cmds: NonNullable<typeof method>["kali"]) => cmds.map((c) => fillLibraryCommand(c, input, false));
+  const fill = (cmds: NonNullable<typeof method>["kali"]) => cmds.map((c) => fillLibraryCommand(c, input));
+  const hostName = host?.name || "the target";
+  const shortName = host ? shortHostName(host.name) : null;
+  // The serve command runs from the tool folders set in Settings.
+  const toolsDirs = { windows: d.settings?.windowsToolsDir, linux: d.settings?.linuxToolsDir };
+  const kali = method ? fill(method.kali.map((c) => ({ ...c, template: withToolsDirs(c.template, toolsDirs) }))) : [];
+  const target = method ? fill(method.target) : [];
 
-  // The target half as typed at the shell: one block, so the cleanup list sees every line.
-  const targetFills = method ? method.target.map((c) => fillCommand(c.template, input, { commandOs: c.os })) : [];
-  const targetText = targetFills.map((f) => f.text).join("\n");
-  const targetCmd = method && {
-    id: `transfer:${method.id}`, title: method.label, text: targetText, unresolved: [...new Set(targetFills.flatMap((f) => f.unresolved))], msfMarker: false,
-  };
+  // The target half as one command, a line each, so the cleanup list sees every line; it runs on the target.
+  const targetCmd = method && target.length > 0 ? joinCommands(`transfer:${method.id}`, method.label, target) : null;
   const focusToken = useCallback((t: string) => (t === "FILE" || t === "SCRIPT" ? fileRef.current?.focus() : focusOuter(t)), [focusOuter]);
-  const focusNothing = useCallback(() => {}, []);
-  const guard = useCopyGuard({ focusToken, focusCred: focusNothing, hostName: host ? shortHostName(host.name) : null, repeatKey: "⌘↵ or Copy" });
+  const guard = useCommandCopy({ to: copyTo({ d, host }), focusToken, repeatKey: "⌘↵ or Copy" });
   const logTarget = async () => {
     setStatus(undefined);
-    if (!targetCmd || !host || !d.engagement || !targetText) return;
+    if (!targetCmd || !guard.canLog) return;
     try {
-      if ((await guard.attempt(targetCmd, () => copyPlain(targetText))) !== "copied") return;
-      await logCommand(qc, {
-        engagementId, host, hosts: d.hosts, command: targetText,
-        title: `Transfer ${file.trim() || "a file"} with ${method.label}`,
-        ranOn: host.name,
-      });
+      const title = `Transfer ${file.trim() || "a file"} with ${targetCmd.title}`;
+      if ((await guard.copy(targetCmd, { log: true, logAs: { title } })) !== "copied") return;
       setStatus("Copied and logged");
     } catch (e) {
       reportError(e);
@@ -145,13 +132,6 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
     setMethodId(methods[next]!.id);
     tabRefs.current[next]?.focus();
   };
-
-  const hostName = host?.name || "the target";
-  const shortName = host ? shortHostName(host.name) : null;
-  // The serve command runs from the tool folders set in Settings.
-  const toolsDirs = { windows: d.settings?.windowsToolsDir, linux: d.settings?.linuxToolsDir };
-  const kali = method ? fill(method.kali.map((c) => ({ ...c, template: withToolsDirs(c.template, toolsDirs) }))) : [];
-  const target = method ? fill(method.target) : [];
 
   return (
     <section aria-label="Transfer a file" className="transfer-generator">

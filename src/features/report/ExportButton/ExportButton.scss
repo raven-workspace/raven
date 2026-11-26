@@ -1,0 +1,66 @@
+@use "@/styles/abstracts/index" as *;
+
+// The export's result: what to upload, what's inside, the MD5 to compare, then any warning.
+@layer features {
+  .export-result {
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  .export-result__files {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-sm) var(--space-md);
+    margin: 0;
+
+    dt {
+      @include type(meta);
+      color: var(--muted);
+    }
+
+    dd {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: var(--space-sm);
+      margin: 0;
+    }
+  }
+
+  .export-result__file {
+    @include type(code);
+    overflow-wrap: anywhere;
+  }
+
+  .export-result__size {
+    @include type(meta);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .export-result__md5 {
+    @include type(code);
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
+
+  .export-result__hint {
+    @include type(meta);
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .export-result__warn {
+    @include type(meta);
+    margin: 0;
+    color: var(--warn);
+  }
+
+  .export-result__footer {
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: end;
+    gap: var(--space-sm);
+  }
+}

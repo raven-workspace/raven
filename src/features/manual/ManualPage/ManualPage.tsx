@@ -2,13 +2,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ManualNote } from "../../../engines/manual/index";
 import { isInlineCommand, lookupRows, type LookupRow } from "../../../engines/manual/lookup";
-import { getCards, useLibraryVersion } from "../../../engines/library/store";
+import { useLibrary } from "../../../engines/library/store";
 import { isFreeKey, isTypingTarget, useKeydown } from "../../../lib/keys";
+import { useFontsLoaded } from "../../../lib/useFontsLoaded";
 import { RavenError } from "../../../types/errors";
 import { Button, Disclosure, EmptyState, ErrorState, HintLine, labelClass, useFadeOnChange, type Hint } from "../../../ui/index";
 import { HostChip, isHostPickKey, type HostChipHandle } from "../../arsenal/HostChip/HostChip";
 import { useFillScope, useLastEngagementStore } from "../../arsenal/useFillScope";
-import { useFillBase } from "../../palette/fillData";
+import { useFillBase } from "../../commands/fillData";
 import { AnswerCard } from "../AnswerCard/AnswerCard";
 import { MANUAL_NOTE_ID, manualKeysBlocked } from "../keys";
 import { MANUAL_QUERY, MANUAL_ROW } from "../searchPath";
@@ -192,10 +193,12 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const note = noteId ? notes.find((n) => n.id === noteId) : undefined;
   const { engagementId, hostId, pending: scopePending } = useFillScope();
   const base = useFillBase(engagementId, hostId);
+  const fontsLoaded = useFontsLoaded();
+  /** Exam rules, fill data and web fonts are all in: the note's layout won't move again on its own. */
+  const settled = base.examReady && fontsLoaded;
   const hostRef = useRef<HostChipHandle>(null);
   const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
-  useLibraryVersion();
-  const cards = getCards();
+  const { cards } = useLibrary();
   const noteKey = note?.id;
   useEffect(() => useManualStatus.getState().clear(), [noteKey]);
   // What a copy said was about the host it filled for: another host clears it.
@@ -221,7 +224,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const pendingScroll = useRef<ManualPlace | null>(null);
   /** ⌘[ is returning: the note being left is not pushed onto the history. */
   const returning = useRef(false);
-  /** A restored scroll waiting for late layout (exam lines, filled text) to settle: applied once more then. */
+  /** A restored scroll waiting for late layout (exam lines, filled text, web fonts) to settle: applied once more then. */
   const restored = useRef<ManualPlace | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -256,7 +259,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     restored.current = null;
     if (pending?.noteId === note.id) {
       top = pending.scrollTop;
-      if (top > 0 && !base.examReady) restored.current = pending;
+      if (top > 0 && !settled) restored.current = pending;
     }
     else if (location.hash) {
       const el = pane.querySelector(`[id="${CSS.escape(decodeURIComponent(location.hash.slice(1)))}"]`);
@@ -280,16 +283,17 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     // location.key: a link to a heading in the same note scrolls again.
   }, [note?.id, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Exam rules and fill data arrive after the first paint and change the note's height: put the restored spot back once.
+  // Exam rules, fill data and web fonts (swapped in once loaded) arrive after the first paint and change the note's
+  // height: once they have all settled, put the restored spot back once, whichever arrived last.
   useLayoutEffect(() => {
     const pane = paneRef.current;
     const r = restored.current;
-    if (!base.examReady || !pane || !r) return;
+    if (!settled || !pane || !r) return;
     restored.current = null;
     if (shown.current?.noteId !== r.noteId) return;
     pane.scrollTop = r.scrollTop;
     shown.current = { noteId: r.noteId, scrollTop: pane.scrollTop };
-  }, [base.examReady]);
+  }, [settled]);
 
   const ids = useMemo(() => note?.outline.map((o) => o.id) ?? [], [note]);
   const spy = useOutlineSpy(paneRef, note?.id ?? "", ids);
@@ -354,13 +358,14 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
       else landRow(target, anchor, Number(rowAt), !inRail);
     } else showMatch(firstAfter(pane, anchor), true, !inRail, !inRail);
   }, [note?.id, query, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Exam lines and filled text arrive late and move the note: bring the current match (or lit row) back into view once.
+  // Exam lines, filled text and web fonts (swapped in once loaded) arrive late and move the note: once they have all
+  // settled, put the current match (or lit row) back in the middle, whichever arrived last.
   useLayoutEffect(() => {
-    if (!base.examReady || !query) return;
+    if (!settled || !query) return;
     const row = lit();
     if (row) row.scrollIntoView?.({ block: "center" });
     else showMatch(matchAt.current, true);
-  }, [base.examReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settled]); // eslint-disable-line react-hooks/exhaustive-deps
   // Fill data and exam lines re-render the note's text: keep the current match marked (and the count right).
   useEffect(() => {
     const pane = paneRef.current;
@@ -491,7 +496,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
           {engagementId ? (
             <>
               <div data-host-chip-cell="" className="manual-page__host-cell">
-                <HostChip ref={hostRef} hosts={base.d.hosts} value={base.host?.id ?? null} onChange={setHostId} align="start" className="manual-page__host-chip" />
+                <HostChip ref={hostRef} hosts={base.d.hosts} loadError={base.d.hostsError} value={base.host?.id ?? null} onChange={setHostId} align="start" className="manual-page__host-chip" />
               </div>
               <span data-testid="manual-host-ip" className="manual-page__host-ip">{base.host?.ip ?? ""}</span>
             </>
@@ -560,12 +565,16 @@ export function ManualPage() {
   const { host } = useFillBase(scope.engagementId, scope.hostId);
   const cardEscRef: CardEsc = useRef(null);
   const [cardShown, setCardShown] = useState(false);
-  // A load that is still going after 300ms says so; a fast one shows nothing.
+  // A load that is still going after 300ms says so; a fast one shows nothing. Each load starts quiet: one that ends
+  // clears the flag, so a quick Retry after a slow failed load shows nothing either.
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     if (status !== "loading") return;
     const t = setTimeout(() => setSlow(true), LOADING_MS);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      setSlow(false);
+    };
   }, [status]);
 
   useKeydown((e) => {

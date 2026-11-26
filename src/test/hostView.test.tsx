@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -88,6 +88,16 @@ async function openLog(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("host view", () => {
+  it("a host tab shows its name and ⌥ key in a tooltip on keyboard focus, not a title (RAV-22)", async () => {
+    mount();
+    const log = await screen.findByRole("tab", { name: "Log" });
+    expect(log).not.toHaveAttribute("title");
+    act(() => log.focus());
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent(/^Log/);
+    expect(within(tip).getByText("⌥2")).toHaveClass("tooltip__key");
+  });
+
   it("has exactly the tabs Next, Log and Findings, Next first and selected", async () => {
     mount();
     await screen.findByRole("tab", { name: "Next" });

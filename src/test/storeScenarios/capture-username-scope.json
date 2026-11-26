@@ -1,0 +1,53 @@
+{
+  "name": "Capture output sets a username's scope: .\\user and HOST\\user are local to that host, the engagement's domain in either spelling is domain, anything else unknown",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Synthetic lab", "kind": "lab", "domain": "corp.example" }], "as": "eng" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "WEB01", "ip": "192.0.2.10" }], "as": "web" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "sql01.corp.example", "ip": "192.0.2.11" }], "as": "sql" },
+    {
+      "do": "logCreate",
+      "args": ["$eng", {
+        "title": "rid brute", "ranOn": null, "hostIds": ["$sql"], "observations": null,
+        "returnedNothing": false, "private": false, "content": { "kind": "note", "text": "users" }
+      }],
+      "as": "entry"
+    },
+    {
+      "do": "extractionFile",
+      "args": ["$eng", "$entry", {
+        "createdHostIds": [], "newHosts": [], "scans": [], "identity": null, "credentials": [], "cracks": [],
+        "usernames": [
+          { "username": "ann", "domain": ".", "sourceHostId": "$sql" },
+          { "username": "bea", "domain": ".", "sourceHostId": null },
+          { "username": "cal", "domain": "web01", "sourceHostId": "$sql" },
+          { "username": "dee", "domain": "SQL01", "sourceHostId": "$sql" },
+          { "username": "eve", "domain": "CORP", "sourceHostId": "$sql" },
+          { "username": "fay", "domain": "corp.example", "sourceHostId": null },
+          { "username": "gus", "domain": "FABRIKAM", "sourceHostId": null },
+          { "username": "ivy", "domain": null, "sourceHostId": "$sql" }
+        ],
+        "intake": {
+          "usernames": [{ "key": "eng|jo|.|local:web", "input": { "username": "jo", "domain": ".", "sourceHostId": "$web", "source": "nxc" } }],
+          "attempts": [], "credentials": [], "hashes": [], "links": [], "reprovedCredentialIds": [], "reprovedUsernameIds": []
+        },
+        "triedPairs": [], "vectors": []
+      }]
+    },
+    {
+      "do": "usernamesList", "args": ["$eng"],
+      "expect": [
+        { "username": "ann", "domain": null, "scope": "local", "localHostId": "$sql", "sourceHostId": "$sql" },
+        { "username": "bea", "domain": ".", "scope": "unknown", "localHostId": null },
+        { "username": "cal", "domain": null, "scope": "local", "localHostId": "$web" },
+        { "username": "dee", "domain": null, "scope": "local", "localHostId": "$sql" },
+        { "username": "eve", "domain": "CORP", "scope": "domain", "localHostId": null },
+        { "username": "fay", "domain": "corp.example", "scope": "domain", "localHostId": null },
+        { "username": "gus", "domain": "FABRIKAM", "scope": "unknown", "localHostId": null },
+        { "username": "ivy", "domain": null, "scope": "unknown", "localHostId": null },
+        { "username": "jo", "domain": null, "scope": "local", "localHostId": "$web" }
+      ]
+    },
+    { "do": "extractionUndo", "args": ["$entry"] },
+    { "do": "usernamesList", "args": ["$eng"], "expect": [] }
+  ]
+}

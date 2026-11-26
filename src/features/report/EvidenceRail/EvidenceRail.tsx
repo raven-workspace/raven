@@ -2,10 +2,12 @@ import { XIcon } from "@phosphor-icons/react";
 import type { Editor } from "prosekit/core";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
-  entryPhase,
-  entryIdsIn,
   isPortScan,
   machinesInOrder,
+  PAGE_PHASES,
+  PHASE_TITLE,
+  entriesOnPage,
+  placementPlan,
   targetCredentials,
   type Phase,
   type ReportData,
@@ -32,9 +34,9 @@ type RailTab = "unused" | "notes" | "creds";
 
 
 /** Host-linked, non-private entries (any host of the target) with no block on the page sourced from them
- *  (`entryIdsIn`), in time order. An entry behind an operator-reason attempt never shows. */
+ *  (`entriesOnPage`), in time order. An entry behind an operator-reason attempt never shows. */
 export function unusedEntries(data: ReportData, target: ReportTarget, doc: ReportNode): LogEntry[] {
-  const onPage = entryIdsIn(doc);
+  const onPage = entriesOnPage(doc, data);
   return data.log
     .filter((e) => !keptFromReport(data, e) && !onPage.has(e.id) && e.hostIds.some((h) => target.hostIds.includes(h)))
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
@@ -55,16 +57,6 @@ export interface RailGroup {
   label: string;
   rows: RailRow[];
 }
-
-const PHASE_LABELS: Partial<Record<Phase, string>> = {
-  enum: "Service enumeration",
-  foothold: "Initial access",
-  lateral: "Lateral movement",
-  privesc: "Privilege escalation",
-  domain: "Domain compromise",
-  post: "Post-exploitation",
-};
-const GROUP_ORDER: Phase[] = ["enum", "foothold", "lateral", "privesc", "domain", "post"];
 
 const outputsOf = (e: LogEntry) => (e.content.kind === "command" ? e.content.blocks.map((b) => b.output ?? "") : []);
 const firstLine = (text: string) =>
@@ -89,37 +81,21 @@ function railRow(data: ReportData, hostId: string, e: LogEntry): RailRow {
   return { entry: e, line, ...(note ? { note } : {}) };
 }
 
-interface Placed {
-  hostId: string;
-  phase: Phase;
-  row: RailRow;
-}
-const rowCache = new WeakMap<ReportData, WeakMap<ReportTarget, Map<string, Placed>>>();
-
 /**
- * The log column (§10.1): the target's log that is not in the report, per machine (in page order) and phase (the phase
- * `phaseInsertAt` would place it in), time order inside each group. Private entries and operator-reason attempts never
+ * The log column (§10.1): the target's log that is not in the report, per machine (in page order) and phase (the
+ * placement plan's `phaseOf`, where `phaseInsertAt` would place it), time order inside each group. Private entries and operator-reason attempts never
  * show.
  */
 export function railGroups(data: ReportData, target: ReportTarget, doc: ReportNode): RailGroup[] {
-  // An entry's phase and row depend on the data alone: worked out once per load, not on every keystroke.
-  const byTarget = rowCache.get(data) ?? new WeakMap<ReportTarget, Map<string, Placed>>();
-  rowCache.set(data, byTarget);
-  const known = byTarget.get(target) ?? new Map<string, Placed>();
-  byTarget.set(target, known);
+  const plan = placementPlan(data, target);
   const placed = unusedEntries(data, target, doc).map((e) => {
-    let p = known.get(e.id);
-    if (!p) {
-      const { hostId, phase } = entryPhase(data, target, e);
-      p = { hostId, phase, row: railRow(data, hostId, e) };
-      known.set(e.id, p);
-    }
-    return p;
+    const { hostId, phase } = plan.phaseOf(e);
+    return { hostId, phase, entry: e };
   });
   return machinesInOrder(data, target).flatMap((hostId) =>
-    GROUP_ORDER.flatMap((phase) => {
-      const rows = placed.filter((p) => p.hostId === hostId && p.phase === phase).map((p) => p.row);
-      return rows.length > 0 ? [{ hostId, phase, label: PHASE_LABELS[phase]!, rows }] : [];
+    PAGE_PHASES.flatMap((phase) => {
+      const rows = placed.filter((p) => p.hostId === hostId && p.phase === phase).map((p) => railRow(data, hostId, p.entry));
+      return rows.length > 0 ? [{ hostId, phase, label: PHASE_TITLE[phase]!, rows }] : [];
     }),
   );
 }
@@ -408,9 +384,11 @@ export function EvidenceRail({
 }
 
 /** Whether a menu, a list or a Radix popover is open: Esc closes that first. ProseKit keeps its closed menus and
- *  lists in the DOM, marked closed. */
+ *  lists in the DOM, marked closed. A tooltip (a popper wrapper holding `role="tooltip"`) is no popup: Esc closes the
+ *  drawer while one shows. */
 const popupOpen = () =>
-  document.querySelector(':is([role="menu"], [role="listbox"]):not([data-state="closed"], [hidden]), [data-radix-popper-content-wrapper]') !== null;
+  document.querySelector(':is([role="menu"], [role="listbox"]):not([data-state="closed"], [hidden])') !== null ||
+  [...document.querySelectorAll("[data-radix-popper-content-wrapper]")].some((w) => w.querySelector('[role="tooltip"]') === null);
 
 /** The rail as a drawer from the right edge (under 1200px): E or the strip button toggles it, Esc and the X close it. */
 export function EvidenceDrawer({

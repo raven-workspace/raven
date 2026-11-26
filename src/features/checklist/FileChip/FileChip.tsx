@@ -1,6 +1,6 @@
 import { FilePicker } from "../../generators/FilePicker/FilePicker";
 import { filePickFor, useFilePickStore } from "../filePick";
-import type { FilledCommand } from "../CommandList/CommandList";
+import type { FilledCommand } from "../../commands/filledCommand";
 import "./FileChip.scss";
 
 /** The {FILE}/{SCRIPT} chip of a checklist step: the Toolkit picker, scoped to the host the commands are filled for. */

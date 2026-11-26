@@ -1,12 +1,13 @@
 //! Tried pairs: username + secret combinations that failed on a host/service. Kept so a spray is not
 //! repeated, but never credentials. `promote` removes them once the pair becomes a real credential.
 
+use crate::credentials::{engagement_domain, pick_same_domain, same_domain};
 use crate::db::{blank_to_none, check_in_engagement, check_scope, delete_by_id, now_ms};
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TriedPair {
     pub id: String,
@@ -66,12 +67,14 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<TriedPair>>
     Ok(st.query_map([engagement_id], row)?.collect::<Result<Vec<_>, _>>()?)
 }
 
-/// Idempotent insert-or-ignore on the unique key (case-insensitive user and domain). Returns the stored row for
-/// each input, in order, existing ones included. All or nothing.
+/// Idempotent: an input that is a stored pair (case-insensitive user, the same domain, and an equal secret, host,
+/// service and auth mode) returns the stored row unchanged; any other is inserted. Returns the stored row for each
+/// input, in order, existing ones included. All or nothing.
 pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[TriedPairInput]) -> AppResult<Vec<TriedPair>> {
     check_scope(conn, engagement_id, None)?;
+    let anchor = engagement_domain(conn, engagement_id)?;
     let now = now_ms();
-    let tx = conn.unchecked_transaction()?;
+    let tx = crate::db::atomic(conn)?;
     let mut out = Vec::with_capacity(inputs.len());
     for i in inputs {
         let username = i.username.trim();
@@ -96,6 +99,20 @@ pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[TriedPairInput])
         let log_entry_id = blank_to_none(i.log_entry_id.as_deref());
         if let Some(l) = &log_entry_id {
             check_in_engagement(&tx, "log_entries", engagement_id, l)?;
+        }
+        let stored = {
+            let mut st = tx.prepare_cached(&format!(
+                "SELECT {COLS} FROM tried_pairs WHERE engagement_id = ?1 AND lower(username) = lower(?2) AND secret = ?3 \
+                 AND host_id = ?4 AND service = ?5 AND auth_mode = ?6 ORDER BY at, id"
+            ))?;
+            let rows = st
+                .query_map(params![engagement_id, username, i.secret, i.host_id, i.service, auth_mode], row)?
+                .collect::<Result<Vec<_>, _>>()?;
+            pick_same_domain(rows, |t| t.domain.as_deref(), anchor.as_deref(), domain.as_deref())
+        };
+        if let Some(t) = stored {
+            out.push(t);
+            continue;
         }
         tx.prepare_cached(&format!(
             "INSERT OR IGNORE INTO tried_pairs ({COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)"
@@ -130,23 +147,8 @@ pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
     delete_by_id(conn, "tried_pairs", id)
 }
 
-/// Whether two domain spellings name the same domain (R16): equal ignoring case, or a NetBIOS name (`CORP`) and an
-/// FQDN (`corp.lan`) whose first label it is. A blank domain matches only a blank one. Agrees with TS `sameDomain`.
-pub fn same_domain(a: Option<&str>, b: Option<&str>) -> bool {
-    let x = a.unwrap_or("").trim().to_lowercase();
-    let y = b.unwrap_or("").trim().to_lowercase();
-    if x == y {
-        return true;
-    }
-    if x.is_empty() || y.is_empty() {
-        return false;
-    }
-    let (netbios, fqdn) = if x.contains('.') { (y, x) } else { (x, y) };
-    !netbios.contains('.') && fqdn.contains('.') && fqdn.split('.').next() == Some(netbios.as_str())
-}
-
 /// Deletes the tried pairs matching (username, domain, secret) once that pair is a real credential.
-/// User compares case-insensitively; the domain by `same_domain` (CORP and corp.lan are one domain). Returns how
+/// User compares case-insensitively; the domain by `same_domain`, anchored to the engagement's domain. Returns how
 /// many were removed.
 pub fn promote(
     conn: &Connection,
@@ -157,6 +159,7 @@ pub fn promote(
 ) -> AppResult<usize> {
     check_scope(conn, engagement_id, None)?;
     let domain = blank_to_none(domain);
+    let anchor = engagement_domain(conn, engagement_id)?;
     let tx = conn.unchecked_transaction()?;
     let ids: Vec<String> = {
         let mut stmt = tx.prepare(
@@ -168,7 +171,7 @@ pub fn promote(
         let mut ids = Vec::new();
         for row in rows {
             let (id, d) = row?;
-            if same_domain(d.as_deref(), domain.as_deref()) {
+            if same_domain(anchor.as_deref(), d.as_deref(), domain.as_deref()) {
                 ids.push(id);
             }
         }
@@ -270,8 +273,8 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
-        let a = upsert(c, &e, &[inp(&h, "jay", Some("corp.lan"), "Winter2024!")]).unwrap();
-        let b = upsert(c, &e, &[inp(&h, "jay", Some("corp.lan"), "Winter2024!")]).unwrap();
+        let a = upsert(c, &e, &[inp(&h, "zoe", Some("corp.lan"), "Winter2024!")]).unwrap();
+        let b = upsert(c, &e, &[inp(&h, "zoe", Some("corp.lan"), "Winter2024!")]).unwrap();
         assert_eq!(a, b);
         assert_eq!(list(c, &e).unwrap().len(), 1);
     }
@@ -281,12 +284,12 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
-        let a = upsert(c, &e, &[inp(&h, "JAY", Some("corp.lan"), "Winter2024!")]).unwrap();
-        let b = upsert(c, &e, &[inp(&h, "jay", Some("CORP.LAN"), "Winter2024!")]).unwrap();
+        let a = upsert(c, &e, &[inp(&h, "ZOE", Some("corp.lan"), "Winter2024!")]).unwrap();
+        let b = upsert(c, &e, &[inp(&h, "zoe", Some("CORP.LAN"), "Winter2024!")]).unwrap();
         assert_eq!(a[0].id, b[0].id);
         assert_eq!(list(c, &e).unwrap().len(), 1);
         // The secret is case-sensitive.
-        upsert(c, &e, &[inp(&h, "jay", Some("corp.lan"), "winter2024!")]).unwrap();
+        upsert(c, &e, &[inp(&h, "zoe", Some("corp.lan"), "winter2024!")]).unwrap();
         assert_eq!(list(c, &e).unwrap().len(), 2);
     }
 
@@ -295,13 +298,13 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
-        let mut other_svc = inp(&h, "jay", Some("corp.lan"), "Winter2024!");
+        let mut other_svc = inp(&h, "zoe", Some("corp.lan"), "Winter2024!");
         other_svc.service = "winrm".into();
-        upsert(c, &e, &[inp(&h, "jay", Some("corp.lan"), "Winter2024!"), other_svc, inp(&h, "drew", None, "Winter2024!")]).unwrap();
-        assert_eq!(promote(c, &e, "JAY", Some("CORP.LAN"), "Winter2024!").unwrap(), 2);
+        upsert(c, &e, &[inp(&h, "zoe", Some("corp.lan"), "Winter2024!"), other_svc, inp(&h, "omar", None, "Winter2024!")]).unwrap();
+        assert_eq!(promote(c, &e, "ZOE", Some("CORP.LAN"), "Winter2024!").unwrap(), 2);
         let left = list(c, &e).unwrap();
         assert_eq!(left.len(), 1);
-        assert_eq!(left[0].username, "drew");
+        assert_eq!(left[0].username, "omar");
     }
 
     #[test]
@@ -309,23 +312,53 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
+        on_domain(c, &e, Some("corp.lan"));
         upsert(
             c,
             &e,
             &[
-                inp(&h, "jay", Some("CORP"), "Winter2024!"),
-                inp(&h, "jay", Some("other.com"), "Winter2024!"),
-                inp(&h, "jay", None, "Winter2024!"),
+                inp(&h, "zoe", Some("CORP"), "Winter2024!"),
+                inp(&h, "zoe", Some("corp.local"), "Winter2024!"),
+                inp(&h, "zoe", Some("other.com"), "Winter2024!"),
+                inp(&h, "zoe", None, "Winter2024!"),
             ],
         )
         .unwrap();
-        assert_eq!(promote(c, &e, "jay", Some("corp.lan"), "Winter2024!").unwrap(), 1);
+        assert_eq!(promote(c, &e, "zoe", Some("corp.lan"), "Winter2024!").unwrap(), 1);
         let left: Vec<Option<String>> = list(c, &e).unwrap().into_iter().map(|t| t.domain).collect();
-        assert_eq!(left.len(), 2);
+        assert_eq!(left.len(), 3);
         assert!(!left.contains(&Some("CORP".to_string())));
-        assert!(same_domain(Some("corp.lan"), Some("CORP")));
-        assert!(!same_domain(Some("corp"), Some("corporate.com")));
-        assert!(!same_domain(None, Some("corp.lan")));
+    }
+
+    /// Sets the engagement's own domain.
+    fn on_domain(c: &Connection, e: &str, domain: Option<&str>) {
+        c.execute("UPDATE engagements SET domain = ?2 WHERE id = ?1", params![e, domain]).unwrap();
+    }
+
+    #[test]
+    fn promote_without_an_engagement_domain_matches_only_equal_spellings() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let (e, h) = setup(c);
+        upsert(c, &e, &[inp(&h, "zoe", Some("CORP"), "Winter2024!"), inp(&h, "zoe", Some("corp"), "Spring2024!")]).unwrap();
+        assert_eq!(promote(c, &e, "zoe", Some("corp.lan"), "Winter2024!").unwrap(), 0);
+        assert_eq!(promote(c, &e, "zoe", Some("Corp "), "Spring2024!").unwrap(), 1);
+        assert_eq!(list(c, &e).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn upsert_finds_the_pair_stored_in_the_other_spelling() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let (e, h) = setup(c);
+        on_domain(c, &e, Some("corp.lan"));
+        let a = upsert(c, &e, &[inp(&h, "zoe", Some("CORP"), "Winter2024!")]).unwrap();
+        let b = upsert(c, &e, &[inp(&h, "ZOE", Some("corp.lan"), "Winter2024!")]).unwrap();
+        assert_eq!(a, b);
+        // Another FQDN with the same first label is another pair.
+        let other = upsert(c, &e, &[inp(&h, "zoe", Some("corp.local"), "Winter2024!")]).unwrap();
+        assert_ne!(other[0].id, a[0].id);
+        assert_eq!(list(c, &e).unwrap().len(), 2);
     }
 
     #[test]
@@ -334,8 +367,8 @@ mod tests {
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
         let e2 = eng(c, "e2");
-        assert!(matches!(upsert(c, &e2, &[inp(&h, "jay", None, "x")]), Err(AppError::NotFound)));
-        let mut bad = inp(&h, "jay", None, "x");
+        assert!(matches!(upsert(c, &e2, &[inp(&h, "zoe", None, "x")]), Err(AppError::NotFound)));
+        let mut bad = inp(&h, "zoe", None, "x");
         bad.secret_kind = "ticket".into();
         assert!(upsert(c, &e, &[bad]).is_err());
     }

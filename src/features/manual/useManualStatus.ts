@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { CONFIRM_MS } from "../arsenal/copyGuard";
+import { CONFIRM_MS } from "../commands/copyCommand";
 
 /** `ok` says a copy worked, `warn` that it was held back or half-filled, `muted` is a neutral aside ("No previous note"). */
 export type ManualStatusTone = "ok" | "warn" | "muted";

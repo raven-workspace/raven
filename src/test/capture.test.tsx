@@ -12,6 +12,7 @@ import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import { RavenError } from "../types/errors";
 import type { LogEntryInput } from "../types/log";
+import { filed } from "./features/capture/filed";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
@@ -116,6 +117,7 @@ beforeEach(() => {
   m.servicesListEngagement.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
+  m.checklistApplyEntryTicks.mockResolvedValue([]);
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30,
     backupRetention: 14,
@@ -128,7 +130,7 @@ beforeEach(() => {
     host({ id: "h2", name: "web07", ip: "10.10.10.6", boardColumn: "privilege-escalation" }),
   ]);
   m.engagementsProgress.mockResolvedValue({});
-  m.servicesUpsertScan.mockResolvedValue([]);
+  m.extractionFile.mockResolvedValue(filed());
   m.logCreate.mockImplementation(async (_e, input: LogEntryInput) => ({
     id: "l1",
     engagementId: "e1",
@@ -155,6 +157,22 @@ describe("capture panel", () => {
     const dialog = await openCapture(user);
     expect(within(dialog).getByLabelText("Paste")).toHaveFocus();
     expect(within(dialog).getByRole("radio", { name: "Other" })).toBeChecked();
+  });
+
+  it("hosts that fail to load: the Hosts field says so, and Retry brings the picker back (RAV-22)", async () => {
+    const user = userEvent.setup();
+    const hosts = await m.hostsList("e1");
+    m.hostsList.mockRejectedValue(new Error("vault busy"));
+    mount();
+    await screen.findByRole("navigation", { name: "Engagement" });
+    await user.keyboard("l");
+    const dialog = within(await screen.findByRole("dialog", { name: "Add to log" }));
+    expect(await dialog.findByText("Couldn't load hosts")).toBeInTheDocument();
+    expect(dialog.queryByText("No host")).toBeNull();
+    m.hostsList.mockResolvedValue(hosts);
+    await user.click(dialog.getByRole("button", { name: "Retry" }));
+    expect(await dialog.findByText("No host")).toBeInTheDocument();
+    expect(dialog.queryByText("Couldn't load hosts")).toBeNull();
   });
 
   it("pasting nmap output fills title, host and services line", async () => {
@@ -228,7 +246,9 @@ describe("capture panel", () => {
         private: false,
       }),
     );
-    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h1", expect.arrayContaining([expect.objectContaining({ port: 3003 })]));
+    expect(m.extractionFile.mock.calls[0]![2].scans).toEqual([
+      expect.objectContaining({ hostId: "h1", ports: expect.arrayContaining([expect.objectContaining({ port: 3003 })]) }),
+    ]);
     expect(card).toHaveFocus();
     // The draft is gone.
     await openCapture(user);
@@ -377,11 +397,10 @@ describe("capture panel", () => {
       order.push("log");
       throw new Error("never mind");
     });
-    m.servicesUpsertScan.mockImplementation(async () => {
-      order.push("services");
-      return [];
+    m.extractionFile.mockImplementation(async () => {
+      order.push("file");
+      return filed();
     });
-    m.hostUpdate.mockImplementation(async (hid, input) => host({ id: hid, name: input.name }));
     mount();
     await ready();
     const dialog = await openCapture(user);
@@ -394,10 +413,12 @@ describe("capture panel", () => {
     await user.keyboard("{Enter}");
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(m.hostCreate).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(["host", "log", "services"]);
+    expect(order).toEqual(["host", "log", "file"]);
     expect(m.logCreate).toHaveBeenLastCalledWith("e1", expect.objectContaining({ hostIds: ["h9"] }));
-    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h9", expect.arrayContaining([expect.objectContaining({ port: 80 })]));
-    expect(m.hostUpdate).toHaveBeenCalledWith("h9", { name: "10.10.10.9", ip: "10.10.10.9", os: "linux", access: "none" });
+    const proofs = m.extractionFile.mock.calls[0]![2];
+    expect(proofs.scans).toEqual([
+      { hostId: "h9", ports: expect.arrayContaining([expect.objectContaining({ port: 80 })]), os: "linux" },
+    ]);
   });
 
   it("Kali's two-line prompt pastes as a command and Enter saves it run on Kali", async () => {
@@ -444,8 +465,8 @@ describe("capture panel", () => {
     expect(await screen.findByLabelText("Password")).toBeInTheDocument();
   });
 
-  it("a locked vault after the entry saved (services step) also moves to unlock (I4)", async () => {
-    m.servicesUpsertScan.mockRejectedValue(new RavenError("locked", "vault is locked"));
+  it("a locked vault after the entry saved (filing step) also moves to unlock (I4)", async () => {
+    m.extractionFile.mockRejectedValue(new RavenError("locked", "vault is locked"));
     const user = userEvent.setup();
     mount();
     await ready();

@@ -81,6 +81,28 @@ describe("targetCredentials: direct logins", () => {
     expect(tied(data([out("ssh bob@10.0.0.5", "Welcome to Ubuntu\nbob@ms01:~$")]))).toEqual([["bob", "used on ms01"]]);
   });
 
+  describe("a spray over several hosts", () => {
+    const spray = (hostIds: string[], output: string) =>
+      ({ id: "e", kind: "command", title: "e", hostIds, private: false, content: { kind: "command", blocks: [{ command: "nxc smb 10.0.0.5 10.0.0.10 -u bob -p 'Spring2026!'", output }] } }) as unknown as LogEntry;
+    const both = (d: ReportData) => targetCredentials(d, [H, "h2"]).credentials.map((c) => [c.username, c.ties.join("; ")]);
+
+    it("ties each host whose line says [+], never one whose line says it failed", () => {
+      const output = "SMB  10.0.0.5   445  MS01  [-] corp.local\\bob:Spring2026! STATUS_LOGON_FAILURE\nSMB  10.0.0.10  445  DC01  [+] corp.local\\bob:Spring2026!";
+      expect(both(data([spray([H, "h2"], output)]))).toEqual([["bob", "used on dc01"]]);
+      // Named by its name, not its IP, and on both.
+      const named = "SMB  ms01  445  [+] corp.local\\bob:Spring2026!\nSMB  dc01  445  [+] corp.local\\bob:Spring2026! (Pwn3d!)";
+      expect(both(data([spray([H, "h2"], named)]))).toEqual([["bob", "used on ms01; used on dc01"]]);
+    });
+
+    it("with no [+] line naming one of its hosts, ties only an entry with one host", () => {
+      const anonymous = "[+] corp.local\\bob:Spring2026!";
+      expect(both(data([spray([H, "h2"], anonymous)]))).toEqual([]);
+      expect(both(data([spray([H], anonymous)]))).toEqual([["bob", "used on ms01"]]);
+      // An IP that only starts like a host's is another host.
+      expect(both(data([spray([H, "h2"], "SMB  10.0.0.50  445  [+] corp.local\\bob:Spring2026!")]))).toEqual([]);
+    });
+  });
+
   it("never ties a login whose credential (or username) failed on that host", () => {
     const failed = (o: Record<string, unknown>) => ({ id: "a", credId: "c1", usernameId: null, hostId: H, service: "ssh", result: "failed", at: 5, ...o });
     const creds = [cred("c1", "bob", "Spring2026!"), cred("c2", "alice", "Other1!"), cred("c3", "svc", "Spring2026!")];
@@ -94,5 +116,29 @@ describe("targetCredentials: direct logins", () => {
     expect(tied(d(failed({ credId: "c2", usernameId: "u1" }), bob))).toEqual([["bob", "used on ms01"]]);
     // A failure on another host says nothing about this one.
     expect(tied(d(failed({ hostId: "h2" })))).toEqual([["bob", "used on ms01"]]);
+  });
+});
+
+describe("targetCredentials: password reuse", () => {
+  // zoe's local password, stored for dc01, found again in a dump on ms01: an attempt marked as password reuse.
+  const zoe = cred("cj", "zoe", "Winter2024!", { localHostId: "h2" });
+  const attempt = (o: Record<string, unknown>) => ({ id: "a", credId: "cj", usernameId: null, hostId: H, port: null, result: "valid", authMode: "local", at: 5, ...o });
+  const reuse = attempt({ service: "other", detail: "password reuse" });
+  const withAttempts = (credAttempts: unknown[]) => ({ ...data([], [zoe]), credAttempts }) as unknown as ReportData;
+
+  it("words a reuse attempt as reuse, naming the host the credential is stored for, never as works on OTHER", () => {
+    expect(tied(withAttempts([reuse]))).toEqual([["zoe", "reused on ms01 (same password as dc01)"]]);
+    // With the stored host in the target too, it is local there and reused here.
+    const both = targetCredentials(withAttempts([reuse]), [H, "h2"]).credentials.map((c) => c.ties);
+    expect(both).toEqual([["local to dc01", "reused on ms01 (same password as dc01)"]]);
+  });
+
+  it("words reuse without the stored host when it was deleted", () => {
+    const orphan = { ...withAttempts([reuse]), credentials: [{ ...zoe, localHostId: null }] } as unknown as ReportData;
+    expect(tied(orphan)).toEqual([["zoe", "reused on ms01"]]);
+  });
+
+  it("still words a real result on another service as before", () => {
+    expect(tied(withAttempts([attempt({ service: "other", detail: null })]))).toEqual([["zoe", "works on OTHER, ms01"]]);
   });
 });

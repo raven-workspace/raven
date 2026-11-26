@@ -18,7 +18,7 @@ import { useHops } from "../network/queries";
 import { useEngagementServices } from "../services/queries";
 import { useCleanup } from "../cleanup/queries";
 import { useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../credentials/queries";
-import { findingFilesKey, useFailedAttempts, useFindings } from "../findings/queries";
+import { findingFilesQuery, useFailedAttempts, useFindings } from "../findings/queries";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { useNotes } from "../notes/queries";
@@ -70,7 +70,7 @@ export function useReportData(eid: string): { data: ReportData | undefined; isLo
   const credentials = useCredentials(eid);
   const credAttempts = useCredAttempts(eid);
   const files = useQueries({
-    queries: (findings.data ?? []).map((f) => ({ queryKey: findingFilesKey(f.id), queryFn: () => api.findingFilesList(f.id) })),
+    queries: (findings.data ?? []).map((f) => findingFilesQuery(f.id)),
     combine: combineFiles,
   });
   const findingFiles = files.data;
@@ -255,7 +255,8 @@ export async function deletePage(qc: QueryClient, section: ReportSection): Promi
   return kept;
 }
 
-/** Undo of `deletePage`: the kept page comes back under its key, title, place and text. */
+/** Undo of `deletePage`: the kept page comes back under its key, title and text, at its old place in the current
+ *  order (later sections shift down; past the end, it goes last). */
 export async function restorePage(qc: QueryClient, kept: ReportSection): Promise<ReportSection> {
   const back = await api.reportSectionUpsert(kept.reportId, {
     kind: "page",
@@ -265,8 +266,14 @@ export async function restorePage(qc: QueryClient, kept: ReportSection): Promise
     meta: kept.meta,
     draftBuiltAt: kept.draftBuiltAt,
   });
-  qc.setQueryData<ReportSection[]>(reportSectionsKey(kept.reportId), (list = []) => [...list.filter((s) => s.id !== back.id), back]);
-  return back;
+  const key = reportSectionsKey(kept.reportId);
+  const others = (qc.getQueryData<ReportSection[]>(key) ?? []).filter((s) => s.id !== back.id).sort((a, b) => a.position - b.position);
+  qc.setQueryData<ReportSection[]>(key, [...others, back]);
+  // Its old place in the current order: before every section at or after its old position (a page added since may
+  // hold that position now). Stored as a reorder, so every position stays unique.
+  const at = others.filter((s) => s.position < kept.position).length;
+  reorderSections(qc, kept.reportId, [...others.slice(0, at).map((s) => s.id), back.id, ...others.slice(at).map((s) => s.id)]);
+  return { ...back, position: at };
 }
 
 /** A stored page built with the current draft layout (6: a plain document); any other (older, or none yet) is rebuilt

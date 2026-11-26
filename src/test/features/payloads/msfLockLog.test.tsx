@@ -17,12 +17,8 @@ import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 
-// The real copy-and-log path (logCommand, saveCapture, afterEntrySaved, lockMetasploit) over the fake API.
+// The real copy-and-log path (logCommand, saveCapture, the entry change with its checklist sync and Metasploit lock) over the fake API.
 vi.mock("../../../lib/api");
-vi.mock("../../../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../../../features/checklist/ticks")>()),
-  resyncBoards: vi.fn().mockResolvedValue(undefined),
-}));
 const m = vi.mocked(api, true);
 
 // Synthetic fixtures only (RFC 5737 addresses, invented names).
@@ -120,7 +116,7 @@ async function openOn(hostId: string, fit: string) {
 describe("Meterpreter copy and log sets the exam's Metasploit lock", () => {
   it("⌘↵ on a Meterpreter payload locks Metasploit to the target (not Kali); another host then shows the amber lock", async () => {
     const first = await openOn("h1", MET);
-    expect(first.d.getByText("Using Meterpreter here makes this your Metasploit machine")).not.toHaveClass("payload-block__lock--breach");
+    expect(first.d.getByText("Using Metasploit here makes this your Metasploit machine")).not.toHaveClass("payload-block__lock--breach");
     await first.user.keyboard("{Meta>}{Enter}{/Meta}");
     await vi.waitFor(() => expect(m.engagementSetMsfHost).toHaveBeenCalledWith("e1", "h1"));
     expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ ranOn: "Kali (VM)", hostIds: ["h1"], payloadId: "msf-win-x64-met-staged" }));

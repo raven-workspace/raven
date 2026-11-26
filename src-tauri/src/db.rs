@@ -48,6 +48,41 @@ pub(crate) fn check_scope(conn: &Connection, engagement_id: &str, host_id: Optio
     if ok { Ok(()) } else { Err(AppError::NotFound) }
 }
 
+/// An all-or-nothing group of writes that also works inside a caller's transaction: a savepoint, which is its own
+/// transaction when there is none open. Dropped without `commit`, it rolls back to where it started.
+pub(crate) struct Atomic<'c> {
+    conn: &'c Connection,
+    done: bool,
+}
+
+pub(crate) fn atomic(conn: &Connection) -> AppResult<Atomic<'_>> {
+    conn.execute_batch("SAVEPOINT raven_atomic")?;
+    Ok(Atomic { conn, done: false })
+}
+
+impl Atomic<'_> {
+    pub(crate) fn commit(mut self) -> AppResult<()> {
+        self.conn.execute_batch("RELEASE raven_atomic")?;
+        self.done = true;
+        Ok(())
+    }
+}
+
+impl std::ops::Deref for Atomic<'_> {
+    type Target = Connection;
+    fn deref(&self) -> &Connection {
+        self.conn
+    }
+}
+
+impl Drop for Atomic<'_> {
+    fn drop(&mut self) {
+        if !self.done {
+            let _ = self.conn.execute_batch("ROLLBACK TO raven_atomic; RELEASE raven_atomic");
+        }
+    }
+}
+
 /// Deletes row `id` of `table`; `NotFound` if there was none.
 pub(crate) fn delete_by_id(conn: &Connection, table: &'static str, id: &str) -> AppResult<()> {
     if conn.execute(&format!("DELETE FROM {table} WHERE id = ?1"), [id])? == 0 {

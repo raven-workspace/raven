@@ -1,15 +1,11 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { fillCommand } from "../../../engines/checklist/index";
 import { credLabel } from "../../../engines/credentials/labels";
-import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../../engines/library/store";
-import { copyPlain, copySecret } from "../../../lib/clipboard";
+import { useLibrary, useToolkit } from "../../../engines/library/store";
 import { reportError } from "../../../lib/lockSignal";
 import { Dialog, HintLine, type Hint } from "../../../ui/index";
-import { logCommand } from "../../capture/logCommand";
-import { copyKey, useCopyGuard } from "../../arsenal/copyGuard";
-import { shortHostName } from "../../../lib/hostName";
+import { copyKey } from "../../commands/copyCommand";
+import { copyTo, useCommandCopy } from "../../commands/useCommandCopy";
 import { useArsenalStore } from "../../arsenal/useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "../../arsenal/useFillScope";
 import { CredChip, isCredPickKey } from "../../arsenal/CredChip/CredChip";
@@ -21,7 +17,7 @@ import { useCredPickStore } from "../../checklist/credPick";
 import { ResultList } from "../../arsenal/ResultList/ResultList";
 import type { ResultGroup, ResultRow } from "../../arsenal/ResultList/ResultList";
 import { SearchBar } from "../../arsenal/SearchBar/SearchBar";
-import { useFillBase } from "../fillData";
+import { useFillBase } from "../../commands/fillData";
 import { GENERATORS } from "../generators";
 import type { GeneratorId } from "../../../engines/payloads/types";
 import { usePayloadsStore } from "../../payloads/usePayloadsStore";
@@ -45,14 +41,14 @@ const paletteRow = (result: PaletteResult): PaletteRow => ({
 });
 
 function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: (opts?: { handOff?: boolean }) => void }) {
-  const qc = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
   const { notes } = useManualNotes();
-  const libraryVersion = useLibraryVersion();
+  const library = useLibrary();
+  const { toolkit } = useToolkit();
   // The chip picks another host for this search only; typed values never carry over to it.
   const [hostId, setHostId] = useState(openedHostId);
-  const { d, host, cred, credOwnerId, makeInput, examReady } = useFillBase(engagementId, hostId);
+  const { d, host, cred, credOwnerId, makeInput, exam } = useFillBase(engagementId, hostId);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -84,13 +80,10 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const found = useMemo(
     () =>
       searchPalette(query, {
-        library: getLibrary(), cards: getCards(), generators: GENERATORS, engagementItems: items, notes,
-        ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
-        examPending: !examReady,
+        library: library.commands, cards: library.cards, generators: GENERATORS, engagementItems: items, notes,
+        exam,
       }),
-    // getLibrary()/getCards() change only with the library version.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query, items, notes, host, d.engagement, examReady, libraryVersion],
+    [query, items, notes, exam, library],
   );
   // Lookup rows first (the answer, its commands ready to fill), then Arsenal categories (the drawer's rows), then one
   // group for the engagement, then the Manual. Each list stops at MAX_RESULTS; Lookup rows never count against the Arsenal's.
@@ -112,8 +105,8 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const current: PaletteResult | undefined = results[index];
 
   const filled = useMemo(
-    () => (current?.type === "command" ? fillPreview(current.command, current.msfMarker, makeInput, overrides, toolPrefill(query, host?.os ?? null)) : null),
-    [current, host, makeInput, query, overrides],
+    () => (current?.type === "command" ? fillPreview(current.command, current.msfMarker, makeInput, overrides, toolPrefill(query, host?.os ?? null, toolkit)) : null),
+    [current, host, makeInput, query, overrides, toolkit],
   );
 
   useEffect(() => searchRef.current?.focus(), []);
@@ -123,20 +116,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
   const focusToken = useCallback((t: string) => fieldEls.current.get(t)?.focus(), []);
   const focusCred = useCallback(() => credRef.current?.focus(), []);
-  const guard = useCopyGuard({ focusToken, focusCred, hostName: host ? shortHostName(host.name) : null });
+  const guard = useCommandCopy({ to: copyTo({ d, host }), focusToken, focusCred });
   // Moving to another row ends a held-back copy: coming back to the first one holds it back again.
   const { reset: resetGuard } = guard;
   const currentKey = current ? `${current.type}-${current.id}` : "";
   useEffect(() => resetGuard(), [currentKey, resetGuard]);
-
-  /** Copies the filled command through the copy guard: null when it was held back for an unfilled token. */
-  const copy = async (): Promise<string | null> => {
-    if (!filled) return null;
-    const c = filled.cmd;
-    const text = c.copyText ?? c.text;
-    const r = await guard.attempt(c, () => (text !== c.text ? copySecret : copyPlain)(text));
-    return r === "copied" ? text : null;
-  };
 
   const run = async (log: boolean) => {
     setStatus(undefined);
@@ -167,19 +151,8 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     }
     if (!filled || current?.type !== "command") return;
     try {
-      const text = await copy();
       // Held back for an unfilled token: the field has focus and the hint says why. Nothing is copied, logged or closed.
-      if (text === null) return;
-      if (log && host && d.engagement) {
-        const c = current.command;
-        // The real values, as typed at the shell (not shell-escaped, not masked).
-        const typed = fillCommand(c.template, filled.input, { commandOs: c.os }).text;
-        await logCommand(qc, {
-          engagementId, host, hosts: d.hosts, command: typed,
-          title: c.title,
-          ranOn: c.runFrom === "attacker" ? (d.settings?.machines[0] ?? "") : host.name,
-        });
-      }
+      if ((await guard.copy(filled.cmd, { log })) === "guarded") return;
       onClose();
     } catch (e) {
       reportError(e);
@@ -187,7 +160,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     }
   };
 
-  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
+  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit };
 
   // Tab goes to the first field still empty. With every value filled there is nothing to jump to: Tab moves on as usual,
   // to the host picker. Only tokens that have a field count (a credential's USER and PASS have none once it is picked).
@@ -290,7 +263,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         {engagementId && (
           <div className="palette__chips">
             <HostChip
-              ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} align="start" className="palette__chip"
+              ref={pickerRef} hosts={d.hosts} loadError={d.hostsError} value={host?.id ?? null} onChange={pickHost} align="start" className="palette__chip"
               {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})}
             />
             <CredChip

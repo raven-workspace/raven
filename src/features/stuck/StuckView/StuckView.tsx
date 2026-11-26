@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { PIVOT_GOALS, type FillInput } from "../../../engines/checklist/index";
+import { useLibrary } from "../../../engines/library/store";
 import { engagementStuck, hostStuck, type StuckLine } from "../../../engines/stuck/index";
 import { cx } from "../../../lib/cx";
 import { isDialogOpen } from "../../../lib/keys";
@@ -9,7 +10,8 @@ import { shortHostName } from "../../../lib/hostName";
 import { XIcon } from "@phosphor-icons/react";
 import { BELOW_TITLE_BAR, Disclosure, HintLine, IconButton, LoadingState, labelClass, queryState, useDrawerPresence, type Hint } from "../../../ui/index";
 import { useCredFill } from "../../checklist/credPick";
-import { CommandList, type FilledCommand } from "../../checklist/CommandList/CommandList";
+import { CommandList } from "../../checklist/CommandList/CommandList";
+import { commandText, type FilledCommand } from "../../commands/filledCommand";
 import { goalCommands } from "../../checklist/goalCommands";
 import { useChecklist } from "../../checklist/queries";
 import { useTunnels } from "../../network/queries";
@@ -41,9 +43,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 const nudgeCommands = (prefix: string, nudges: { label: string; command: string }[]): FilledCommand[] =>
-  nudges.map((n, i) => ({
-    id: `${prefix}:${i}`, title: n.label, text: n.command, copyText: n.command, unresolved: [], msfMarker: false,
-  }));
+  nudges.map((n, i) => commandText({ id: `${prefix}:${i}`, title: n.label, text: n.command }));
 
 /**
  * Stuck view (`H`): a slide-over on the host view with what to try next, all on one screen. Open or closed is the
@@ -100,6 +100,7 @@ export function StuckView({
 function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }: { root: React.RefObject<HTMLElement | null>; engagementId: string; host: Host; onClose: () => void; onOpenGoal: (goalId: string) => void; skipRestoreRef: React.RefObject<boolean> }) {
   const hostsQ = useHosts(engagementId);
   const engagement = useEngagement(engagementId);
+  const library = useLibrary();
   const settings = useSettings();
   const log = useLog(engagementId);
   const { byOwner, query: checklistQ } = useChecklist(engagementId);
@@ -127,7 +128,8 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
 
   const hosts = hostsQ.data;
   const eng = engagement.data;
-  const title = `Stuck on ${host.name}`;
+  // The short host name, as in the command lists below; the heading's tooltip keeps the full one.
+  const title = `Stuck on ${shortHostName(host.name)}`;
   // Every query the body reads: a failed checklist would otherwise look like "nothing skipped", and failed tunnels
   // would quietly change the filled commands.
   const queries = [hostsQ, engagement, settings, servicesQ, log, note, credsQ, checklistQ, tunnelsQ];
@@ -141,13 +143,14 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
     const s = hostStuck({
       host, engagement: eng, hosts, servicesByHost, state: byOwner.get(host.id) ?? {},
       entries: log.data ?? [], hostNote: pending?.body ?? note.data?.body ?? "",
+      library: library.commands,
     });
     const input: FillInput = {
       host, engagement: eng, hosts, servicesByHost, tunnels,
       ...settingsFill(settings.data), cred: creds.cred,
     };
     const filled = s.commands
-      .map((c) => ({ ...c, commands: goalCommands(c.goalId, input, eng).commands }))
+      .map((c) => ({ ...c, commands: goalCommands(c.goalId, input, eng, library.commands).commands }))
       .filter((c) => c.commands.length > 0);
     const after = s.phase === "after-foothold";
     const empty =
@@ -243,7 +246,7 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
       className={cx("stuck-view", BELOW_TITLE_BAR)}
     >
       <header className="stuck-view__header">
-        <h2 className="stuck-view__title" title={title}>{title}</h2>
+        <h2 className="stuck-view__title" title={`Stuck on ${host.name}`}>{title}</h2>
         <IconButton icon={XIcon} label="Close" shortcut="Esc" onClick={onClose} />
       </header>
       <div className="stuck-view__body">{content}</div>
@@ -267,6 +270,7 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   const [open, setOpen] = useState(false);
   const hostsQ = useHosts(engagementId);
   const engagement = useEngagement(engagementId);
+  const library = useLibrary();
   const { byOwner, query: checklistQ } = useChecklist(engagementId);
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
   const { tunnels, query: tunnelsQ } = useTunnels(engagementId);
@@ -288,9 +292,9 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   const lines = useMemo(
     () =>
       loaded && hosts && eng && credentials && attempts && usernames
-        ? engagementStuck({ engagement: eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels })
+        ? engagementStuck({ engagement: eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels, library: library.commands })
         : [],
-    [loaded, eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels],
+    [loaded, eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels, library],
   );
   if (state) return state;
   if (!loaded || !hosts || !eng || !credentials || !attempts || !usernames) return <LoadingState label="the stuck check" />;

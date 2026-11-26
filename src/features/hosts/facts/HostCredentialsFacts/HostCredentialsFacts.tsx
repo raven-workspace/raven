@@ -6,13 +6,15 @@ import {
   dedupeHashCaptures,
   foldCrackedHashes,
   hostSprayServices,
+  isReuseAttempt,
   isSprayable,
+  PASSWORD_REUSE_DETAIL,
   usernameLabel,
 } from "../../../../engines/credentials/index";
 import type { AccessGrant, AccessLevel, CredAttempt, Credential, Username } from "../../../../types/credentials";
 import type { Host } from "../../../../types/host";
 import type { Service } from "../../../../types/service";
-import { Button, Chip, Dialog, Field, Input, Select, labelClass } from "../../../../ui/index";
+import { Button, Chip, Dialog, Field, Input, Select, labelClass, queryState } from "../../../../ui/index";
 import { ConfirmDelete } from "../../../checklist/ConfirmDelete/ConfirmDelete";
 import { useEngagementServices } from "../../../services/queries";
 import { LEVEL_LABEL, LEVEL_OPTIONS } from "../../../credentials/AccessGrants/AccessGrants";
@@ -77,7 +79,7 @@ export function HostCredentialsFacts({ engagementId: eid, host, open, onToggle, 
   return (
     <FactGroup title="Host Credentials" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="fact-group__error">Couldn't load credentials: {failed.message}</p>
+        queryState([credsQ, usersQ, grantsQ, attemptsQ, servicesQ, logQ], "credentials")
       ) : !ready ? null : (
         <div className="host-creds">
           <HostResults
@@ -235,11 +237,18 @@ function HostResults({ attempts, creds, usernames, titles, onOpenEntry }: {
               <li key={a.id} className="host-creds__attempt">
                 <span className="host-creds__who" title={who}>{who}</span>
                 <ResultChip result={a.result} />
-                <span className="host-creds__where">
-                  <span className="host-creds__service">{a.service.toUpperCase()}{a.port ? ` ${a.port}` : ""}</span>
-                  {a.authMode === "local" && <span>local</span>}
-                  <span className="host-creds__detail" title={a.detail || undefined}>{a.detail}</span>
-                </span>
+                {isReuseAttempt(a) ? (
+                  // Password reuse is no service result: no service, just what it is.
+                  <span className="host-creds__where">
+                    <span className="host-creds__detail">{PASSWORD_REUSE_DETAIL}</span>
+                  </span>
+                ) : (
+                  <span className="host-creds__where">
+                    <span className="host-creds__service">{a.service.toUpperCase()}{a.port ? ` ${a.port}` : ""}</span>
+                    {a.authMode === "local" && <span>local</span>}
+                    <span className="host-creds__detail" title={a.detail || undefined}>{a.detail}</span>
+                  </span>
+                )}
                 {a.logEntryId && title !== undefined ? (
                   <EntryLink title={title} label={commandName(title)} onClick={() => onOpenEntry?.(a.logEntryId!)} className="host-creds__proof" />
                 ) : (

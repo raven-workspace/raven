@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { breaks, files } from "./conventionsRules";
+import { breaks, files, importsLibraryStore, placeholderRegexes } from "./conventionsRules";
 
 const F = "src/features/x/X.tsx";
 const U = "src/ui/X.tsx";
@@ -183,8 +183,75 @@ describe("joined-strings in engines (narrow)", () => {
     expect(breaks("joined-strings", E, "// `${a} — ${b}` was the old title\nconst a = 1;")).toBe(false);
     expect(breaks("joined-strings", E, "const w = `${n} hosts detected — primary target ports mapped.`;")).toBe(false);
   });
+  it("flags a separator string concatenated with + or passed to .join() (RAV-23)", () => {
+    expect(breaks("joined-strings", E, 'const t = a + " — " + b;')).toBe(true);
+    expect(breaks("joined-strings", E, 'const t = " · " + x;')).toBe(true);
+    expect(breaks("joined-strings", E, "const t = x + ' → ';")).toBe(true);
+    expect(breaks("joined-strings", E, 'const t = parts.join(" · ");')).toBe(true);
+    expect(breaks("joined-strings", E, 'const t = [a, b].join(" → ");')).toBe(true);
+    expect(breaks("joined-strings", E, 'const t = a + " \\u2014 " + b;')).toBe(true);
+    // Only a separator that is the argument itself: a computed one is the caller's to check.
+    expect(breaks("joined-strings", E, 'const t = parts.join(sep(" — "));')).toBe(false);
+  });
+  it("leaves a prose string with a separator alone, and the same in a comment (RAV-23)", () => {
+    expect(breaks("joined-strings", E, 'const p = "Run it — then check";')).toBe(false);
+    expect(breaks("joined-strings", E, 'const p = { text: "Run it — then check", n: 1 + 2 };')).toBe(false);
+    expect(breaks("joined-strings", E, '// a + " — " + b was the old title\nconst a = 1;')).toBe(false);
+    expect(breaks("joined-strings", E, '/* parts.join(" · ") */ const a = 1;')).toBe(false);
+    expect(breaks("joined-strings", E, 'const t = parts.join(", ");')).toBe(false);
+    // A quote inside a template literal is not a string's start.
+    expect(breaks("joined-strings", E, 'const t = `it\'s ${a}` + " done";')).toBe(false);
+  });
   it("applies no markup rules to engines", () => {
     for (const r of ["tiny-type", "feature-flex", "hand-hint", "esc-close", "unknown-color", "off-scale-spacing"] as const)
       expect(breaks(r, E, 'const c = ".a { font-size: 9px; display: flex; color: #fff; padding: 6px; }"; <div><Kbd>a</Kbd><Kbd>esc</Kbd></div>'), r).toBe(false);
+  });
+});
+
+describe("placeholder regexes (RAV-48)", () => {
+  it("finds each shape the old copies used", () => {
+    for (const line of [
+      "const PLACEHOLDER = /\\{[A-Za-z][A-Za-z0-9_]*\\}/;",
+      "const TOKEN_RE = /(?<![$%])\\{([A-Z][A-Z0-9_-]+)\\}|<([A-Z][A-Z0-9_]+)>/g;",
+      "const fileTok = /(?<![$%])\\{(FILE|SCRIPT)\\}/.exec(t);",
+      "if (/(?<![$%])\\{LPORT\\}/.test(t)) go();",
+      'const p = ["\\\\{[A-Za-z0-9_]+\\\\}"];',
+      "const w = /\\{(\\w+)\\}/g;",
+      "const a = /<([A-Z_]+)>/g;",
+    ]) expect(placeholderRegexes(line), line).toHaveLength(1);
+  });
+
+  it("leaves Windows paths, template strings and comments alone", () => {
+    for (const line of [
+      'const NOTE = "rundll32 C:\\\\path\\\\to\\\\{FILE_NAME},x";',
+      "const s = `${host}:${port}`;",
+      "// was /\\{[A-Z]+\\}/",
+      "const css = /\\.a \\{[^}]*gap/;",
+    ]) expect(placeholderRegexes(line), line).toEqual([]);
+  });
+});
+
+describe("library store imports (RAV-49)", () => {
+  const KIND = "src/engines/capture/kind.ts";
+  it("finds every way an engine can import the store", () => {
+    for (const line of [
+      "import { useLibrary } from '../library/store';",
+      'import type { LibrarySnapshot } from "../library/store";',
+      'import { currentLibrary } from "@/engines/library/store";',
+      "import { currentLibrary } from '../library/store.ts';",
+      'export { useLibrary } from "../library/store";',
+      'const s = await import("../library/store");',
+      'import "../library/store";',
+    ]) expect(importsLibraryStore(KIND, line), line).toBe(true);
+    expect(importsLibraryStore("src/engines/library/categories.ts", 'import { useLibrary } from "./store";')).toBe(true);
+  });
+
+  it("leaves other modules, other stores and comments alone", () => {
+    for (const line of [
+      "import type { LibraryCommand } from '../library/types';",
+      'import { create } from "zustand";',
+      'import { useStore } from "../capture/store";',
+      "// the library comes from '../library/store' in the caller",
+    ]) expect(importsLibraryStore(KIND, line), line).toBe(false);
   });
 });

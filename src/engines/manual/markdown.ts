@@ -1,5 +1,5 @@
 import { splitWikilinks } from "../library/wikilinks";
-import { anchorIds, FENCE, OUTLINE_HEADING, tableCaption } from "./anchors";
+import { anchorIds, closesFence, FENCE, OUTLINE_HEADING, openFence, tableCaption } from "./anchors";
 
 /**
  * A small, safe Markdown reader for Manual notes: it turns a note body into plain data that the renderer maps to React
@@ -20,7 +20,7 @@ export type Block =
   | { kind: "table"; head: Inline[][]; rows: Inline[][][] }
   | { kind: "code"; lang: string; title?: string; text: string };
 
-const DEEP_HEADING = /^(#{4,6})\s+(.*?)\s*#*\s*$/;
+export const DEEP_HEADING = /^(#{4,6})\s+(.*?)\s*#*\s*$/;
 const LIST_ITEM = /^\s*([-*+]|\d+[.)])\s+(.*)$/;
 export const TABLE_SEPARATOR = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
@@ -30,31 +30,49 @@ const QUOTE = /^\s*>\s?/;
 const startsBlock = (line: string): boolean =>
   FENCE.test(line) || OUTLINE_HEADING.test(line) || DEEP_HEADING.test(line) || tableCaption(line) !== null;
 
-/** A line of a pipe table: it starts with `|`. */
-export const isTableRow = (line: string) => line.trim().startsWith("|");
+/** An unescaped `|`: the cell delimiter. */
+const PIPE = /(^|[^\\])\|/;
 
-/** Whether a pipe table starts at `lines[i]`: a `|` row, then a separator row (`| --- |`). */
-export const isTableStart = (lines: string[], i: number) =>
-  isTableRow(lines[i]) && i + 1 < lines.length && TABLE_SEPARATOR.test(lines[i + 1]) && lines[i + 1].includes("-");
+/** A line that can be a row of a pipe table: it holds a cell delimiter (GFM: the outer pipes are optional). */
+export const isTableRow = (line: string) => line.trim() !== "" && PIPE.test(line);
+
+/**
+ * Whether a pipe table starts at `lines[i]` (GFM): a header row, then a separator row (`| --- |`, `--- | ---`) with the
+ * same number of cells. Prose with a `|` over a `---` rule, or over a separator of another width, is no table.
+ */
+export const isTableStart = (lines: string[], i: number) => {
+  const head = lines[i];
+  const sep = lines[i + 1];
+  return head !== undefined && sep !== undefined && isTableRow(head) && TABLE_SEPARATOR.test(sep) && sep.includes("-")
+    && cells(head).length === cells(sep).length;
+};
+
+/**
+ * The index after the table that starts at `lines[i]` (`isTableStart`): its body rows run while each holds a cell
+ * delimiter and starts no other block (a fence, a heading, a table caption).
+ */
+export function tableEnd(lines: string[], i: number): number {
+  let j = i + 2;
+  while (j < lines.length && isTableRow(lines[j]) && !startsBlock(lines[j])) j++;
+  return j;
+}
 
 /**
  * The fenced code block opening at `lines[i]`, or null when that line is no fence: the info string after the fence,
- * the body, and the index after the closing fence. Same rule as the outline: a fence closes on the next fence line of
- * the same character (or the end of the text). CommonMark: the opening fence's indent (a fence inside a list item)
- * comes off each body line, so a copied command never starts with a space.
+ * the body, and the index after the closing fence. Same rule as the outline (`closesFence`): a fence closes on a
+ * fence of the same character at least as long, with nothing after it (or at the end of the text). CommonMark: the
+ * opening fence's indent (a fence inside a list item) comes off each body line, so a copied command never starts with
+ * a space.
  */
 export function readFence(lines: string[], i: number): { info: string; text: string; next: number } | null {
   const line = lines[i];
-  const fence = FENCE.exec(line);
+  const fence = openFence(line);
   if (!fence) return null;
-  const ch = fence[1][0];
   const indent = /^[ \t]*/.exec(line)![0].length;
   const dedent = (l: string) => l.replace(new RegExp(`^[ \\t]{0,${indent}}`), "");
   const text: string[] = [];
   let j = i + 1;
-  while (j < lines.length) {
-    const f = FENCE.exec(lines[j]);
-    if (f && f[1][0] === ch) break;
+  while (j < lines.length && !closesFence(lines[j], fence)) {
     text.push(dedent(lines[j]));
     j++;
   }
@@ -141,13 +159,10 @@ export function parseMarkdown(body: string, opts: MarkdownOptions = {}): Block[]
       continue;
     }
     if (isTableStart(lines, i)) {
+      const end = tableEnd(lines, i);
       const head = cells(line).map(parseInline);
-      const rows: Inline[][][] = [];
-      i += 2;
-      while (i < lines.length && isTableRow(lines[i]) && !startsBlock(lines[i])) {
-        rows.push(cells(lines[i]).map(parseInline));
-        i++;
-      }
+      const rows = lines.slice(i + 2, end).map((l) => cells(l).map(parseInline));
+      i = end;
       out.push({ kind: "table", head, rows });
       continue;
     }
@@ -170,7 +185,9 @@ export function parseMarkdown(body: string, opts: MarkdownOptions = {}): Block[]
     const text: string[] = [];
     while (i < lines.length) {
       const l = lines[i];
-      if (l.trim() === "" || startsBlock(l) || RULE.test(l) || (text.length > 0 && (LIST_ITEM.test(l) || isTableRow(l)))) break;
+      // A line that starts with `|` breaks the paragraph, as it always has, as does a table without outer pipes.
+      const table = l.trim().startsWith("|") || isTableStart(lines, i);
+      if (l.trim() === "" || startsBlock(l) || RULE.test(l) || (text.length > 0 && (LIST_ITEM.test(l) || table))) break;
       text.push(l.replace(QUOTE, "").replace(/^\[![\w-]+\][+-]?\s*/, "").trim());
       i++;
     }
@@ -178,6 +195,28 @@ export function parseMarkdown(body: string, opts: MarkdownOptions = {}): Block[]
     if (joined !== "") out.push({ kind: "paragraph", inline: parseInline(joined) });
   }
   return out;
+}
+
+/**
+ * One source line outside a fence as the note renders it: its inline runs (a table row's cells, when `row` says the
+ * line is one; a caption's bold name and its trail), each parsed as `parseMarkdown` parses it, and the separator they
+ * read with. Heading, list, quote and callout markers come off. A blank line or a rule renders nothing: no runs.
+ */
+export function lineRuns(line: string, row = false): { runs: Inline[][]; sep: string } {
+  const none = { runs: [], sep: "" };
+  if (line.trim() === "" || RULE.test(line)) return none;
+  if (row) return { runs: cells(line).filter(Boolean).map((c) => parseInline(c)), sep: "  " };
+  const h = OUTLINE_HEADING.exec(line) ?? DEEP_HEADING.exec(line);
+  if (h) return { runs: [parseInline(h[2])], sep: "" };
+  const caption = tableCaption(line);
+  if (caption) {
+    const trimmed = line.trim();
+    const head = parseInline(trimmed.slice(0, trimmed.length - caption.trail.length).trim());
+    return { runs: caption.trail ? [head, parseInline(caption.trail)] : [head], sep: " " };
+  }
+  const item = LIST_ITEM.exec(line);
+  const text = item ? item[2] : line.replace(QUOTE, "").replace(/^\[![\w-]+\][+-]?\s*/, "").trim();
+  return text === "" ? none : { runs: [parseInline(text)], sep: "" };
 }
 
 const isSpace = (c: string) => /\s/.test(c);
@@ -227,10 +266,18 @@ function atomAt(s: string, i: number, opts: MarkdownOptions = {}): Atom | null {
   return null;
 }
 
-/** A run of `*` or `_` waiting to be matched: `n` markers left of `orig`. */
-type Delim = { delim: "*" | "_"; n: number; orig: number; open: boolean; close: boolean };
+/**
+ * A run of `*` or `_` waiting to be matched: `n` markers left of `orig`. `at` is its place among the line's runs, in
+ * order; `node` is where it sits in the line, and `prev`/`next` link the runs still on the delimiter stack.
+ */
+type Delim = {
+  delim: "*" | "_"; n: number; orig: number; open: boolean; close: boolean; at: number;
+  node?: Node; prev?: Delim | null; next?: Delim | null;
+};
 type Item = Inline | Delim;
 const isDelim = (x: Item): x is Delim => "delim" in x;
+/** One item of a line, linked to its neighbours: matching wraps a span in place, never splicing an array. */
+type Node = { item: Item; prev: Node | null; next: Node | null };
 
 /** Items to inline runs: unmatched markers become text, and neighbouring text joins. */
 function settle(items: Item[]): Inline[] {
@@ -262,6 +309,7 @@ export function parseInlineWith(s: string, opts: MarkdownOptions): Inline[] {
     buf = "";
   };
   let prev = " ";
+  let runs = 0;
   let i = 0;
   while (i < s.length) {
     const c = s[i];
@@ -274,7 +322,7 @@ export function parseInlineWith(s: string, opts: MarkdownOptions): Inline[] {
       const right = !isSpace(before) && (!isPunct(before) || isSpace(after) || isPunct(after));
       flush();
       items.push({
-        delim: c, n, orig: n,
+        delim: c, n, orig: n, at: runs++,
         open: c === "*" ? left : left && (!right || isPunct(before)),
         close: c === "*" ? right : right && (!left || isPunct(after)),
       });
@@ -299,40 +347,87 @@ export function parseInlineWith(s: string, opts: MarkdownOptions): Inline[] {
   }
   flush();
 
-  // Match each closer with the nearest opener of the same marker before it (CommonMark "process emphasis").
-  let c = 0;
-  while (c < items.length) {
-    const closer = items[c];
-    if (!isDelim(closer) || !closer.close) {
-      c++;
+  return emphasis(items);
+}
+
+/** The rule of 3: a marker that can both open and close does not pair across a multiple-of-3 total. */
+const pairs = (opener: Delim, closer: Delim) =>
+  !((opener.close || closer.open) && (opener.orig + closer.orig) % 3 === 0 && !(opener.orig % 3 === 0 && closer.orig % 3 === 0));
+
+/**
+ * CommonMark's "process emphasis": each closer pairs with the nearest opener of the same marker before it. Linear in
+ * the line: the items are a linked list (a match wraps its span in place), the delimiter stack is linked too, and
+ * `openers_bottom` remembers, per kind of closer, how far down a search already failed, so no run is searched twice.
+ */
+function emphasis(items: Item[]): Inline[] {
+  const head: Node = { item: { text: "" }, prev: null, next: null };
+  let last = head;
+  let bottomD: Delim | null = null;
+  let topD: Delim | null = null;
+  for (const item of items) {
+    const node: Node = { item, prev: last, next: null };
+    last.next = node;
+    last = node;
+    if (isDelim(item)) {
+      Object.assign(item, { node, prev: topD, next: null });
+      if (topD) topD.next = item;
+      else bottomD = item;
+      topD = item;
+    }
+  }
+  const unstack = (d: Delim) => {
+    if (d.prev) d.prev.next = d.next ?? null;
+    else bottomD = d.next ?? null;
+    if (d.next) d.next.prev = d.prev ?? null;
+  };
+  const unlink = (x: Node) => {
+    x.prev!.next = x.next;
+    if (x.next) x.next.prev = x.prev;
+  };
+
+  // openers_bottom: per marker, "can open" and length mod 3, the `at` at or below which no opener can pair.
+  const floor = new Map<string, number>();
+  let closer: Delim | null = bottomD;
+  while (closer) {
+    if (!closer.close) {
+      closer = closer.next ?? null;
       continue;
     }
-    let o = c - 1;
-    for (; o >= 0; o--) {
-      const op = items[o];
-      if (!isDelim(op) || op.delim !== closer.delim || !op.open) continue;
-      // The rule of 3: a marker that can both open and close does not pair across a multiple-of-3 total.
-      const both = op.close || closer.open;
-      if (both && (op.orig + closer.orig) % 3 === 0 && !(op.orig % 3 === 0 && closer.orig % 3 === 0)) continue;
-      break;
-    }
-    if (o < 0) {
-      if (!closer.open) closer.close = false;
-      c++;
+    const kind = `${closer.delim}${closer.open ? 1 : 0}${closer.orig % 3}`;
+    const bottom = floor.get(kind) ?? -1;
+    let opener = closer.prev ?? null;
+    while (opener && opener.at > bottom && !(opener.delim === closer.delim && opener.open && pairs(opener, closer))) opener = opener.prev ?? null;
+    if (!opener || opener.at <= bottom) {
+      floor.set(kind, closer.prev?.at ?? -1);
+      const next: Delim | null = closer.next ?? null;
+      // A closer that cannot open is done: it stays as text.
+      if (!closer.open) unstack(closer);
+      closer = next;
       continue;
     }
-    const opener = items[o] as Delim;
     const use = opener.n >= 2 && closer.n >= 2 ? 2 : 1;
-    const inner = settle(items.slice(o + 1, c));
-    items.splice(o + 1, c - o - 1, use === 2 ? { strong: inner } : { em: inner });
-    c = o + 2;
+    const inner: Item[] = [];
+    for (let x = opener.node!.next; x && x !== closer.node; x = x.next) inner.push(x.item);
+    const wrapped: Node = { item: use === 2 ? { strong: settle(inner) } : { em: settle(inner) }, prev: opener.node!, next: closer.node! };
+    opener.node!.next = wrapped;
+    closer.node!.prev = wrapped;
+    // Runs between the pair are text now.
+    opener.next = closer;
+    closer.prev = opener;
     opener.n -= use;
     closer.n -= use;
     if (opener.n === 0) {
-      items.splice(o, 1);
-      c--;
+      unlink(opener.node!);
+      unstack(opener);
     }
-    if (closer.n === 0) items.splice(c, 1);
+    if (closer.n === 0) {
+      const next: Delim | null = closer.next ?? null;
+      unlink(closer.node!);
+      unstack(closer);
+      closer = next;
+    }
   }
-  return settle(items);
+  const out: Item[] = [];
+  for (let x = head.next; x; x = x.next) out.push(x.item);
+  return settle(out);
 }

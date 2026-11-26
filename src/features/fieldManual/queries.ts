@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS, LATERAL_MOVEMENT_GOALS } from "../../engines/checklist";
 import { computeDrift } from "../../engines/fieldManual/drift";
 import { applyOverlay, mergeImport, normalizeSnapshot, type FieldManualSnapshot } from "../../engines/fieldManual/merge";
@@ -21,6 +21,11 @@ export function useFieldManual(enabled = true) {
     queryKey: FIELD_MANUAL_KEY,
     queryFn: async () => (await api.fieldManualLoad()) ?? null,
   });
+}
+
+/** Puts a snapshot loaded elsewhere (the vault gate's unlock) in the cache. */
+export function cacheFieldManual(qc: QueryClient, s: FieldManualSnapshot): void {
+  qc.setQueryData(FIELD_MANUAL_KEY, s);
 }
 
 /** Applies a stored snapshot to the runtime library. */
@@ -60,12 +65,13 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
   }
   const { commands, overlay, added, report } = mergeImport(BUILTIN_LIBRARY, cards, previous ?? undefined);
   const goals = [...HOST_GOALS, ...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
-  report.drift = computeDrift(goals, playbook, commands, cards, toolkit);
   // Cards came through but no note did (an iCloud vault half downloaded): keep the last import's notes, and say so.
   const kept = notes.length === 0 && (previous?.notes?.length ?? 0) > 0 ? previous!.notes! : null;
   if (kept) {
     report.warnings = [`No notes found; kept the last import's ${kept.length} notes. Check iCloud has downloaded the vault.`];
   }
+  // The notes the Manual will show: their commands count toward the drift too.
+  report.drift = computeDrift(goals, playbook, commands, cards, toolkit, kept ?? notes);
   const snapshot: FieldManualSnapshot = {
     importedAt: Date.now(),
     cards: cards.map((c) => c.meta),

@@ -1,0 +1,16 @@
+{
+  "name": "A new derived column moves the card and ends a hand placement, unless the card was placed by hand before any was derived",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Board lab", "kind": "lab" }], "as": "eng" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "web07", "ip": "192.0.2.70" }], "as": "h" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "dc01", "ip": "192.0.2.71" }], "as": "old" },
+    { "do": "hostSyncBoard", "args": ["$h", "initial-foothold"], "expect": { "boardColumn": "initial-foothold", "boardDerived": "initial-foothold", "boardManual": false } },
+    { "do": "hostMove", "args": ["$h", "reporting"], "expect": { "boardColumn": "reporting", "boardManual": true } },
+    { "do": "hostSyncBoard", "args": ["$h", "initial-foothold"], "expect": { "boardColumn": "reporting", "boardDerived": "initial-foothold", "boardManual": true } },
+    { "do": "hostSyncBoard", "args": ["$h", "post-exploitation"], "expect": { "boardColumn": "post-exploitation", "boardDerived": "post-exploitation", "boardManual": false } },
+    { "do": "hostMove", "args": ["$old", "reporting"] },
+    { "do": "hostSyncBoard", "args": ["$old", "privilege-escalation"], "expect": { "boardColumn": "reporting", "boardDerived": "privilege-escalation", "boardManual": true } },
+    { "do": "hostSyncBoard", "args": ["$h", "nowhere"], "error": { "code": "validation", "field": "derived" } },
+    { "do": "hostSyncBoard", "args": ["no-such-host", "reporting"], "error": { "code": "not_found" } }
+  ]
+}

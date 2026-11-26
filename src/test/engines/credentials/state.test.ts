@@ -99,6 +99,13 @@ describe("accessFlags", () => {
     expect(accessFlags({ hosts: [ms02.host], attempts: [A({ result: "failed" })], credentials: [C()] })).toEqual([]);
   });
 
+  it("marks password reuse, so it is never read as a result on its stand-in service", () => {
+    const reuse = accessFlags({ hosts: [ms02.host], attempts: [A({ service: "other", authMode: "local", detail: "password reuse" })], credentials: [C()] });
+    expect(reuse.map((f) => [f.service, f.reuse])).toEqual([["other", true]]);
+    const other = accessFlags({ hosts: [ms02.host], attempts: [A({ service: "other" })], credentials: [C()] });
+    expect(other.map((f) => [f.service, f.reuse])).toEqual([["other", undefined]]);
+  });
+
   it("keeps the strongest result per host, subject and service, sorted by time", () => {
     const flags = accessFlags({
       hosts: [ms02.host],

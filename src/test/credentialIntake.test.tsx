@@ -11,8 +11,9 @@ import { makeQueryClient } from "../lib/queryClient";
 import type { AccessGrant, CredAttempt, CredAttemptInput, Credential, CredentialInput, TriedPair, Username } from "../types/credentials";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
-import type { LogEntry, LogEntryInput } from "../types/log";
+import type { ExtractionProofs, LogEntry, LogEntryInput } from "../types/log";
 import type { Service } from "../types/service";
+import { filed } from "./features/capture/filed";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
@@ -38,7 +39,7 @@ const cred = (o: Partial<Credential> & { id: string }): Credential => ({
   fromSecretId: null, createdAt: 1, updatedAt: 1, ...o,
 });
 const uname = (o: Partial<Username> & { id: string; username: string }): Username => ({
-  engagementId: "e1", domain: null, sourceHostId: null, source: null, createdAt: 1, ...o,
+  engagementId: "e1", domain: null, sourceHostId: null, source: null, createdAt: 1, scope: "unknown", localHostId: null, ...o,
 });
 
 const BOB = cred({ id: "cBob", username: "bob", domain: "corp.local", secret: "Pass1" });
@@ -128,7 +129,7 @@ function setupBackend(seed: Partial<Db> = {}) {
     if (found) return found;
     const u: Username = {
       id: nextId("u"), engagementId: eid, username: input.username.trim(), domain: input.domain ?? null,
-      sourceHostId: input.sourceHostId ?? null, source: input.source ?? null, createdAt: seq,
+      sourceHostId: input.sourceHostId ?? null, source: input.source ?? null, createdAt: seq, scope: input.scope ?? "unknown", localHostId: input.localHostId ?? null,
     };
     db.usernames.push(u);
     return u;
@@ -141,11 +142,11 @@ function setupBackend(seed: Partial<Db> = {}) {
       notes: input.notes ?? null, crackStatus: input.type === "hash" ? (input.crackStatus ?? "uncracked") : null,
       crackedFrom: input.crackedFrom ?? null, fromSecretId: input.fromSecretId ?? null,
     });
-    // Rust's safety net: the plain key returns the existing row.
+    // The store's identity, with equal domain spellings only (the same-domain rule itself is tested in Rust).
     const found = db.credentials.find((x) => x.secret && credKey(x) === credKey(c) && x.localHostId === c.localHostId);
-    if (found) return found;
+    if (found) return { credential: found, existed: true };
     db.credentials.push(c);
-    return c;
+    return { credential: c, existed: false };
   });
   m.credentialUpdate.mockImplementation(async (id, input: CredentialInput) => {
     const i = db.credentials.findIndex((c) => c.id === id);
@@ -215,10 +216,11 @@ beforeEach(() => {
   m.hostsList.mockResolvedValue([H1, H2]);
   m.servicesList.mockResolvedValue([smb("s1", "h1")]);
   m.servicesListEngagement.mockResolvedValue([smb("s1", "h1"), smb("s2", "h2")]);
-  m.servicesUpsertScan.mockResolvedValue([]);
+  m.extractionFile.mockResolvedValue(filed());
   m.checklistList.mockResolvedValue([]);
   m.checklistApplyFacts.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
+  m.checklistApplyEntryTicks.mockResolvedValue([]);
   setupBackend();
 });
 
@@ -256,15 +258,18 @@ const SPRAY = [
   "kali@kali:~$ nxc smb 10.10.10.5 10.10.10.6 -u bob -p 'Pass1' --continue-on-success",
   "SMB  10.10.10.5  445  DC01   [+] corp.local\\bob:Pass1 (Pwn3d!)",
   "SMB  10.10.10.6  445  WEB07  [-] corp.local\\bob:Pass1 STATUS_LOGON_FAILURE",
-  "SMB  10.10.10.5  445  DC01   [+] corp.local\\drew:Fresh1",
+  "SMB  10.10.10.5  445  DC01   [+] corp.local\\omar:Fresh1",
   "SMB  10.10.10.6  445  WEB07  [-] corp.local\\eve:Nope1 STATUS_LOGON_FAILURE",
   "SMB  10.10.10.99 445  GHOST  [+] corp.local\\bob:Pass1",
 ].join("\n");
 
+/** What the saves gave the store to file; the filing itself is the store's (extractions/filing.rs). */
+const proofs = (): ExtractionProofs => m.extractionFile.mock.calls.at(-1)![2];
+const pending = (username: string) => proofs().intake!.credentials.find((c) => c.input.username === username)!;
+const NEW_9 = "new-host:10.10.10.9";
+
 describe("nxc results on save", () => {
-  it("a [+] pair on an unknown IP makes the host, and its credential lands there", async () => {
-    const H9 = host({ id: "h9", name: "10.10.10.9", ip: "10.10.10.9" });
-    m.hostCreate.mockResolvedValue(H9);
+  it("a [+] pair on an unknown IP proves the host, and its credential lands there", async () => {
     const user = userEvent.setup();
     mount();
     await pasteAndSave(
@@ -276,19 +281,14 @@ describe("nxc results on save", () => {
       ].join("\n"),
     );
     await saved();
-    expect(m.hostCreate).toHaveBeenCalledWith("e1", { name: "10.10.10.9", ip: "10.10.10.9" });
-    const bob = db.credentials.find((c) => c.username === "bob" && c.secret === "Pass")!;
-    expect(bob).toMatchObject({ domain: "corp", scope: "domain", sourceHostId: "h9" });
-    const entry = db.log[0]!;
-    expect(db.attempts.filter((a) => a.credId === bob.id).map((a) => [a.hostId, a.result, a.logEntryId]).sort()).toEqual([
-      ["h1", "failed", entry.id],
-      ["h9", "valid", entry.id],
-    ]);
+    expect(m.extractionFile).toHaveBeenCalledWith("e1", db.log[0]!.id, expect.anything());
+    expect(proofs().newHosts).toEqual([{ key: NEW_9, ip: "10.10.10.9" }]);
+    const bob = pending("bob");
+    expect(bob).toMatchObject({ accepted: true, input: { domain: "corp", scope: "domain", sourceHostId: NEW_9 } });
+    expect(bob.attempts.map((a) => [a.hostId, a.result]).sort()).toEqual([["h1", "failed"], [NEW_9, "valid"]]);
   });
 
-  it("a local pair on a proven new host is filed local to it; its failed-only neighbour is a tried pair", async () => {
-    const H9 = host({ id: "h9", name: "10.10.10.9", ip: "10.10.10.9" });
-    m.hostCreate.mockResolvedValue(H9);
+  it("a local pair on a proven new host is local to it; its failed-only neighbour is a tried pair", async () => {
     const user = userEvent.setup();
     mount();
     await pasteAndSave(
@@ -300,9 +300,9 @@ describe("nxc results on save", () => {
       ].join("\n"),
     );
     await saved();
-    const made = db.credentials.filter((c) => c.secret === "Local1");
-    expect(made.map((c) => [c.username, c.scope, c.localHostId])).toEqual([["administrator", "local", "h9"]]);
-    expect(db.tried.map((t) => [t.username, t.secret, t.hostId, t.authMode])).toEqual([["guest", "Local1", "h9", "local"]]);
+    const accepted = proofs().intake!.credentials.filter((c) => c.accepted);
+    expect(accepted.map((c) => [c.input.username, c.input.scope, c.input.localHostId])).toEqual([["administrator", "local", NEW_9]]);
+    expect(proofs().triedPairs.map((t) => [t.username, t.secret, t.hostId, t.authMode])).toEqual([["guest", "Local1", NEW_9, "local"]]);
   });
 
   it("a failed hash pair is a tried pair, never a credential", async () => {
@@ -314,131 +314,73 @@ describe("nxc results on save", () => {
       [`kali@kali:~$ nxc smb 10.10.10.6 -u eve -H ${nt}`, `SMB  10.10.10.6  445  WEB07  [-] corp.local\\eve:${nt} STATUS_LOGON_FAILURE`].join("\n"),
     );
     await saved();
-    expect(db.credentials.some((c) => c.username === "eve")).toBe(false);
-    expect(db.tried).toEqual([expect.objectContaining({ username: "eve", secret: nt, secretKind: "hash", hostId: "h2", service: "smb" })]);
+    expect(proofs().intake!.credentials.filter((c) => c.accepted)).toEqual([]);
+    expect(proofs().triedPairs).toEqual([expect.objectContaining({ username: "eve", secret: nt, secretKind: "hash", hostId: "h2", service: "smb" })]);
   });
 
-  it("saving applies attempts with the entry as proof and adds every working pair", async () => {
-    m.hostCreate.mockResolvedValue(host({ id: "h99", name: "10.10.10.99", ip: "10.10.10.99" }));
+  it("saving proves every result and every working pair", async () => {
     const user = userEvent.setup();
     mount();
     await pasteAndSave(user, SPRAY);
     await saved();
-
-    const entry = db.log[0]!;
-    // bob's results, with the entry as proof and its time
-    const bob = db.attempts.filter((a) => a.credId === "cBob");
-    expect(bob.map((a) => [a.hostId, a.result, a.logEntryId, a.at, a.usernameId]).sort()).toEqual([
-      ["h1", "admin", entry.id, entry.at, null],
-      ["h2", "failed", entry.id, entry.at, null],
-      ["h99", "valid", entry.id, entry.at, null],
+    const p = proofs();
+    // bob's results, on his stored credential
+    expect(p.intake!.attempts.filter((a) => a.credId === "cBob").map((a) => [a.hostId, a.result]).sort()).toEqual([
+      ["h1", "admin"],
+      ["h2", "failed"],
+      ["new-host:10.10.10.99", "valid"],
     ]);
-    // drew worked: a new credential with its own result; eve only failed: a tried pair, never a credential
-    const drew = db.credentials.find((c) => c.username === "drew")!;
-    expect(drew).toMatchObject({ type: "password", secret: "Fresh1", domain: "corp.local", scope: "domain", sourceHostId: "h1" });
-    expect(db.attempts.filter((a) => a.credId === drew.id).map((a) => [a.hostId, a.result, a.logEntryId])).toEqual([
-      ["h1", "valid", entry.id],
-    ]);
-    expect(db.credentials.some((c) => c.username === "eve")).toBe(false);
-    expect(db.tried.map((t) => [t.username, t.secret, t.hostId])).toEqual([["eve", "Nope1", "h2"]]);
+    // omar worked: a new credential with its own result; eve only failed: a tried pair, never a credential
+    expect(pending("omar")).toMatchObject({ accepted: true, input: { type: "password", secret: "Fresh1", domain: "corp.local", scope: "domain", sourceHostId: "h1" } });
+    expect(pending("omar").attempts.map((a) => [a.hostId, a.result])).toEqual([["h1", "valid"]]);
+    expect(pending("eve").accepted).toBe(false);
+    expect(p.triedPairs.map((t) => [t.username, t.secret, t.hostId])).toEqual([["eve", "Nope1", "h2"]]);
     // usernames seen in the output are listed
-    expect(db.usernames.map((u) => u.username).sort()).toEqual(["alice", "bob", "drew", "eve"]);
-    // the unknown host's [+] line proves 10.10.10.99, which becomes a host with bob's result
-    expect(m.hostCreate).toHaveBeenCalledWith("e1", { name: "10.10.10.99", ip: "10.10.10.99" });
+    expect(p.intake!.usernames.map((u) => u.input.username).sort()).toEqual(["bob", "eve", "omar"]);
+    // the unknown host's [+] line proves 10.10.10.99
+    expect(p.newHosts).toEqual([{ key: "new-host:10.10.10.99", ip: "10.10.10.99" }]);
   });
 
-  it("a username spray hit re-keys earlier username attempts onto the new credential", async () => {
-    setupBackend({
-      attempts: [
-        {
-          id: "aOld", engagementId: "e1", credId: "cBob", usernameId: "uAlice", hostId: "h2", service: "winrm", port: 5985,
-          result: "valid", authMode: "domain", detail: null, logEntryId: null, at: 5,
-        },
-      ],
-    });
+  it("a username spray hit carries the username whose earlier results move onto the new credential", async () => {
     const user = userEvent.setup();
     mount();
     await pasteAndSave(user, ["kali@kali:~$ nxc smb 10.10.10.5 -u users.txt -p 'Pass1'", "SMB  10.10.10.5  445  DC01   [+] corp.local\\alice:Pass1"].join("\n"));
     await saved();
-
-    const alice = db.credentials.find((c) => c.username === "alice")!;
-    expect(m.credAttemptsRekey).toHaveBeenCalledWith("uAlice", ["cBob"], alice.id, undefined);
-    expect(db.attempts.map((a) => [a.credId, a.usernameId, a.hostId, a.service, a.result]).sort()).toEqual([
-      [alice.id, null, "h1", "smb", "valid"],
-      [alice.id, null, "h2", "winrm", "valid"],
-    ]);
+    expect(pending("alice")).toMatchObject({ accepted: true, fromUsername: { usernameId: "uAlice", secretCredIds: ["cBob"] } });
   });
 
-  it("a spray hit links the new credential to the owner-less secret via fromSecretId", async () => {
+  it("a spray hit names the owner-less secret it came from", async () => {
     const user = userEvent.setup();
     mount();
     await pasteAndSave(user, ["kali@kali:~$ nxc smb 10.10.10.5 -u users.txt -p 'Spray1'", "SMB  10.10.10.5  445  DC01   [+] corp.local\\frank:Spray1"].join("\n"));
     await saved();
-    const frank = db.credentials.find((c) => c.username === "frank")!;
-    expect(frank).toMatchObject({ secret: "Spray1", fromSecretId: "cS" });
-    expect(db.attempts.filter((a) => a.credId === frank.id).map((a) => [a.hostId, a.result])).toEqual([["h1", "valid"]]);
+    expect(pending("frank")).toMatchObject({ accepted: true, input: { secret: "Spray1", fromSecretId: "cS" } });
+    expect(pending("frank").attempts.map((a) => [a.hostId, a.result])).toEqual([["h1", "valid"]]);
   });
 
-  it("a working pair that duplicates a stored one reuses it and fills fromSecretId", async () => {
-    // Stored meanwhile (another window, a retry): the panel's list doesn't have it.
-    setupBackend({ credentials: [BOB, OWNERLESS, cred({ id: "cAlice", username: "alice", domain: "corp.local", secret: "Spray1" })] });
-    const user = userEvent.setup();
-    mount();
-    await pasteAndSave(user, ["kali@kali:~$ nxc smb 10.10.10.5 -u users.txt -p 'Spray1'", "SMB  10.10.10.5  445  DC01   [+] corp.local\\alice:Spray1"].join("\n"));
-    await saved();
-
-    expect(m.credentialCreate).not.toHaveBeenCalled();
-    expect(db.credentials.filter((c) => c.username === "alice")).toHaveLength(1);
-    expect(db.credentials.find((c) => c.id === "cAlice")!.fromSecretId).toBe("cS");
-    expect(db.attempts.map((a) => [a.credId, a.usernameId, a.hostId, a.result])).toEqual([["cAlice", null, "h1", "valid"]]);
-  });
-
-  it("saving the same output twice adds nothing new", async () => {
+  it("saving the same output twice proves the same again", async () => {
     const TGS = "$krb5tgs$23$*svc$CORP.LOCAL$MSSQL/db*$aabbccdd$eeff0011";
     const output = [
       "kali@kali:~$ nxc smb 10.10.10.5 10.10.10.6 -u users.txt -p 'Pass1' --continue-on-success",
       "SMB  10.10.10.5  445  DC01   [+] corp.local\\alice:Pass1 (Pwn3d!)",
-      "SMB  10.10.10.6  445  WEB07  [-] corp.local\\alice:Pass1 STATUS_LOGON_FAILURE",
-      "SMB  10.10.10.5  445  DC01   [+] corp.local\\frank:Spray1",
-      "SMB  10.10.10.5  445  DC01   [-] corp.local\\carol:Pass1 STATUS_LOGON_FAILURE",
-      "SMB  10.10.10.5  445  DC01   [+] corp.local\\drew:Fresh1",
-      "SMB  10.10.10.6  445  WEB07  [-] corp.local\\drew:Fresh1 STATUS_LOGON_FAILURE",
       "SMB  10.10.10.6  445  WEB07  [-] corp.local\\eve:Nope1 STATUS_LOGON_FAILURE",
-      "SMB  10.10.10.6  445  WEB07  [-] corp.local\\bob:Pass1 STATUS_ACCOUNT_LOCKED_OUT",
       `LDAP  10.10.10.5  389  DC01   ${TGS}`,
     ].join("\n");
     const user = userEvent.setup();
     mount();
-
     await pasteAndSave(user, output);
     await saved();
-    // sanity: the first save really added credentials, usernames, a hash, attempts and a tried pair
-    expect(db.credentials.map((c) => c.username).sort()).toEqual(["", "alice", "bob", "drew", "frank", "svc"]);
-    expect(db.credentials.find((c) => c.username === "svc")).toMatchObject({ type: "hash", crackStatus: "uncracked" });
-    expect(db.credentials.find((c) => c.username === "svc")!.hashType).toBeTruthy();
-    expect(db.usernames.length).toBeGreaterThan(1);
-    expect(db.attempts.length).toBeGreaterThan(0);
-    expect(db.tried.map((t) => t.username)).toEqual(["eve"]);
-    const before = structuredClone({ credentials: db.credentials, usernames: db.usernames, attempts: db.attempts, tried: db.tried });
-    vi.mocked(m.credentialCreate).mockClear();
-    vi.mocked(m.usernameCreate).mockClear();
-
+    const first = proofs();
+    // The roast hash is offered with a type; the store returns the one it holds the second time.
+    expect(first.intake!.hashes).toEqual([expect.objectContaining({ username: "svc", type: "hash", hashType: expect.any(String) })]);
     await pasteAndSave(user, output);
     await saved();
-
     expect(db.log).toHaveLength(2);
-    expect(m.credentialCreate).not.toHaveBeenCalled();
-    expect(db.credentials).toEqual(before.credentials);
-    expect(db.usernames).toEqual(before.usernames);
-    expect(db.tried).toEqual(before.tried);
-    // No attempt is added and no result changes. (By the store's merge rule a same-result upsert from the later
-    // entry moves the proof link to it; that is the only difference.)
-    const shape = (a: CredAttempt) => ({ ...a, logEntryId: undefined, at: undefined });
-    expect(db.attempts.map(shape)).toEqual(before.attempts.map(shape));
+    expect(proofs()).toEqual(first);
   });
 
   it("a filing failure shows the partial-save message and the entry stays", async () => {
-    m.credAttemptsUpsert.mockRejectedValue(new Error("disk full"));
+    m.extractionFile.mockRejectedValue(new Error("disk full"));
     const user = userEvent.setup();
     mount();
     const dialog = await pasteAndSave(user, SPRAY);
@@ -451,9 +393,8 @@ describe("nxc results on save", () => {
   });
 
   it("a filing failure and a checklist failure read as one message", async () => {
-    m.credAttemptsUpsert.mockRejectedValue(new Error("disk full"));
-    m.checklistPut.mockRejectedValue(new Error("nope"));
-    m.checklistList.mockRejectedValue(new Error("nope"));
+    m.extractionFile.mockRejectedValue(new Error("disk full"));
+    m.checklistApplyEntryTicks.mockRejectedValue(new Error("nope"));
     const user = userEvent.setup();
     mount();
     const dialog = await pasteAndSave(user, SPRAY);
@@ -548,5 +489,22 @@ describe("Host Credentials fact group", () => {
     await user.click(within(rows[0]!).getByRole("button", { name: /nxc smb spray/ }));
     expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("button", { name: /nxc smb spray/, expanded: true })).toBeInTheDocument();
+  });
+
+  it("a password reuse result reads as reuse, with no OTHER service", async () => {
+    setupBackend({
+      attempts: [
+        {
+          id: "r1", engagementId: "e1", credId: "cBob", usernameId: null, hostId: "h1", service: "other", port: null,
+          result: "valid", authMode: "local", detail: "password reuse", logEntryId: null, at: 5000,
+        },
+      ],
+    });
+    mount("/e/e1/h/h1");
+    const panel = await screen.findByRole("region", { name: "Host Credentials" });
+    const results = await within(panel).findByRole("region", { name: "Results against this host" });
+    const [row] = within(results).getAllByRole("listitem");
+    expect(within(row!).getByText("password reuse")).toBeInTheDocument();
+    expect(row!.textContent).toBe("corp.local\\bobvalidpassword reuseno proof");
   });
 });

@@ -1,35 +1,11 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { ChipSet, Chip, CommandBlock } from "../../../ui/index";
-import { copyPlain, copySecret } from "../../../lib/clipboard";
 import { sectionPath } from "../../engagements/sections/sections";
-import { copyKey, useCopyGuard } from "../../arsenal/copyGuard";
+import { copyKey } from "../../commands/copyCommand";
+import type { FilledCommand } from "../../commands/filledCommand";
+import { useCommandCopy, type CommandCopy } from "../../commands/useCommandCopy";
 import "./CommandList.scss";
-
-export interface FilledCommand {
-  id: string;
-  title: string;
-  /** What is shown: PASS and HASH are masked. */
-  text: string;
-  /** What Copy puts on the clipboard: the real values. Falls back to `text`. */
-  copyText?: string;
-  unresolved: string[];
-  /** Exam sim, no host locked yet: this command would spend the one Metasploit host. */
-  msfMarker: boolean;
-  viaTunnel?: { viaHostId: string; viaHostName: string; down: boolean };
-  /** The DC in this command was picked by host name only. */
-  dcByName?: boolean;
-  /** Field-manual commands: the Arsenal card they came from. */
-  cardId?: string;
-  /** Uses {FILE} or {SCRIPT}: the step shows the Toolkit picker for this host. */
-  fileToken?: { hostId: string; os: "windows" | "linux" | null; token: "FILE" | "SCRIPT" };
-  /** Uses {PORT} and the host has several matching open ports: the step shows a port chip. */
-  portToken?: { key: string; choices: number[]; picked: number };
-  /** Its {LPORT} is already held by a logged listener: warn and name the next free port. */
-  portClash?: { port: number; suggested: number };
-  /** The raw unresolved tokens as they appear in `text`, to mark. */
-  tokens?: string[];
-}
 
 const noToken = () => {};
 const noCred = () => {};
@@ -47,15 +23,15 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
   hideDcNote?: boolean;
   /** Titles read as headings over their blocks (the Arsenal), not as quiet labels (a checklist goal's commands). */
   strongTitles?: boolean;
-  /** One guard shared with another copy control (Transfer's ⌘↵), instead of this list's own. */
-  guard?: ReturnType<typeof useCopyGuard>;
+  /** One copier shared with another copy control (Transfer's ⌘↵), instead of this list's own. */
+  guard?: CommandCopy;
   /** Guard every Copy here as this one command (its id and unresolved tokens), so a shared guard has one arm. */
-  guardAs?: FilledCommand;
+  guardAs?: Pick<FilledCommand, "id" | "unresolved">;
   /** What the hint tells the user to press for the second try. */
   repeatKey?: string;
 }) {
   // Always called (hooks rule), even when a shared guard replaces it.
-  const own = useCopyGuard({ focusToken, focusCred, hostName, ...(repeatKey ? { repeatKey } : {}) });
+  const own = useCommandCopy({ hostName, focusToken, focusCred, ...(repeatKey ? { repeatKey } : {}) });
   const guard = shared ?? own;
   // With one guard over several blocks, its status shows on the block last pressed (the first until one is).
   const [pressed, setPressed] = useState<string | null>(null);
@@ -64,10 +40,8 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
   const engagementId = useParams().id;
 
   const copy = (c: FilledCommand, button: HTMLElement) => {
-    // A filled command carries a real credential: that copy is a secret.
     setPressed(c.id);
-    const write = c.copyText !== undefined && c.copyText !== c.text ? copySecret : copyPlain;
-    return guard.attempt(guardAs ?? c, () => write(c.copyText ?? c.text)).then((r) => {
+    return guard.copy(c, guardAs ? { guardAs } : {}).then((r) => {
       // Held back with no field or chip to take focus here: the Copy button keeps it, so Enter is the second press.
       const a = document.activeElement;
       if (r === "guarded" && (!a || a === document.body || a === button)) button.focus();
@@ -89,8 +63,7 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
           </div>
           <div data-testid="command-block">
             <CommandBlock
-              text={c.text}
-              {...(c.copyText !== undefined ? { copyText: c.copyText } : {})}
+              text={c.shown}
               tokens={c.tokens ?? []}
               name={c.title}
               copyLabel={`Copy command: ${c.title}`}

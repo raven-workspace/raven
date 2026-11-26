@@ -90,10 +90,6 @@ fn parse(s: &str) -> AppResult<Value> {
     serde_json::from_str(s).map_err(|e| AppError::Db(format!("stored report JSON is invalid: {e}")))
 }
 
-fn to_text(v: &Value) -> String {
-    v.to_string()
-}
-
 const REPORT_COLS: &str = "id, engagement_id, candidate_name, email, osid, title, meta, created_at, updated_at, exported_at";
 
 fn report_row(r: &Row) -> rusqlite::Result<(Report, String)> {
@@ -172,11 +168,20 @@ pub fn update(conn: &Connection, id: &str, patch: ReportPatch) -> AppResult<Repo
             patch.email.unwrap_or(cur.email),
             patch.osid.unwrap_or(cur.osid),
             title,
-            to_text(&patch.meta.unwrap_or(cur.meta)),
+            patch.meta.unwrap_or(cur.meta).to_string(),
             now_ms(),
             id
         ],
     )?;
+    report_by(conn, "id", id)?.ok_or(AppError::NotFound)
+}
+
+/// Records that the report was exported now.
+pub fn mark_exported(conn: &Connection, id: &str) -> AppResult<Report> {
+    let n = conn.execute("UPDATE reports SET exported_at=?1 WHERE id=?2", params![now_ms(), id])?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
     report_by(conn, "id", id)?.ok_or(AppError::NotFound)
 }
 
@@ -222,8 +227,8 @@ pub fn sections_list(conn: &Connection, report_id: &str) -> AppResult<Vec<Report
 
 /// The page and meta as stored, refused past 8 MiB together.
 fn section_texts(doc: Option<&Value>, meta: &Value) -> AppResult<(Option<String>, String)> {
-    let doc = doc.map(to_text);
-    let meta = to_text(meta);
+    let doc = doc.map(Value::to_string);
+    let meta = meta.to_string();
     if doc.as_ref().map_or(0, String::len) + meta.len() > MAX_SECTION_BYTES {
         return Err(AppError::validation("doc", "this page is over 8 MiB"));
     }
@@ -289,6 +294,39 @@ pub fn section_save(conn: &Connection, id: &str, doc: Value, meta: Value) -> App
         return Err(AppError::NotFound);
     }
     section_get(conn, id)
+}
+
+/// One page write of `sections_save`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionWrite {
+    pub id: String,
+    pub doc: Value,
+    pub meta: Value,
+}
+
+/// Writes several of the report's sections, and deletes one of its pages, all or nothing (Move to appendix and its
+/// Undo): a section outside the report fails with NotFound, a page over 8 MiB or a deleted section that isn't a page
+/// with Validation, and any failure changes nothing. Returns the written sections, in the order given.
+pub fn sections_save(conn: &Connection, report_id: &str, writes: Vec<SectionWrite>, delete: Option<String>) -> AppResult<Vec<ReportSection>> {
+    let tx = conn.unchecked_transaction()?;
+    let at = now_ms();
+    for w in &writes {
+        let (doc, meta) = section_texts(Some(&w.doc), &w.meta)?;
+        let n = tx.execute(
+            "UPDATE report_sections SET doc=?1, meta=?2, updated_at=?3 WHERE id=?4 AND report_id=?5",
+            params![doc, meta, at, w.id, report_id],
+        )?;
+        if n == 0 {
+            return Err(AppError::NotFound);
+        }
+    }
+    if let Some(id) = delete {
+        section_delete(&tx, report_id, &id)?;
+    }
+    let saved = writes.iter().map(|w| section_get(&tx, &w.id)).collect::<AppResult<Vec<_>>>()?;
+    tx.commit()?;
+    Ok(saved)
 }
 
 /// Deletes an owner-written page of the report. Other sections are part of the report's outline and are never deleted.
@@ -377,6 +415,18 @@ mod tests {
         assert_eq!(a.title, "OSCP Exam Report");
         assert_eq!(a.meta, json!({}));
         assert!(matches!(get_or_create(c, "missing", &defaults()), Err(AppError::NotFound)));
+    }
+
+    #[test]
+    fn mark_exported_records_when_and_refuses_an_unknown_report() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "E");
+        let r = get_or_create(c, &e, &defaults()).unwrap();
+        assert_eq!(r.exported_at, None);
+        let marked = mark_exported(c, &r.id).unwrap();
+        assert!(marked.exported_at.is_some());
+        assert!(matches!(mark_exported(c, "nope"), Err(AppError::NotFound)));
     }
 
     #[test]
@@ -498,6 +548,37 @@ mod tests {
         // Nothing changed.
         let ids: Vec<_> = sections_list(c, &r.id).unwrap().into_iter().map(|s| s.id).collect();
         assert_eq!(ids, vec![b.id, a.id]);
+    }
+
+    #[test]
+    fn sections_save_writes_all_or_nothing() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "e");
+        let r = get_or_create(c, &e, &defaults()).unwrap();
+        let a = section_upsert(c, &r.id, input("summary", None, 0)).unwrap();
+        let p = section_upsert(c, &r.id, input("page", Some("p1"), 1)).unwrap();
+        let gone = section_upsert(c, &r.id, input("page", Some("p2"), 2)).unwrap();
+        let write = |id: &str, text: &str| SectionWrite { id: id.into(), doc: json!({ "type": "doc", "content": [{ "type": "paragraph", "text": text }] }), meta: json!({ "t": text }) };
+        let docs = |c: &Connection| sections_list(c, &r.id).unwrap().into_iter().map(|s| (s.id, s.doc)).collect::<Vec<_>>();
+
+        let saved = sections_save(c, &r.id, vec![write(&a.id, "a"), write(&p.id, "p")], Some(gone.id.clone())).unwrap();
+        assert_eq!(saved.iter().map(|s| s.id.clone()).collect::<Vec<_>>(), vec![a.id.clone(), p.id.clone()]);
+        assert_eq!(saved[1].meta, json!({ "t": "p" }));
+        let before = docs(c);
+        assert_eq!(before.len(), 2, "the deleted page is gone");
+
+        // A section of another report: nothing is written.
+        let e2 = eng(c, "e2");
+        let r2 = get_or_create(c, &e2, &defaults()).unwrap();
+        let foreign = section_upsert(c, &r2.id, input("summary", None, 0)).unwrap();
+        assert!(matches!(sections_save(c, &r.id, vec![write(&a.id, "changed"), write(&foreign.id, "x")], None), Err(AppError::NotFound)));
+        // A section that isn't a page can't be deleted: the writes before it are undone too.
+        assert!(matches!(sections_save(c, &r.id, vec![write(&p.id, "changed")], Some(a.id.clone())), Err(AppError::Validation { .. })));
+        // A page over 8 MiB.
+        let big = SectionWrite { id: p.id.clone(), doc: json!({ "text": "x".repeat(MAX_SECTION_BYTES) }), meta: json!({}) };
+        assert!(matches!(sections_save(c, &r.id, vec![write(&a.id, "changed"), big], None), Err(AppError::Validation { .. })));
+        assert_eq!(docs(c), before);
     }
 
     #[test]

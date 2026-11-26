@@ -4,6 +4,7 @@ import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 import type { LibraryCommand } from "../../../engines/library/types";
+import { TEST_LIBRARY } from "../../support/library";
 import type { Service } from "../../../types/service";
 import { applicableGoals } from "../../../engines/checklist";
 import { hostStuck } from "../../../engines/stuck";
@@ -25,7 +26,7 @@ const cmd = (command: string, hostIds = ["h1"]): LogEntry =>
 const run = (o: { host?: Host; services?: Service[]; state?: ChecklistState; entries?: LogEntry[]; note?: string; engagement?: Engagement; library?: LibraryCommand[] } = {}) => {
   const h = o.host ?? host();
   const servicesByHost = new Map([[h.id, o.services ?? []]]);
-  return hostStuck({ host: h, engagement: o.engagement ?? engagement, ...(o.library ? { library: o.library } : {}), hosts: [h], servicesByHost, state: o.state ?? {}, entries: o.entries ?? [], hostNote: o.note ?? "" });
+  return hostStuck({ host: h, engagement: o.engagement ?? engagement, library: o.library ?? TEST_LIBRARY, hosts: [h], servicesByHost, state: o.state ?? {}, entries: o.entries ?? [], hostNote: o.note ?? "" });
 };
 const goalIds = (h: Host, services: Service[], stage: string) =>
   applicableGoals(h, engagement, [h], new Map([[h.id, services]])).find((s) => s.stage.id === stage)?.goals.map((g) => g.id) ?? [];

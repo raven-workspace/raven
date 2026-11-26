@@ -12,7 +12,12 @@ export interface AppendixIndex {
   pages: AppendixPageLetter[];
 }
 
-const FIRST_LETTER = "A".charCodeAt(0);
+/** The letter of the appendix at `index` (from 0), as spreadsheet columns go: A … Z, AA, AB … AZ, BA … ZZ, AAA. */
+export function appendixLetter(index: number): string {
+  let out = "";
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) out = String.fromCharCode(65 + ((n - 1) % 26)) + out;
+  return out;
+}
 /** Lines of a code block past which it is suggested for an appendix page (`suggestMoves`). */
 export const MAX_INLINE_LINES = 60;
 
@@ -20,12 +25,12 @@ export const MAX_INLINE_LINES = 60;
 export const isAppendixPage = (s: { kind: SectionKind; meta?: unknown }) =>
   s.kind === "page" && (s.meta as Partial<PageMeta> | undefined)?.placement === "appendix";
 
-/** Appendix letters: each appendix page (+ Page) takes the next letter from A, by position. Nothing is moved out of a page. */
+/** Appendix letters: each appendix page (+ Page) takes the next letter from A, by position (past Z: AA, AB …). Nothing is moved out of a page. */
 export function numberAppendices(sections: { id: string; kind: SectionKind; meta?: unknown; position?: number }[]): AppendixIndex {
   const pages = sections
     .filter(isAppendixPage)
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-    .map((s, i) => ({ sectionId: s.id, letter: String.fromCharCode(FIRST_LETTER + i) }));
+    .map((s, i) => ({ sectionId: s.id, letter: appendixLetter(i) }));
   return { pages };
 }
 
@@ -41,4 +46,40 @@ export function suggestMoves(doc: ReportNode): { key: string; reason: string }[]
   };
   walk(doc, "");
   return out;
+}
+
+/* ------------------------------------------------------------------ Move to appendix */
+
+/** Whether two blocks are the same, attr for attr and child for child, whatever order their keys were saved in. */
+function sameNode(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
+  const kb = Object.keys(b).filter((k) => (b as Record<string, unknown>)[k] !== undefined);
+  return ka.length === kb.length && ka.every((k) => sameNode((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+/** A page with nothing on it yet: no block, or a new page's one empty paragraph. */
+const isBlank = (blocks: ReportNode[]) => blocks.length === 0 || (blocks.length === 1 && blocks[0].type === "paragraph" && !blocks[0].content?.length);
+
+/**
+ * An appendix page with `block` moved to its end (Move to appendix), attrs and all: its source and a figure's entry go
+ * with it. A page with nothing on it yet (a new page's one empty paragraph) takes the block in that paragraph's place.
+ */
+export function withBlockAppended(doc: ReportNode, block: ReportNode): ReportNode {
+  const content = doc.content ?? [];
+  return { ...doc, content: isBlank(content) ? [block] : [...content, block] };
+}
+
+/**
+ * Undo of `withBlockAppended`: the page without its last top-level block equal to `block`, one empty paragraph when
+ * nothing is left. Null when the page holds no such block (the owner changed it or took it off).
+ */
+export function withoutAppended(doc: ReportNode, block: ReportNode): ReportNode | null {
+  const content = doc.content ?? [];
+  let at = content.length - 1;
+  while (at >= 0 && !sameNode(content[at], block)) at--;
+  if (at === -1) return null;
+  const rest = content.filter((_, i) => i !== at);
+  return { ...doc, content: rest.length > 0 ? rest : [{ type: "paragraph" }] };
 }

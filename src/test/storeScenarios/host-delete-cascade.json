@@ -1,0 +1,100 @@
+{
+  "name": "Deleting a host removes everything that hangs off it and unlinks what only points at it; a local credential it leaves with no host stays editable",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Synthetic lab", "kind": "lab", "domain": "corp.example" }], "as": "eng" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "web01", "ip": "192.0.2.10" }], "as": "web" },
+    { "do": "hostCreate", "args": ["$eng", { "name": "files01", "ip": "192.0.2.11" }], "as": "keep" },
+    { "do": "serviceCreate", "args": ["$web", { "port": 445 }], "as": "smb" },
+    { "do": "serviceCreate", "args": ["$keep", { "port": 22 }], "as": "ssh" },
+    { "do": "noteSave", "args": ["$eng", "$web", "web01 notes", false] },
+    { "do": "noteSave", "args": ["$eng", null, "engagement notes", false] },
+    { "do": "ruledOutCreate", "args": [{ "engagementId": "$eng", "hostId": "$web", "text": "anonymous FTP", "reason": "closed" }] },
+    { "do": "tunnelCreate", "args": ["$eng", { "kind": "ligolo", "viaHostId": "$web", "subnets": ["198.51.100.0/24"], "status": "up" }] },
+    { "do": "hopCreate", "args": ["$eng", { "fromHostId": "$keep", "toHostId": "$web", "via": "ssh" }] },
+    { "do": "hopCreate", "args": ["$eng", { "fromHostId": null, "toHostId": "$keep", "via": "smb" }], "as": "hop" },
+    { "do": "interfaceDismiss", "args": ["$eng", "$web", "198.51.100.0/24"] },
+    {
+      "do": "credentialCreate",
+      "args": ["$eng", { "type": "password", "username": "alice", "domain": "corp", "secret": "Winter2026!", "sourceHostId": "$web" }],
+      "bind": { "alice": "credential.id" }
+    },
+    {
+      "do": "credentialCreate",
+      "args": ["$eng", { "type": "password", "username": "administrator", "secret": "Local-1", "scope": "local", "localHostId": "$web" }],
+      "bind": { "admin": "credential.id" }
+    },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "bob", "sourceHostId": "$web" }], "as": "bob" },
+    { "do": "accessGrantCreate", "args": ["$eng", { "usernameId": "$bob", "hostId": "$web", "level": "user", "via": "winrm" }] },
+    { "do": "accessGrantCreate", "args": ["$eng", { "usernameId": "$bob", "hostId": "$keep", "level": "user", "via": "ssh" }] },
+    {
+      "do": "credAttemptsUpsert",
+      "args": ["$eng", [
+        { "credId": "$alice", "hostId": "$web", "service": "smb", "result": "valid" },
+        { "credId": "$alice", "hostId": "$keep", "service": "ssh", "result": "failed" }
+      ]]
+    },
+    { "do": "triedPairsUpsert", "args": ["$eng", [{ "username": "carol", "secret": "Spring2026!", "secretKind": "password", "hostId": "$web", "service": "smb" }]] },
+    { "do": "findingCreate", "args": ["$eng", { "title": "SMB signing not required", "hostIds": ["$web", "$keep"], "serviceIds": ["$smb", "$ssh"] }] },
+    { "do": "failedAttemptCreate", "args": ["$eng", { "hostId": "$web", "title": "MS17-010", "reasonKind": "control", "reason": "patched" }] },
+    {
+      "do": "logCreate",
+      "args": ["$eng", {
+        "title": "nmap sweep", "ranOn": null, "hostIds": ["$web", "$keep"], "observations": null,
+        "returnedNothing": false, "private": false, "content": { "kind": "note", "text": "two hosts up" }
+      }]
+    },
+    { "do": "cleanupCreate", "args": ["$eng", { "hostId": "$web", "kind": "file", "target": "C:\\Windows\\Temp\\agent.exe" }] },
+    { "do": "payloadBuildRecord", "args": [{ "engagementId": "$eng", "hostId": "$web", "payloadId": "ps-b64", "lhost": "192.0.2.99", "lport": "443", "at": 1 }] },
+    { "do": "hostIdentitySet", "args": [{ "hostId": "$web", "username": "www-data", "privileges": [], "groups": [], "entryId": null }] },
+    { "do": "vectorUpsert", "args": ["$web", { "title": "SeImpersonatePrivilege", "status": "try", "source": "manual" }] },
+    {
+      "do": "checklistPut",
+      "args": ["$eng", [
+        { "ownerId": "$web", "goalId": "h-enum-smb", "status": "done" },
+        { "ownerId": "$keep", "goalId": "h-enum-ssh", "status": "todo" },
+        { "ownerId": "$eng", "goalId": "e-sweep", "status": "todo" }
+      ]]
+    },
+
+    { "do": "hostDelete", "args": ["$web"] },
+
+    { "do": "hostsList", "args": ["$eng"], "expect": [{ "id": "$keep" }] },
+    { "do": "servicesListEngagement", "args": ["$eng"], "expect": [{ "id": "$ssh" }] },
+    { "do": "servicesList", "args": ["$web"], "expect": [] },
+    { "do": "notesList", "args": ["$eng"], "expect": [{ "hostId": null, "body": "engagement notes" }] },
+    { "do": "ruledOutList", "args": ["$eng"], "expect": [] },
+    { "do": "tunnelsList", "args": ["$eng"], "expect": [] },
+    { "do": "hopsList", "args": ["$eng"], "expect": [{ "id": "$hop", "toHostId": "$keep" }] },
+    { "do": "interfaceDismissalsList", "args": ["$eng"], "expect": [] },
+    {
+      "do": "credentialsList", "args": ["$eng"],
+      "expect": [
+        { "username": "alice", "sourceHostId": null },
+        { "username": "administrator", "scope": "local", "localHostId": null }
+      ]
+    },
+    {
+      "do": "credentialUpdate",
+      "args": ["$admin", { "type": "password", "username": "administrator", "secret": "Local-2", "scope": "local", "localHostId": null, "notes": "reused on files01" }],
+      "expect": { "id": "$admin", "secret": "Local-2", "scope": "local", "localHostId": null, "notes": "reused on files01" }
+    },
+    {
+      "do": "credentialCreate",
+      "args": ["$eng", { "type": "password", "username": "guest", "secret": "Guest-1", "scope": "local", "localHostId": null }],
+      "error": { "code": "validation", "field": "localHostId" }
+    },
+    { "do": "usernamesList", "args": ["$eng"], "expect": [{ "id": "$bob", "sourceHostId": null }] },
+    { "do": "accessGrantsList", "args": ["$eng"], "expect": [{ "usernameId": "$bob", "hostId": "$keep" }] },
+    { "do": "credAttemptsList", "args": ["$eng"], "expect": [{ "credId": "$alice", "hostId": "$keep" }] },
+    { "do": "triedPairsList", "args": ["$eng"], "expect": [] },
+    { "do": "findingsList", "args": ["$eng"], "expect": [{ "hostIds": ["$keep"], "serviceIds": ["$ssh"] }] },
+    { "do": "failedAttemptsList", "args": ["$eng"], "expect": [{ "title": "MS17-010", "hostId": null }] },
+    { "do": "logList", "args": ["$eng"], "expect": [{ "title": "nmap sweep", "hostIds": ["$keep"] }] },
+    { "do": "cleanupList", "args": ["$eng"], "expect": [{ "target": "C:\\Windows\\Temp\\agent.exe", "hostId": null }] },
+    { "do": "payloadBuildsList", "args": ["$eng"], "expect": [] },
+    { "do": "hostIdentityGet", "args": ["$web"], "expect": null },
+    { "do": "vectorsList", "args": ["$web"], "expect": [] },
+    { "do": "checklistList", "args": ["$eng"], "expect": [{ "ownerId": "$keep" }, { "ownerId": "$eng" }] },
+    { "do": "hostDelete", "args": ["$web"], "error": { "code": "not_found" } }
+  ]
+}

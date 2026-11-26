@@ -57,23 +57,68 @@ export function tableCaption(line: string): TableCaption | null {
   return null;
 }
 
-/** A fence line: three or more backticks or tildes. A fence closes on the next fence line of the same character. */
+/** A fence line: three or more backticks or tildes. Which fence closes which: `openFence` and `closesFence`. */
 export const FENCE = /^\s*(`{3,}|~{3,})/;
+
+/** An opening code fence: its character and length. */
+export interface Fence {
+  ch: string;
+  len: number;
+}
+
+/** The code fence `line` opens, or null when it is no fence line. */
+export function openFence(line: string): Fence | null {
+  const f = FENCE.exec(line);
+  return f ? { ch: f[1][0], len: f[1].length } : null;
+}
+
+/**
+ * Whether `line` closes `open` (CommonMark): a fence of the same character, at least as long, with nothing but
+ * whitespace after it. So a ````` ````md ````` block can hold a ```` ```sh ```` example.
+ */
+export function closesFence(line: string, open: Fence): boolean {
+  const f = /^\s*(`{3,}|~{3,})\s*$/.exec(line);
+  return !!f && f[1][0] === open.ch && f[1].length >= open.len;
+}
+
+/**
+ * Walks a note line by line, telling fenced code from the rest: each call says what `line` is. An unclosed fence runs
+ * to the end of the note. The renderer (`readFence`), the outline and search all follow this one rule.
+ */
+export function fenceWalk(): (line: string) => "fence" | "code" | "text" {
+  let open: Fence | null = null;
+  return (line) => {
+    if (open) {
+      if (!closesFence(line, open)) return "code";
+      open = null;
+      return "fence";
+    }
+    open = openFence(line);
+    return open ? "fence" : "text";
+  };
+}
 
 /** An outline heading (`#` to `###`, at the start of the line); the text is the raw heading, inline Markdown included. */
 export const OUTLINE_HEADING = /^(#{1,3})\s+(.*?)\s*#*\s*$/;
 
 /**
  * Hands out anchor ids in document order. The outline and the renderer both use it, so their ids always match: one
- * dedupe counter shared by `##`, `###` and table captions (`-2`, `-3` for repeats); a heading of only symbols gets
- * `section`.
+ * dedupe counter shared by `##`, `###` and table captions (`-2`, `-3` for repeats, counting on past any id already
+ * given, so "Usage", "Usage 2", "Usage" gives `usage`, `usage-2`, `usage-3`); a heading of only symbols gets `section`.
  */
 export function anchorIds() {
   const seen = new Map<string, number>();
+  const used = new Set<string>();
   const unique = (base: string): string => {
-    const n = (seen.get(base) ?? 0) + 1;
+    let n = seen.get(base) ?? 0;
+    let id: string;
+    do {
+      n++;
+      id = n === 1 ? base : `${base}-${n}`;
+    } while (used.has(id));
     seen.set(base, n);
-    return n === 1 ? base : `${base}-${n}`;
+    used.add(id);
+    return id;
   };
   return {
     heading: (text: string) => unique(slug(text) || "section"),

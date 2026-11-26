@@ -21,6 +21,18 @@ describe("features use Raven primitives, not stock shadcn pieces", () => {
     }
   }, 30_000);
 
+  it("bans Radix's own tooltip in features, by package and by the radix-ui export (RAV-23)", async () => {
+    const pkg = await restricted("src/features/x/X.tsx", `import * as T from "@radix-ui/react-tooltip";\nexport const t = T;\n`);
+    const named = await restricted("src/features/x/X.tsx", `import { Tooltip } from "radix-ui";\nexport const t = Tooltip;\n`);
+    expect(pkg).toHaveLength(1);
+    expect(named).toHaveLength(1);
+    expect(pkg[0]).toMatch(/Raven's Tooltip from src\/ui/);
+    expect(named[0]).toMatch(/Raven's Tooltip from src\/ui/);
+    // Other radix-ui exports stay allowed, and src/ui may wrap Radix's tooltip.
+    expect(await restricted("src/features/x/X.tsx", `import { Slot } from "radix-ui";\nexport const s = Slot;\n`)).toEqual([]);
+    expect(await restricted("src/ui/Tooltip.tsx", `import * as RT from "@radix-ui/react-tooltip";\nexport const r = RT;\n`)).toEqual([]);
+  }, 30_000);
+
   it("allows the shadcn pieces Raven has no primitive for, and src/ui itself", async () => {
     for (const piece of ["sidebar", "tabs", "toggle-group", "separator"])
       expect(await restricted("src/features/x/X.tsx", `import { A } from "../../ui/shadcn/${piece}";\nexport const a = A;\n`), piece).toEqual([]);

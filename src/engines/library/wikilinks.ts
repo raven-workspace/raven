@@ -1,4 +1,4 @@
-import type { CardMeta } from "./store";
+import type { CardMeta } from "./types";
 
 /**
  * A piece of note text: plain text, or an Obsidian `[[link]]` (its target without `#heading`, the heading when there is

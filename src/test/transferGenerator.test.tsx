@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { getLibrary, setImported } from "../engines/library/store";
+import { currentLibrary, setImported } from "../engines/library/store";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useNotesStore } from "../features/notes/useNotesStore";
@@ -19,10 +19,6 @@ import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 
 vi.mock("../lib/api");
-vi.mock("../features/checklist/ticks", async (orig) => ({
-  ...(await orig<typeof import("../features/checklist/ticks")>()),
-  resyncBoards: vi.fn().mockResolvedValue(undefined),
-}));
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
@@ -88,7 +84,7 @@ const pre = (root: { findByText: typeof screen.findByText }, text: string) =>
   root.findByText((_, el) => el?.tagName === "PRE" && el.textContent === text);
 /** The generator once its host has loaded (it remounts when the engagement resolves). */
 const generator = async () => {
-  await vi.waitFor(() => expect(screen.getByRole("button", { name: "Host MS02" })).toBeInTheDocument());
+  await vi.waitFor(() => expect(screen.getByRole("button", { name: "Fill for host MS02" })).toBeInTheDocument());
   return screen.getByRole("region", { name: "Transfer a file" });
 };
 
@@ -141,7 +137,7 @@ describe("Transfer a file", () => {
   });
 
   it("the generator hides banned methods in exam-sim", async () => {
-    const certutil = getLibrary().find((c) => c.title === "Download with certutil" && c.cardId === "shell-file-transfer-to-windows")!;
+    const certutil = currentLibrary().commands.find((c) => c.title === "Download with certutil" && c.cardId === "shell-file-transfer-to-windows")!;
     setImported({ commands: [{ ...certutil, exam: "banned" }], cards: [], toolkit: TOOLKIT });
     const user = userEvent.setup();
     const { unmount } = mount("/payloads?generator=transfer", EXAM);
@@ -282,7 +278,7 @@ describe("Transfer a file: layout", () => {
     mount("/payloads?generator=transfer");
     const g = within(await generator());
     expect(g.queryByRole("combobox", { name: "To host" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /^(Host |No host)/ })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^Fill for host/ })).toHaveLength(1);
   });
 
   it("footnote never reads 'the the'", async () => {

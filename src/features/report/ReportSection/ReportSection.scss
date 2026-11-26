@@ -82,6 +82,7 @@
   }
 
   // A notice with its buttons after it.
+  // A notice's line: a page deleted, a block moved, a move that failed.
   .report-section__notice {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -101,7 +102,7 @@
     color: var(--warn);
   }
 
-  .report-section__deleted {
+  .report-section__notice {
     color: var(--muted);
   }
 }

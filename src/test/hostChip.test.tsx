@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { HostChip, isHostPickKey } from "../features/arsenal/HostChip/HostChip";
+import { HostChips } from "../features/capture/HostChips/HostChips";
 import type { HostChipHandle } from "../features/arsenal/HostChip/HostChip";
 import type { Host } from "../types/host";
 
@@ -22,14 +23,14 @@ function setup(value: string | null = "h1") {
       <input aria-label="last" />
     </form>,
   );
-  return { onChange, ref, chip: () => screen.getByRole("button", { name: /^(Host |No host)/ }) };
+  return { onChange, ref, chip: () => screen.getByRole("button", { name: /^Fill for host/ }) };
 }
 
 describe("HostChip", () => {
   it("host and credential pickers are tabbable triggers: labelled with the short host name, in the Tab order", async () => {
     const user = userEvent.setup();
     const { chip } = setup();
-    expect(chip()).toHaveAccessibleName("Host dc01");
+    expect(chip()).toHaveAccessibleName("Fill for host dc01");
     expect(chip()).toHaveAttribute("aria-haspopup", "listbox");
     expect(chip()).not.toHaveAttribute("tabindex", "-1");
     expect(chip()).toHaveTextContent(/^Host\s*dc01/);
@@ -40,18 +41,17 @@ describe("HostChip", () => {
     expect(screen.getByLabelText("last")).toHaveFocus();
   });
 
-  it("host chip with no host reads \"No host\" with no Host prefix, and the name starts with the visible text", () => {
+  it("host chip with no host reads \"No host\" with no Host prefix, and is named for what picking does (RAV-21)", () => {
     render(<HostChip hosts={HOSTS} value={null} onChange={vi.fn()} />);
-    const chip = screen.getByRole("button", { name: /^No host/ });
+    const chip = screen.getByRole("button", { name: "Fill for host" });
     expect(chip).toHaveTextContent(/^No host$/);
-    expect(chip).toHaveAccessibleName("No host");
   });
 
-  it("with a host the accessible name starts with the visible text", () => {
+  it("with a host the accessible name says what picking does and holds the visible text (RAV-21)", () => {
     setup("h2");
-    const chip = screen.getByRole("button", { name: /^Host web07/ });
-    expect(chip.textContent!.trim().startsWith("Host")).toBe(true);
-    expect(chip.getAttribute("aria-label")!.startsWith("Host web07")).toBe(true);
+    const chip = screen.getByRole("button", { name: "Fill for host web07" });
+    expect(chip).toHaveTextContent(/^Host\s*web07$/);
+    expect(chip.getAttribute("aria-label")!.toLowerCase()).toContain("host web07");
   });
 
   it("the list is at least as wide as the trigger", async () => {
@@ -127,3 +127,38 @@ describe("HostChip", () => {
     expect(isHostPickKey({ altKey: false, metaKey: false, ctrlKey: false, code: "KeyH", key: "h" })).toBe(false);
   });
 });
+
+describe("host pickers when hosts fail to load (RAV-22)", () => {
+  it("HostChip says Couldn't load hosts with Retry, offers no list, and ⌥H's open() retries", async () => {
+    const user = userEvent.setup();
+    const retry = vi.fn();
+    const ref = createRef<HostChipHandle>();
+    render(<HostChip ref={ref} hosts={[]} value={null} onChange={vi.fn()} loadError={{ retry }} />);
+    expect(screen.getByText("Couldn't load hosts")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Fill for host/ })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    act(() => ref.current!.open());
+    expect(retry).toHaveBeenCalledTimes(2);
+    act(() => ref.current!.focus());
+    expect(screen.getByRole("button", { name: "Retry" })).toHaveFocus();
+  });
+
+  it("with no error and no hosts, the chip still reads No host", () => {
+    render(<HostChip hosts={[]} value={null} onChange={vi.fn()} loadError={null} />);
+    expect(screen.getByRole("button", { name: "Fill for host" })).toHaveTextContent(/^No host$/);
+    expect(screen.queryByText("Couldn't load hosts")).toBeNull();
+  });
+
+  it("Capture's HostChips says Couldn't load hosts with Retry instead of No host", async () => {
+    const user = userEvent.setup();
+    const retry = vi.fn();
+    const { rerender } = render(<HostChips hosts={[]} linked={[]} onLinked={vi.fn()} loadError={{ retry }} />);
+    expect(screen.getByText("Couldn't load hosts")).toBeInTheDocument();
+    expect(screen.queryByText("No host")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+    rerender(<HostChips hosts={[]} linked={[]} onLinked={vi.fn()} />);
+    expect(screen.getByText("No host")).toBeInTheDocument();
+  });
+});
+

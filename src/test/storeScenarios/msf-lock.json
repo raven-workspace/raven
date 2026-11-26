@@ -1,0 +1,23 @@
+{
+  "name": "The Metasploit lock holds only a host of its own engagement, and clears when that host goes",
+  "steps": [
+    { "do": "engagementCreate", "args": [{ "name": "Mock exam", "kind": "exam-sim" }], "as": "exam" },
+    { "do": "engagementCreate", "args": [{ "name": "Other lab", "kind": "lab" }], "as": "other" },
+    { "do": "hostCreate", "args": ["$exam", { "name": "ms01", "ip": "192.0.2.30" }], "as": "ms01" },
+    { "do": "hostCreate", "args": ["$exam", { "name": "ms02", "ip": "192.0.2.31" }], "as": "ms02" },
+    { "do": "hostCreate", "args": ["$other", { "name": "elsewhere", "ip": "198.51.100.30" }], "as": "foreign" },
+
+    { "do": "engagementSetMsfHost", "args": ["$exam", "$ms01"], "expect": { "id": "$exam", "msfHostId": "$ms01" } },
+    { "do": "engagementSetMsfHost", "args": ["$exam", "$foreign"], "error": { "code": "not_found" } },
+    { "do": "engagementSetMsfHost", "args": ["$exam", "no-such-host"], "error": { "code": "not_found" } },
+    { "do": "engagementSetMsfHost", "args": ["no-such-engagement", null], "error": { "code": "not_found" } },
+    { "do": "engagementGet", "args": ["$exam"], "expect": { "msfHostId": "$ms01" } },
+
+    { "do": "hostDelete", "args": ["$ms02"] },
+    { "do": "engagementGet", "args": ["$exam"], "expect": { "msfHostId": "$ms01" } },
+    { "do": "hostDelete", "args": ["$ms01"] },
+    { "do": "engagementGet", "args": ["$exam"], "expect": { "msfHostId": null } },
+    { "do": "engagementsList", "args": [], "expect": [{ "id": "$exam", "msfHostId": null }, { "id": "$other", "msfHostId": null }] },
+    { "do": "engagementSetMsfHost", "args": ["$exam", null], "expect": { "msfHostId": null } }
+  ]
+}

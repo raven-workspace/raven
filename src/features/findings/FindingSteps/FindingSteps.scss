@@ -17,6 +17,12 @@
     gap: var(--space-sm);
   }
 
+  .finding-steps__adds {
+    display: grid;
+    grid-auto-flow: column;
+    gap: var(--space-sm);
+  }
+
   .finding-steps__error {
     @include type(meta);
     color: var(--warn);
@@ -178,5 +184,57 @@
     @include truncate;
     @include type(body);
     color: var(--fg-2);
+  }
+
+  // Adding a screenshot from the finding: the drop zone (its preview once there is one), the caption, the actions.
+  .finding-shot {
+    display: grid;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+  }
+
+  .finding-shot__zone {
+    display: grid;
+    place-items: center;
+    min-height: 6rem;
+    padding: var(--space-sm);
+    border: 1px dashed var(--line-2);
+    border-radius: var(--radius-sm);
+
+    &:focus-visible {
+      outline-style: solid;
+      outline-width: 1px;
+      outline-color: var(--accent);
+    }
+  }
+
+  .finding-shot__zone--dragging {
+    border-color: var(--accent);
+  }
+
+  .finding-shot__prompt {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .finding-shot__image {
+    display: block;
+    max-width: 100%;
+    max-height: 18rem;
+  }
+
+  // Where the image comes from, then Cancel and Add on a row of their own at the end.
+  .finding-shot__sources,
+  .finding-shot__commit {
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: start;
+    gap: var(--space-sm);
+  }
+
+  .finding-shot__commit {
+    justify-content: end;
   }
 }

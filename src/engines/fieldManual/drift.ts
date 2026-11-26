@@ -2,6 +2,8 @@ import { COMPUTED_TOKENS } from '../checklist/fill';
 import { resolveTemplate } from '../checklist/template';
 import type { ChecklistGoal } from '../checklist/types';
 import type { LibraryCommand } from '../library/types';
+import { noteCommands } from '../manual/commands';
+import type { ManualNote } from '../manual/types';
 import type { ParsedCard } from './parseCard';
 import type { PlaybookItem } from './parsePlaybook';
 import type { ToolkitEntry } from './parseToolkit';
@@ -14,15 +16,18 @@ export interface Drift {
   reworded: { goalId: string; text: string }[];
   /** Steps with no `playbook` field. */
   ravenOnlySteps: string[];
-  /** Tokens Raven cannot fill, with the number of commands using each; `manual` = fine, you type these. */
-  unfillable: { token: string; count: number; manual: boolean }[];
+  /**
+   * Tokens Raven cannot fill, with the number of commands using each and where those commands are (Arsenal commands,
+   * Manual note commands); `manual` = fine, you type these. `from` is absent in a report saved before it was added.
+   */
+  unfillable: { token: string; count: number; manual: boolean; from?: { arsenal: number; notes: number } }[];
   /** Raven-source commands whose template is in no card. */
   ravenOnlyCommands: string[];
   /** Toolkit files no card command mentions (informational). */
   toolkitUnused: string[];
 }
 
-/** Spec §7 "stay manual": the user types these. */
+/** Arsenal-import spec §7 "stay manual": the user types these. */
 export const MANUAL_TOKENS: ReadonlySet<string> = new Set([
   'FILE', 'SCRIPT', 'OUTPUT', 'SHARE', 'SPN', 'PARAM', 'NEW_USER', 'NEW_PASS', 'KALI_PASS',
   'LOCAL_PORT', 'LISTEN_PORT', 'BIND_PORT', 'TARGET_PORT', 'EDB_ID', 'DOMAIN_SID',
@@ -56,8 +61,9 @@ function unfilledTokens(template: string): Set<string> {
 }
 
 /**
- * What the vault and Raven disagree on (spec §5). Step mapping is exact (file name plus parsePlaybook text,
- * whitespace collapsed); there is no fuzzy matching.
+ * What the vault and Raven disagree on (arsenal-import spec §5). Step mapping is exact (file name plus parsePlaybook text,
+ * whitespace collapsed); there is no fuzzy matching. `notes`: the Manual notes, whose commands that fill (code blocks
+ * that fill, lookup-table commands) count toward `unfillable` too.
  */
 export function computeDrift(
   goals: ChecklistGoal[],
@@ -65,14 +71,23 @@ export function computeDrift(
   commands: LibraryCommand[],
   cards: ParsedCard[],
   toolkit: ToolkitEntry[],
+  notes: ManualNote[] = [],
 ): Drift {
   const key = (file: string, text: string) => `${base(file)}\n${norm(text)}`;
   const steps = playbook.filter((i) => isStepPlaybook(i.file));
   const mapped = new Set(goals.flatMap((g) => (g.playbook ?? []).map((p) => key(p.file, p.text))));
   const inVault = new Set(steps.map((i) => key(i.file, i.text)));
 
-  const counts = new Map<string, number>();
-  for (const c of commands) for (const t of unfilledTokens(c.template)) counts.set(t, (counts.get(t) ?? 0) + 1);
+  const counts = new Map<string, { arsenal: number; notes: number }>();
+  const add = (template: string, from: 'arsenal' | 'notes') => {
+    for (const t of unfilledTokens(template)) {
+      const n = counts.get(t) ?? { arsenal: 0, notes: 0 };
+      n[from]++;
+      counts.set(t, n);
+    }
+  };
+  for (const c of commands) add(c.template, 'arsenal');
+  for (const n of notes) for (const template of noteCommands(n)) add(template, 'notes');
 
   const blocks = cards.flatMap((c) => c.blocks.map((b) => norm(b.template)));
   const blockText = blocks.join('\n');
@@ -87,7 +102,7 @@ export function computeDrift(
     ),
     ravenOnlySteps: goals.filter((g) => !g.playbook?.length).map((g) => g.id),
     unfillable: [...counts]
-      .map(([token, count]) => ({ token, count, manual: isManual(token) }))
+      .map(([token, from]) => ({ token, count: from.arsenal + from.notes, manual: isManual(token), from }))
       .sort((a, b) => b.count - a.count || a.token.localeCompare(b.token)),
     ravenOnlyCommands: commands.filter((c) => c.source === 'raven' && !cardTemplates.has(norm(c.template))).map((c) => c.id),
     toolkitUnused: [...new Set(toolkit.map((t) => t.file))].filter((f) => !mentions(blockText, f)),

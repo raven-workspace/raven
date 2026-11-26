@@ -1,0 +1,50 @@
+# Checks that every author of a pull request has signed the Raven CLA (CLA.md).
+# A contributor signs by commenting the sentence the check asks for. Signatures are stored in
+# signatures/cla.json on the cla-signatures branch, which this workflow writes to.
+#
+# pull_request_target runs with write access on PRs from forks. That's safe here only because
+# no step checks out or runs the PR's code: keep it that way.
+name: CLA
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request &&
+        (github.event.comment.body == 'recheck' ||
+         github.event.comment.body == 'I have read the Raven CLA and I hereby sign it.'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check CLA signatures
+        # contributor-assistant/github-action v2.6.1, pinned by commit.
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          path-to-document: https://github.com/raven-workspace/raven/blob/develop/CLA.md
+          path-to-signatures: signatures/cla.json
+          branch: cla-signatures
+          # The copyright holder and bots don't sign.
+          allowlist: ktchntn,dependabot[bot],github-actions[bot],renovate[bot]
+          custom-pr-sign-comment: I have read the Raven CLA and I hereby sign it.
+          custom-notsigned-prcomment: >-
+            Thanks for your pull request. Before it can be merged, each author needs to sign the
+            [Raven Contributor Licence Agreement](https://github.com/raven-workspace/raven/blob/develop/CLA.md).
+            You keep the copyright in your work. To sign, read the CLA and then post the comment below.
+          custom-allsigned-prcomment: Every author of this pull request has signed the Raven CLA. Thank you.
+          create-file-commit-message: 'chore(cla): start the CLA signature list'
+          signed-commit-message: 'chore(cla): $contributorName signed the CLA in #$pullRequestNo'
+          lock-pullrequest-aftermerge: false
