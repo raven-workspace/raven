@@ -222,6 +222,18 @@ describe("Report view", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
   });
 
+  it("picking a missing flag selects its machine's heading", async () => {
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    await waitFor(() => expect(openTodo()).toHaveTextContent("2 flags are not on the page"));
+    fireEvent.click(within(openTodo()).getByText("2 flags are not on the page"));
+    await waitFor(() => expect(pageEditor().state.selection instanceof NodeSelection).toBe(true));
+    const picked = (pageEditor().state.selection as NodeSelection).node;
+    expect(picked.type.name).toBe("heading");
+    expect(picked.textContent).toContain("lnx02");
+  });
+
   it("a dismissed check leaves To do and the tab's count, is saved with the page, and can be brought back", async () => {
     await seedLnx(80);
     const save = vi.spyOn(api, "reportSectionSave");

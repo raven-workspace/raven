@@ -125,6 +125,14 @@ describe("targetChecks", () => {
       ["proof-missing:DC01:proof", "fail", "No proof.txt for DC01 on the page."],
     ]);
   });
+  it("proof-missing is anchored to the machine's heading when it is on the page, else to nothing", () => {
+    const page = doc(words("Intro"), h1("DC01 (10.0.0.5)", "facts:h1"), words("Text"));
+    // Pre-order: the intro paragraph 0, its text 1, the heading 2.
+    expect(find(run(data(), page), "proof-missing")?.anchor).toEqual({ nodeIndex: 2 });
+    expect(find(run(data(), doc(words("Text"))), "proof-missing")?.anchor).toBeUndefined();
+    // Another machine's heading is not this one's.
+    expect(find(run(data(), doc(h1("WS01", "facts:h2"))), "proof-missing")?.anchor).toBeUndefined();
+  });
   it("proof-missing when the flag exists but is not on the page", () => {
     expect(find(run(good(), doc()), "proof-missing")).toBeDefined();
   });

@@ -196,7 +196,7 @@ function credentialChecks(data: ReportData, hosts: Host[]): Check[] {
  * Each expected flag's proof, read from the flag entry and its companions (`proofCompanions`): the flag's own paste and
  * screenshot, the commands that print its value, the screenshots taken with it.
  */
-function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData, onPage: Set<string>): Check[] {
+function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData, onPage: Set<string>, heading?: number): Check[] {
   const out: Check[] = [];
   for (const flag of flags) {
     const entries = data.log
@@ -206,7 +206,8 @@ function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData,
     // proof with its own companions.
     const entry = entries.find((e) => onPage.has(e.id)) ?? readOnPage(data, host.id, flag, onPage);
     if (!entry) {
-      out.push({ id: `proof-missing:${host.name}:${flag}`, level: "fail", text: `No ${flag}.txt for ${host.name} on the page.` });
+      // Picking it goes to the machine's heading, where the proof belongs; with none on the page, to the page.
+      out.push({ id: `proof-missing:${host.name}:${flag}`, level: "fail", text: `No ${flag}.txt for ${host.name} on the page.`, ...(heading === undefined ? {} : { anchor: { nodeIndex: heading } }) });
       continue;
     }
     const companions = proofCompanions(data, host.id, entry);
@@ -302,7 +303,13 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   const onPage = entriesOnPage(doc, data);
   const hosts = target.hostIds.flatMap((id) => data.hosts.find((h) => h.id === id) ?? []);
   const entryOf = (id: string) => data.log.find((e) => e.id === id);
-  for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage));
+  /** Each machine's heading on the page (a `facts:<hostId>` heading), by host id: its node index. */
+  const headings = new Map<string, number>();
+  for (const { node, index } of nodes) {
+    const s = node.type === "heading" ? blockSource(node) : null;
+    if (s?.kind === "facts" && !headings.has(s.hostId)) headings.set(s.hostId, index);
+  }
+  for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage, headings.get(host.id)));
 
   // A block from an entry kept from the report (private, or behind a private or operator attempt) or deleted: the words or picture on the page may be what was hidden or meant to go.
   // One check per entry, at its first block. A command block with no output block of its entry after it (before that
