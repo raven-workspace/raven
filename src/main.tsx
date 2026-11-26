@@ -7,16 +7,20 @@ import "@fontsource-variable/jetbrains-mono";
 import "./styles/global.css";
 import "./styles/base.scss";
 import App from "./App";
+import { loadFonts } from "./lib/loadFonts";
 import { makeQueryClient } from "./lib/queryClient";
 
 const queryClient = makeQueryClient();
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </QueryClientProvider>
-  </React.StrictMode>,
-);
+// Mount once the bundled fonts are in (or a short timeout passes), so no text swaps fonts after it's on screen.
+void loadFonts().then(() => {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </React.StrictMode>,
+  );
+});
