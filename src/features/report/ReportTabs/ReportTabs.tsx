@@ -331,7 +331,8 @@ export function ReportTabs({
           {openPage && (onRenamePage || onDeletePage) && (
             <MenuPopover
               label="Page actions"
-              trigger={<IconButton icon={DotsThree} label="Page actions" shortcut="F2" />}
+              // No F2 on its tooltip: F2 renames from a focused tab, not from here.
+              trigger={<IconButton icon={DotsThree} label="Page actions" />}
               items={[
                 ...(onRenamePage ? [{ label: "Rename", run: () => setRenaming(openPage.id), movesFocus: true }] : []),
                 ...(onDeletePage ? [{ label: "Delete", run: () => onDeletePage(openPage.id), destructive: true, movesFocus: true }] : []),

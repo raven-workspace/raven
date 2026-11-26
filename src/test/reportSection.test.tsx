@@ -1985,4 +1985,25 @@ describe("Report view: tabs, focus and keyboard (RAV-17)", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(document.activeElement).toBe(tab("§6 Pivoting")));
   });
+
+  it("Page actions' tooltip shows no F2, which renames only from a focused tab", async () => {
+    const onRenamePage = vi.fn();
+    render(
+      <TooltipProvider>
+        <ReportTabs
+          tabs={[{ id: "p", label: "§6 Pivoting", state: "none", page: true, title: "Pivoting" }]}
+          openId="p"
+          onOpen={() => {}}
+          onReorder={() => {}}
+          onRenamePage={onRenamePage}
+          exportSlot={null}
+        />
+      </TooltipProvider>,
+    );
+    fireEvent.focus(screen.getByRole("button", { name: "Page actions" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(/^Page actions$/);
+    // F2 on the focused tab still renames.
+    fireEvent.keyDown(screen.getByRole("tab"), { key: "F2" });
+    expect(screen.getByRole("textbox", { name: "Page title" })).toHaveValue("Pivoting");
+  });
 });
