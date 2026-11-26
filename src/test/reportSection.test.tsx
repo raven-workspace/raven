@@ -10,6 +10,7 @@ import { api, resetAuditState } from "../audit/fakeApi";
 import { reportSchema } from "../features/report/editor/extension";
 import { PROGRAMMATIC } from "../features/report/editor/pageActions";
 import { ReportSectionView } from "../features/report/ReportSection/ReportSection";
+import { openFindBar } from "../features/report/editor/ReportEditor/ReportEditor";
 import { pruneRemoved } from "../features/report/queries";
 import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, type ReportNode, type SectionMeta, placedIn, removalKeys } from "../engines/report";
 import { discardReports, flushReports, queueReportSave } from "../features/report/saveQueue";
@@ -2037,5 +2038,37 @@ describe("Report view: tabs, focus and keyboard (RAV-17)", () => {
     await waitFor(() => expect(tabLabels()).not.toContain("Appendix B"));
     await waitFor(() => expect(document.activeElement).toBe(tab("Appendix A")));
     expect(tab("Appendix A")).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("after a check is picked, Esc on the page closes To do and focus stays in the page; a field or a menu keeps its Esc", async () => {
+    await seedLnx(80);
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBe(1));
+    const pick = async () => {
+      fireEvent.click(within(openTodo()).getByText("Long block (80 lines)"));
+      await waitFor(() => expect(pageEditor().state.selection instanceof NodeSelection).toBe(true));
+    };
+    const inPage = () => pageEditor().view.dom.contains(document.activeElement);
+    await waitFor(() => expect(openTodo()).toHaveTextContent("Long block (80 lines)"));
+    await pick();
+    expect(inPage()).toBe(true);
+    // A field of the page's own (the find bar) keeps its Esc: it closes, the panel stays.
+    act(() => void openFindBar(pageEditor()));
+    const find = await screen.findByRole("textbox", { name: "Find" });
+    find.focus();
+    fireEvent.keyDown(find, { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("search", { name: "Find on this page" })).toBeNull());
+    expect(screen.getByRole("region", { name: "To do" })).toBeInTheDocument();
+    await waitFor(() => expect(inPage()).toBe(true));
+    // A menu is open: Esc is the menu's.
+    const menu = document.body.appendChild(Object.assign(document.createElement("div"), { role: "menu" }));
+    menu.setAttribute("role", "menu");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape", code: "Escape" });
+    expect(screen.getByRole("region", { name: "To do" })).toBeInTheDocument();
+    menu.remove();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
+    expect(inPage()).toBe(true);
   });
 });

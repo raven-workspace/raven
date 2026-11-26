@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useParams } from "react-router";
 import {
   archivePage,
@@ -88,6 +88,7 @@ import { useSettings } from "../../settings/queries";
 import { useEngagement } from "../../engagements/queries";
 import { RavenError } from "../../../types/errors";
 import { moveToAppendix, undoMoveToAppendix, type MovedBlock } from "../moveToAppendix";
+import { popupOpen } from "../popupOpen";
 import "./ReportSection.scss";
 
 const HINTS: Hint[] = [
@@ -819,6 +820,18 @@ function ReportBody({
     todoOpener.current = null;
     if (back?.isConnected) back.focus();
   };
+  // Esc on the page closes To do too (a picked check takes focus there), and focus stays where it is. Heard before the
+  // page's text does, which would otherwise take it to select the block around the picked one; a field (the find bar,
+  // a link's address) keeps its own Esc, and so does an open dialog, menu, list or other popup.
+  const onPageKeyDownCapture = (e: KeyboardEvent<HTMLElement>) => {
+    if (!todoOpen || e.key !== "Escape" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('input, textarea, select, [role="dialog"], [role="menu"], [role="listbox"]') || isDialogOpen() || popupOpen()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    todoOpener.current = null;
+    setTodoOpen(false);
+  };
   const openChecks = open?.target ? (checks.get(open.section.id) ?? []) : open?.item.group === "front" ? reportLevel : [];
   // The open tab's dismissed checks that still fire (a dismissal whose check stopped firing lists nothing).
   const shown = new Set(openChecks.map((c) => c.id));
@@ -1115,7 +1128,7 @@ function ReportBody({
             <div id={panelId} role="tabpanel" aria-labelledby={reportTabDomId(openTabId)} className="report-section__main">
               {partRow}
               {todoPanel}
-              <div ref={pageRef} className="report-section__pane">
+              <div ref={pageRef} onKeyDownCapture={onPageKeyDownCapture} className="report-section__pane">
             {!editorShown && notices}
             {openSection?.kind === "details" ? (
               <ReportDetails

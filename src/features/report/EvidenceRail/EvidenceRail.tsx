@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../ui/shadcn/tab
 import { KIND_LABELS } from "../../log/kindLabels";
 import { insertEntry } from "../editor/pageActions";
 import { hasPageCursor } from "../editor/ReportEditor/ReportEditor";
+import { popupOpen } from "../popupOpen";
 import { clockTime } from "../../engagements/format";
 import "./EvidenceRail.scss";
 
@@ -383,12 +384,6 @@ export function EvidenceRail({
   );
 }
 
-/** Whether a menu, a list or a Radix popover is open: Esc closes that first. ProseKit keeps its closed menus and
- *  lists in the DOM, marked closed. A tooltip (a popper wrapper holding `role="tooltip"`) is no popup: Esc closes the
- *  drawer while one shows. */
-const popupOpen = () =>
-  document.querySelector(':is([role="menu"], [role="listbox"]):not([data-state="closed"], [hidden])') !== null ||
-  [...document.querySelectorAll("[data-radix-popper-content-wrapper]")].some((w) => w.querySelector('[role="tooltip"]') === null);
 
 /** The rail as a drawer from the right edge (under 1200px): E or the strip button toggles it, Esc and the X close it. */
 export function EvidenceDrawer({

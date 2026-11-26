@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { AUDIT_NOW } from "../src/audit/fixtures";
-import { openReportItem, reportTab } from "./screens";
+import { openReportItem, reportChecks, reportTab } from "./screens";
 
 // The report's tab row: its keyboard, focus and layout (RAV-17). Hard regressions: these fail the run.
 
@@ -57,4 +57,25 @@ test("Report: renaming a page's tab keeps the row still, the title field as wide
   await rename(page, long, "Tools");
   await page.keyboard.press("F2");
   expect(Math.round((await titleField(page).boundingBox())!.width)).toBe(192);
+});
+
+test("Report: after a check is picked, Esc closes To do and focus stays in the page, in WebKit too", async ({ page, playwright, baseURL }) => {
+  const run = async (p: Page) => {
+    await openReport(p, "AD set");
+    const checks = await reportChecks(p);
+    await checks.getByRole("button").first().click();
+    const editor = p.locator(".report-page .ProseMirror");
+    await expect(editor).toBeFocused();
+    await p.keyboard.press("Escape");
+    await expect(p.getByRole("region", { name: "To do" })).toHaveCount(0);
+    await expect(editor).toBeFocused();
+    expect(new URL(p.url()).pathname).toBe("/e/e-exam/s/report");
+  };
+  await run(page);
+  const browser = await playwright.webkit.launch();
+  try {
+    await run(await browser.newPage({ baseURL }));
+  } finally {
+    await browser.close();
+  }
 });
