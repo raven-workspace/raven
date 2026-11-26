@@ -91,6 +91,20 @@ describe("proofFacts details", () => {
     expect(f("root@x:/root# cd /tmp | cat proof.txt").usualPath).toBe(false);
     expect(f("bob@x:/home$ cd bob; cat local.txt").usualPath).toBe(true);
   });
+  it("shows the hostname only when hostname is run or the host's name is in the output", () => {
+    // The bare word is not enough: a failed command names it too.
+    expect(f("hostname: command not found\nipconfig\n10.0.0.5").showsHostname).toBe(false);
+    expect(f("bash: hostname: command not found").showsHostname).toBe(false);
+    expect(f("the hostname is unknown").showsHostname).toBe(false);
+    // Run as a command: at a line start, after a prompt or after a separator.
+    for (const run of ["hostname", "  hostname", "whoami; hostname; ip a", "whoami && hostname && ipconfig", "root@x:/root# hostname", "PS C:\\Users\\bob> hostname", "C:\\Users\\bob>hostname"]) {
+      expect(f(run).showsHostname, run).toBe(true);
+    }
+    // The host's name in the output, as a whole word, in any case.
+    expect(f("uname -n\ndc01").showsHostname).toBe(true);
+    expect(f("root@DC01:/root# cat proof.txt").showsHostname).toBe(true);
+    expect(f("uname -n\ndc012").showsHostname).toBe(false);
+  });
 });
 
 describe("absoluteClaims", () => {
@@ -143,6 +157,9 @@ describe("targetChecks", () => {
     for (const id of ["proof-identity", "proof-path", "proof-hostname"]) expect(find(c, id)!.fix).toContain("ipconfig");
     const lin = run(data({ hosts: [host({ os: "linux" })], log: [flag({}, { proof: "id\nip addr\n10.0.0.5\ncat /root/proof.txt", attachmentId: null })] }), goodDoc());
     expect(find(lin, "proof-hostname")!.fix).toContain("ip addr");
+    // A failed hostname command still lacks the hostname.
+    const failed = run(data({ log: [flag({}, { proof: "whoami\nhostname: command not found\ntype C:\\Users\\Administrator\\Desktop\\proof.txt\nipconfig\n10.0.0.5", attachmentId: null })] }), goodDoc());
+    expect(find(failed, "proof-hostname")).toMatchObject({ id: "proof-hostname:DC01:proof", level: "soft" });
     // With a screenshot, what the text lacks may be on it: only a read from a known odd folder is said.
     const shot = run(data({ log: [flag({}, { proof: "ipconfig\n10.0.0.5\ncat /tmp/proof.txt" })] }), goodDoc());
     expect(shot.map((x) => x.id)).toEqual(["proof-path:DC01:proof"]);

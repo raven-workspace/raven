@@ -1,5 +1,6 @@
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
+import { escapeRegExp } from "../regex";
 
 export interface ProofFacts {
   showsIp: boolean;
@@ -18,7 +19,12 @@ export const ADDRESS_COMMAND = /\bip\s+(?:-\S+\s+)*a(?:ddr(?:ess)?)?\b|\bifconfi
 const WHOAMI = /\bwhoami\b/i;
 /** `id` as a command: at a line start or right after a prompt or separator. */
 const ID_COMMAND = /(?:^|[;&|$#>]\s*)id(?:\s|$)/m;
-const HOSTNAME = /\bhostname\b/i;
+/** `hostname` as a command: at a line start or right after a prompt or separator, and not an error naming it
+ *  ("hostname: command not found"). */
+const HOSTNAME_COMMAND = /(?:^\s*|[;&|$#>]\s*)hostname(?=[\s;&|]|$)/im;
+/** The host's name as a whole word, in any case: what `hostname` prints, or a prompt that shows it. */
+const namesHost = (text: string, name: string) =>
+  name.trim() !== "" && new RegExp(`(?<![\\w-])${escapeRegExp(name.trim())}(?![\\w-])`, "i").test(text);
 const READ_COMMAND = /\b(?:cat|type)\s+(.+)/gi;
 /** A `cd` and its argument, cut where the next command starts (`;`, `&&`, `|`). */
 const CD_COMMAND = /\bcd\s+(?:\/d\s+)?([^;&|\r\n]+)/gi;
@@ -80,7 +86,7 @@ export function textFacts(text: string, host: Host): Omit<ProofFacts, "hasScreen
   return {
     showsIp: host.ip != null && host.ip !== "" && ADDRESS_COMMAND.test(text) && hasIp(text, host.ip),
     showsIdentity: WHOAMI.test(text) || ID_COMMAND.test(text),
-    showsHostname: HOSTNAME.test(text),
+    showsHostname: HOSTNAME_COMMAND.test(text) || namesHost(text, host.name),
     usualPath: usualRead || dir.usual,
     pathKnown: usualRead || dir.known || reads.some((arg) => ABSOLUTE.test(arg)),
   };
