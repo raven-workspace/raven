@@ -8,6 +8,8 @@ import "./TodoPanel.scss";
 /** A check's one-press fix, offered under it (a long block's "Move to appendix"). */
 export interface CheckAction {
   label: string;
+  /** What pressing it does, when its label alone doesn't say: a line above the action. */
+  note?: string;
   run(): void;
 }
 
@@ -88,6 +90,7 @@ export function CheckList({
                       <code className="check-list__fix">{check.fix}</code>
                     </Disclosure>
                   )}
+                  {action?.note && <span>{action.note}</span>}
                   {(action || onDismiss) && (
                     <div className="check-list__actions">
                       {action && (

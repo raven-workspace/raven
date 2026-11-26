@@ -1041,6 +1041,8 @@ describe("Report view: the result", () => {
     await waitFor(() => expect(paper().querySelector('[data-source-gone="private"]')).toBeTruthy());
     const checks = openTodo();
     fireEvent.click(within(checks).getByText("Block from a now-private entry"));
+    // The action says what it does before it is pressed.
+    expect(within(checks).getByText("Keep the text to make it your own writing: it stays on the page and goes into the report, though its entry stays private.")).toBeInTheDocument();
     fireEvent.click(within(checks).getByRole("button", { name: "Keep the text" }));
     await waitFor(() => expect(paper().querySelector("[data-source-gone]")).toBeNull());
     expect(paper().textContent).toContain("creds in the share");
@@ -1809,6 +1811,21 @@ describe("CheckList", () => {
     expect(screen.getAllByText(/22\/tcp on ms01 is untested/)).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Fix" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark tested" })).toBeInTheDocument();
+  });
+
+  it("shows an action's note, saying what it does, with the action", () => {
+    render(
+      <TooltipProvider>
+        <CheckList
+          checks={[{ id: "copied-deleted:e1", level: "fail", text: "A block on the page comes from an entry that was deleted." }]}
+          onPick={() => {}}
+          actionFor={() => ({ label: "Keep the text", note: "It stays as yours.", run: () => {} })}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByText("It stays as yours.")).toBeNull();
+    fireEvent.click(screen.getByText("Block from a deleted entry"));
+    expect(screen.getByText("It stays as yours.")).toBeInTheDocument();
   });
 });
 
