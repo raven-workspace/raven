@@ -22,7 +22,7 @@ const COMMANDS: LibraryCommand[] = [
     why: 'ESC1 (enrollee supplies subject) is a two-command path to Domain Admin.',
     source: 'oscp-notes',
     match: { bins: ['certipy', 'certipy-ad'], all: [String.raw`(^|\s)find(?=\s)`] },
-    matchExamples: { hit: ["certipy-ad find -u jace@corp.local -p 'Pw1' -dc-ip 10.0.0.1 -vulnerable"], miss: ['certipy-ad auth -pfx administrator.pfx'] },
+    matchExamples: { hit: ["certipy-ad find -u ruth@corp.local -p 'Pw1' -dc-ip 10.0.0.1 -vulnerable"], miss: ['certipy-ad auth -pfx administrator.pfx'] },
   },
   {
     id: 'ad-user-adcs-nxc',
@@ -34,7 +34,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-user-adcs'],
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP, String.raw`(-M|--module)\s+adcs`] },
-    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' -M adcs"], miss: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' -M laps"] },
+    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' -M adcs"], miss: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' -M laps"] },
   },
   {
     id: 'ad-user-certipy-esc1',
@@ -72,7 +72,7 @@ const COMMANDS: LibraryCommand[] = [
     why: 'Each password is local Administrator on that computer.',
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP, String.raw`(-M|--module)\s+laps`] },
-    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' -M laps"], miss: ['nxc smb 10.0.0.5 -u administrator -p x --laps'] },
+    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' -M laps"], miss: ['nxc smb 10.0.0.5 -u administrator -p x --laps'] },
   },
   {
     id: 'ad-user-laps-ps',
@@ -97,7 +97,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-user-delegation'],
     source: 'oscp-notes',
     match: { bins: impacket('findDelegation') },
-    matchExamples: { hit: ["impacket-findDelegation corp.local/jace:'Pw1' -dc-ip 10.0.0.1"], miss: ['impacket-GetUserSPNs corp/jace'] },
+    matchExamples: { hit: ["impacket-findDelegation corp.local/ruth:'Pw1' -dc-ip 10.0.0.1"], miss: ['impacket-GetUserSPNs corp/ruth'] },
   },
   {
     id: 'ad-user-delegation-nxc',
@@ -109,7 +109,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-user-delegation'],
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP, String.raw`--trusted-for-delegation|--find-delegation`] },
-    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' --trusted-for-delegation"], miss: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' --users"] },
+    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --trusted-for-delegation"], miss: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --users"] },
   },
   {
     id: 'ad-user-maq',
@@ -122,7 +122,7 @@ const COMMANDS: LibraryCommand[] = [
     why: 'MAQ > 0 plus write on a computer object = RBCD.',
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP, String.raw`(-M|--module)\s+maq`] },
-    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' -M maq"], miss: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' -M laps"] },
+    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' -M maq"], miss: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' -M laps"] },
   },
   // ---------------------------------------------------------------- gMSA
   {
@@ -135,7 +135,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-user-gmsa'],
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP, String.raw`--gmsa`] },
-    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' --gmsa"], miss: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1'"] },
+    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --gmsa"], miss: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1'"] },
   },
   {
     id: 'ad-user-gmsa-bloodyad',
@@ -147,7 +147,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-user-gmsa'],
     source: 'oscp-notes',
     match: { bins: ['bloodyad', 'bloodyad.py'], all: [String.raw`msds-managedpassword`] },
-    matchExamples: { hit: ["bloodyAD --host dc01.corp.local -d corp.local -u jace -p 'Pw1' get object 'svc_web$' --attr msDS-ManagedPassword"], miss: ['bloodyAD --host dc01 get object jace'] },
+    matchExamples: { hit: ["bloodyAD --host dc01.corp.local -d corp.local -u ruth -p 'Pw1' get object 'svc_web$' --attr msDS-ManagedPassword"], miss: ['bloodyAD --host dc01 get object ruth'] },
   },
   {
     id: 'ad-user-gmsadumper',
@@ -171,7 +171,7 @@ const COMMANDS: LibraryCommand[] = [
     why: 'Run -M gpp_autologin too; cpassword decrypts with gpp-decrypt.',
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_SMB, String.raw`gpp_(password|autologin)`] },
-    matchExamples: { hit: ["nxc smb 10.0.0.1 -u jace -p 'Pw1' -M gpp_password"], miss: ["nxc smb 10.0.0.1 -u jace -p 'Pw1' --shares"] },
+    matchExamples: { hit: ["nxc smb 10.0.0.1 -u ruth -p 'Pw1' -M gpp_password"], miss: ["nxc smb 10.0.0.1 -u ruth -p 'Pw1' --shares"] },
   },
   {
     id: 'ad-user-sysvol-mirror',
@@ -184,7 +184,7 @@ const COMMANDS: LibraryCommand[] = [
     why: 'Logon scripts in NETLOGON leak passwords as often as GPP does.',
     source: 'oscp-notes',
     match: { bins: ['smbclient'], all: [String.raw`/sysvol`, String.raw`(^|\s)-c\s`, String.raw`mget|recurse`], none: [String.raw`(^|\s)-N(?=\s|$)`] },
-    matchExamples: { hit: ["smbclient //10.0.0.1/SYSVOL -U 'corp\\jace%Pw1' -c 'recurse on; mget *'"], miss: ['smbclient -N //10.0.0.1/SYSVOL', "smbclient //10.0.0.1/SYSVOL -U 'corp\\jace%Pw1'"] },
+    matchExamples: { hit: ["smbclient //10.0.0.1/SYSVOL -U 'corp\\ruth%Pw1' -c 'recurse on; mget *'"], miss: ['smbclient -N //10.0.0.1/SYSVOL', "smbclient //10.0.0.1/SYSVOL -U 'corp\\ruth%Pw1'"] },
   },
   {
     id: 'ad-user-gpp-decrypt',
@@ -220,7 +220,7 @@ const COMMANDS: LibraryCommand[] = [
     why: 'Shows hosts in subnets you have not scanned yet: candidates for a pivot.',
     source: 'oscp-notes',
     match: { bins: ['adidnsdump', 'adidnsdump.py'] },
-    matchExamples: { hit: ["adidnsdump -u 'corp\\jace' -p 'Pw1' 10.0.0.1 -r"], miss: ['dig axfr corp.local @10.0.0.1'] },
+    matchExamples: { hit: ["adidnsdump -u 'corp\\ruth' -p 'Pw1' 10.0.0.1 -r"], miss: ['dig axfr corp.local @10.0.0.1'] },
   },
   // ---------------------------------------------------------------- MSSQL
   {
@@ -235,7 +235,7 @@ const COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
     match: { bins: impacket('mssqlclient'), all: [String.raw`-windows-auth`] },
     matchExamples: {
-      hit: ["impacket-mssqlclient corp.local/jace:'Pw1'@10.0.0.7 -windows-auth"],
+      hit: ["impacket-mssqlclient corp.local/ruth:'Pw1'@10.0.0.7 -windows-auth"],
       miss: ["impacket-mssqlclient sa:'Pw1'@10.0.0.7"],
     },
   },
@@ -282,7 +282,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-user-mssql'],
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP, String.raw`mssqlsvc`] },
-    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' --query \"(servicePrincipalName=MSSQLSvc*)\" \"servicePrincipalName\""], miss: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' --users"] },
+    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --query \"(servicePrincipalName=MSSQLSvc*)\" \"servicePrincipalName\""], miss: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --users"] },
   },
   {
     id: 'ad-user-mssql-priv',
@@ -294,7 +294,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-user-mssql'],
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_MSSQL, String.raw`(-M|--module)\s+(mssql_priv|enum_links|enum_impersonate)`] },
-    matchExamples: { hit: ["nxc mssql 10.0.0.7 -u jace -p 'Pw1' -M mssql_priv"], miss: ["nxc mssql 10.0.0.7 -u jace -p 'Pw1'"] },
+    matchExamples: { hit: ["nxc mssql 10.0.0.7 -u ruth -p 'Pw1' -M mssql_priv"], miss: ["nxc mssql 10.0.0.7 -u ruth -p 'Pw1'"] },
   },
   // ---------------------------------------------------------------- relay and coercion (exam-banned)
   {

@@ -48,7 +48,7 @@ function mount(over: { initial?: string; creds?: Credential[]; selectedId?: stri
         <Search />
         <InventoryList
           eid="e1" creds={creds} all={creds} hosts={[H1]} servicesByHost={new Map([["h1", [SMB]]])}
-          attempts={over.attempts ?? []} usernames={over.usernames ?? [user("u1", "carol"), user("u2", "drew")]} grants={[]}
+          attempts={over.attempts ?? []} usernames={over.usernames ?? [user("u1", "carol"), user("u2", "omar")]} grants={[]}
           selectedId={over.selectedId} onSelect={over.onSelect ?? (() => {})}
         />
       </MemoryRouter>
@@ -193,14 +193,14 @@ describe("InventoryList", () => {
     mount({
       creds: [],
       usernames: [
-        { ...user("u1", "jay"), scope: "local", localHostId: "h1" },
+        { ...user("u1", "zoe"), scope: "local", localHostId: "h1" },
         { ...user("u2", "kim"), scope: "local", localHostId: null },
         { ...user("u3", "lee"), scope: "domain", domain: "CORP" },
         user("u4", "max"),
       ],
     });
     const row = (name: string) => screen.getByTitle(name).closest("li")!;
-    expect(within(row("jay")).getByText("local to dc01")).toHaveClass("usernames-list__scope");
+    expect(within(row("zoe")).getByText("local to dc01")).toHaveClass("usernames-list__scope");
     expect(within(row("kim")).getByText("local (host deleted)")).toHaveClass("usernames-list__scope");
     expect(row("CORP\\lee").querySelector(".usernames-list__scope")).toBeNull();
     expect(row("max").querySelector(".usernames-list__scope")).toBeNull();

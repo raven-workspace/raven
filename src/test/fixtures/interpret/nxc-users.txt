@@ -1,5 +1,5 @@
 SMB         10.10.1.10      445    DC01             [*] Windows Server 2022 Build 20348 x64 (name:DC01) (domain:corp.lan) (signing:True) (SMBv1:None) (Null Auth:True)
-SMB         10.10.1.10      445    DC01             [+] corp.lan\jay:Synthetic123! 
+SMB         10.10.1.10      445    DC01             [+] corp.lan\zoe:Synthetic123! 
 SMB         10.10.1.10      445    DC01             -Username-                    -Last PW Set-       -BadPW- -Description-                                               
 SMB         10.10.1.10      445    DC01             Administrator                 2026-01-01 00:00:00 1       Built-in account for administering the computer/domain 
 SMB         10.10.1.10      445    DC01             Guest                         <never>             0       Built-in account for guest access to the computer/domain 

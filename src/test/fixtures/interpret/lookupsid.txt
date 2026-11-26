@@ -7,6 +7,6 @@ Impacket v0.12.0 - Copyright Fortra, LLC and its affiliated companies
 498: CORP\Enterprise Read-only Domain Controllers (SidTypeGroup)
 500: CORP\Administrator (SidTypeUser)
 512: CORP\Domain Admins (SidTypeGroup)
-1103: CORP\jay (SidTypeUser)
+1103: CORP\zoe (SidTypeUser)
 1104: CORP\tom (SidTypeUser)
 1105: CORP\MS01$ (SidTypeUser)

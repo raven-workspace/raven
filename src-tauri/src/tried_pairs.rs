@@ -273,8 +273,8 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
-        let a = upsert(c, &e, &[inp(&h, "jay", Some("corp.lan"), "Winter2024!")]).unwrap();
-        let b = upsert(c, &e, &[inp(&h, "jay", Some("corp.lan"), "Winter2024!")]).unwrap();
+        let a = upsert(c, &e, &[inp(&h, "zoe", Some("corp.lan"), "Winter2024!")]).unwrap();
+        let b = upsert(c, &e, &[inp(&h, "zoe", Some("corp.lan"), "Winter2024!")]).unwrap();
         assert_eq!(a, b);
         assert_eq!(list(c, &e).unwrap().len(), 1);
     }
@@ -284,12 +284,12 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
-        let a = upsert(c, &e, &[inp(&h, "JAY", Some("corp.lan"), "Winter2024!")]).unwrap();
-        let b = upsert(c, &e, &[inp(&h, "jay", Some("CORP.LAN"), "Winter2024!")]).unwrap();
+        let a = upsert(c, &e, &[inp(&h, "ZOE", Some("corp.lan"), "Winter2024!")]).unwrap();
+        let b = upsert(c, &e, &[inp(&h, "zoe", Some("CORP.LAN"), "Winter2024!")]).unwrap();
         assert_eq!(a[0].id, b[0].id);
         assert_eq!(list(c, &e).unwrap().len(), 1);
         // The secret is case-sensitive.
-        upsert(c, &e, &[inp(&h, "jay", Some("corp.lan"), "winter2024!")]).unwrap();
+        upsert(c, &e, &[inp(&h, "zoe", Some("corp.lan"), "winter2024!")]).unwrap();
         assert_eq!(list(c, &e).unwrap().len(), 2);
     }
 
@@ -298,13 +298,13 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
-        let mut other_svc = inp(&h, "jay", Some("corp.lan"), "Winter2024!");
+        let mut other_svc = inp(&h, "zoe", Some("corp.lan"), "Winter2024!");
         other_svc.service = "winrm".into();
-        upsert(c, &e, &[inp(&h, "jay", Some("corp.lan"), "Winter2024!"), other_svc, inp(&h, "drew", None, "Winter2024!")]).unwrap();
-        assert_eq!(promote(c, &e, "JAY", Some("CORP.LAN"), "Winter2024!").unwrap(), 2);
+        upsert(c, &e, &[inp(&h, "zoe", Some("corp.lan"), "Winter2024!"), other_svc, inp(&h, "omar", None, "Winter2024!")]).unwrap();
+        assert_eq!(promote(c, &e, "ZOE", Some("CORP.LAN"), "Winter2024!").unwrap(), 2);
         let left = list(c, &e).unwrap();
         assert_eq!(left.len(), 1);
-        assert_eq!(left[0].username, "drew");
+        assert_eq!(left[0].username, "omar");
     }
 
     #[test]
@@ -317,14 +317,14 @@ mod tests {
             c,
             &e,
             &[
-                inp(&h, "jay", Some("CORP"), "Winter2024!"),
-                inp(&h, "jay", Some("corp.local"), "Winter2024!"),
-                inp(&h, "jay", Some("other.com"), "Winter2024!"),
-                inp(&h, "jay", None, "Winter2024!"),
+                inp(&h, "zoe", Some("CORP"), "Winter2024!"),
+                inp(&h, "zoe", Some("corp.local"), "Winter2024!"),
+                inp(&h, "zoe", Some("other.com"), "Winter2024!"),
+                inp(&h, "zoe", None, "Winter2024!"),
             ],
         )
         .unwrap();
-        assert_eq!(promote(c, &e, "jay", Some("corp.lan"), "Winter2024!").unwrap(), 1);
+        assert_eq!(promote(c, &e, "zoe", Some("corp.lan"), "Winter2024!").unwrap(), 1);
         let left: Vec<Option<String>> = list(c, &e).unwrap().into_iter().map(|t| t.domain).collect();
         assert_eq!(left.len(), 3);
         assert!(!left.contains(&Some("CORP".to_string())));
@@ -340,9 +340,9 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
-        upsert(c, &e, &[inp(&h, "jay", Some("CORP"), "Winter2024!"), inp(&h, "jay", Some("corp"), "Spring2024!")]).unwrap();
-        assert_eq!(promote(c, &e, "jay", Some("corp.lan"), "Winter2024!").unwrap(), 0);
-        assert_eq!(promote(c, &e, "jay", Some("Corp "), "Spring2024!").unwrap(), 1);
+        upsert(c, &e, &[inp(&h, "zoe", Some("CORP"), "Winter2024!"), inp(&h, "zoe", Some("corp"), "Spring2024!")]).unwrap();
+        assert_eq!(promote(c, &e, "zoe", Some("corp.lan"), "Winter2024!").unwrap(), 0);
+        assert_eq!(promote(c, &e, "zoe", Some("Corp "), "Spring2024!").unwrap(), 1);
         assert_eq!(list(c, &e).unwrap().len(), 1);
     }
 
@@ -352,11 +352,11 @@ mod tests {
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
         on_domain(c, &e, Some("corp.lan"));
-        let a = upsert(c, &e, &[inp(&h, "jay", Some("CORP"), "Winter2024!")]).unwrap();
-        let b = upsert(c, &e, &[inp(&h, "JAY", Some("corp.lan"), "Winter2024!")]).unwrap();
+        let a = upsert(c, &e, &[inp(&h, "zoe", Some("CORP"), "Winter2024!")]).unwrap();
+        let b = upsert(c, &e, &[inp(&h, "ZOE", Some("corp.lan"), "Winter2024!")]).unwrap();
         assert_eq!(a, b);
         // Another FQDN with the same first label is another pair.
-        let other = upsert(c, &e, &[inp(&h, "jay", Some("corp.local"), "Winter2024!")]).unwrap();
+        let other = upsert(c, &e, &[inp(&h, "zoe", Some("corp.local"), "Winter2024!")]).unwrap();
         assert_ne!(other[0].id, a[0].id);
         assert_eq!(list(c, &e).unwrap().len(), 2);
     }
@@ -367,8 +367,8 @@ mod tests {
         let c = v.conn().unwrap();
         let (e, h) = setup(c);
         let e2 = eng(c, "e2");
-        assert!(matches!(upsert(c, &e2, &[inp(&h, "jay", None, "x")]), Err(AppError::NotFound)));
-        let mut bad = inp(&h, "jay", None, "x");
+        assert!(matches!(upsert(c, &e2, &[inp(&h, "zoe", None, "x")]), Err(AppError::NotFound)));
+        let mut bad = inp(&h, "zoe", None, "x");
         bad.secret_kind = "ticket".into();
         assert!(upsert(c, &e, &[bad]).is_err());
     }

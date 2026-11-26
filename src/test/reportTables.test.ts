@@ -52,7 +52,7 @@ const standalone = (id: string): ReportTarget => ({ key: id, kind: "standalone",
 /** quartz: one shell as ronan, then root, flags; three findings (entry, privesc, none). */
 function lab(): ReportData {
   const d = empty();
-  d.hosts = [host("h1", "quartz", { ip: "172.31.166.144", os: "linux" }), host("h2", "onyx", { ip: "172.31.166.145", os: "windows" })];
+  d.hosts = [host("h1", "quartz", { ip: "10.10.20.144", os: "linux" }), host("h2", "onyx", { ip: "10.10.20.145", os: "windows" })];
   d.usernames = [{ id: "u1", username: "ronan" }, { id: "u2", username: "jo.parker" }] as never;
   d.services = [
     service("h1", 22, { nmapService: "ssh", nmapVersion: "OpenSSH 8" }),
@@ -229,8 +229,8 @@ describe("scopeRows", () => {
     d.hosts.push(host("a1", "MS01", { ip: "10.10.130.141", os: "windows", adSetEffective: true }));
     const rows = scopeRows(d, [standalone("h1"), standalone("h2"), { key: "ad-set", kind: "ad-set", hostIds: ["a1"] }]);
     expect(rows).toEqual([
-      { host: "quartz", ip: "172.31.166.144", os: "Linux", set: "Independent" },
-      { host: "onyx", ip: "172.31.166.145", os: "Windows", set: "Independent" },
+      { host: "quartz", ip: "10.10.20.144", os: "Linux", set: "Independent" },
+      { host: "onyx", ip: "10.10.20.145", os: "Windows", set: "Independent" },
       { host: "MS01", ip: "10.10.130.141", os: "Windows", set: "AD" },
     ]);
   });

@@ -12,7 +12,7 @@ const ip = { ip: '10.10.1.10' }
 
 describe('username lists', () => {
   it('each format yields its usernames with domain', () => {
-    const a = interpret({ command: 'nxc smb 10.10.1.10 -u jay -p x --users', output: nxcUsers })
+    const a = interpret({ command: 'nxc smb 10.10.1.10 -u zoe -p x --users', output: nxcUsers })
     expect(a.parsers).toEqual(['usernames', 'nxc-results']) // the [+] login line in the header is a real attempt too
     expect(view(a.usernames)).toEqual([
       ['Administrator', 'corp.lan'], ['Guest', 'corp.lan'], ['krbtgt', 'corp.lan'],
@@ -24,19 +24,19 @@ describe('username lists', () => {
       { host: ip, goalId: 'h-vuln-spray', parser: 'nxc-results' },
     ])
 
-    const rid = interpret({ command: 'nxc smb 10.10.1.10 -u jay -p x --rid-brute', output: nxcRid })
-    expect(view(rid.usernames)).toEqual([['Administrator', 'CORP'], ['jay', 'CORP'], ['tom', 'CORP']])
+    const rid = interpret({ command: 'nxc smb 10.10.1.10 -u zoe -p x --rid-brute', output: nxcRid })
+    expect(view(rid.usernames)).toEqual([['Administrator', 'CORP'], ['zoe', 'CORP'], ['tom', 'CORP']])
     expect(rid.usernames[0].host).toEqual(ip)
 
     const k = interpret({ command: 'kerbrute userenum --dc 10.10.1.10 -d corp.lan users.txt', output: kerbrute })
-    expect(view(k.usernames)).toEqual([['jay', 'corp.lan'], ['tom', 'corp.lan']])
+    expect(view(k.usernames)).toEqual([['zoe', 'corp.lan'], ['tom', 'corp.lan']])
     expect(k.usernames[0].host).toEqual(ip)
 
     const r = interpret({ command: 'rpcclient -U "" -N 10.10.1.10 -c enumdomusers', output: rpc })
-    expect(view(r.usernames)).toEqual([['Administrator', null], ['Guest', null], ['krbtgt', null], ['jay', null], ['tom', null]])
+    expect(view(r.usernames)).toEqual([['Administrator', null], ['Guest', null], ['krbtgt', null], ['zoe', null], ['tom', null]])
 
-    const l = interpret({ command: 'impacket-lookupsid corp.lan/jay:x@10.10.1.10', output: lookupsid })
-    expect(view(l.usernames)).toEqual([['Administrator', 'CORP'], ['jay', 'CORP'], ['tom', 'CORP']])
+    const l = interpret({ command: 'impacket-lookupsid corp.lan/zoe:x@10.10.1.10', output: lookupsid })
+    expect(view(l.usernames)).toEqual([['Administrator', 'CORP'], ['zoe', 'CORP'], ['tom', 'CORP']])
     expect(l.ticks[0].host).toEqual(ip)
   })
 
@@ -44,12 +44,12 @@ describe('username lists', () => {
     const row = (n: string, rest: string) => `SMB  10.10.1.10  445  DC01  ${n.padEnd(30)}${rest}`
     const out = [
       row('-Username-', '-Last PW Set-       -BadPW- -Description-'),
-      row('corp.lan\\jay', '2026-01-01 00:00:00 0  '),
+      row('corp.lan\\zoe', '2026-01-01 00:00:00 0  '),
       row('Help Desk', '<never>             0  shared'),
       row('amy', '2026-01-01 00:00:00 0  '),
     ].join('\n')
     const r = interpret({ command: 'nxc smb 10.10.1.10 --users', output: out })
-    expect(view(r.usernames)).toEqual([['jay', 'corp.lan'], ['Help Desk', null], ['amy', null]])
+    expect(view(r.usernames)).toEqual([['zoe', 'corp.lan'], ['Help Desk', null], ['amy', null]])
   })
 
   it('RID names with spaces are kept', () => {
@@ -77,8 +77,8 @@ describe('username lists', () => {
   })
 
   it('nxc login lines ([+]/[-]) are not usernames output', () => {
-    const out = 'SMB  10.10.1.10  445  DC01  [+] corp.lan\\jay:Synthetic123! (Pwn3d!)\nSMB  10.10.1.10  445  DC01  [-] corp.lan\\tom:wrong STATUS_LOGON_FAILURE\n'
-    const r = interpret({ command: 'nxc smb 10.10.1.10 -u jay -p x', output: out })
+    const out = 'SMB  10.10.1.10  445  DC01  [+] corp.lan\\zoe:Synthetic123! (Pwn3d!)\nSMB  10.10.1.10  445  DC01  [-] corp.lan\\tom:wrong STATUS_LOGON_FAILURE\n'
+    const r = interpret({ command: 'nxc smb 10.10.1.10 -u zoe -p x', output: out })
     expect(r.parsers).not.toContain('usernames')
     expect(r.usernames).toEqual([])
   })

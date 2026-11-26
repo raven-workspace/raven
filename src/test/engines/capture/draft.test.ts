@@ -106,17 +106,17 @@ describe('capture draft', () => {
   });
 
   it('a proof shot is named for its flag, not the board column', () => {
-    const args = { ip: '172.31.148.151', hostName: 'ms01', column: 'privilege-escalation' as const, mime: 'image/png' };
-    expect(screenshotFileName({ ...args, caption: '', flag: 'local' })).toBe('172.31.148.151_local-txt.png');
-    expect(screenshotFileName({ ...args, caption: 'proof.txt as SYSTEM' })).toBe('172.31.148.151_proof-txt.png');
-    expect(screenshotFileName({ ...args, caption: 'Local.txt', flag: null })).toBe('172.31.148.151_local-txt.png');
+    const args = { ip: '10.10.20.151', hostName: 'files01', column: 'privilege-escalation' as const, mime: 'image/png' };
+    expect(screenshotFileName({ ...args, caption: '', flag: 'local' })).toBe('10.10.20.151_local-txt.png');
+    expect(screenshotFileName({ ...args, caption: 'proof.txt as SYSTEM' })).toBe('10.10.20.151_proof-txt.png');
+    expect(screenshotFileName({ ...args, caption: 'Local.txt', flag: null })).toBe('10.10.20.151_local-txt.png');
   });
 
   it('no two screenshots share a name', () => {
-    const args = { ip: '172.31.148.151', hostName: 'ms01', column: 'privilege-escalation' as const, mime: 'image/png', caption: '' };
-    const taken = new Set(['172.31.148.151_privesc_shot.png', '172.31.148.151_privesc_shot_2.png', '172.31.148.151_local-txt.png']);
-    expect(screenshotFileName({ ...args, taken })).toBe('172.31.148.151_privesc_shot_3.png');
-    expect(screenshotFileName({ ...args, flag: 'local', taken })).toBe('172.31.148.151_local-txt_2.png');
+    const args = { ip: '10.10.20.151', hostName: 'files01', column: 'privilege-escalation' as const, mime: 'image/png', caption: '' };
+    const taken = new Set(['10.10.20.151_privesc_shot.png', '10.10.20.151_privesc_shot_2.png', '10.10.20.151_local-txt.png']);
+    expect(screenshotFileName({ ...args, taken })).toBe('10.10.20.151_privesc_shot_3.png');
+    expect(screenshotFileName({ ...args, flag: 'local', taken })).toBe('10.10.20.151_local-txt_2.png');
   });
 
   it('proofShotFlag: the host\'s last non-screenshot entry is a recent flag', () => {

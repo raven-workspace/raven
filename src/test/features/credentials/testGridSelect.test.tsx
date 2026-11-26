@@ -11,7 +11,7 @@ vi.mock("../../../lib/api");
 
 const h1 = hostWith("h1", "10.10.10.5", [22, 445]);
 const creds = [
-  cred({ id: "c1", username: "jay", domain: "ACME" }),
+  cred({ id: "c1", username: "zoe", domain: "ACME" }),
   cred({ id: "c2", username: "svc_sql", domain: "ACME" }),
 ];
 
@@ -90,12 +90,12 @@ describe("TestGrid selection", () => {
 
   it("tried rows are not selectable", () => {
     const tried: TriedPair[] = [{
-      id: "t1", engagementId: "eng1", username: "drew", domain: null, secret: "SyntheticPw01", secretKind: "password",
+      id: "t1", engagementId: "eng1", username: "omar", domain: null, secret: "SyntheticPw01", secretKind: "password",
       hostId: "h1", service: "ssh", authMode: "domain", logEntryId: null, at: 1,
     }];
     grid({ onSelect: vi.fn(), tried });
-    expect(screen.getByText("drew")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Select drew/ })).toBeNull();
+    expect(screen.getByText("omar")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Select omar/ })).toBeNull();
     expect(screen.getAllByRole("button", { name: /^Select / })).toHaveLength(2);
   });
 });

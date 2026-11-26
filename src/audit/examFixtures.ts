@@ -814,7 +814,7 @@ print("[+] Payload accepted (HTTP %d): %s started on the target" % (r4.status_co
 export const GARNET_HOST = "h-exam-garnet";
 
 /**
- * garnet (10.10.30.31): one standalone machine shaped like the owner's sample walk-through (§4.1 of "model report"): a full scan whose http-git script finds `/.git/`, the repository dumped, a "Add the reporting datasource" commit
+ * garnet (10.10.30.31): one standalone machine: a full scan whose http-git script finds `/.git/`, the repository dumped, a "Add the reporting datasource" commit
  * that removed a database password, the password sprayed over SSH, local.txt read on login; then sudo find
  * CVE-2021-3156 built in a container and run for root, proof.txt read. Logged as the capture flow records it: command
  * entries with their blocks, screenshots with captions, flags with the pasted proof, the owner's observations where they

@@ -7,7 +7,7 @@ import { EMPTY_PASS, NULL_USER, NXC_LDAP, NXC_MSSQL, NXC_SMB, impacket } from '.
 const NXC_SMB_NULL: CommandMatcher = { bins: ['nxc', 'netexec'], all: [NXC_SMB, NULL_USER, EMPTY_PASS] };
 const NXC_SMB_NULL_EXAMPLES = {
   hit: ["nxc smb 10.0.0.5 -u '' -p '' --shares", "nxc smb 10.0.0.5 -u guest -p '' --shares", 'netexec smb 10.0.0.5 -u "" -p ""'],
-  miss: ["nxc smb 10.0.0.5 -u 'jace' -p 'Pw1!' --shares", "nxc ldap 10.0.0.5 -u '' -p ''", 'nxc smb 10.0.0.5'],
+  miss: ["nxc smb 10.0.0.5 -u 'ruth' -p 'Pw1!' --shares", "nxc ldap 10.0.0.5 -u '' -p ''", 'nxc smb 10.0.0.5'],
 };
 
 const COMMANDS: LibraryCommand[] = [
@@ -54,7 +54,7 @@ const COMMANDS: LibraryCommand[] = [
     },
     matchExamples: {
       hit: ['smbclient -N -L //10.0.0.5', "smbclient -L //10.0.0.5 -U '%'", 'smbclient -L //10.0.0.5 -U guest%'],
-      miss: ["smbclient -L //10.0.0.5 -U 'corp\\jace%Pw1'", 'smbclient //10.0.0.5/share -N'],
+      miss: ["smbclient -L //10.0.0.5 -U 'corp\\ruth%Pw1'", 'smbclient //10.0.0.5/share -N'],
     },
   },
   {
@@ -70,7 +70,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: ['smbmap'], all: [String.raw`(^|\s)-H\s`, NULL_USER] },
     matchExamples: {
       hit: ["smbmap -H 10.0.0.5 -u '' -p ''", "smbmap -H 10.0.0.5 -u guest -p ''"],
-      miss: ["smbmap -H 10.0.0.5 -u jace -p 'Pw1'"],
+      miss: ["smbmap -H 10.0.0.5 -u ruth -p 'Pw1'"],
     },
   },
   {
@@ -86,7 +86,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: ['enum4linux-ng', 'enum4linux'], none: [String.raw`(^|\s)-u\s*(?!''|""|'guest'|guest(\s|$))\S`] },
     matchExamples: {
       hit: ['enum4linux-ng -A 10.0.0.5', "enum4linux-ng -u guest -p '' 10.0.0.5", 'enum4linux -a 10.0.0.5'],
-      miss: ["enum4linux-ng -A -u jace -p 'Pw1' 10.0.0.5", 'nxc smb 10.0.0.5'],
+      miss: ["enum4linux-ng -A -u ruth -p 'Pw1' 10.0.0.5", 'nxc smb 10.0.0.5'],
     },
   },
   {
@@ -136,7 +136,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: ['nxc', 'netexec'], all: [String.raw`(^|\s)ftp(?=\s)`, String.raw`-u\s*['"]?anonymous`] },
     matchExamples: {
       hit: ['nxc ftp 10.0.0.5 -u anonymous -p anonymous', "nxc ftp 10.0.0.5 -u 'anonymous' -p ''"],
-      miss: ['nxc ftp 10.0.0.5 -u jace -p Pw1', "nxc smb 10.0.0.5 -u anonymous -p ''"],
+      miss: ['nxc ftp 10.0.0.5 -u ruth -p Pw1', "nxc smb 10.0.0.5 -u anonymous -p ''"],
     },
   },
   {
@@ -150,7 +150,7 @@ const COMMANDS: LibraryCommand[] = [
     why: 'Password is anything; then `ls -la`, `binary`, `get` the files.',
     source: 'oscp-notes',
     match: { bins: ['ftp'], all: [String.raw`anonymous@`] },
-    matchExamples: { hit: ['ftp anonymous@10.0.0.5'], miss: ['ftp 10.0.0.5', 'ftp jace@10.0.0.5'] },
+    matchExamples: { hit: ['ftp anonymous@10.0.0.5'], miss: ['ftp 10.0.0.5', 'ftp ruth@10.0.0.5'] },
   },
   {
     id: 'enum-ftp-nmap',
@@ -237,7 +237,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: impacket('samrdump'), none: [String.raw`/[^\s/:@]+:[^\s@]+@`, String.raw`-hashes`] },
     matchExamples: {
       hit: ['impacket-samrdump 10.0.0.5', 'samrdump.py 10.0.0.5'],
-      miss: ["impacket-samrdump corp.local/jace:'Pw1'@10.0.0.5", 'rpcclient -U "" -N 10.0.0.5'],
+      miss: ["impacket-samrdump corp.local/ruth:'Pw1'@10.0.0.5", 'rpcclient -U "" -N 10.0.0.5'],
     },
   },
   {
@@ -256,7 +256,7 @@ const COMMANDS: LibraryCommand[] = [
     },
     matchExamples: {
       hit: ["rpcclient -U '' -N 10.0.0.5", 'rpcclient -U "" 10.0.0.5 -c enumdomusers', "rpcclient -U '%' 10.0.0.5"],
-      miss: ["rpcclient -U 'corp\\jace%Pw1' 10.0.0.5 -c enumdomusers"],
+      miss: ["rpcclient -U 'corp\\ruth%Pw1' 10.0.0.5 -c enumdomusers"],
     },
   },
   {
@@ -298,7 +298,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: ['ldapsearch'], all: [String.raw`(^|\s)-x(?=\s)`], none: [String.raw`(^|\s)-[dwy](?=\s|$)`] },
     matchExamples: {
       hit: ['ldapsearch -x -H ldap://10.0.0.5 -s base namingcontexts', 'ldapsearch -x -H ldap://10.0.0.5 -b "DC=corp,DC=local"'],
-      miss: ['ldapsearch -x -H ldap://10.0.0.5 -D "jace@corp.local" -w Pw1 -b "DC=corp,DC=local"'],
+      miss: ['ldapsearch -x -H ldap://10.0.0.5 -D "ruth@corp.local" -w Pw1 -b "DC=corp,DC=local"'],
     },
   },
   {
@@ -325,7 +325,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: ['nxc', 'netexec'], all: [NXC_LDAP, NULL_USER, EMPTY_PASS] },
     matchExamples: {
       hit: ["nxc ldap 10.0.0.5 -u '' -p ''", "nxc ldap 10.0.0.5 -u '' -p '' -M get-desc-users"],
-      miss: ["nxc ldap 10.0.0.5 -u jace -p 'Pw1' --users", "nxc smb 10.0.0.5 -u '' -p ''"],
+      miss: ["nxc ldap 10.0.0.5 -u ruth -p 'Pw1' --users", "nxc smb 10.0.0.5 -u '' -p ''"],
     },
   },
   {
@@ -467,7 +467,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: ['nxc', 'netexec'], all: [NXC_MSSQL, String.raw`-u\s*['"]?sa['"]?(?=\s)`] },
     matchExamples: {
       hit: ["nxc mssql 10.0.0.5 -u sa -p ''", "nxc mssql 10.0.0.5 -u 'sa' -p 'sa' --local-auth"],
-      miss: ["nxc mssql 10.0.0.5 -u jace -p 'Pw1'", "nxc smb 10.0.0.5 -u sa -p ''"],
+      miss: ["nxc mssql 10.0.0.5 -u ruth -p 'Pw1'", "nxc smb 10.0.0.5 -u sa -p ''"],
     },
   },
   {

@@ -8,10 +8,10 @@ import { att, byHost, cred, host, NT, svc } from "./fixtures";
 describe("credential matrix", () => {
   it("machine accounts are not sprayable", () => {
     expect(isMachineAccount(cred({ username: "DC01$" }))).toBe(true);
-    expect(isMachineAccount(cred({ username: "jay" }))).toBe(false);
+    expect(isMachineAccount(cred({ username: "zoe" }))).toBe(false);
     expect(isSprayable(cred({ username: "DC01$", secret: "pw" }))).toBe(false);
     expect(isSprayable(cred({ type: "hash", username: "DC01$", secret: NT, hashType: "NTLM" }))).toBe(false);
-    expect(isSprayable(cred({ username: "jay", secret: "pw" }))).toBe(true);
+    expect(isSprayable(cred({ username: "zoe", secret: "pw" }))).toBe(true);
   });
 
   it("hostSprayServices reads open services by port and by nmap name", () => {

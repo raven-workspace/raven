@@ -17,7 +17,7 @@ import { omitted } from "./trim";
 import { capitalize, splitAffected } from "./wording";
 
 /**
- * A target written as a plain document (the owner's sample report, §4.1 Quartz): only ordinary editable nodes
+ * A target written as a plain document (the owner's model report, §4.1): only ordinary editable nodes
  * (headings, paragraphs, flat lists, code blocks, tables, hard breaks) and one `figure` per screenshot (image plus an
  * editable caption). No slots, chips or atoms. Each generated block carries a `source` attr ("entry:<id>:<block>",
  * "finding:<id>:fix", "ports:<hostId>") for Refresh and the checks, and a `gen` attr (`blockHash` of the block as

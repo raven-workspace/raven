@@ -23,7 +23,7 @@ describe("TestGrid tried pairs", () => {
       <TestGrid
         eid="eng1"
         hosts={[h1.host]}
-        creds={[cred({ id: "c1", username: "jay", secret: "pw1" })]}
+        creds={[cred({ id: "c1", username: "zoe", secret: "pw1" })]}
         attempts={[]}
         servicesByHost={byHost(h1)}
         tried={[pair(), pair({ id: "t2", username: "SAM.DOE", hostId: "h1", service: "smb" })]}
@@ -39,7 +39,7 @@ describe("TestGrid tried pairs", () => {
     expect(document.querySelectorAll("tr[data-tried]").length).toBe(1);
     // Never a credential row, and the secret is not shown.
     expect(document.querySelectorAll("[data-cred-id]").length).toBe(1);
-    expect(screen.getByText("jay").closest("tr")).toHaveAttribute("data-cred-id", "c1");
+    expect(screen.getByText("zoe").closest("tr")).toHaveAttribute("data-cred-id", "c1");
     expect(screen.queryByText(/SyntheticPw01/)).toBeNull();
   });
 
@@ -52,7 +52,7 @@ describe("TestGrid tried pairs", () => {
         creds={[]}
         attempts={[]}
         servicesByHost={byHost(h1)}
-        tried={[pair(), pair({ id: "t2", username: "drew", secret: nt, secretKind: "hash" })]}
+        tried={[pair(), pair({ id: "t2", username: "omar", secret: nt, secretKind: "hash" })]}
       />,
     );
     const pwRow = screen.getByText("sam.doe").closest("tr")!;
@@ -61,7 +61,7 @@ describe("TestGrid tried pairs", () => {
     fireEvent.click(within(pwRow).getByRole("button", { name: /^Reveal secret/ }));
     expect(within(pwRow).getByTestId("secret-text")).toHaveTextContent("SyntheticPw01");
     expect(within(pwRow).getByText("tried password")).toBeInTheDocument();
-    const hashRow = screen.getByText("drew").closest("tr")!;
+    const hashRow = screen.getByText("omar").closest("tr")!;
     expect(within(hashRow).getByText("tried hash")).toBeInTheDocument();
     expect(within(hashRow).getByTestId("tried-secret")).toHaveTextContent("01234567…cdef");
     expect(within(hashRow).queryByText(nt)).toBeNull();
