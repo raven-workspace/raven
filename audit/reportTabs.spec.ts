@@ -59,6 +59,34 @@ test("Report: renaming a page's tab keeps the row still, the title field as wide
   expect(Math.round((await titleField(page).boundingBox())!.width)).toBe(192);
 });
 
+test("Report: after + add in the evidence column, by key or click, focus moves on to a row of the column, in WebKit too", async ({ page, playwright, baseURL }) => {
+  const run = async (p: Page) => {
+    // ms01 has five unused log entries.
+    await openReport(p, "ms01");
+    await p.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true }).click();
+    const column = p.locator("aside[aria-label='Evidence']");
+    const rows = column.locator("li[data-rail-row]");
+    await rows.first().waitFor();
+    const before = await rows.count();
+    const add = rows.first().getByRole("button", { name: /^Add / });
+    await add.focus();
+    await p.keyboard.press("Enter");
+    await expect(rows).toHaveCount(before - 1);
+    await expect(column.locator("li[data-rail-row]:focus")).toHaveCount(1);
+    // And by a click, which WebKit doesn't follow with focus.
+    await rows.first().getByRole("button", { name: /^Add / }).click();
+    await expect(rows).toHaveCount(before - 2);
+    await expect(column.locator("li[data-rail-row]:focus")).toHaveCount(1);
+  };
+  await run(page);
+  const browser = await playwright.webkit.launch();
+  try {
+    await run(await browser.newPage({ baseURL }));
+  } finally {
+    await browser.close();
+  }
+});
+
 test("Report: after a check is picked, Esc closes To do and focus stays in the page, in WebKit too", async ({ page, playwright, baseURL }) => {
   const run = async (p: Page) => {
     await openReport(p, "AD set");

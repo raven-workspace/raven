@@ -499,6 +499,46 @@ describe("Evidence rail: the log column on a plain page", () => {
     expect(document.activeElement).toBe(row("winpeas run"));
   });
 
+  it("+ add names the row's note, as the row shows it", async () => {
+    await seed();
+    mount();
+    await ready();
+    expect(within(row("nmap scan")).getByRole("button")).toHaveAccessibleName("Add nmap scan, in the port table already");
+    expect(within(row("ftp anonymous")).getByRole("button")).toHaveAccessibleName("Add ftp anonymous, in Also tested");
+    expect(within(row("hydra login")).getByRole("button")).toHaveAccessibleName("Add hydra login");
+  });
+
+  it("after + add, focus moves to the next row, else the previous one, else the column itself", async () => {
+    await seed();
+    mount();
+    await ready();
+    const add = (title: string) => {
+      const button = within(row(title)).getByRole("button", { name: /^Add / });
+      button.focus();
+      fireEvent.click(button);
+    };
+    add("hydra login");
+    await waitFor(() => expect(titles()).not.toContain("hydra login"));
+    expect(document.activeElement).toBe(row("ftp anonymous"));
+    // The last row: the one before it.
+    add("winpeas run");
+    await waitFor(() => expect(titles()).not.toContain("winpeas run"));
+    expect(document.activeElement).toBe(row("smbclient list"));
+    // A click on + add (WebKit doesn't focus a clicked button) moves focus on too.
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.click(within(row("smbclient list")).getByRole("button"));
+    await waitFor(() => expect(titles()).not.toContain("smbclient list"));
+    expect(document.activeElement).toBe(row("ssh shell screenshot"));
+    // Every row added: the column itself.
+    const remaining = () => (screen.queryByRole("group", { name: "Unused log entries" }) ? titles() : []);
+    for (let left = remaining(); left.length > 0; left = remaining()) {
+      add(left[0]);
+      await waitFor(() => expect(remaining()).not.toContain(left[0]));
+    }
+    expect(screen.getByText("Everything logged on this target is in the report.")).toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByRole("complementary", { name: "Evidence" }));
+  });
+
   it("a screenshot goes into the step holding the cursor, as a figure", async () => {
     const { screenshot } = await seed();
     mount();
