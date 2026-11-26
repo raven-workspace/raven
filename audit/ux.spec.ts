@@ -140,7 +140,7 @@ const PRIVATE_TEXT = [
   "Read every file feroxbuster finds",
   "Felt slow on this one",
   // garnet: an operator slip, private.
-  "Ran ./exp from my home folder",
+  "Ran find without sudo",
 ];
 
 test("report: nothing private shows on any page, check or evidence tab", async ({ page }) => {

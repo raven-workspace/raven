@@ -1312,9 +1312,9 @@ test("Report: every block type takes typing and the log stays as it was, in WebK
     // The page is the owner's copy: the command's output in the log is what the terminal printed.
     await p.getByRole("link", { name: /^Log\b/ }).first().click();
     await expect.poll(() => new URL(p.url()).pathname).toBe("/e/e-exam/s/log");
-    await p.getByText("Confirm the repository is readable", { exact: true }).click();
-    const output = p.locator("pre").filter({ hasText: /^ref: refs\/heads\/main/ });
-    await expect(output).toHaveText("ref: refs/heads/main");
+    await p.getByText("Identify the Jenkins version", { exact: true }).click();
+    const output = p.locator("pre").filter({ hasText: /^X-Jenkins: 2\.401\.3/ });
+    await expect(output).toHaveText("X-Jenkins: 2.401.3");
   });
 });
 

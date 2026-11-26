@@ -62,7 +62,7 @@ describe("buildPlainTarget (garnet)", () => {
       "garnet (10.10.30.31)",
       "Service enumeration",
       "Initial access: Jenkins script console with default credentials",
-      "Privilege escalation: sudo CVE-2021-3156",
+      "Privilege escalation: Unrestricted sudo rule for find",
       "Additional findings (not on the path to root)",
       "Also tested",
     ]);
@@ -87,25 +87,26 @@ describe("buildPlainTarget (garnet)", () => {
       expect(textOf(s.content![0]).trim()).not.toBe("");
     }
     expect(steps.map((s) => textOf(s.content![0]))).toEqual([
-      "Confirm the repository is readable:",
-      "Download the repository:",
-      'Show the "Add the reporting datasource" commit, which removes the credentials:',
-      "Test the password over SSH. The bare username ronan succeeds:",
-      "Log in and read local.txt:",
-      "Check the kernel version and that unprivileged user namespaces are enabled:",
-      "Build the exploit in an Ubuntu 22.04 container:",
+      "Identify the Jenkins version:",
+      "Enumerate the Jenkins paths:",
+      "Log in with the default admin / admin. The script console runs Groovy as the service account and reads Jenkins' own files:",
+      "Send the Groovy reverse shell (revshell.groovy) from the script console and catch it:",
+      "Upgrade the shell and read local.txt:",
+      "Check what the service account may run with sudo:",
+      "Look up find on GTFOBins:",
       "Run find through sudo and have it start a shell:",
-      "In a second SSH session, trigger the exploit:",
+      "Check the new shell's user:",
       "Read proof.txt:",
     ]);
   });
 
-  it("keeps the password lines of the git show output", () => {
-    const show = steps[2].content!.filter((n) => n.type === "codeBlock").map(textOf);
-    expect(show).toContain("git show 3b9e0c4");
-    const diff = show.find((t) => t.startsWith("commit 3b9e0c4"))!;
-    expect(diff).toContain('-    private $username = "ronan@garnet.lab";');
-    expect(diff).toContain('-    private $password = "Tourmaline!77";');
+  it("keeps the password lines of the script console's output", () => {
+    const blocks = steps[2].content!.filter((n) => n.type === "codeBlock").map(textOf);
+    expect(blocks[0]).toContain("/j_spring_security_check");
+    expect(blocks.filter((t) => t.includes("/scriptText"))).toHaveLength(2);
+    const creds = blocks.find((t) => t.startsWith("<?xml"))!;
+    expect(creds).toMatch(/\[… \d+ lines omitted …\]/);
+    expect(creds).toContain("<password>{AQAAABAAAAAQx2Vt0b3UcM1yZkGmF8pQ4eJ7c3ZhbHVlLXNlY3JldA==}</password>");
   });
 
   it("prints the login step as the sample does: the commands together, the output once, then the screenshot", () => {
@@ -115,15 +116,15 @@ describe("buildPlainTarget (garnet)", () => {
     expect(textOf(login[2])).toBe(
       "garnet\nronan\n4c1d8e2f9a7b3065e2c4a9f1d7b80e36\n2: ens3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    inet 10.10.30.31/24 brd 10.10.30.255 scope global ens3",
     );
-    expect(textOf(login[1])).toBe("ssh ronan@10.10.30.31\nhostname && whoami && cat local.txt && ip a");
-    expect(textOf(login[3])).toBe("local.txt on garnet after logging in");
+    expect(textOf(login[1])).toBe("python3 -c 'import pty; pty.spawn(\"/bin/bash\")'\nhostname && whoami && cat local.txt && ip a");
+    expect(textOf(login[3])).toBe("local.txt on garnet from the reverse shell");
   });
 
   it("cuts long output with one omitted line and keeps every source attr off the text", () => {
     const dump = steps[1].content!.filter((n) => n.type === "codeBlock").map(textOf)[1];
     expect(dump).toMatch(/\[… \d+ lines omitted …\]/);
     expect(dump.split("\n").length).toBeLessThanOrEqual(10);
-    expect(steps[1].content![1].attrs?.source).toBe("entry:l-garnet-dump:0:command");
+    expect(steps[1].content![1].attrs?.source).toBe("entry:l-garnet-ferox:0:command");
   });
 
   it("prints the scan's open ports, with script lines only under the port a finding is about", () => {
@@ -131,7 +132,8 @@ describe("buildPlainTarget (garnet)", () => {
     const scan = textOf(doc.content!.slice(at).filter((n) => n.type === "codeBlock")[1]);
     expect(scan).not.toContain("ssh-hostkey");
     expect(scan).not.toContain("http-title");
-    expect(scan).toContain("| http-git:");
+    expect(scan).not.toContain("http-robots.txt");
+    expect(scan).toContain("| http-default-accounts:");
     expect(scan.split("\n").filter((l) => /^\d+\/tcp open/.test(l))).toHaveLength(3);
   });
 
@@ -144,7 +146,7 @@ describe("buildPlainTarget (garnet)", () => {
   it("states the unmodified exploit by its URL, with the exploit notes after it", () => {
     const line = (doc.content ?? []).find((n) => textOf(n).startsWith("Exploit code:"))!;
     expect(textOf(line)).toBe(
-      "Exploit code: Public exploit from https://gtfobins.github.io/gtfobins/find/, used without changes. The target has no compiler, so it was built in an ubuntu:22.04 amd64 container (packages build-essential libssl-dev) to match the target's glibc 2.35.",
+      "Exploit code: Public exploit from https://www.revshells.com/, used without changes. Generated on revshells.com for 192.0.2.10:4444 (Groovy) and pasted into the script console as is.",
     );
   });
 
@@ -224,7 +226,7 @@ function sourcedRuns(n: ReportNode): [string, ReportNode[]][] {
 
 /** The garnet draft's placed entries: every step's, the scan's and the flags' (private ones and the slip never). */
 const expectedPlacedIds = [
-  "nmap", "head", "dump", "show", "spray", "ssh", "local-shot", "local", "kernel", "build", "fuse", "exp", "proof-read", "proof-shot", "proof",
+  "nmap", "version", "ferox", "console", "revshell", "shell", "local-shot", "local", "sudo", "gtfo", "find", "root", "proof-read", "proof-shot", "proof",
 ].map((k) => `l-garnet-${k}`);
 
 describe("plain entry blocks and Refresh sources", () => {
@@ -244,11 +246,11 @@ describe("plain entry blocks and Refresh sources", () => {
   });
 
   it("entryBlocks gives an entry the draft's own sentence, command, trimmed output and figures", () => {
-    const blocks = entryBlocks(data, logEntry("l-garnet-head"));
+    const blocks = entryBlocks(data, logEntry("l-garnet-version"));
     expect(blocks.map((b) => [b.type, b.attrs?.source])).toEqual([
-      ["paragraph", "entry:l-garnet-head:title"],
-      ["codeBlock", "entry:l-garnet-head:0:command"],
-      ["codeBlock", "entry:l-garnet-head:0:output"],
+      ["paragraph", "entry:l-garnet-version:title"],
+      ["codeBlock", "entry:l-garnet-version:0:command"],
+      ["codeBlock", "entry:l-garnet-version:0:output"],
     ]);
     for (const b of blocks) expect(b.attrs?.gen).toBe(blockHash(b));
   });
@@ -276,7 +278,7 @@ describe("plain entry blocks and Refresh sources", () => {
     expect(sourceBlocks("entry:nope:title", data, target, {})).toBeNull();
     expect(sourceBlocks("finding:nope:fix", data, target, {})).toBeNull();
     expect(sourceBlocks("file:nope", data, target, {})).toBeNull();
-    expect(sourceBlocks(`entry:l-garnet-head:bogus`, data, target, {})).toBeNull();
+    expect(sourceBlocks(`entry:l-garnet-version:bogus`, data, target, {})).toBeNull();
     expect(sourceBlocks(`file:${data.findingFiles[0].id}:x`, data, target, {})).toBeNull();
     expect(sourceBlocks("ports:nope", data, target, {})).toBeNull();
     expect(sourceBlocks("phase:h-exam-garnet:foothold", data, target, {})).toBeNull();
@@ -308,12 +310,12 @@ describe("plain entry blocks and Refresh sources", () => {
     expect(regenerated).toEqual([holders[0]]);
     expect(regenerated[0].attrs?.also).toEqual(["l-garnet-local"]);
     // A refresh of a block with no flag absorbed carries no `also`.
-    expect(sourceBlocks("entry:l-garnet-head:0:output", data, target, {})![0].attrs?.also).toBeUndefined();
+    expect(sourceBlocks("entry:l-garnet-version:0:output", data, target, {})![0].attrs?.also).toBeUndefined();
   });
 
   it("withoutRemoved leaves out a removed entry's blocks and empty steps, the Also tested list, and an absorbed flag's claim", () => {
     const steps0 = steps.length;
-    const removed = ["l-garnet-head", "l-garnet-local", `tested:${GARNET_HOST}`];
+    const removed = ["l-garnet-version", "l-garnet-local", `tested:${GARNET_HOST}`];
     const out = withoutRemoved(doc, removed);
     const placed = placedKeys(out);
     for (const id of removed) expect(placed.has(id)).toBe(false);
@@ -327,7 +329,7 @@ describe("plain entry blocks and Refresh sources", () => {
     expect(all(out).some((n) => String(n.attrs?.source ?? "").startsWith("tested:") || n.attrs?.source === `phase:${GARNET_HOST}:tested`)).toBe(false);
     // Everything else is the draft as it was.
     expect(withoutRemoved(doc, [])).toBe(doc);
-    expect(placedKeys(withoutRemoved(doc, ["l-garnet-head"])).size).toBe(placedKeys(doc).size - 1);
+    expect(placedKeys(withoutRemoved(doc, ["l-garnet-version"])).size).toBe(placedKeys(doc).size - 1);
   });
 
   it("withoutRemoved drops a Steps to reproduce label and a phase heading the removals leave bare, nothing else", () => {
@@ -428,7 +430,7 @@ describe("entries kept from the report never reach the draft", () => {
     return c.kind === "flag" ? c.value : "";
   };
   const extra = (id: string, at: number, over: Partial<LogEntry> & Pick<LogEntry, "kind" | "title" | "content">): LogEntry => ({
-    ...logEntry("l-garnet-head"), id, at, createdAt: at, updatedAt: at, titleEdited: true, returnedNothing: false, private: false, ...over,
+    ...logEntry("l-garnet-version"), id, at, createdAt: at, updatedAt: at, titleEdited: true, returnedNothing: false, private: false, ...over,
   });
   const attempt = (id: string, logEntryId: string, over: Partial<FailedAttempt>): FailedAttempt => ({
     id, engagementId: data.engagement.id, hostId: GARNET_HOST, findingId: null, title: id, reasonKind: "operator", reason: "Mine.", private: true,

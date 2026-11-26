@@ -136,19 +136,19 @@ describe("insertEntry: the rail's + add", () => {
   it("+ add with the cursor in a step puts the entry's blocks after the cursor's block, inside that step", async () => {
     const { editor } = await ready(draft);
     const ftp = entry(garnet, "ftp");
-    // Step 2 (Download the repository): the cursor in its sentence.
-    const sentence = find(editor(), bySource(`entry:${id("dump")}:title`));
+    // Step 2 (Enumerate the Jenkins paths): the cursor in its sentence.
+    const sentence = find(editor(), bySource(`entry:${id("ferox")}:title`));
     cursorAt(editor(), sentence.pos + 3);
     const added: PMNode[] = [];
     act(() => void added.push(...insertEntry(editor(), garnet, target, ftp, true)));
 
-    const step = json(editor()).content!.find((n) => n.type === "list" && holds(n, "dump"))!;
+    const step = json(editor()).content!.find((n) => n.type === "list" && holds(n, "ferox"))!;
     const wanted = entryBlocks(garnet, ftp).map(sourceOf);
     expect(step.content!.map(sourceOf)).toEqual([
-      `entry:${id("dump")}:title`,
+      `entry:${id("ferox")}:title`,
       ...wanted,
-      `entry:${id("dump")}:0:command`,
-      `entry:${id("dump")}:0:output`,
+      `entry:${id("ferox")}:0:command`,
+      `entry:${id("ferox")}:0:output`,
     ]);
     expect(wanted).toEqual([`entry:${id("ftp")}:title`, `entry:${id("ftp")}:0:command`, `entry:${id("ftp")}:0:output`]);
     expect(added.map((n) => n.attrs.source)).toEqual(wanted);
@@ -165,10 +165,10 @@ describe("insertEntry: the rail's + add", () => {
 
     const hint = find(editor(), (n) => n.attrs.hint === "Say what this step does");
     cursorAt(editor(), hint.pos + 1);
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "head"), true));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "version"), true));
     const top = json(editor()).content!;
     expect(top[1].attrs?.hint).toBe("Say what this step does");
-    expect(top.slice(2).map(sourceOf)).toEqual(entryBlocks(garnet, entry(garnet, "head")).map(sourceOf));
+    expect(top.slice(2).map(sourceOf)).toEqual(entryBlocks(garnet, entry(garnet, "version")).map(sourceOf));
   });
 
   it("+ add with the cursor in a table cell puts the blocks after the table, never in a cell", async () => {
@@ -185,34 +185,34 @@ describe("insertEntry: the rail's + add", () => {
   });
 
   it("the entry a lead's block shows is no longer unused once the lead is added", async () => {
-    const { editor } = await ready(without("ssh"));
+    const { editor } = await ready(without("shell"));
     expect(unusedEntries(garnet, target, json(editor())).map((e) => e.id)).toContain(id("local"));
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "ssh"), false));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "shell"), false));
     expect(unusedEntries(garnet, target, json(editor())).map((e) => e.id)).not.toContain(id("local"));
   });
 
   it("with the cursor in a heading, + add places by phase, as with no cursor", async () => {
-    const { editor } = await ready(without("fuse"));
+    const { editor } = await ready(without("find"));
     cursorAt(editor(), find(editor(), (n) => n.type.name === "heading" && String(n.attrs.source).startsWith(`phase:${GARNET_HOST}:foothold`)).pos + 2);
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "fuse"), true));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "find"), true));
     const top = json(editor()).content!;
     const additional = top.findIndex((n) => sourceOf(n) === `phase:${GARNET_HOST}:additional`);
-    expect(holds(top[additional - 1], "fuse")).toBe(true);
+    expect(holds(top[additional - 1], "find")).toBe(true);
   });
 
   it("typing right after an insert is its own undo step", async () => {
-    const { editor } = await ready(without("fuse"));
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "fuse"), false));
+    const { editor } = await ready(without("find"));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "find"), false));
     const inserted = json(editor());
-    typeAt(editor(), find(editor(), bySource(`entry:${id("fuse")}:observations`)).pos + 1, "X");
+    typeAt(editor(), find(editor(), bySource(`entry:${id("find")}:observations`)).pos + 1, "X");
     fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
     expect(json(editor())).toEqual(inserted);
   });
 
   it("each insert is one undoable step", async () => {
-    const { editor } = await ready(without("fuse"));
+    const { editor } = await ready(without("find"));
     const before = json(editor());
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "fuse"), false));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "find"), false));
     expect(json(editor())).not.toEqual(before);
     fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
     expect(json(editor())).toEqual(before);
@@ -241,15 +241,15 @@ describe("a flag and the step that prints it, added in either order", () => {
 
   it("the flag added by hand first, then its lead step: the flag's own step gives way, in one undo step", async () => {
     expect(value).not.toBe("");
-    const { editor, onRemoveEvidence } = await ready(without("ssh", "local", "local-shot"));
+    const { editor, onRemoveEvidence } = await ready(without("shell", "local", "local-shot"));
     expect(times(editor())).toBe(0);
     act(() => void insertEntry(editor(), garnet, target, local, false));
     expect(times(editor())).toBe(1);
     const withFlag = json(editor());
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "ssh"), false));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "shell"), false));
     expect(times(editor())).toBe(1);
     expect(flagStep(editor())).toBe(false);
-    expect([...placed(editor())]).toEqual(expect.arrayContaining([id("local"), id("ssh")]));
+    expect([...placed(editor())]).toEqual(expect.arrayContaining([id("local"), id("shell")]));
     // Still on the page (in the step's `also`): not the owner's removal.
     expect(onRemoveEvidence).not.toHaveBeenCalled();
     fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
@@ -257,17 +257,17 @@ describe("a flag and the step that prints it, added in either order", () => {
   });
 
   it("a flag step the owner edited stays: their words are theirs", async () => {
-    const { editor } = await ready(without("ssh", "local", "local-shot"));
+    const { editor } = await ready(without("shell", "local", "local-shot"));
     act(() => void insertEntry(editor(), garnet, target, local, false));
     const title = find(editor(), bySource(`entry:${id("local")}:title`));
     typeAt(editor(), title.pos + title.node.nodeSize - 1, " (by hand)");
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "ssh"), false));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "shell"), false));
     expect(flagStep(editor())).toBe(true);
   });
 
   it("the lead step first, then the flag: the flag joins the step that prints it", async () => {
-    const { editor } = await ready(without("ssh", "local", "local-shot"));
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "ssh"), false));
+    const { editor } = await ready(without("shell", "local", "local-shot"));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "shell"), false));
     expect(times(editor())).toBe(1);
     // As the page has it, the step names no flag yet: an owner's earlier page, or the flag logged later.
     const output = find(editor(), (n) => Array.isArray(n.attrs.also) && (n.attrs.also as string[]).includes(id("local")));
@@ -282,23 +282,23 @@ describe("a flag and the step that prints it, added in either order", () => {
 
 describe("the block menu: Refresh and Delete", () => {
   it("Refresh on an unedited block replaces it without asking", async () => {
-    const data = newOutput("head", "ref: refs/heads/dev\n\n");
+    const data = newOutput("version", "ref: refs/heads/dev\n\n");
     const { container, editor } = await ready(draft, data);
-    const items = await menuFor(container, find(editor(), bySource(`entry:${id("head")}:0:output`)));
+    const items = await menuFor(container, find(editor(), bySource(`entry:${id("version")}:0:output`)));
     expect(items).toEqual(["Refresh from log", "Delete"]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Refresh from log" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(find(editor(), bySource(`entry:${id("head")}:0:output`)).node.textContent).toBe("ref: refs/heads/dev");
+    expect(find(editor(), bySource(`entry:${id("version")}:0:output`)).node.textContent).toBe("ref: refs/heads/dev");
   });
 
   it("Refresh on an edited block asks; Cancel keeps it; Replace swaps only its run; undo restores", async () => {
-    const data = newOutput("head", "ref: refs/heads/dev");
+    const data = newOutput("version", "ref: refs/heads/dev");
     const { container, editor } = await ready(draft, data);
-    const output = find(editor(), bySource(`entry:${id("head")}:0:output`));
+    const output = find(editor(), bySource(`entry:${id("version")}:0:output`));
     typeAt(editor(), output.pos + 1, "MY ");
     const edited = json(editor());
     const ask = async () => {
-      await menuFor(container, find(editor(), bySource(`entry:${id("head")}:0:output`)));
+      await menuFor(container, find(editor(), bySource(`entry:${id("version")}:0:output`)));
       fireEvent.click(screen.getByRole("menuitem", { name: "Refresh from log" }));
       return screen.findByRole("dialog", { name: "Replace this block with the current version?" });
     };
@@ -313,23 +313,23 @@ describe("the block menu: Refresh and Delete", () => {
     await ask();
     fireEvent.click(screen.getByRole("button", { name: "Replace" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    const step = (doc: ReportNode) => doc.content!.find((n) => n.type === "list" && holds(n, "head"))!;
+    const step = (doc: ReportNode) => doc.content!.find((n) => n.type === "list" && holds(n, "version"))!;
     const now = json(editor());
-    expect(find(editor(), bySource(`entry:${id("head")}:0:output`)).node.textContent).toBe("ref: refs/heads/dev");
+    expect(find(editor(), bySource(`entry:${id("version")}:0:output`)).node.textContent).toBe("ref: refs/heads/dev");
     // Only that block changed: its neighbours, and every other block of the page, are as they were.
     expect(step(now).content!.slice(0, 2)).toEqual(step(edited).content!.slice(0, 2));
-    expect(now.content!.filter((n) => !holds(n, "head"))).toEqual(edited.content!.filter((n) => !holds(n, "head")));
+    expect(now.content!.filter((n) => !holds(n, "version"))).toEqual(edited.content!.filter((n) => !holds(n, "version")));
 
     fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
     expect(json(editor())).toEqual(edited);
-    expect(find(editor(), bySource(`entry:${id("head")}:0:output`)).node.textContent).toContain("MY ");
+    expect(find(editor(), bySource(`entry:${id("version")}:0:output`)).node.textContent).toContain("MY ");
   });
 
   it("a confirmed run that moved is found again by its source and asked about again, never whatever sits at its old place", async () => {
-    const data = newOutput("head", "ref: refs/heads/dev");
+    const data = newOutput("version", "ref: refs/heads/dev");
     const { container, editor } = await ready(draft, data);
-    typeAt(editor(), find(editor(), bySource(`entry:${id("head")}:0:output`)).pos + 1, "MY ");
-    await menuFor(container, find(editor(), bySource(`entry:${id("head")}:0:output`)));
+    typeAt(editor(), find(editor(), bySource(`entry:${id("version")}:0:output`)).pos + 1, "MY ");
+    await menuFor(container, find(editor(), bySource(`entry:${id("version")}:0:output`)));
     fireEvent.click(screen.getByRole("menuitem", { name: "Refresh from log" }));
     await screen.findByRole("dialog", { name: "Replace this block with the current version?" });
     // The page shifts under the dialog: a paragraph lands at the top.
@@ -341,23 +341,23 @@ describe("the block menu: Refresh and Delete", () => {
     expect(json(editor())).toEqual(shifted);
     fireEvent.click(screen.getByRole("button", { name: "Replace" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(find(editor(), bySource(`entry:${id("head")}:0:output`)).node.textContent).toBe("ref: refs/heads/dev");
+    expect(find(editor(), bySource(`entry:${id("version")}:0:output`)).node.textContent).toBe("ref: refs/heads/dev");
     expect(json(editor()).content![0]).toEqual(shifted.content![0]);
   });
 
   it("typing right after a Replace is its own undo step", async () => {
-    const data = newOutput("head", "ref: refs/heads/dev");
+    const data = newOutput("version", "ref: refs/heads/dev");
     const { container, editor } = await ready(draft, data);
-    await menuFor(container, find(editor(), bySource(`entry:${id("head")}:0:output`)));
+    await menuFor(container, find(editor(), bySource(`entry:${id("version")}:0:output`)));
     fireEvent.click(screen.getByRole("menuitem", { name: "Refresh from log" }));
     const refreshed = json(editor());
-    typeAt(editor(), find(editor(), bySource(`entry:${id("head")}:0:output`)).pos + 1, "X");
+    typeAt(editor(), find(editor(), bySource(`entry:${id("version")}:0:output`)).pos + 1, "X");
     fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
     expect(json(editor())).toEqual(refreshed);
   });
 
   it("a flattened block (no gen) counts as edited, so Refresh asks", async () => {
-    const plain: ReportNode = { type: "doc", content: [{ type: "codeBlock", attrs: { language: "", source: `entry:${id("head")}:0:output` }, content: [{ type: "text", text: "ref: refs/heads/main" }] }] };
+    const plain: ReportNode = { type: "doc", content: [{ type: "codeBlock", attrs: { language: "", source: `entry:${id("version")}:0:output` }, content: [{ type: "text", text: "ref: refs/heads/main" }] }] };
     const { container, editor } = await ready(plain);
     expect(isEdited([editor().state.doc.child(0)])).toBe(true);
     await menuFor(container, { node: editor().state.doc.child(0), pos: 0 });
@@ -367,8 +367,8 @@ describe("the block menu: Refresh and Delete", () => {
 
   it("Refresh replaces the whole run of an observations source, nothing else", async () => {
     const said = "The repository holds an old commit.\n\nIts parent removed the password.";
-    const data = withEntry("show", (e) => ({ ...e, observations: said }));
-    const obs = `entry:${id("show")}:observations`;
+    const data = withEntry("console", (e) => ({ ...e, observations: said }));
+    const obs = `entry:${id("console")}:observations`;
     const page: ReportNode = {
       type: "doc",
       content: [
@@ -379,7 +379,7 @@ describe("the block menu: Refresh and Delete", () => {
           content: [
             { type: "paragraph", attrs: { source: obs }, content: [{ type: "text", text: "Old one" }] },
             { type: "paragraph", attrs: { source: obs }, content: [{ type: "text", text: "Old two" }] },
-            { type: "codeBlock", attrs: { language: "", source: `entry:${id("show")}:0:command` }, content: [{ type: "text", text: "git log" }] },
+            { type: "codeBlock", attrs: { language: "", source: `entry:${id("console")}:0:command` }, content: [{ type: "text", text: "git log" }] },
           ],
         },
       ],
@@ -399,12 +399,12 @@ describe("the block menu: Refresh and Delete", () => {
   });
 
   it("a block whose entry is private or deleted offers no Refresh", async () => {
-    const data = { ...withEntry("head", (e) => ({ ...e, private: true })), log: withEntry("head", (e) => ({ ...e, private: true })).log.filter((e) => e.id !== id("dump")) };
+    const data = { ...withEntry("version", (e) => ({ ...e, private: true })), log: withEntry("version", (e) => ({ ...e, private: true })).log.filter((e) => e.id !== id("ferox")) };
     const { container, editor } = await ready(draft, data);
-    expect(await menuFor(container, find(editor(), bySource(`entry:${id("head")}:0:output`)))).toEqual(["Delete"]);
+    expect(await menuFor(container, find(editor(), bySource(`entry:${id("version")}:0:output`)))).toEqual(["Delete"]);
     fireEvent.keyDown(screen.getByRole("menu", { name: "Block actions" }), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-    expect(await menuFor(container, find(editor(), bySource(`entry:${id("dump")}:0:command`)))).toEqual(["Delete"]);
+    expect(await menuFor(container, find(editor(), bySource(`entry:${id("ferox")}:0:command`)))).toEqual(["Delete"]);
   });
 
   it("a heading or an owner paragraph offers no Refresh", async () => {
@@ -418,28 +418,28 @@ describe("the block menu: Refresh and Delete", () => {
 
   it("an entry's sentence refreshes as one: a title becomes the observations written since, and back", async () => {
     const said = "The web root serves a .git folder.";
-    const written = withEntry("head", (e) => ({ ...e, observations: said }));
+    const written = withEntry("version", (e) => ({ ...e, observations: said }));
     const { container, editor } = await ready(draft, written);
-    const title = find(editor(), bySource(`entry:${id("head")}:title`));
+    const title = find(editor(), bySource(`entry:${id("version")}:title`));
     expect(await menuFor(container, title)).toEqual(["Refresh from log", "Delete"]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Refresh from log" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    const now = find(editor(), bySource(`entry:${id("head")}:observations`));
+    const now = find(editor(), bySource(`entry:${id("version")}:observations`));
     expect(now.node.textContent).toBe(said);
-    expect(editor().state.doc.nodeAt(now.pos + now.node.nodeSize)?.attrs.source).toBe(`entry:${id("head")}:0:command`);
+    expect(editor().state.doc.nodeAt(now.pos + now.node.nodeSize)?.attrs.source).toBe(`entry:${id("version")}:0:command`);
     // And back: with the observations cleared, the title sentence returns in their place.
     const run = sourceRun(editor().state.doc, now.pos)!;
     act(() => void refreshRun(editor(), run, garnet, target, {}));
-    const back = find(editor(), bySource(`entry:${id("head")}:title`));
-    const title0 = sourceBlocks(`entry:${id("head")}:title`, garnet, target, {})![0];
+    const back = find(editor(), bySource(`entry:${id("version")}:title`));
+    const title0 = sourceBlocks(`entry:${id("version")}:title`, garnet, target, {})![0];
     expect([back.node.textContent, back.node.attrs.gen]).toEqual([title0.content!.map((t) => t.text).join(""), title0.attrs!.gen]);
     expect(isEdited([back.node])).toBe(false);
   });
 
   it("a block that regenerates to nothing offers no Refresh and is never taken away by one", async () => {
-    const data = newOutput("head", "");
+    const data = newOutput("version", "");
     const { container, editor } = await ready(draft, data);
-    const output = find(editor(), bySource(`entry:${id("head")}:0:output`));
+    const output = find(editor(), bySource(`entry:${id("version")}:0:output`));
     expect(await menuFor(container, output)).toEqual(["Delete"]);
     const before = json(editor());
     expect(refreshRun(editor(), sourceRun(editor().state.doc, output.pos)!, data, target, {})).toBe(false);
@@ -470,7 +470,7 @@ describe("the block menu: Refresh and Delete", () => {
 
   it("the block menu never offers Move to appendix", async () => {
     const { container, editor } = await ready(draft);
-    for (const pick of [(n: PMNode) => n.type.name === "figure", (n: PMNode) => n.type.name === "table", bySource(`entry:${id("head")}:0:output`)]) {
+    for (const pick of [(n: PMNode) => n.type.name === "figure", (n: PMNode) => n.type.name === "table", bySource(`entry:${id("version")}:0:output`)]) {
       const items = await menuFor(container, find(editor(), pick));
       expect(items).not.toContain("Move to appendix");
       expect(items).not.toContain("Back inline");
@@ -500,18 +500,18 @@ describe("Add new evidence", () => {
   }
 
   it("adds what the draft would place and isn't on the page or removed; Undo takes off exactly that", async () => {
-    const { editor, onRemoveEvidence } = await ready(without("fuse", "dump"));
+    const { editor, onRemoveEvidence } = await ready(without("find", "ferox"));
     const before = json(editor());
-    expect(missingEntries(before, garnet, target, [id("dump")]).map((e) => e.id)).toEqual([id("fuse")]);
-    const onAdded = addButton(editor(), [id("dump")]);
+    expect(missingEntries(before, garnet, target, [id("ferox")]).map((e) => e.id)).toEqual([id("find")]);
+    const onAdded = addButton(editor(), [id("ferox")]);
     fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
     expect(await screen.findByText("Added 1 entry")).toBeInTheDocument();
     expect(onAdded).toHaveBeenCalled();
     const top = json(editor()).content!;
     const additional = top.findIndex((n) => sourceOf(n) === `phase:${GARNET_HOST}:additional`);
-    expect(holds(top[additional - 1], "fuse")).toBe(true);
-    expect(top.some((n) => holds(n, "dump"))).toBe(false);
-    expect(top.filter((n) => holds(n, "fuse"))).toHaveLength(1);
+    expect(holds(top[additional - 1], "find")).toBe(true);
+    expect(top.some((n) => holds(n, "ferox"))).toBe(false);
+    expect(top.filter((n) => holds(n, "find"))).toHaveLength(1);
 
     // The page's own Undo button, beside the notice (the editor's toolbar has one too).
     fireEvent.click(within(screen.getByText("Added 1 entry").closest<HTMLElement>("[role=status]")!).getByRole("button", { name: "Undo" }));
@@ -521,7 +521,7 @@ describe("Add new evidence", () => {
   });
 
   it("an entry the draft shows inside another's block is placed with it once: the flag value printed once, never its own step", async () => {
-    const { editor, onRemoveEvidence } = await ready(without("ssh"));
+    const { editor, onRemoveEvidence } = await ready(without("shell"));
     addButton(editor(), []);
     fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
     // The login, and its screenshot in the same step; local.txt is shown by the login's output.
@@ -533,7 +533,7 @@ describe("Add new evidence", () => {
       expect(text.split("4c1d8e2f9a7b3065e2c4a9f1d7b80e36")).toHaveLength(JSON.stringify(draft).split("4c1d8e2f9a7b3065e2c4a9f1d7b80e36").length);
       expect(text).not.toContain(`entry:${id("local")}:`);
       expect(text).not.toContain("Read local.txt:");
-      const step = page.content!.find((n) => holds(n, "ssh"))!;
+      const step = page.content!.find((n) => holds(n, "shell"))!;
       expect(step.content!.map((b) => b.type)).toEqual(["paragraph", "codeBlock", "codeBlock", "figure"]);
       expect(step.content![2].attrs?.also).toEqual([id("local")]);
       expect(step.content![3].attrs?.entryId).toBe(id("local-shot"));
@@ -552,7 +552,7 @@ describe("Add new evidence", () => {
   });
 
   it("Undo takes off exactly what one run added, a screenshot that joined a step added in the same run included", async () => {
-    const { editor, onRemoveEvidence } = await ready(without("ssh"));
+    const { editor, onRemoveEvidence } = await ready(without("shell"));
     const before = json(editor());
     addButton(editor(), []);
     fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
@@ -586,16 +586,16 @@ describe("Add new evidence", () => {
   });
 
   it("adds several in time order, each at the end of its phase", async () => {
-    const { editor } = await ready(without("head", "kernel", "fuse"));
+    const { editor } = await ready(without("version", "sudo", "find"));
     addButton(editor(), []);
     fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
     expect(await screen.findByText("Added 3 entries")).toBeInTheDocument();
     const top = json(editor()).content!;
     const at = (name: string) => top.findIndex((n) => holds(n, name));
     const privesc = top.findIndex((n) => (sourceOf(n) ?? "").startsWith(`phase:${GARNET_HOST}:privesc`));
-    expect(at("head")).toBeLessThan(privesc);
-    expect(at("kernel")).toBeGreaterThan(privesc);
-    expect(at("fuse")).toBe(at("kernel") + 1);
+    expect(at("version")).toBeLessThan(privesc);
+    expect(at("sudo")).toBeGreaterThan(privesc);
+    expect(at("find")).toBe(at("sudo") + 1);
   });
 });
 
@@ -634,13 +634,13 @@ describe("removal tracking", () => {
   it("deleting every block of an entry records it as removed; undo un-records it", async () => {
     const { editor, onRemoveEvidence } = await ready(draft);
     // One block of the step: the entry is still on the page.
-    act(() => void deleteBlockAt(editor(), find(editor(), bySource(`entry:${id("dump")}:0:output`))));
+    act(() => void deleteBlockAt(editor(), find(editor(), bySource(`entry:${id("ferox")}:0:output`))));
     expect(onRemoveEvidence).not.toHaveBeenCalled();
     // The rest of it.
-    act(() => void deleteBlockAt(editor(), find(editor(), (n) => n.type.name === "list" && n.textContent.startsWith("Download the repository"))));
-    expect(onRemoveEvidence).toHaveBeenCalledWith(id("dump"));
+    act(() => void deleteBlockAt(editor(), find(editor(), (n) => n.type.name === "list" && n.textContent.startsWith("Enumerate the Jenkins paths"))));
+    expect(onRemoveEvidence).toHaveBeenCalledWith(id("ferox"));
     expect(onRemoveEvidence).toHaveBeenCalledTimes(1);
-    const removed = { removedEntryIds: [id("dump")] };
+    const removed = { removedEntryIds: [id("ferox")] };
     expect(pruneRemoved(json(editor()), removed)).toEqual(removed);
 
     // Undo brings the step back: the save drops it from the removed list.
@@ -725,11 +725,11 @@ describe("removal tracking", () => {
   });
 
   it("a Refresh that swaps an entry's blocks is not the owner's removal", async () => {
-    const data = withEntry("head", (e) => ({ ...e, observations: "Seen." }));
-    const { editor, onRemoveEvidence } = await ready({ type: "doc", content: [{ type: "paragraph", attrs: { source: `entry:${id("head")}:title` }, content: [{ type: "text", text: "x" }] }] }, data);
+    const data = withEntry("version", (e) => ({ ...e, observations: "Seen." }));
+    const { editor, onRemoveEvidence } = await ready({ type: "doc", content: [{ type: "paragraph", attrs: { source: `entry:${id("version")}:title` }, content: [{ type: "text", text: "x" }] }] }, data);
     const run = sourceRun(editor().state.doc, 0)!;
     act(() => void refreshRun(editor(), run, data, target, {}));
-    expect(editor().state.doc.child(0).attrs.source).toBe(`entry:${id("head")}:observations`);
+    expect(editor().state.doc.child(0).attrs.source).toBe(`entry:${id("version")}:observations`);
     expect(onRemoveEvidence).not.toHaveBeenCalled();
   });
 });
@@ -738,12 +738,12 @@ describe("every insert path keeps the page in the plain schema", () => {
   const plainOnly = (doc: ReportNode) => expect(types(doc).filter((t) => !PAGE_NODE_TYPES.includes(t))).toEqual([]);
 
   it("+ add at the cursor, at the end of a phase, under a new heading, a pasted image, Add new evidence and Refresh insert only PAGE_NODE_TYPES", async () => {
-    const { editor } = await ready(without("fuse", "kernel", "ftp"));
+    const { editor } = await ready(without("find", "sudo", "ftp"));
     const ftp = entry(garnet, "ftp");
-    cursorAt(editor(), find(editor(), bySource(`entry:${id("dump")}:title`)).pos + 2);
+    cursorAt(editor(), find(editor(), bySource(`entry:${id("ferox")}:title`)).pos + 2);
     act(() => void insertEntry(editor(), garnet, target, ftp, true));
     plainOnly(json(editor()));
-    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "fuse"), false));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "find"), false));
     plainOnly(json(editor()));
     // A screenshot: a figure, its caption the page's to write.
     const shot = entry(garnet, "proof-shot");

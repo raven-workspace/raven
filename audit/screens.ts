@@ -85,8 +85,8 @@ export const openGarnet = async (page: Page) => {
   await openReportItem("garnet")(page);
   await page.locator(GARNET_HEADING).waitFor();
 };
-/** garnet's "Confirm the repository is readable" output on the page: one plain code block copied from the log. */
-export const garnetOutput = (page: Page) => page.locator(".report-page .report-codeblock").filter({ hasText: /^ref: refs\/heads\/main/ });
+/** garnet's "Identify the Jenkins version" output on the page: one plain code block copied from the log. */
+export const garnetOutput = (page: Page) => page.locator(".report-page .report-codeblock").filter({ hasText: /^X-Jenkins: 2\.401\.3/ });
 /** Clicks into a block's text and moves to the end of the clicked line, ready to type. ProseMirror takes up a click's
  *  selection a moment after mouseup; a key pressed sooner acts at the old selection. */
 export const caretAtEnd = async (page: Page, block: Locator) => {

