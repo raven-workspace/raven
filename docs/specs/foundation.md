@@ -10,7 +10,7 @@ Raven is the user's personal work surface for penetration testing. It covers the
 
 It replaces two things:
 
-1. **The old Raven** (repo the old app's repo). It is a React/IndexedDB web app that grew out of an HTB/THM box tracker. Its newest parts are good and fit engagement work: the command log, engagement credentials, the goal-based checklist with auto-tick, and the command library. Everything around them is CTF-shaped, cluttered and redundant, and browser storage is a dead end for a long-term tool.
+1. **The old Raven**, in its own private repo. It is a React/IndexedDB web app that grew out of an HTB/THM box tracker. Its newest parts are good and fit engagement work: the command log, engagement credentials, the goal-based checklist with auto-tick, and the command library. Everything around them is CTF-shaped, cluttered and redundant, and browser storage is a dead end for a long-term tool.
 2. **The user's Obsidian notes for engagements.** Today Claude writes up the user's pasted output into Obsidian host notes (for example, a host note in Obsidian). Claude isn't available during the exam, so Raven alone has to be fast enough to record everything by hand, as it happens.
 
 Raven has four jobs:
@@ -26,7 +26,7 @@ Raven has four jobs:
 - capture is one paste and a keystroke;
 - nothing competes for attention.
 
-This design builds a **new app in a new repo** (this repo), not a rework of the old one. The engines from the old repo are ported (see §9). Everything else is left behind.
+This design builds a **new app in a new repo**, not a rework of the old one. The engines from the old repo are ported (see §9). Everything else is left behind.
 
 ## 2. Goals, non-goals, anti-goals
 
@@ -240,7 +240,7 @@ Each engagement keeps a list of artifacts left on targets: uploaded files and th
 - **Re-import** of an already-imported engagement is **add-only**: records are matched by their old id; new records are added; existing records are never overwritten or deleted. Edits made in the new app always win. The summary lists counts of added and already-present records. *(my call)*
 - **Not imported:** anything not selected, and all HTB/THM catalog data.
 - **Safety:** the import runs in one transaction after an automatic backup. It's idempotent: re-importing the same engagement doesn't create duplicates. It ends with a summary of counts per type.
-- **Fixture:** the real backup at `a file outside the repo` contains secrets. Use it only for local verification that prints counts and ids, never values. Never commit it or copy its contents. Tests use synthetic fixtures.
+- **Fixture:** a real backup, kept outside the repo, contains secrets. Use it only for local verification that prints counts and ids, never values. Never commit it or copy its contents. Tests use synthetic fixtures.
 
 ## 8. Visual design: direction A, "Ink" (chosen by the user from three mockups)
 - **Palette:** true black `#000` background; white and light-grey text; hairline borders around `#1f1f1f`–`#2a2a2a`; secondary text `#8a8a8a`–`#a8a8a8`. **One accent, `#c6ff00`**, used sparingly and only with meaning: the active selection marker, held access, confirmed facts, focus. No other hues, except a muted warning amber for open threads, which the builder may refine.
@@ -251,7 +251,7 @@ Each engagement keeps a list of artifacts left on targets: uploaded files and th
 - **No stock look:** stock component-library styling (default shadcn/Tailwind UI look) must not show through. Components are styled to this system.
 - **Reference:** the chosen mockup, direction **A** in [visual-directions.html](https://github.com/raven-workspace/raven/blob/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks/visual-directions.html); the layout mockups are in [docs/specs/mocks/](https://github.com/raven-workspace/raven/tree/b78787e7b42921c700972ef82817a3474aab4a9f/docs/specs/mocks) (dashboard: option A, engagement view: option B, host view: option B).
 
-## 9. Engines to port from the old app's repo
+## 9. Engines to port from the old Raven
 Copy these with their tests, then adapt them to the new types (Engagement, Host, Service, LogEntry, and so on):
 
 - **Checklist engine.** `src/utils/checklist/`: `matcher`, `library`, `applicability`, `dc`, `ports`, `fill`, `autoTick`, `examRules`, `engagementState`, `scanImport`. Plus `src/data/hostChecklist.ts`, `src/data/engagementChecklist.ts`, `src/data/commandLibrary/*` (keep the MIT attribution to oscp-notes-2026).

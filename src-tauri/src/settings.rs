@@ -22,7 +22,7 @@ const FIELD_MANUAL_KEY: &str = "field_manual_path";
 const DEFAULT_KALI_USER: &str = "kali";
 const DEFAULT_WINDOWS_TOOLS: &str = "~/tools/windows";
 const DEFAULT_LINUX_TOOLS: &str = "~/tools/linux";
-const DEFAULT_FIELD_MANUAL: &str = "~/Documents/Field Manual";
+const DEFAULT_FIELD_MANUAL: &str = "";
 const MAX_PATH_LEN: usize = 500;
 /// The NIST NVD API key. Stored in the encrypted vault; never sent to the frontend.
 const NVD_KEY_KEY: &str = "nvd_api_key";
@@ -520,7 +520,7 @@ mod tests {
     fn field_manual_path_defaults() {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
-        let def = "~/Documents/Field Manual";
+        let def = "";
         assert_eq!(get(c).unwrap().field_manual_path, def);
         let s = update(c, SettingsPatch { field_manual_path: Some("/Volumes/x/FM".into()), ..Default::default() }).unwrap();
         assert_eq!(s.field_manual_path, "/Volumes/x/FM");

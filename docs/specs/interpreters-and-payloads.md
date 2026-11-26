@@ -123,7 +123,7 @@ Both halves will be tested in the PEN-200 labs straight after this round.
 
 **Verification status.** Real output exists for nearly every tool:
 - the owner's lab notes (outside the repo);
-- old Raven backups: a file outside the repo, a file outside the repo.
+- old Raven backups (outside the repo).
 
 **No real samples yet:** lsassy, kerbrute, rpcclient/lookupsid and pspy. Their parsers are built from each tool's documented format and marked unverified. The owner will capture real output in the next lab, and those parsers are fixed against it.
 
