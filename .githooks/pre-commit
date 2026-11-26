@@ -12,9 +12,6 @@ IFS='
 set -f
 for slop_f in $slop_files; do
     slop_base=${slop_f##*/}
-    case "/$slop_f/" in */.claude/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Claude Code)"; continue ;; esac
-    case "$slop_base" in CLAUDE.md) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Claude Code)"; continue ;; esac
-    case "$slop_base" in .mcp.json) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Claude Code)"; continue ;; esac
     case "$slop_base" in plan-*.md) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Claude Code)"; continue ;; esac
     case "/$slop_f/" in */.cursor/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Cursor)"; continue ;; esac
     case "$slop_base" in .cursorrules) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Cursor)"; continue ;; esac
@@ -29,7 +26,6 @@ for slop_f in $slop_files; do
     case "/$slop_f/" in */.continue/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Continue.dev)"; continue ;; esac
     case "$slop_base" in .continuerules) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Continue.dev)"; continue ;; esac
     case "/$slop_f/" in */.codex/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (OpenAI Codex)"; continue ;; esac
-    case "$slop_base" in AGENTS.md) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (OpenAI Codex)"; continue ;; esac
     case "/$slop_f/" in */.amazonq/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (Amazon Q)"; continue ;; esac
     case "/$slop_f/" in */.junie/*) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (JetBrains Junie)"; continue ;; esac
     case "$slop_base" in .aiignore) slop_blocked=$((slop_blocked + 1)); echo "  BLOCKED: $slop_f (JetBrains Junie)"; continue ;; esac
