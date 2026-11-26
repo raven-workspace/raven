@@ -502,7 +502,7 @@ const PLURAL: Record<string, (n: number) => string> = {
  * its full statement (tooltip, picked detail). Kinds not listed read in full (coverage is short already).
  */
 const SHORT: Record<string, (c: Check) => string> = {
-  "proof-missing": (c) => `No ${part(c, 2)}.txt for ${part(c, 1)}`,
+  "proof-missing": (c) => fitNames([part(c, 1)], ([host]) => `No ${part(c, 2)}.txt for ${host}`),
   "proof-ip": (c) => `${part(c, 2)}.txt proof lacks ipconfig`,
   "proof-screenshot": (c) => `${part(c, 2)}.txt proof has no screenshot`,
   "proof-web": (c) => `${part(c, 2)}.txt proof from a web request`,
@@ -516,10 +516,13 @@ const SHORT: Record<string, (c: Check) => string> = {
   output: () => "A command shows no output",
   explain: () => "A step has no explanation",
   "step-replay": (c) => `Step ${/^Step (\d+)/.exec(c.text)?.[1] ?? ""} can't be replayed`,
-  "cred-finding": (c) => c.text.replace(/, but no finding covers it.*$/, "").replace(/^(.+?)'s credential from .+ got you onto /, "$1 got you onto ") + ": no finding",
+  "cred-finding": (c) => {
+    const m = /^(.+?)'s credential from .+ got you onto (.+?), but no finding covers it/.exec(c.text);
+    return m ? fitNames([m[1], m[2]], ([user, host]) => `${user} got you onto ${host}: no finding`) : "A credential has no finding";
+  },
   caption: () => "Caption over 10 words",
   "caption-weak": () => "A screenshot has no caption",
-  "access-shot": (c) => `${part(c, 1)}: no ${part(c, 2)} screenshot`,
+  "access-shot": (c) => fitNames([part(c, 1)], ([host]) => `${host}: no ${part(c, 2)} screenshot`),
   "finding-severity": () => "A finding has no severity",
   "finding-title": () => "A finding title is one word",
   "finding-affected": () => "A finding has no affected host",
@@ -536,6 +539,25 @@ const SHORT: Record<string, (c: Check) => string> = {
   legible: () => "Screenshot too narrow to print",
   details: () => "Name, email or OSID missing",
 };
+
+/** The outline column's widest line, in characters. */
+const MAX_SHORT = 38;
+
+/**
+ * A short line with names in it, fitted to the outline column: while the line is too long, the longest name loses a
+ * character and ends in "…". The full names stay in the check's text, the row's tooltip.
+ */
+function fitNames(names: string[], line: (names: string[]) => string): string {
+  const lengths = names.map((n) => n.length);
+  const shown = () => names.map((n, i) => (lengths[i] >= n.length ? n : `${n.slice(0, lengths[i] - 1)}…`));
+  while (line(shown()).length > MAX_SHORT) {
+    const i = lengths.indexOf(Math.max(...lengths));
+    // A name keeps at least one character and its "…".
+    if (lengths[i] <= 2) break;
+    lengths[i]--;
+  }
+  return line(shown());
+}
 
 /** The id's n-th ":" part ("proof-ip:ms01:local" → 1 "ms01", 2 "local"). */
 const part = (c: Check, n: number) => c.id.split(":")[n] ?? "";

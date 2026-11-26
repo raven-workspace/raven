@@ -701,6 +701,32 @@ describe("groupChecks", () => {
       expect(one(k), k).not.toMatch(/\.$/);
     }
   });
+  it("fits a short line with long usernames and host names in 38 characters, shortening the names with …", () => {
+    const HOST = "workstation-finance-01.corp.example";
+    const USER = "svc_sqlreporting_admin";
+    const cred = `${USER}'s credential from fileserver-backup-02 got you onto ${HOST}, but no finding covers it. A credential that lets you move is a finding too`;
+    const lines = [
+      c(`proof-missing:${HOST}:proof`, "fail", `No proof.txt for ${HOST} on the page.`),
+      c(`proof-missing:${HOST}:local`, "fail", `No local.txt for ${HOST} on the page.`),
+      c(`access-shot:${HOST}:system`, "soft", `${HOST} has system access with no screenshot of it on the page.`),
+      c(`access-shot:${HOST}:admin`, "soft", `${HOST} has admin access with no screenshot of it on the page.`),
+      c("cred-finding:k1:h2", "soft", cred),
+      ...["proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot"].map((k) => c(`${k}:${HOST}:proof`)),
+    ];
+    for (const check of lines) {
+      const [g] = groupChecks([check]);
+      expect(g.text.length, g.text).toBeLessThanOrEqual(38);
+      // The tooltip keeps the full text.
+      expect(g.full).toBe(check.text);
+    }
+    const one = (check: Check) => groupChecks([check])[0].text;
+    expect(one(lines[0])).toMatch(/^No proof\.txt for workstation.*…$/);
+    expect(one(lines[2])).toMatch(/^workstation.*…: no system screenshot$/);
+    expect(one(lines[4])).toBe("svc_s… got you onto works…: no finding");
+    // Short names are left whole.
+    expect(one(c("cred-finding:k1:h2", "soft", "bob's credential from ms01 got you onto dc01, but no finding covers it. A credential that lets you move is a finding too"))).toBe("bob got you onto dc01: no finding");
+    expect(one(c("proof-missing:ms01:proof"))).toBe("No proof.txt for ms01");
+  });
   it("words every kind targetChecks makes when there are two of it", () => {
     const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot", "gone", "copied-private", "copied-deleted", "output", "explain", "step-replay:t1", "cred-finding", "caption", "caption-weak", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "move", "legible"];
     for (const k of kinds) {
