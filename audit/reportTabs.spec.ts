@@ -59,6 +59,39 @@ test("Report: renaming a page's tab keeps the row still, the title field as wide
   expect(Math.round((await titleField(page).boundingBox())!.width)).toBe(192);
 });
 
+test("Report: at 1400 with the tabs overflowing, Page actions and + Page stay in view beside Export; only the tabs scroll", async ({ page }) => {
+  await openReport(page, "Tools and versions");
+  const scroller = page.locator(".report-tabs__scroller");
+  const add = page.getByRole("button", { name: "+ Page" });
+  // Enough free pages to overflow the row (each opens as it is added, so Page actions stays offered).
+  while (await scroller.evaluate((el) => el.scrollWidth <= el.clientWidth)) {
+    const count = await tabRow(page).getByRole("tab").count();
+    await add.click();
+    await page.getByRole("menu", { name: "Add a page" }).getByRole("menuitem", { name: "Free page" }).click();
+    await expect(tabRow(page).getByRole("tab")).toHaveCount(count + 1);
+  }
+  const actions = page.getByRole("button", { name: "Page actions" });
+  const exportButton = page.getByRole("button", { name: /^Export/ }).first();
+  const inView = async () => {
+    const view = page.viewportSize()!;
+    const row = (await scroller.boundingBox())!;
+    for (const control of [actions, add, exportButton]) {
+      await expect(control).toBeVisible();
+      const box = (await control.boundingBox())!;
+      // Right of the scrolling tabs, inside the window.
+      expect(box.x).toBeGreaterThanOrEqual(row.x + row.width - 0.5);
+      expect(box.x + box.width).toBeLessThanOrEqual(view.width);
+    }
+    // Page actions, + Page, then Export, left to right.
+    const xs = await Promise.all([actions, add, exportButton].map(async (c) => (await c.boundingBox())!.x));
+    expect([...xs].sort((a, b) => a - b)).toEqual(xs);
+  };
+  // The open (last) tab is scrolled into view, the row scrolled to its end; scrolled back to the start, nothing moves.
+  await inView();
+  await scroller.evaluate((el) => el.scrollTo({ left: 0 }));
+  await inView();
+});
+
 test("Report: after + add in the evidence column, by key or click, focus moves on to a row of the column, in WebKit too", async ({ page, playwright, baseURL }) => {
   const run = async (p: Page) => {
     // ms01 has five unused log entries.

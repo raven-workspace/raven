@@ -2008,6 +2008,37 @@ describe("Report view: tabs, focus and keyboard (RAV-17)", () => {
     expect(screen.getByRole("textbox", { name: "Page title" })).toHaveValue("Pivoting");
   });
 
+  it("Page actions and + Page sit outside the scrolling tab row, beside Export; only the tabs scroll", () => {
+    render(
+      <TooltipProvider>
+        <ReportTabs
+          tabs={[
+            { id: "a", label: "1 lnx02", state: "ready" },
+            { id: "p", label: "§6 Pivoting", state: "none", page: true, title: "Pivoting" },
+          ]}
+          openId="p"
+          onOpen={() => {}}
+          onReorder={() => {}}
+          onAddPage={() => {}}
+          onRenamePage={() => {}}
+          exportSlot={<button type="button">Export PDF</button>}
+        />
+      </TooltipProvider>,
+    );
+    const list = screen.getByRole("tablist", { name: "Report pages" });
+    const scroller = list.closest<HTMLElement>(".report-tabs__scroller")!;
+    const actions = screen.getByRole("button", { name: "Page actions" });
+    const add = screen.getByRole("button", { name: "+ Page" });
+    const exportButton = screen.getByRole("button", { name: "Export PDF" });
+    for (const b of [actions, add]) expect(scroller).not.toContainElement(b);
+    const beside = exportButton.closest<HTMLElement>(".report-tabs__actions")!;
+    for (const b of [actions, add]) expect(beside).toContainElement(b);
+    // In reading order: the tabs, Page actions, + Page, then Export.
+    expect(list.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(actions.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(add.compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("closing the delete dialog puts focus back on what opened it: Page actions, or the tab; after a delete, the open tab", async () => {
     mount();
     await ready();

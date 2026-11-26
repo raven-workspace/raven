@@ -207,9 +207,9 @@ function RenameInput({ initial, style, onDone }: { initial: string; style?: CSSP
 
 /**
  * The report's tab row under the status strip (§10.1, mock A): Front matter, the targets in grading order, Closing and
- * the appendices, then + Page. It is a roving-tabindex tablist (←/→ move, ↵ opens, ⌥←/⌥→ reorder a target or a page) that
- * scrolls sideways when it overflows, keeping the open tab in view; the export slot sits outside the scroller, so it
- * never scrolls away.
+ * the appendices. It is a roving-tabindex tablist (←/→ move, ↵ opens, ⌥←/⌥→ reorder a target or a page) that scrolls
+ * sideways when it overflows, keeping the open tab in view. The open page's actions (⋯), + Page and the export slot sit
+ * after it, outside the scroller, so they never scroll away.
  */
 export function ReportTabs({
   tabs,
@@ -246,6 +246,13 @@ export function ReportTabs({
   const [renaming, setRenaming] = useState<string | null>(null);
   const openPage = tabs.find((t) => t.id === openId && t.page);
   const renamed = renaming ? tabs.find((t) => t.id === renaming) : undefined;
+  // The open page's actions: Rename and Delete on an owner-written page.
+  const pageActions: MenuItem[] = openPage
+    ? [
+        ...(onRenamePage ? [{ label: "Rename", run: () => setRenaming(openPage.id), movesFocus: true }] : []),
+        ...(onDeletePage ? [{ label: "Delete", run: (from: HTMLElement | null) => onDeletePage(openPage.id, from), destructive: true, movesFocus: true }] : []),
+      ]
+    : [];
   // A reordered tab keeps focus: the row re-renders with it elsewhere, and a moved node can lose focus in WebKit.
   const refocus = useRef<string | null>(null);
   useLayoutEffect(() => {
@@ -332,35 +339,35 @@ export function ReportTabs({
               }}
             />
           )}
-          {/* The open page's actions sit outside the tablist, which owns only tabs (F2 and Delete work on the tab itself). */}
-          {openPage && (onRenamePage || onDeletePage) && (
-            <MenuPopover
-              label="Page actions"
-              // No F2 on its tooltip: F2 renames from a focused tab, not from here.
-              trigger={<IconButton icon={DotsThree} label="Page actions" />}
-              items={[
-                ...(onRenamePage ? [{ label: "Rename", run: () => setRenaming(openPage.id), movesFocus: true }] : []),
-                ...(onDeletePage ? [{ label: "Delete", run: (from: HTMLElement | null) => onDeletePage(openPage.id, from), destructive: true, movesFocus: true }] : []),
-              ]}
-            />
-          )}
-          {onAddPage && (
-            <MenuPopover
-              label="Add a page"
-              trigger={
-                <button type="button" className="report-tabs__add">
-                  + Page
-                </button>
-              }
-              items={[
-                { label: "Appendix page", run: () => onAddPage("appendix") },
-                { label: "Free page", run: () => onAddPage("body") },
-              ]}
-            />
-          )}
         </div>
       </div>
-      {exportSlot != null && exportSlot !== false && <div className="report-tabs__export">{exportSlot}</div>}
+      {/* Outside the scroller, so they never scroll out of view; outside the tablist, which owns only tabs (F2 and
+          Delete work on a page's tab itself). */}
+      <div className="report-tabs__actions">
+        {pageActions.length > 0 && (
+          <MenuPopover
+            label="Page actions"
+            // No F2 on its tooltip: F2 renames from a focused tab, not from here.
+            trigger={<IconButton icon={DotsThree} label="Page actions" />}
+            items={pageActions}
+          />
+        )}
+        {onAddPage && (
+          <MenuPopover
+            label="Add a page"
+            trigger={
+              <button type="button" className="report-tabs__add">
+                + Page
+              </button>
+            }
+            items={[
+              { label: "Appendix page", run: () => onAddPage("appendix") },
+              { label: "Free page", run: () => onAddPage("body") },
+            ]}
+          />
+        )}
+        {exportSlot}
+      </div>
     </div>
   );
 }
