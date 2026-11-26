@@ -40,6 +40,10 @@ _Avoid_: origin, ref, provenance
 A log entry that may never reach the page, the evidence column or the PDF: a private entry, or one tied to an attempt the owner marked private or kept to themselves.
 _Avoid_: hidden, private (private is one way to be kept from the report)
 
+**Report checklist**:
+The checks still open on the report tab in view, such as a missing proof screenshot or a finding with no severity, each with its fix. The app labels it "To do"; always say "report checklist", since "checklist" alone means a host's methodology checklist.
+_Avoid_: To do panel, todo list, checks panel
+
 ## Engagement data
 
 **AD set**:

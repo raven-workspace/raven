@@ -61,6 +61,9 @@ export interface SectionMeta {
   /** Check ids the owner dismissed from this page's To do (a false positive): not counted, listed as dismissed. Owner
    *  meta: kept across rebuilds. */
   dismissedChecks?: string[];
+  /** The owner dismissed the page's "rebuilt" or "converted" notice: it stays hidden, and the swap with `previousDoc`
+   *  moves to the page's ⋯ menu. Owner meta: kept across rebuilds. */
+  noticeDismissed?: boolean;
   /** The draft layout the page was built with (`DRAFT_LAYOUT`). */
   layout?: number;
   /** The page as it was before a rebuild for a new layout, kept so the owner can restore it; after a restore, the

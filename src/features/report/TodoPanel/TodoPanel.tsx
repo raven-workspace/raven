@@ -8,6 +8,8 @@ import "./TodoPanel.scss";
 /** A check's one-press fix, offered under it (a long block's "Move to appendix"). */
 export interface CheckAction {
   label: string;
+  /** What pressing it does, when its label alone doesn't say: a line above the action. */
+  note?: string;
   run(): void;
 }
 
@@ -57,8 +59,10 @@ export function CheckList({
         const action = isPicked ? actionFor?.(check) : undefined;
         const many = g.checks.length > 1;
         // The picked check in full: always for a single one (its row is the short wording), and for a group when its
-        // checks' words differ ("22/tcp on lnx02 is untested.").
-        const ownText = !many || g.checks.some((c) => c.text !== g.checks[0].text);
+        // checks' words differ ("22/tcp on lnx02 is untested."). A single check whose row already reads in full (a kind
+        // with no short wording) isn't said twice.
+        const sameAsRow = !many && check.text.replace(/\.$/, "") === g.text.replace(/\.$/, "");
+        const ownText = (!many && !sameAsRow) || (many && g.checks.some((c) => c.text !== g.checks[0].text));
         return (
           <li key={g.key} className="check-list__item">
             <Tooltip content={g.full} side="right">
@@ -86,6 +90,7 @@ export function CheckList({
                       <code className="check-list__fix">{check.fix}</code>
                     </Disclosure>
                   )}
+                  {action?.note && <span>{action.note}</span>}
                   {(action || onDismiss) && (
                     <div className="check-list__actions">
                       {action && (

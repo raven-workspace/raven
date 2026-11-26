@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../ui/shadcn/tab
 import { KIND_LABELS } from "../../log/kindLabels";
 import { insertEntry } from "../editor/pageActions";
 import { hasPageCursor } from "../editor/ReportEditor/ReportEditor";
+import { popupOpen } from "../popupOpen";
 import { clockTime } from "../../engagements/format";
 import "./EvidenceRail.scss";
 
@@ -151,7 +152,7 @@ function RailItem({ row, onAct }: { row: RailRow; onAct(row: RailRow, from: HTML
           </>
         }
       >
-        <Button size="sm" aria-label={`Add ${entry.title}`} onClick={(e) => onAct(row, e.currentTarget.closest("li"))}>
+        <Button size="sm" aria-label={note ? `Add ${entry.title}, ${NOTE_TEXT[note]}` : `Add ${entry.title}`} onClick={(e) => onAct(row, e.currentTarget.closest("li"))}>
           + add
         </Button>
       </Tooltip>
@@ -176,11 +177,13 @@ function LogTab({
 }) {
   const act = (row: RailRow, li: HTMLElement | null) => {
     if (!editor) return;
-    // Keyboard focus stays in the column: the row is about to leave it.
-    if (li && li === document.activeElement) {
+    // Focus stays in the column, as the row is about to leave it: on the next row, else the one before, else the column
+    // itself. By ↵, ⌘↵ or + add (a click doesn't focus a button in WebKit, so focus may be anywhere by then).
+    if (li) {
       const rows = [...(li.closest("[data-rail-log]")?.querySelectorAll<HTMLElement>("li[data-rail-row]") ?? [])];
       const i = rows.indexOf(li);
-      (rows[i + 1] ?? rows[i - 1])?.focus();
+      const next = rows[i + 1] ?? rows[i - 1] ?? li.closest<HTMLElement>("aside");
+      next?.focus();
     }
     insertEntry(editor, data, target, row.entry, hasPageCursor(editor), meta);
     onInserted(row.entry.id);
@@ -383,12 +386,6 @@ export function EvidenceRail({
   );
 }
 
-/** Whether a menu, a list or a Radix popover is open: Esc closes that first. ProseKit keeps its closed menus and
- *  lists in the DOM, marked closed. A tooltip (a popper wrapper holding `role="tooltip"`) is no popup: Esc closes the
- *  drawer while one shows. */
-const popupOpen = () =>
-  document.querySelector(':is([role="menu"], [role="listbox"]):not([data-state="closed"], [hidden])') !== null ||
-  [...document.querySelectorAll("[data-radix-popper-content-wrapper]")].some((w) => w.querySelector('[role="tooltip"]') === null);
 
 /** The rail as a drawer from the right edge (under 1200px): E or the strip button toggles it, Esc and the X close it. */
 export function EvidenceDrawer({
@@ -436,6 +433,8 @@ export function EvidenceDrawer({
   return (
     <aside
       ref={ref}
+      // Focusable from script: focus lands here once its last log row is added.
+      tabIndex={-1}
       aria-label="Evidence"
       className={`evidence-drawer ${BELOW_TITLE_BAR}`}
     >

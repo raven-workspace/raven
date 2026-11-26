@@ -1,7 +1,8 @@
 @use "@/styles/abstracts/index" as *;
 
 @layer features {
-  // The tab row under the status strip: the scrolling tabs, then the export slot that never scrolls away.
+  // The tab row under the status strip: the scrolling tabs, then the page's actions, + Page and Export, which never
+  // scroll away.
   .report-tabs {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -16,6 +17,7 @@
   }
 
   .report-tabs__row {
+    position: relative;
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: max-content;
@@ -56,7 +58,8 @@
     }
   }
 
-  .report-tabs__export {
+  // The open page's actions (⋯), + Page and Export: outside the scroller, always in view.
+  .report-tabs__actions {
     display: grid;
     grid-auto-flow: column;
     align-items: center;
@@ -65,22 +68,16 @@
     padding-left: var(--space-sm);
   }
 
-  // A page title edited in place of its tab.
+  // A page title edited over its tab, outside the tablist: placed on the tab's box (its left, top, width and height,
+  // set where it renders). Focus shows the app's ring.
   .report-tabs__rename {
-    align-self: center;
-    width: 12rem;
-    height: 2.25rem;
+    position: absolute;
     padding-inline: var(--space-sm);
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-sm);
     background-color: var(--bg);
     @include type(body);
     color: var(--fg);
-    outline-style: none;
-
-    &:focus-visible {
-      border-color: var(--accent);
-    }
   }
 
   // One tab: its label over its state. The open tab is plain fg; the rest are muted and light up on hover.
@@ -98,6 +95,12 @@
 
     &[aria-selected="true"] {
       color: var(--fg);
+    }
+
+    // Renamed: hidden under its title field, keeping its place; at least the field's 12rem.
+    &[data-renaming] {
+      min-width: 12rem;
+      visibility: hidden;
     }
 
     @media (hover: hover) {
