@@ -1943,3 +1943,46 @@ describe("pruneRemoved", () => {
     expect(pruneRemoved(doc, meta)).toBe(meta);
   });
 });
+
+describe("Report view: tabs, focus and keyboard (RAV-17)", () => {
+  const addPage = async (kind: "Appendix page" | "Free page") => {
+    fireEvent.click(screen.getByRole("button", { name: "+ Page" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: kind }));
+  };
+
+  it("names each tab with its state; every tab controls the page, a tabpanel labelled by the open tab", async () => {
+    await seedLnx(80);
+    mount();
+    await ready();
+    await waitFor(() => expect(rowFor("lnx02")).toHaveAccessibleName(/^1 lnx02, \d+ to do$/));
+    expect(tab("Front matter")).toHaveAccessibleName("Front matter, ready");
+    expect(rowFor("ms01")).toHaveAccessibleName("3 ms01, ready");
+    expect(tab("Closing")).toHaveAccessibleName("Closing");
+    // The page region (the evidence column's own tabs have panels too).
+    const panel = () => document.getElementById(rowFor("lnx02").getAttribute("aria-controls") ?? "")!;
+    expect(panel()).toHaveAttribute("role", "tabpanel");
+    expect(panel()).toContainElement(document.querySelector<HTMLElement>(".report-page"));
+    for (const t of tabEls()) expect(t).toHaveAttribute("aria-controls", panel().id);
+    expect(panel()).toHaveAttribute("aria-labelledby", rowFor("lnx02").id);
+    expect(panel()).toHaveAccessibleName(rowFor("lnx02").getAttribute("aria-label")!);
+    fireEvent.click(rowFor("ms01"));
+    await waitFor(() => expect(panel()).toHaveAttribute("aria-labelledby", rowFor("ms01").id));
+    expect(panel()).toHaveAccessibleName("3 ms01, ready");
+  });
+
+  it("while a page is renamed the tablist holds only tabs: the title field sits outside it, over the tab", async () => {
+    mount();
+    await ready();
+    await addPage("Free page");
+    await waitFor(() => expect(tabLabels()).toContain("§6 Untitled page"));
+    fireEvent.keyDown(tab("§6 Untitled page"), { key: "F2" });
+    const input = screen.getByRole("textbox", { name: "Page title" });
+    expect(tabRow()).not.toContainElement(input);
+    expect(tabRow().querySelector("input")).toBeNull();
+    // The tab it edits keeps its place in the row, out of the accessibility tree until the rename ends.
+    expect(within(tabRow()).queryByRole("tab", { name: /Untitled page/ })).toBeNull();
+    fireEvent.change(input, { target: { value: "Pivoting" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(document.activeElement).toBe(tab("§6 Pivoting")));
+  });
+});

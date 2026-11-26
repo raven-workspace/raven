@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
 import {
   archivePage,
@@ -59,7 +59,7 @@ import { EvidenceDrawer, EvidenceRail } from "../EvidenceRail/EvidenceRail";
 import { GuidePanel } from "../GuidePanel/GuidePanel";
 import { ReportDetails } from "../ReportDetails/ReportDetails";
 import { ReportStrip } from "../ReportStrip/ReportStrip";
-import { focusReportTab, PartTabs, ReportTabs, type TabItem } from "../ReportTabs/ReportTabs";
+import { focusReportTab, PartTabs, ReportTabs, reportTabDomId, type TabItem } from "../ReportTabs/ReportTabs";
 import { ExpectedFlags, TodoPanel, type CheckAction } from "../TodoPanel/TodoPanel";
 import {
   BACK_KINDS,
@@ -679,6 +679,7 @@ function ReportBody({
 
   // Keys: J/K move along the tabs; ⌥1/⌥2/⌥3 focus the tab row, the page and the evidence column.
   const navRef = useRef<HTMLDivElement | null>(null);
+  const panelId = useId();
   const pageRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
   const [sectionRef, paneWidth] = useWidthRef<HTMLElement>();
@@ -1101,9 +1102,11 @@ function ReportBody({
             }}
             exportSlot={<ExportButton report={report} build={buildExport} gaps={gaps} onSaveReport={saveReport} />}
             listRef={navRef}
+            panelId={panelId}
           />
           <div className={cx("report-section__body", railBeside && "report-section__body--rail")}>
-            <div className="report-section__main">
+            {/* The page region: the panel every tab controls, named by the open tab. */}
+            <div id={panelId} role="tabpanel" aria-labelledby={reportTabDomId(openTabId)} className="report-section__main">
               {partRow}
               {todoPanel}
               <div ref={pageRef} className="report-section__pane">
