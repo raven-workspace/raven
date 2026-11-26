@@ -183,6 +183,13 @@ describe("findingRows", () => {
     expect(rows[0]).toMatchObject({ findingId: "f1", host: "quartz", severity: "high" });
   });
 
+  it("calls a privilege escalation with no admin, root or SYSTEM grant Privilege escalation (§10.3)", () => {
+    const d = lab();
+    d.grants = [grant("h1", "user", "u1", "shell", 20), grant("h1", "user", "u2", "root", 31)];
+    const rows = findingRows(d, targets);
+    expect(rows.find((r) => r.title === "sudo find")?.result).toBe("Privilege escalation");
+  });
+
   it("never carries lessons", () => {
     expect(findingRows(lab(), targets).every((r) => !("lessons" in r))).toBe(true);
   });

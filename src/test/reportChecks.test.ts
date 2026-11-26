@@ -91,6 +91,20 @@ describe("proofFacts details", () => {
     expect(f("root@x:/root# cd /tmp | cat proof.txt").usualPath).toBe(false);
     expect(f("bob@x:/home$ cd bob; cat local.txt").usualPath).toBe(true);
   });
+  it("shows the hostname only when hostname is run or the host's name is in the output", () => {
+    // The bare word is not enough: a failed command names it too.
+    expect(f("hostname: command not found\nipconfig\n10.0.0.5").showsHostname).toBe(false);
+    expect(f("bash: hostname: command not found").showsHostname).toBe(false);
+    expect(f("the hostname is unknown").showsHostname).toBe(false);
+    // Run as a command: at a line start, after a prompt or after a separator.
+    for (const run of ["hostname", "  hostname", "whoami; hostname; ip a", "whoami && hostname && ipconfig", "root@x:/root# hostname", "PS C:\\Users\\bob> hostname", "C:\\Users\\bob>hostname"]) {
+      expect(f(run).showsHostname, run).toBe(true);
+    }
+    // The host's name in the output, as a whole word, in any case.
+    expect(f("uname -n\ndc01").showsHostname).toBe(true);
+    expect(f("root@DC01:/root# cat proof.txt").showsHostname).toBe(true);
+    expect(f("uname -n\ndc012").showsHostname).toBe(false);
+  });
 });
 
 describe("absoluteClaims", () => {
@@ -110,6 +124,14 @@ describe("targetChecks", () => {
       ["proof-missing:DC01:local", "fail", "No local.txt for DC01 on the page."],
       ["proof-missing:DC01:proof", "fail", "No proof.txt for DC01 on the page."],
     ]);
+  });
+  it("proof-missing is anchored to the machine's heading when it is on the page, else to nothing", () => {
+    const page = doc(words("Intro"), h1("DC01 (10.0.0.5)", "facts:h1"), words("Text"));
+    // Pre-order: the intro paragraph 0, its text 1, the heading 2.
+    expect(find(run(data(), page), "proof-missing")?.anchor).toEqual({ nodeIndex: 2 });
+    expect(find(run(data(), doc(words("Text"))), "proof-missing")?.anchor).toBeUndefined();
+    // Another machine's heading is not this one's.
+    expect(find(run(data(), doc(h1("WS01", "facts:h2"))), "proof-missing")?.anchor).toBeUndefined();
   });
   it("proof-missing when the flag exists but is not on the page", () => {
     expect(find(run(good(), doc()), "proof-missing")).toBeDefined();
@@ -143,6 +165,9 @@ describe("targetChecks", () => {
     for (const id of ["proof-identity", "proof-path", "proof-hostname"]) expect(find(c, id)!.fix).toContain("ipconfig");
     const lin = run(data({ hosts: [host({ os: "linux" })], log: [flag({}, { proof: "id\nip addr\n10.0.0.5\ncat /root/proof.txt", attachmentId: null })] }), goodDoc());
     expect(find(lin, "proof-hostname")!.fix).toContain("ip addr");
+    // A failed hostname command still lacks the hostname.
+    const failed = run(data({ log: [flag({}, { proof: "whoami\nhostname: command not found\ntype C:\\Users\\Administrator\\Desktop\\proof.txt\nipconfig\n10.0.0.5", attachmentId: null })] }), goodDoc());
+    expect(find(failed, "proof-hostname")).toMatchObject({ id: "proof-hostname:DC01:proof", level: "soft" });
     // With a screenshot, what the text lacks may be on it: only a read from a known odd folder is said.
     const shot = run(data({ log: [flag({}, { proof: "ipconfig\n10.0.0.5\ncat /tmp/proof.txt" })] }), goodDoc());
     expect(shot.map((x) => x.id)).toEqual(["proof-path:DC01:proof"]);
@@ -513,11 +538,13 @@ describe("targetChecks", () => {
     });
   });
   describe("gone", () => {
+    // What is wrong, then what to do: the block menu's Delete (a deleted source offers no Refresh).
+    const GONE = "A finding or file on the page was deleted. Delete its block from the block menu (⋯).";
     it("fails once per finding or file that no longer exists, at its first block", () => {
       const page = doc(words("Why.", "finding:nf:explanation"), words("Fix.", "finding:nf:fix"), code("x", "file:nx"), ...goodDoc().content!);
       expect(run(good(), page).filter((c) => c.id.startsWith("gone"))).toEqual([
-        { id: "gone:nf", level: "fail", text: "A finding or file on the page was deleted.", anchor: { nodeIndex: 0 } },
-        { id: "gone:nx", level: "fail", text: "A finding or file on the page was deleted.", anchor: { nodeIndex: 4 } },
+        { id: "gone:nf", level: "fail", text: GONE, anchor: { nodeIndex: 0 } },
+        { id: "gone:nx", level: "fail", text: GONE, anchor: { nodeIndex: 4 } },
       ]);
     });
     it("says nothing for a finding and a file that exist", () => {
@@ -618,6 +645,10 @@ describe("reportChecks", () => {
   });
   it("details, osid and no-targets", () => {
     expect(reportChecks({ report: report({ email: " " }), targets: [target], data: data() }).map((c) => [c.id, c.level])).toEqual([["details", "fail"]]);
+    const details = reportChecks({ report: report({ email: " " }), targets: [target], data: data() });
+    expect(details[0].text).toBe("The report is missing your name, email or OSID. Fill in your name, email and OSID in Report details.");
+    // The outline's row stays short.
+    expect(groupChecks(details)[0].text).toBe("Name, email or OSID missing");
     expect(reportChecks({ report: report({ osid: "123" }), targets: [target], data: data() }).map((c) => [c.id, c.level])).toEqual([["osid", "fail"]]);
     expect(reportChecks({ report: report(), targets: [], data: data() }).map((c) => c.id)).toEqual(["no-targets"]);
   });
@@ -677,6 +708,32 @@ describe("groupChecks", () => {
       // Single and counted lines end alike: no full stop.
       expect(one(k), k).not.toMatch(/\.$/);
     }
+  });
+  it("fits a short line with long usernames and host names in 38 characters, shortening the names with …", () => {
+    const HOST = "workstation-finance-01.corp.example";
+    const USER = "svc_sqlreporting_admin";
+    const cred = `${USER}'s credential from fileserver-backup-02 got you onto ${HOST}, but no finding covers it. A credential that lets you move is a finding too`;
+    const lines = [
+      c(`proof-missing:${HOST}:proof`, "fail", `No proof.txt for ${HOST} on the page.`),
+      c(`proof-missing:${HOST}:local`, "fail", `No local.txt for ${HOST} on the page.`),
+      c(`access-shot:${HOST}:system`, "soft", `${HOST} has system access with no screenshot of it on the page.`),
+      c(`access-shot:${HOST}:admin`, "soft", `${HOST} has admin access with no screenshot of it on the page.`),
+      c("cred-finding:k1:h2", "soft", cred),
+      ...["proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot"].map((k) => c(`${k}:${HOST}:proof`)),
+    ];
+    for (const check of lines) {
+      const [g] = groupChecks([check]);
+      expect(g.text.length, g.text).toBeLessThanOrEqual(38);
+      // The tooltip keeps the full text.
+      expect(g.full).toBe(check.text);
+    }
+    const one = (check: Check) => groupChecks([check])[0].text;
+    expect(one(lines[0])).toMatch(/^No proof\.txt for workstation.*…$/);
+    expect(one(lines[2])).toMatch(/^workstation.*…: no system screenshot$/);
+    expect(one(lines[4])).toBe("svc_s… got you onto works…: no finding");
+    // Short names are left whole.
+    expect(one(c("cred-finding:k1:h2", "soft", "bob's credential from ms01 got you onto dc01, but no finding covers it. A credential that lets you move is a finding too"))).toBe("bob got you onto dc01: no finding");
+    expect(one(c("proof-missing:ms01:proof"))).toBe("No proof.txt for ms01");
   });
   it("words every kind targetChecks makes when there are two of it", () => {
     const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot", "gone", "copied-private", "copied-deleted", "output", "explain", "step-replay:t1", "cred-finding", "caption", "caption-weak", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "move", "legible"];

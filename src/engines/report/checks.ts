@@ -196,7 +196,7 @@ function credentialChecks(data: ReportData, hosts: Host[]): Check[] {
  * Each expected flag's proof, read from the flag entry and its companions (`proofCompanions`): the flag's own paste and
  * screenshot, the commands that print its value, the screenshots taken with it.
  */
-function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData, onPage: Set<string>): Check[] {
+function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData, onPage: Set<string>, heading?: number): Check[] {
   const out: Check[] = [];
   for (const flag of flags) {
     const entries = data.log
@@ -206,7 +206,8 @@ function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData,
     // proof with its own companions.
     const entry = entries.find((e) => onPage.has(e.id)) ?? readOnPage(data, host.id, flag, onPage);
     if (!entry) {
-      out.push({ id: `proof-missing:${host.name}:${flag}`, level: "fail", text: `No ${flag}.txt for ${host.name} on the page.` });
+      // Picking it goes to the machine's heading, where the proof belongs; with none on the page, to the page.
+      out.push({ id: `proof-missing:${host.name}:${flag}`, level: "fail", text: `No ${flag}.txt for ${host.name} on the page.`, ...(heading === undefined ? {} : { anchor: { nodeIndex: heading } }) });
       continue;
     }
     const companions = proofCompanions(data, host.id, entry);
@@ -302,7 +303,13 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   const onPage = entriesOnPage(doc, data);
   const hosts = target.hostIds.flatMap((id) => data.hosts.find((h) => h.id === id) ?? []);
   const entryOf = (id: string) => data.log.find((e) => e.id === id);
-  for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage));
+  /** Each machine's heading on the page (a `facts:<hostId>` heading), by host id: its node index. */
+  const headings = new Map<string, number>();
+  for (const { node, index } of nodes) {
+    const s = node.type === "heading" ? blockSource(node) : null;
+    if (s?.kind === "facts" && !headings.has(s.hostId)) headings.set(s.hostId, index);
+  }
+  for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage, headings.get(host.id)));
 
   // A block from an entry kept from the report (private, or behind a private or operator attempt) or deleted: the words or picture on the page may be what was hidden or meant to go.
   // One check per entry, at its first block. A command block with no output block of its entry after it (before that
@@ -348,7 +355,8 @@ export function targetChecks(input: TargetChecksInput): Check[] {
     if (!id || goneSeen.has(id)) continue;
     goneSeen.add(id);
     const exists = finding ? data.findings.some((f) => f.id === finding) : data.findingFiles.some((f) => f.id === file);
-    if (!exists) out.push({ id: `gone:${id}`, level: "fail", text: "A finding or file on the page was deleted.", anchor: { nodeIndex: index } });
+    // A deleted source offers no Refresh: the block menu's Delete is the way out.
+    if (!exists) out.push({ id: `gone:${id}`, level: "fail", text: "A finding or file on the page was deleted. Delete its block from the block menu (⋯).", anchor: { nodeIndex: index } });
   }
 
   out.push(...stepChecks(nodes, sectionId));
@@ -501,7 +509,7 @@ const PLURAL: Record<string, (n: number) => string> = {
  * its full statement (tooltip, picked detail). Kinds not listed read in full (coverage is short already).
  */
 const SHORT: Record<string, (c: Check) => string> = {
-  "proof-missing": (c) => `No ${part(c, 2)}.txt for ${part(c, 1)}`,
+  "proof-missing": (c) => fitNames([part(c, 1)], ([host]) => `No ${part(c, 2)}.txt for ${host}`),
   "proof-ip": (c) => `${part(c, 2)}.txt proof lacks ipconfig`,
   "proof-screenshot": (c) => `${part(c, 2)}.txt proof has no screenshot`,
   "proof-web": (c) => `${part(c, 2)}.txt proof from a web request`,
@@ -515,10 +523,13 @@ const SHORT: Record<string, (c: Check) => string> = {
   output: () => "A command shows no output",
   explain: () => "A step has no explanation",
   "step-replay": (c) => `Step ${/^Step (\d+)/.exec(c.text)?.[1] ?? ""} can't be replayed`,
-  "cred-finding": (c) => c.text.replace(/, but no finding covers it.*$/, "").replace(/^(.+?)'s credential from .+ got you onto /, "$1 got you onto ") + ": no finding",
+  "cred-finding": (c) => {
+    const m = /^(.+?)'s credential from .+ got you onto (.+?), but no finding covers it/.exec(c.text);
+    return m ? fitNames([m[1], m[2]], ([user, host]) => `${user} got you onto ${host}: no finding`) : "A credential has no finding";
+  },
   caption: () => "Caption over 10 words",
   "caption-weak": () => "A screenshot has no caption",
-  "access-shot": (c) => `${part(c, 1)}: no ${part(c, 2)} screenshot`,
+  "access-shot": (c) => fitNames([part(c, 1)], ([host]) => `${host}: no ${part(c, 2)} screenshot`),
   "finding-severity": () => "A finding has no severity",
   "finding-title": () => "A finding title is one word",
   "finding-affected": () => "A finding has no affected host",
@@ -533,7 +544,27 @@ const SHORT: Record<string, (c: Check) => string> = {
     return why ? `Long block (${why})` : "Long block";
   },
   legible: () => "Screenshot too narrow to print",
+  details: () => "Name, email or OSID missing",
 };
+
+/** The outline column's widest line, in characters. */
+const MAX_SHORT = 38;
+
+/**
+ * A short line with names in it, fitted to the outline column: while the line is too long, the longest name loses a
+ * character and ends in "…". The full names stay in the check's text, the row's tooltip.
+ */
+function fitNames(names: string[], line: (names: string[]) => string): string {
+  const lengths = names.map((n) => n.length);
+  const shown = () => names.map((n, i) => (lengths[i] >= n.length ? n : `${n.slice(0, lengths[i] - 1)}…`));
+  while (line(shown()).length > MAX_SHORT) {
+    const i = lengths.indexOf(Math.max(...lengths));
+    // A name keeps at least one character and its "…".
+    if (lengths[i] <= 2) break;
+    lengths[i]--;
+  }
+  return line(shown());
+}
 
 /** The id's n-th ":" part ("proof-ip:ms01:local" → 1 "ms01", 2 "local"). */
 const part = (c: Check, n: number) => c.id.split(":")[n] ?? "";
@@ -573,7 +604,7 @@ export function reportChecks(input: { report: Report; targets: ReportTarget[]; d
   const { report, targets, data } = input;
   const out: Check[] = [];
   if (!report.candidateName.trim() || !report.email.trim() || !report.osid.trim()) {
-    out.push({ id: "details", level: "fail", text: "The report is missing your name, email or OSID." });
+    out.push({ id: "details", level: "fail", text: "The report is missing your name, email or OSID. Fill in your name, email and OSID in Report details." });
   }
   if (report.osid.trim() && !isValidOsid(report.osid)) {
     out.push({ id: "osid", level: "fail", text: "The OSID should look like OS-12345." });

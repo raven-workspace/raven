@@ -786,12 +786,14 @@ function ReportBody({
   };
   // Text copied from a now-private or deleted entry: Keep the text makes it the owner's own.
   const checkAction = (check: Check): CheckAction | undefined => {
-    const copied = /^copied-(?:private|deleted):(.+)$/.exec(check.id);
+    const copied = /^copied-(private|deleted):(.+)$/.exec(check.id);
     if (copied) {
+      const entry = copied[1] === "private" ? "its entry stays private" : "its entry was deleted";
       return {
         label: "Keep the text",
+        note: `Keep the text to make it your own writing: it stays on the page and goes into the report, though ${entry}.`,
         run: () => {
-          if (pageEditor) keepCopiedText(pageEditor, copied[1]);
+          if (pageEditor) keepCopiedText(pageEditor, copied[2]);
         },
       };
     }
