@@ -3,7 +3,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { MemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setImported } from "../engines/library/store";
 import type { CardMeta } from "../engines/library/types";
 import type { LibraryCommand } from "../engines/library/types";
@@ -183,5 +183,95 @@ describe("CardView reading view", () => {
     mount();
     await user.click(await screen.findByRole("button", { name: "Open in Obsidian" }));
     expect(m.openObsidian).toHaveBeenCalledWith("02-Cards/Zz/Zz Card.md");
+  });
+});
+
+describe("CardView: the On this card strip follows the reading", () => {
+  /** The IntersectionObserver the strip follows; tests say which blocks are in the reading band. */
+  let observer: { cb: IntersectionObserverCallback; seen: Element[] } | null = null;
+  class FakeObserver {
+    constructor(cb: IntersectionObserverCallback) {
+      observer = { cb, seen: [] };
+    }
+    observe(el: Element) { observer!.seen.push(el); }
+    unobserve() {}
+    disconnect() {}
+    takeRecords() { return []; }
+  }
+  const band = (visible: string[]) =>
+    act(() => observer!.cb(
+      observer!.seen.map((el) => ({ target: el, isIntersecting: visible.includes(el.id) }) as unknown as IntersectionObserverEntry),
+      observer as unknown as IntersectionObserver,
+    ));
+
+  /** A stand-in for `document.fonts` (jsdom has none): the web fonts finish loading when the test says. */
+  function fakeFonts(status: FontFaceSetLoadStatus) {
+    const set = Object.assign(new EventTarget(), { status });
+    Object.defineProperty(document, "fonts", { value: set, configurable: true });
+    return {
+      done: () => act(() => {
+        set.status = "loaded";
+        set.dispatchEvent(new Event("loadingdone"));
+      }),
+    };
+  }
+
+  /** The strip's scrolling row: 200px wide, its 90px labels 100px apart until `widen` spreads them as a wider font does. */
+  const row = () => screen.getByRole("navigation", { name: "On this card" }).querySelector<HTMLElement>("[data-scroll-x]")!;
+  let spread = 100;
+  function layOutStrip() {
+    Object.defineProperty(row(), "clientWidth", { configurable: true, value: 200 });
+    row().querySelectorAll<HTMLElement>("button[data-for]").forEach((b, i) => {
+      Object.defineProperty(b, "offsetLeft", { configurable: true, get: () => 4 + i * spread });
+      Object.defineProperty(b, "offsetWidth", { configurable: true, value: 90 });
+    });
+  }
+  const widen = (to: number) => (spread = to);
+
+  beforeEach(() => {
+    observer = null;
+    spread = 100;
+    globalThis.IntersectionObserver = FakeObserver as unknown as typeof IntersectionObserver;
+  });
+  afterEach(() => {
+    delete (globalThis as Partial<typeof globalThis>).IntersectionObserver;
+    // jsdom has no document.fonts of its own.
+    delete (document as { fonts?: FontFaceSet }).fonts;
+  });
+
+  it("scrolls the strip to an active entry out of its view", async () => {
+    mount();
+    await pre("zza 10.10.10.5");
+    layOutStrip();
+    band(["block-zz-c"]);
+    expect(screen.getByRole("button", { name: "Charlie step" })).toHaveAttribute("aria-current", "location");
+    expect(row().scrollLeft).toBe(196);
+  });
+
+  // RAV-58: a web font swapped in late (font-display: swap) moves the labels, so the strip lines the entry up again.
+  it("lines the active entry up again once web fonts finish loading", async () => {
+    const fonts = fakeFonts("loading");
+    mount();
+    await pre("zza 10.10.10.5");
+    layOutStrip();
+    band(["block-zz-c"]);
+    expect(row().scrollLeft).toBe(196);
+    widen(109); // Charlie step now starts at 222: still in view, but no longer lined up
+    fonts.done();
+    expect(row().scrollLeft).toBe(214);
+  });
+
+  it("leaves a strip scrolled by hand where it is when web fonts finish loading", async () => {
+    const fonts = fakeFonts("loading");
+    mount();
+    await pre("zza 10.10.10.5");
+    layOutStrip();
+    band(["block-zz-c"]);
+    act(() => {
+      row().scrollLeft = 150; // the reader scrolled the strip; Charlie step is still in view
+    });
+    widen(109);
+    fonts.done();
+    expect(row().scrollLeft).toBe(150);
   });
 });

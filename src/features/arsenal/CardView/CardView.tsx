@@ -5,6 +5,7 @@ import { useLibrary, useToolkit } from "../../../engines/library/store";
 import type { LibraryCommand } from "../../../engines/library/types";
 import { isTypingTarget } from "../../../lib/keys";
 import { reportError } from "../../../lib/lockSignal";
+import { useFontsLoaded } from "../../../lib/useFontsLoaded";
 import { api } from "../../../lib/api";
 import { cx } from "../../../lib/cx";
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
@@ -173,12 +174,21 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
 
   // Keep the current entry visible in a strip that scrolls sideways.
   const stripRow = useRef<HTMLDivElement>(null);
+  const fontsLoaded = useFontsLoaded();
+  /** Where this last scrolled the strip to, and for which entry. */
+  const stripPlaced = useRef<{ id: string; left: number } | null>(null);
   useEffect(() => {
     const row = stripRow.current;
     const el = inView ? row?.querySelector<HTMLElement>(`[data-for="${inView}"]`) : null;
-    if (!row || !el) return;
-    if (el.offsetLeft < row.scrollLeft || el.offsetLeft + el.offsetWidth > row.scrollLeft + row.clientWidth) row.scrollLeft = el.offsetLeft - 8;
-  }, [inView]);
+    if (!row || !el || !inView) return;
+    const hidden = el.offsetLeft < row.scrollLeft || el.offsetLeft + el.offsetWidth > row.scrollLeft + row.clientWidth;
+    // A web font swapped in late (font-display: swap) moves the labels: a strip still where this put it lines up again.
+    const placed = stripPlaced.current;
+    const ours = placed !== null && placed.id === inView && placed.left === row.scrollLeft;
+    if (!hidden && !ours) return;
+    row.scrollLeft = el.offsetLeft - 8;
+    stripPlaced.current = { id: inView, left: row.scrollLeft };
+  }, [inView, fontsLoaded]);
 
   // The strip hides its scrollbar (an overlay one sat over the labels); a faded edge says there is more that way.
   const [edges, setEdges] = useState({ start: false, end: false });
