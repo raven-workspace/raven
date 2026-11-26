@@ -185,7 +185,7 @@ describe("targetChecks", () => {
       ["proof-shot:DC01:local", "soft", "Raven can't read screenshots; make sure the local.txt screenshot for DC01 shows ipconfig with 10.0.0.5.", "f0"],
       ["proof-shot:DC01:proof", "soft", "Raven can't read screenshots; make sure the proof.txt screenshot for DC01 shows ipconfig with 10.0.0.5.", "f1"],
     ]);
-    expect(groupChecks(c).map((g) => g.text)).toEqual(["2 proof screenshots: Raven can't read them; check each shows the target IP"]);
+    expect(groupChecks(c).map((g) => [g.text, g.full])).toEqual([["2 proof screenshots: show the IP?", "2 proof screenshots: Raven can't read them; check each shows the target IP"]]);
     expect(groupChecks(c.slice(0, 1)).map((g) => g.text)).toEqual(["local.txt: screenshot shows IP?"]);
     const lin = run(data({ hosts: [host({ os: "linux" })], log: [local] }), doc(ev("f0")), {}, ["local"]);
     expect(lin[0].text).toBe("Raven can't read screenshots; make sure the local.txt screenshot for DC01 shows ip a or ifconfig with 10.0.0.5.");
@@ -508,7 +508,7 @@ describe("targetChecks", () => {
         ["copied-private:n1", "fail", 0],
         ["copied-private:s1", "fail", 2],
       ]);
-      expect(groupChecks(run(data({ log: priv }), page).filter((c) => c.id.startsWith("copied"))).map((g) => g.text)).toEqual(["2 blocks on the page come from now-private entries"]);
+      expect(groupChecks(run(data({ log: priv }), page).filter((c) => c.id.startsWith("copied"))).map((g) => [g.text, g.full])).toEqual([["2 blocks from now-private entries", "2 blocks on the page come from now-private entries"]]);
       expect(groupChecks(run(data({ log: priv }), doc(words("copied words", "entry:n1:note"), ...goodDoc().content!)).filter((c) => c.id.startsWith("copied"))).map((g) => g.text)).toEqual(["Block from a now-private entry"]);
     });
     it("copied-private: a block from an entry kept from the report by its attempt fails like a private one", () => {
@@ -628,7 +628,7 @@ describe("targetChecks", () => {
   it("words copied-deleted for a block and for several", () => {
     const one = groupChecks([{ id: "copied-deleted:a", level: "fail", text: "x" }]);
     const two = groupChecks([{ id: "copied-deleted:a", level: "fail", text: "x" }, { id: "copied-deleted:b", level: "fail", text: "x" }]);
-    expect([one[0].text, two[0].text]).toEqual(["Block from a deleted entry", "2 blocks on the page come from deleted entries"]);
+    expect([one[0].text, two[0].text, two[0].full]).toEqual(["Block from a deleted entry", "2 blocks from deleted entries", "2 blocks on the page come from deleted entries"]);
   });
   it("the garnet draft as drafted has no fail", () => {
     const garnet = garnetFixtures(1_700_000_000_000);
@@ -689,7 +689,7 @@ describe("groupChecks", () => {
   it("keys finding and exploit checks by their kind, not their id", () => {
     const groups = groupChecks([c("finding:f1:severity"), c("finding:f2:severity"), c("finding:f1:remediation"), c("exploit:x:url", "fail"), c("exploit:y:url", "fail")]);
     expect(groups.map((g) => [g.key, g.text])).toEqual([
-      ["exploit-url", "2 modified exploits have no original URL"],
+      ["exploit-url", "2 exploits have no original URL"],
       ["finding-severity", "2 findings have no severity"],
       ["finding-remediation", "A finding has no remediation"],
     ]);
@@ -817,5 +817,15 @@ describe("groupChecks", () => {
       expect(one("msf-many")).toBe("Metasploit on more than one host");
     });
 
+    it("a count of several, up to 99, within 38 characters", () => {
+      for (const [kind, check] of Object.entries(longest)) {
+        for (const n of [2, 99]) {
+          const [g] = groupChecks(Array.from({ length: n }, () => check));
+          expect.soft(g.text.length, `${kind}: ${g.text}`).toBeLessThanOrEqual(38);
+          expect(g.text, kind).toMatch(new RegExp(`^${n} `));
+          expect(g.text, kind).not.toMatch(/\.$/);
+        }
+      }
+    });
   });
 });

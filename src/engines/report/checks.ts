@@ -470,7 +470,7 @@ export function checkKind(id: string): string {
   return parts[0];
 }
 
-/** How a group of `n` checks of one kind reads in the outline. */
+/** How a group of `n` checks of one kind reads in full: the tooltip, and the row where it fits (`SHORT_PLURAL`). */
 const PLURAL: Record<string, (n: number) => string> = {
   "proof-missing": (n) => `${n} flags are not on the page`,
   "proof-ip": (n) => `${n} proofs don't show ipconfig, ifconfig or ip addr with the target IP`,
@@ -502,6 +502,28 @@ const PLURAL: Record<string, (n: number) => string> = {
   coverage: (n) => `${n} services are untested`,
   move: (n) => `${n} blocks are long; consider moving them to an appendix`,
   legible: (n) => `${n} screenshots are narrower than would print legibly`,
+};
+
+/** How a group of `n` checks reads in the outline's narrow column, where its full statement (`PLURAL`) runs long. */
+const SHORT_PLURAL: Record<string, (n: number) => string> = {
+  "proof-ip": (n) => `${n} proofs lack ipconfig`,
+  "proof-web": (n) => `${n} proofs from a web request`,
+  "proof-path": (n) => `${n} proofs read from an odd place`,
+  "proof-shot": (n) => `${n} proof screenshots: show the IP?`,
+  gone: (n) => `${n} deleted findings or files`,
+  "copied-private": (n) => `${n} blocks from now-private entries`,
+  "copied-deleted": (n) => `${n} blocks from deleted entries`,
+  "step-replay": (n) => `${n} steps can't be replayed`,
+  "cred-finding": (n) => `${n} credentials have no finding`,
+  caption: (n) => `${n} captions over ${MAX_CAPTION_WORDS} words`,
+  "caption-weak": (n) => `${n} screenshots have no caption`,
+  "access-shot": (n) => `${n} access levels have no screenshot`,
+  "finding-affected": (n) => `${n} findings have no affected host`,
+  "exploit-url": (n) => `${n} exploits have no original URL`,
+  "exploit-explain": (n) => `${n} modified exploits to explain`,
+  "exploit-original": (n) => `${n} exploits have no original`,
+  move: (n) => `${n} long blocks`,
+  legible: (n) => `${n} screenshots too narrow to print`,
 };
 
 /**
@@ -549,6 +571,7 @@ const SHORT: Record<string, (c: Check) => string> = {
   },
   legible: () => "Screenshot too narrow to print",
   details: () => "Name, email or OSID missing",
+  osid: () => "OSID should look like OS-12345",
   "msf-many": () => "Metasploit on more than one host",
 };
 
@@ -594,13 +617,18 @@ export function groupChecks(checks: Check[]): CheckGroup[] {
     const key = checkKind(c.id);
     groups.set(key, [...(groups.get(key) ?? []), c]);
   }
-  const out = [...groups].map(([key, list]): CheckGroup => ({
-    key,
-    level: list.some((c) => c.level === "fail") ? "fail" : "soft",
-    text: list.length === 1 ? (SHORT[key]?.(list[0]) ?? list[0].text.replace(/\.$/, "")) : (PLURAL[key]?.(list.length) ?? `${list.length} × ${list[0].text.replace(/\.$/, "")}`),
-    full: list.length === 1 ? list[0].text : (PLURAL[key]?.(list.length) ?? `${list.length} × ${list[0].text}`),
-    checks: list,
-  }));
+  const out = [...groups].map(([key, list]): CheckGroup => {
+    const one = SHORT[key]?.(list[0]) ?? list[0].text.replace(/\.$/, "");
+    const plural = SHORT_PLURAL[key] ?? PLURAL[key];
+    return {
+      key,
+      level: list.some((c) => c.level === "fail") ? "fail" : "soft",
+      // A kind with no count wording counts its short line.
+      text: list.length === 1 ? one : (plural?.(list.length) ?? `${list.length} × ${one}`),
+      full: list.length === 1 ? list[0].text : (PLURAL[key]?.(list.length) ?? `${list.length} × ${list[0].text}`),
+      checks: list,
+    };
+  });
   return [...out.filter((g) => g.level === "fail"), ...out.filter((g) => g.level !== "fail")];
 }
 
