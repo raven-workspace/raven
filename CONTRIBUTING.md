@@ -15,6 +15,8 @@ Raven Workspace Community Edition is open source under the [GNU AGPL-3.0](LICENS
 
 Issues live in Linear, in the **RAV** team: create and work them there. Linear syncs each issue to a GitHub issue, so you'll see them on GitHub too, but those are copies. Don't open or edit issues on GitHub.
 
+**Outside contributors:** open bugs and feature requests as GitHub issues. They sync into Linear for triage.
+
 - **Labels:** each issue has a category label (`Feature`, `Improvement`, `Bug`, `Security`, `Design`, `Documentation` or `Plan`). Triage adds `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` or `wontfix`.
 - **Statuses:** Backlog, Todo, In Progress, In Review, Done, Canceled and Duplicate.
 - **Bigger features** start as a design spec in [`docs/specs/`](docs/specs/README.md), agreed before any code is written.
