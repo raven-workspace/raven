@@ -24,7 +24,8 @@ const TYPEAHEAD_MS = 700;
  * A context picker: a bordered `PickerTrigger` ("Host  dc01 v", amber "Pick one" while `shown` is unset) in the Tab
  * order, and its listbox. A click, Enter or `ref.open()` opens the list: arrows move, Enter picks, Esc closes and gives
  * focus back, typeahead works only inside the open list. A pick that changes `value` flashes the trigger once
- * (`data-flash`). In the open list the pointer moves the highlight like the arrow keys (a popup, not a pane).
+ * (`data-flash`). In the open list the pointer moves the highlight like the arrow keys (a popup, not a pane). Until
+ * the user moves it, the highlight follows `value`, so data that loads while the list is open lands on its row.
  */
 export function ChipPicker({ options, value, onPick, onMousePick, label, listLabel, title, align = "end", wide, prefix, shown, warn, ref }: {
   options: ChipOption[]; value: string | null; onPick: (id: string | null) => void;
@@ -50,7 +51,9 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
   const typed = useRef({ text: "", at: 0 });
   const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
+  /** Where the user moved the highlight since the list opened (arrows, Home, End, typeahead, pointer); null follows `value`. */
+  const [moved, setMoved] = useState<number | null>(null);
+  const active = moved ?? Math.max(0, options.findIndex((o) => o.id === value));
   const [flash, setFlash] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
   /** The side the open list lines up with: `align` unless that runs it past its pane's edge (a picker at the end of a wrapping run). */
@@ -62,7 +65,7 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
     const prev = document.activeElement;
     before.current = prev && prev !== buttonRef.current ? prev : null;
     buttonRef.current?.focus();
-    setActive(Math.max(0, options.findIndex((o) => o.id === value)));
+    setMoved(null);
     setSide(align);
     setOpen(true);
   };
@@ -76,6 +79,17 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
     if (side === "start" && r.right > pane.right) setSide("end");
     else if (side === "end" && r.left < pane.left) setSide("start");
   }, [open, side]);
+
+  // Before paint: the row that follows `value` (on open, or when it changes) scrolls into view within the list only.
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const row = list?.children[active];
+    if (!open || moved !== null || !list || !row) return;
+    const r = row.getBoundingClientRect();
+    const top = list.getBoundingClientRect().top + list.clientTop;
+    if (r.top < top) list.scrollTop -= top - r.top;
+    else if (r.bottom > top + list.clientHeight) list.scrollTop += r.bottom - top - list.clientHeight;
+  }, [open, moved, active]);
   useImperativeHandle(ref, () => ({ open: openList, focus: () => buttonRef.current?.focus() }));
 
   const close = (restore: boolean) => {
@@ -112,10 +126,10 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
     }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      setActive((a) => Math.max(0, Math.min(options.length - 1, a + (e.key === "ArrowDown" ? 1 : -1))));
+      setMoved(Math.max(0, Math.min(options.length - 1, active + (e.key === "ArrowDown" ? 1 : -1))));
     } else if (e.key === "Home" || e.key === "End") {
       e.preventDefault();
-      setActive(e.key === "Home" ? 0 : options.length - 1);
+      setMoved(e.key === "Home" ? 0 : options.length - 1);
     } else if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
@@ -126,7 +140,7 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
       const text = (now - typed.current.at < TYPEAHEAD_MS ? typed.current.text : "") + e.key.toLowerCase();
       typed.current = { text, at: now };
       const hit = options.findIndex((o) => o.name.toLowerCase().startsWith(text));
-      if (hit >= 0) setActive(hit);
+      if (hit >= 0) setMoved(hit);
     }
     if (e.key !== "Tab") e.stopPropagation();
   };
@@ -165,7 +179,7 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
               // Keeps focus on the chip so its keys keep working and blur does not close the list first.
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pick(i, true)}
-              onMouseMove={() => setActive(i)}
+              onMouseMove={() => setMoved(i)}
               className="chip-picker__option"
             >
               <span className="chip-picker__name">{o.name}</span>
