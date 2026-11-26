@@ -834,9 +834,10 @@ function ReportBody({
     todoOpener.current = null;
     if (back?.isConnected) back.focus();
   };
-  // Esc on the page closes To do too (a picked check takes focus there), and focus stays where it is. Heard before the
-  // page's text does, which would otherwise take it to select the block around the picked one; a field (the find bar,
-  // a link's address) keeps its own Esc, and so does an open dialog, menu, list or other popup.
+  // Esc on the page closes the report checklist too (a picked check takes focus there), and focus stays where it is.
+  // Caught in the capture phase: prosemirror-view marks every real Esc (keyCode 27) handled without acting on it, so a
+  // bubble-phase listener never sees it. A field (the find bar, a link's address) keeps its own Esc, and so does an
+  // open dialog, menu, list or other popup.
   const onPageKeyDownCapture = (e: KeyboardEvent<HTMLElement>) => {
     if (!todoOpen || e.key !== "Escape" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
     const target = e.target as HTMLElement;
