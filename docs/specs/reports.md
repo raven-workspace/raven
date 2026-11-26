@@ -396,6 +396,8 @@ The To do panel (checks), the log column, Export, and the **guide notes** (dismi
 
 `DRAFT_LAYOUT` is 6. A page stored under an older layout is rebuilt as the plain draft. Before the rebuild, the save queue is flushed so no older write lands after it. The old page is kept byte for byte in `meta.previousDoc`. **Restore your previous page** converts it with `flattenToPlain`: containers are unwrapped, slot text becomes paragraphs, evidence becomes code blocks and figures, generated blocks become their tables or text, and unknown atoms are dropped. Its owner text is kept. A page already at layout 6 is never rebuilt. A page (an owner page included) that still holds old nodes is flattened when it opens, and the original is kept in `previousDoc`.
 
+The "rebuilt" or "converted" notice above such a page has a **Dismiss** button (RAV-17). Dismissing sets the owner meta `noticeDismissed`, carried forward like the rest of the owner's meta, and keeps `previousDoc`. After that, **Restore your previous page** (or **Use the rebuilt page**) is in the page's ⋯ menu, which shows on target and report pages too while they have a previous version. A page that was only converted has nothing to restore, so it gets no ⋯ entry. No migration: section meta is free JSON.
+
 ### 11.5 Appendices are manual
 
 Appendix pages (+ Page → Appendix page) stay. Moving blocks into automatic per-target appendices is gone: no "+ to appendix", no lettered target appendices. A block moves to an appendix page the owner picks with the block menu's Move to appendix (§10.4). A code block over 60 lines gets a soft check suggesting the owner move it to an appendix page.

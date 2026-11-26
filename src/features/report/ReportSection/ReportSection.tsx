@@ -587,6 +587,20 @@ function ReportBody({
     patchCachedSection(qc, s.id, { doc: next.doc, meta: next.meta as Record<string, unknown> });
     setSwaps((n) => n + 1);
   };
+  // The swap the open page offers, if any. A page only converted to the new format holds the same words: nothing of
+  // the owner's to bring back.
+  const swapLabel =
+    openSectionMeta?.previousDoc && (openSectionMeta.restored || !openSectionMeta.flattened)
+      ? openSectionMeta.restored
+        ? "Use the rebuilt page"
+        : "Restore your previous page"
+      : null;
+  /** Hides the open page's rebuilt or converted notice for good (its meta keeps it); the swap moves to Page actions.
+   *  Focus goes to the page, as the notice and its buttons leave. */
+  const dismissNotice = () => {
+    patchMeta({ noticeDismissed: true });
+    pageEditor?.focus();
+  };
   // Front matter and Closing reopen on the part last shown in them.
   const lastPart = useRef<Partial<Record<string, string>>>({});
   const openItem = (id: string) => {
@@ -1011,8 +1025,8 @@ function ReportBody({
           </Button>
         </div>
       )}
-      {openSectionMeta?.previousDoc && (
-        <div className="report-section__notice report-section__notice--centred">
+      {openSectionMeta?.previousDoc && !openSectionMeta.noticeDismissed && (
+        <div className={cx("report-section__notice report-section__notice--centred", swapLabel && "report-section__notice--two-actions")}>
           <p className="report-section__note">
             {openSectionMeta.restored
               ? "This is your page from before the new layout."
@@ -1020,12 +1034,14 @@ function ReportBody({
                 ? "This page was converted to the new format."
                 : "This page was rebuilt for a new layout."}
           </p>
-          {/* A page only converted to the new format holds the same words: nothing of the owner's to bring back. */}
-          {(openSectionMeta.restored || !openSectionMeta.flattened) && (
+          {swapLabel && (
             <Button size="sm" onClick={swapPage}>
-              {openSectionMeta.restored ? "Use the rebuilt page" : "Restore your previous page"}
+              {swapLabel}
             </Button>
           )}
+          <Button size="sm" onClick={dismissNotice}>
+            Dismiss
+          </Button>
         </div>
       )}
       {swapFailed && <p role="alert" className="report-section__alert">{`Couldn't restore the previous page: ${swapFailed}`}</p>}
@@ -1122,6 +1138,8 @@ function ReportBody({
             exportSlot={<ExportButton report={report} build={buildExport} gaps={gaps} onSaveReport={saveReport} />}
             listRef={navRef}
             panelId={panelId}
+            // Once its notice is dismissed, a page's swap with its previous version is in Page actions.
+            openActions={swapLabel && openSectionMeta?.noticeDismissed ? [{ label: swapLabel, run: swapPage }] : undefined}
           />
           <div className={cx("report-section__body", railBeside && "report-section__body--rail")}>
             {/* The page region: the panel every tab controls, named by the open tab. */}

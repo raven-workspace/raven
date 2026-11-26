@@ -223,9 +223,12 @@ export function ReportTabs({
   exportSlot,
   listRef,
   panelId,
+  openActions,
 }: {
   tabs: TabItem[];
   openId: string;
+  /** More of the open tab's Page actions (the swap with a page's previous version), on any tab. */
+  openActions?: { label: string; run(): void }[];
   /** The page region's id (`role="tabpanel"`): every tab controls it. */
   panelId?: string;
   onOpen(id: string): void;
@@ -246,13 +249,12 @@ export function ReportTabs({
   const [renaming, setRenaming] = useState<string | null>(null);
   const openPage = tabs.find((t) => t.id === openId && t.page);
   const renamed = renaming ? tabs.find((t) => t.id === renaming) : undefined;
-  // The open page's actions: Rename and Delete on an owner-written page.
-  const pageActions: MenuItem[] = openPage
-    ? [
-        ...(onRenamePage ? [{ label: "Rename", run: () => setRenaming(openPage.id), movesFocus: true }] : []),
-        ...(onDeletePage ? [{ label: "Delete", run: (from: HTMLElement | null) => onDeletePage(openPage.id, from), destructive: true, movesFocus: true }] : []),
-      ]
-    : [];
+  // The open page's actions: Rename and Delete on an owner-written page, then any the caller adds for the open tab.
+  const pageActions: MenuItem[] = [
+    ...(openPage && onRenamePage ? [{ label: "Rename", run: () => setRenaming(openPage.id), movesFocus: true }] : []),
+    ...(openPage && onDeletePage ? [{ label: "Delete", run: (from: HTMLElement | null) => onDeletePage(openPage.id, from), destructive: true, movesFocus: true }] : []),
+    ...(openActions ?? []).map((a) => ({ label: a.label, run: () => a.run() })),
+  ];
   // A reordered tab keeps focus: the row re-renders with it elsewhere, and a moved node can lose focus in WebKit.
   const refocus = useRef<string | null>(null);
   useLayoutEffect(() => {

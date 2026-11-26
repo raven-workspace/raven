@@ -1310,14 +1310,14 @@ describe("Report view: the result", () => {
       const report = await api.reportGetOrCreate("e-exam");
       const older = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Written under layout 3" }] }]);
       const old = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Written under layout 5" }] }]);
-      const was = { layout: 5, coverage: { s1: { result: "tested", note: "checked by hand" } }, removedEntryIds: ["l-gone"], previousDoc: older, previousLayout: 3, previousAt: 7 };
+      const was = { layout: 5, coverage: { s1: { result: "tested", note: "checked by hand" } }, removedEntryIds: ["l-gone"], noticeDismissed: true, previousDoc: older, previousLayout: 3, previousAt: 7 };
       await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: was, draftBuiltAt: 1 });
       const upsert = vi.spyOn(api, "reportSectionUpsert");
       mount();
       await ready();
       await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
       const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: SectionMeta }];
-      expect(input.meta).toMatchObject({ coverage: was.coverage, removedEntryIds: ["l-gone"], layout: 6, previousDoc: old, previousLayout: 5 });
+      expect(input.meta).toMatchObject({ coverage: was.coverage, removedEntryIds: ["l-gone"], noticeDismissed: true, layout: 6, previousDoc: old, previousLayout: 5 });
       expect(input.meta.originals).toEqual([{ doc: old, layout: 5, meta: was, at: expect.any(Number), why: "rebuild" }]);
     });
 
@@ -2006,6 +2006,61 @@ describe("Report view: tabs, focus and keyboard (RAV-17)", () => {
     // F2 on the focused tab still renames.
     fireEvent.keyDown(screen.getByRole("tab"), { key: "F2" });
     expect(screen.getByRole("textbox", { name: "Page title" })).toHaveValue("Pivoting");
+  });
+
+  it("Dismiss hides a rebuilt page's notice for good; Page actions then offers the swap, both ways", async () => {
+    const paper = () => document.querySelector<HTMLElement>(".report-page")!;
+    const report = await api.reportGetOrCreate("e-exam");
+    const old = { type: "doc", content: [{ type: "slot", attrs: { hint: "x" }, content: [{ type: "text", text: "Written under the old layout" }] }] };
+    const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: { layout: 2 }, draftBuiltAt: 1 });
+    const save = vi.spyOn(api, "reportSectionSave");
+    const first = mount();
+    await ready();
+    await screen.findByText("This page was rebuilt for a new layout.");
+    // A target page has no Page actions until there is something in them.
+    expect(screen.queryByRole("button", { name: "Page actions" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("This page was rebuilt for a new layout.")).toBeNull();
+    // Kept in the page's meta, the previous page with it.
+    await waitFor(() => expect(save.mock.calls.some(([id, , meta]) => id === section.id && (meta as SectionMeta).noticeDismissed === true)).toBe(true));
+    const [, , meta] = save.mock.calls.filter(([id]) => id === section.id).at(-1)!;
+    expect((meta as SectionMeta).previousDoc).toEqual(old);
+    first.unmount();
+    discardReports();
+
+    // Reloaded: still hidden; Page actions offers the restore, which still works.
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(1));
+    expect(screen.queryByText("This page was rebuilt for a new layout.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Page actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Restore your previous page" }));
+    await waitFor(() => expect(paper().textContent).toContain("Written under the old layout"));
+    expect(screen.queryByText("This is your page from before the new layout.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Page actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Use the rebuilt page" }));
+    await waitFor(() => expect(paper().textContent).not.toContain("Written under the old layout"));
+  });
+
+  it("a page only converted to the new format can dismiss its notice, with nothing to restore in Page actions", async () => {
+    const report = await api.reportGetOrCreate("e-exam");
+    await api.reportSectionUpsert(report.id, {
+      kind: "page",
+      targetKey: "p-owner",
+      position: 99,
+      doc: layout3Json as ReportNode,
+      meta: { title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT },
+      draftBuiltAt: 1,
+    });
+    mount();
+    await ready();
+    fireEvent.click(pageTab("Owner notes"));
+    await screen.findByText("This page was converted to the new format.");
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("This page was converted to the new format.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Page actions" }));
+    const menu = await screen.findByRole("menu", { name: "Page actions" });
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Rename", "Delete"]);
   });
 
   it("Page actions and + Page sit outside the scrolling tab row, beside Export; only the tabs scroll", () => {
