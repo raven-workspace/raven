@@ -1802,16 +1802,16 @@ describe("CheckList", () => {
     render(
       <TooltipProvider>
         <CheckList
-          checks={[{ id: "coverage:s1", level: "soft", text: "22/tcp on ms01 is untested.", fix: "nmap -p22 ms01" }]}
+          checks={[{ id: "no-targets", level: "fail", text: "The report has no targets.", fix: "Pick a host in Report details" }]}
           onPick={() => {}}
-          actionFor={() => ({ label: "Mark tested", run })}
+          actionFor={() => ({ label: "Add a target", run })}
         />
       </TooltipProvider>,
     );
-    fireEvent.click(screen.getByText("22/tcp on ms01 is untested"));
-    expect(screen.getAllByText(/22\/tcp on ms01 is untested/)).toHaveLength(1);
+    fireEvent.click(screen.getByText("The report has no targets"));
+    expect(screen.getAllByText(/The report has no targets/)).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Fix" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Mark tested" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a target" })).toBeInTheDocument();
   });
 
   it("shows an action's note, saying what it does, with the action", () => {

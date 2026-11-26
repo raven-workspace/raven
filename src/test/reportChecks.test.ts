@@ -683,7 +683,7 @@ describe("groupChecks", () => {
       // One check reads short in the outline; its full text is the tooltip's.
       ["proof-missing", "fail", "No local.txt for web01", "No local.txt for web01 on the page.", 1],
       ["explain", "soft", "3 steps have no explanation", "3 steps have no explanation", 3],
-      ["coverage", "soft", "22/tcp on web01 is untested", "22/tcp on web01 is untested.", 1],
+      ["coverage", "soft", "22/tcp on web01 untested", "22/tcp on web01 is untested.", 1],
     ]);
   });
   it("keys finding and exploit checks by their kind, not their id", () => {
@@ -743,5 +743,79 @@ describe("groupChecks", () => {
       expect(g.text, k).toMatch(/^2 /);
       expect(g.text, k).not.toMatch(/\.$/);
     }
+  });
+
+  describe("every kind's row fits the report checklist's 38 characters", () => {
+    const HOST = "web-portal-dmz-frontend-01.corp.example";
+    const USER = "svc_sqlreporting_admin";
+    const TITLE = "Unauthenticated remote code execution in the legacy file upload handler";
+    const FILE = "CVE-2019-15107-webmin-password-change-rce-modified.py";
+    const proof = (kind: string, text: string) => c(`${kind}:${HOST}:proof`, "soft", text);
+    const which = `The proof.txt proof for ${HOST}`;
+    /** One check of every kind the checks module makes, worded as it words them, with long names wherever a name goes. */
+    const longest: Record<string, Check> = {
+      explain: c("explain:e1", "soft", "A step has no explanation before it."),
+      "step-replay": c("step-replay:s1:0.12", "soft", `Step 12 of Privilege escalation through the scheduled backup task has no command or output under it, so a reader can't replay it. Add it from the log column`),
+      "cred-finding": c("cred-finding:k1:h2", "soft", `${USER}'s credential from fileserver-backup-02 got you onto ${HOST}, but no finding covers it. A credential that lets you move is a finding too`),
+      "proof-missing": c(`proof-missing:${HOST}:proof`, "fail", `No proof.txt for ${HOST} on the page.`),
+      "proof-shot": proof("proof-shot", `Raven can't read screenshots; make sure the proof.txt screenshot for ${HOST} shows ip a or ifconfig with 192.168.120.250.`),
+      "proof-ip": proof("proof-ip", `${which} doesn't show ipconfig, ifconfig or ip addr with 192.168.120.250. Raven can't read the screenshot, so this checks the pasted proof.`),
+      "proof-screenshot": proof("proof-screenshot", `${which} has no screenshot.`),
+      "proof-web": proof("proof-web", `${which} looks like it came from a web request, not an interactive shell.`),
+      "proof-identity": proof("proof-identity", `${which} doesn't show whoami or id.`),
+      "proof-hostname": proof("proof-hostname", `${which} doesn't show hostname.`),
+      "proof-path": proof("proof-path", `${which} doesn't read the flag from its usual location.`),
+      legible: c("legible:e1", "soft", `The screenshot "${TITLE}" is narrower than would print legibly. Retake it larger or crop it tighter.`),
+      "copied-private": c("copied-private:e1", "fail", "A block on the page comes from an entry that is now private."),
+      "copied-deleted": c("copied-deleted:e1", "fail", "A block on the page comes from an entry that was deleted."),
+      output: c("output:e1:0", "soft", "A command on the page shows no output. Fine if it printed nothing; otherwise paste its output."),
+      gone: c("gone:f1", "fail", "A finding or file on the page was deleted. Delete its block from the block menu (⋯)."),
+      "caption-weak": c("caption-weak:e1", "soft", "A screenshot has no caption of its own. Say what it shows."),
+      caption: c("caption:e1", "soft", "A screenshot caption is over 10 words."),
+      "access-shot": c(`access-shot:${HOST}:system`, "soft", `${HOST} has system access with no screenshot of it on the page.`),
+      "finding-severity": c("finding:f1:severity", "soft", `The finding "${TITLE}" has no severity.`),
+      "finding-title": c("finding:f1:title", "soft", `The finding title "UnauthenticatedRemoteCodeExecutionInTheLegacyUploadHandler" is a single word. Name the vulnerability, not the tool.`),
+      "finding-affected": c("finding:f1:affected", "soft", `The finding "${TITLE}" has no affected host or service.`),
+      "finding-description": c("finding:f1:description", "soft", `The finding "${TITLE}" has no description.`),
+      "finding-remediation": c("finding:f1:remediation", "soft", `The finding "${TITLE}" has no remediation.`),
+      wording: c("wording:0", "soft", `"the application is completely and entirely secure against every attack" is an absolute claim. Say what you tested and what happened instead.`),
+      "exploit-url": c("exploit:x1:url", "fail", `The modified exploit ${FILE} has no original URL.`),
+      "exploit-explain": c("exploit:x1:explain", "soft", `The modified exploit ${FILE} has no explanation of the changes after it.`),
+      "exploit-original": c("exploit:x1:original", "fail", `The modified exploit ${FILE} has no original to compare against.`),
+      coverage: c("coverage:s1", "soft", `65535/tcp on ${HOST} is untested.`),
+      move: c("move:0.12", "soft", "This block is long (12345 lines). Consider moving it to an appendix page."),
+      details: c("details", "fail", "The report is missing your name, email or OSID. Fill in your name, email and OSID in Report details."),
+      osid: c("osid", "fail", "The OSID should look like OS-12345."),
+      "no-targets": c("no-targets", "fail", "The report has no targets."),
+      "msf-many": c("msf-many", "fail", "Metasploit is attributed to more than one host. The exam allows Metasploit against one machine only."),
+    };
+
+    it("covers every kind the checks module makes, read from its source", async () => {
+      const source = (await import("../engines/report/checks.ts?raw")).default;
+      const all = (re: RegExp) => [...source.matchAll(re)].map((m) => m[1]);
+      const kinds = new Set([
+        // `id: \`explain:…\``, `id: "details"`; findings and exploits are keyed by their problem, below.
+        ...all(/id: [`"]([a-z-]+)[:`"]/g).filter((k) => k !== "finding" && k !== "exploit"),
+        ...all(/\bsoft\("([a-z-]+)"/g),
+        ...all(/\bproblem\("([a-z-]+)"/g).map((p) => `finding-${p}`),
+        ...all(/id: `exploit:\$\{[^}]+\}:([a-z-]+)`/g).map((p) => `exploit-${p}`),
+      ]);
+      expect([...kinds].sort()).toEqual(Object.keys(longest).sort());
+      for (const [kind, check] of Object.entries(longest)) expect(checkKind(check.id), kind).toBe(kind);
+    });
+
+    it("one check: a short wording within 38 characters, the full text in the tooltip", () => {
+      for (const [kind, check] of Object.entries(longest)) {
+        const [g] = groupChecks([check]);
+        expect.soft(g.text.length, `${kind}: ${g.text}`).toBeLessThanOrEqual(38);
+        expect(g.text, kind).not.toMatch(/\.$/);
+        expect(g.full, kind).toBe(check.text);
+      }
+      const one = (kind: string) => groupChecks([longest[kind]])[0].text;
+      expect(one("coverage")).toBe("65535/tcp on web-portal-dmz-… untested");
+      expect(groupChecks([c("coverage:s2", "soft", "445/tcp on web-portal-dmz-frontend-01 is untested.")])[0].text).toBe("445/tcp on web-portal-dmz-fr… untested");
+      expect(one("msf-many")).toBe("Metasploit on more than one host");
+    });
+
   });
 });

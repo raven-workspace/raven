@@ -506,7 +506,7 @@ const PLURAL: Record<string, (n: number) => string> = {
 
 /**
  * How one check of a kind reads in the outline's narrow column: short, the subject first. The check's own text is
- * its full statement (tooltip, picked detail). Kinds not listed read in full (coverage is short already).
+ * its full statement (tooltip, picked detail). Kinds not listed read in full ("The report has no targets").
  */
 const SHORT: Record<string, (c: Check) => string> = {
   "proof-missing": (c) => fitNames([part(c, 1)], ([host]) => `No ${part(c, 2)}.txt for ${host}`),
@@ -539,12 +539,17 @@ const SHORT: Record<string, (c: Check) => string> = {
   "exploit-url": () => "Exploit has no original URL",
   "exploit-explain": () => "Explain the modified exploit",
   "exploit-original": () => "Exploit has no original",
+  coverage: (c) => {
+    const m = /^(\S+) on (.+) is untested/.exec(c.text);
+    return m ? fitNames([m[2]], ([host]) => `${m[1]} on ${host} untested`) : "A service is untested";
+  },
   move: (c) => {
     const why = /\(([^)]+)\)/.exec(c.text)?.[1];
     return why ? `Long block (${why})` : "Long block";
   },
   legible: () => "Screenshot too narrow to print",
   details: () => "Name, email or OSID missing",
+  "msf-many": () => "Metasploit on more than one host",
 };
 
 /** The outline column's widest line, in characters. */
