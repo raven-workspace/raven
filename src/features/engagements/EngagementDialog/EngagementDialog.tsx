@@ -245,7 +245,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
     >
       <form id={formId} onSubmit={submit} noValidate className="engagement-dialog__form">
         <Field label="Name" error={err("name")}>
-          <Input autoFocus value={d.name} onChange={(e) => set("name", e.target.value)} placeholder="Mock exam A" />
+          <Input autoFocus value={d.name} onChange={(e) => set("name", e.target.value)} placeholder="Mock exam" />
         </Field>
 
         <div className="engagement-dialog__pair engagement-dialog__pair--kind">

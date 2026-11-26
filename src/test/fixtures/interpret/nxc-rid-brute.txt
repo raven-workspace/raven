@@ -1,9 +1,9 @@
 # unverified: no real sample yet (owner collects in next lab)
 SMB         10.10.1.10      445    DC01             [*] Windows Server 2022 Build 20348 x64 (name:DC01) (domain:corp.lan) (signing:True) (SMBv1:None)
-SMB         10.10.1.10      445    DC01             [+] corp.lan\jay:Synthetic123! 
+SMB         10.10.1.10      445    DC01             [+] corp.lan\zoe:Synthetic123! 
 SMB         10.10.1.10      445    DC01             498: CORP\Enterprise Read-only Domain Controllers (SidTypeGroup)
 SMB         10.10.1.10      445    DC01             500: CORP\Administrator (SidTypeUser)
 SMB         10.10.1.10      445    DC01             512: CORP\Domain Admins (SidTypeGroup)
-SMB         10.10.1.10      445    DC01             1103: CORP\jay (SidTypeUser)
+SMB         10.10.1.10      445    DC01             1103: CORP\zoe (SidTypeUser)
 SMB         10.10.1.10      445    DC01             1104: CORP\tom (SidTypeUser)
 SMB         10.10.1.10      445    DC01             1105: CORP\MS01$ (SidTypeUser)

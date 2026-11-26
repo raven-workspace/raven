@@ -7,15 +7,15 @@ import type { Host } from '../../../types/host'
 const host = (id: string, ip: string) => ({ id, ip }) as Host
 const hosts = [host('h1', '10.10.1.10')]
 const line = (ip: string, mark: string, tail: string) =>
-  `SMB         ${ip}   445    DC01             [${mark}] corp.lan\\jay:Passw0rd1 ${tail}`.trimEnd()
-const cmd = 'nxc smb 10.10.1.0/24 -u jay -p Passw0rd1'
+  `SMB         ${ip}   445    DC01             [${mark}] corp.lan\\zoe:Passw0rd1 ${tail}`.trimEnd()
+const cmd = 'nxc smb 10.10.1.0/24 -u zoe -p Passw0rd1'
 
 describe('nxc results', () => {
   it('maps admin, local and hash semantics', () => {
-    const i = interpret({ command: 'nxc smb 10.10.1.10 -u jay -H 31d6cfe0d16ae931b73c59d7e0c089c0 --local-auth',
+    const i = interpret({ command: 'nxc smb 10.10.1.10 -u zoe -H 31d6cfe0d16ae931b73c59d7e0c089c0 --local-auth',
       output: line('10.10.1.10', '+', '(Pwn3d!)').replace('Passw0rd1', '31d6cfe0d16ae931b73c59d7e0c089c0') })
     expect(i.parsers).toEqual(['nxc-results'])
-    expect(i.attempts).toEqual([{ username: 'jay', domain: null, secret: '31d6cfe0d16ae931b73c59d7e0c089c0',
+    expect(i.attempts).toEqual([{ username: 'zoe', domain: null, secret: '31d6cfe0d16ae931b73c59d7e0c089c0',
       secretKind: 'hash', host: { ip: '10.10.1.10' }, service: 'smb', result: 'admin', authMode: 'local' }])
     expect(i.ticks).toEqual([{ host: { ip: '10.10.1.10' }, goalId: 'h-vuln-spray', parser: 'nxc-results' }])
   })
@@ -61,8 +61,8 @@ describe('resolveInterpretation', () => {
     const i: Interpretation = {
       ...EMPTY,
       parsers: ['x'],
-      credentials: [{ username: 'jay', domain: null, type: 'password', secret: 's', hashType: null, scope: 'local', host: { ip: '10.10.1.40' }, source: 'x' },
-        { username: 'drew', domain: 'corp.lan', type: 'password', secret: 't', hashType: null, scope: 'domain', host: null, source: 'x' }],
+      credentials: [{ username: 'zoe', domain: null, type: 'password', secret: 's', hashType: null, scope: 'local', host: { ip: '10.10.1.40' }, source: 'x' },
+        { username: 'omar', domain: 'corp.lan', type: 'password', secret: 't', hashType: null, scope: 'domain', host: null, source: 'x' }],
       usernames: [{ username: 'amy', domain: null, host: { ip: '10.10.1.40' }, source: 'x' }],
     }
     const r = resolveInterpretation(i, { entryHostIds: [], hosts })

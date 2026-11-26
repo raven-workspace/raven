@@ -395,8 +395,8 @@ const usernames: Username[] = [
 ];
 
 const triedPairs: TriedPair[] = [
-  { id: "tp-1", engagementId: "e-lab", username: "drew", domain: "acme.corp", secret: "Guess1", secretKind: "password", hostId: "h-dc01", service: "smb", authMode: "domain", logEntryId: "l-5", at: ago(65 * MIN) },
-  { id: "tp-2", engagementId: "e-lab", username: "drew", domain: "acme.corp", secret: "Guess1", secretKind: "password", hostId: "h-fs01", service: "smb", authMode: "domain", logEntryId: "l-5", at: ago(65 * MIN) },
+  { id: "tp-1", engagementId: "e-lab", username: "omar", domain: "acme.corp", secret: "Guess1", secretKind: "password", hostId: "h-dc01", service: "smb", authMode: "domain", logEntryId: "l-5", at: ago(65 * MIN) },
+  { id: "tp-2", engagementId: "e-lab", username: "omar", domain: "acme.corp", secret: "Guess1", secretKind: "password", hostId: "h-fs01", service: "smb", authMode: "domain", logEntryId: "l-5", at: ago(65 * MIN) },
 ];
 
 // One saved entry with an extraction, so the log's "Extracted" line has something to show.

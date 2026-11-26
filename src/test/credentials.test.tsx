@@ -258,13 +258,13 @@ describe("credentials section", () => {
     mount({
       creds: [
         cred({ id: "c1", username: "DC01$", domain: "CORP", secret: "x9f3kq2m" }),
-        cred({ id: "c2", username: "jay", domain: "CORP", secret: "Winter2024!" }),
+        cred({ id: "c2", username: "zoe", domain: "CORP", secret: "Winter2024!" }),
       ],
     });
     await openInventory(user);
     const people = await screen.findByRole("region", { name: "Passwords" });
     const machines = screen.getByRole("region", { name: "Machine accounts" });
-    expect(within(people).getByTitle("CORP\\jay")).toBeInTheDocument();
+    expect(within(people).getByTitle("CORP\\zoe")).toBeInTheDocument();
     expect(within(people).queryByTitle("CORP\\DC01$")).not.toBeInTheDocument();
     expect(within(machines).getByTitle("CORP\\DC01$")).toBeInTheDocument();
     expect(people.compareDocumentPosition(machines) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

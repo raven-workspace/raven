@@ -47,32 +47,32 @@ describe('sudo -l', () => {
   })
 
   it('(ALL : ALL) ALL gives full root', () => {
-    const rule = (r: string) => `User jay may run the following commands on web01:\n    ${r}\n`
+    const rule = (r: string) => `User zoe may run the following commands on web01:\n    ${r}\n`
     expect(sudoVectors(rule('(ALL : ALL) ALL'))).toEqual(['sudo: full root (ALL : ALL)'])
     expect(sudoVectors(rule('(ALL) ALL'))).toEqual(['sudo: full root (ALL : ALL)'])
     expect(sudoVectors(rule('(ALL : ALL) NOPASSWD: ALL'))).toEqual(['sudo: full root (ALL : ALL) NOPASSWD'])
   })
 
   it('a * argument wildcard leaves room to abuse; fixed arguments do not', () => {
-    const rule = (r: string) => `User jay may run the following commands on web01:\n    ${r}\n`
+    const rule = (r: string) => `User zoe may run the following commands on web01:\n    ${r}\n`
     expect(sudoVectors(rule('(root) NOPASSWD: /usr/bin/apt-get *'))).toEqual(['sudo /usr/bin/apt-get as root (GTFOBins)'])
     expect(sudoVectors(rule('(root) NOPASSWD: /usr/bin/find *'))).toEqual(['sudo /usr/bin/find as root (GTFOBins)'])
     expect(sudoVectors(rule('(root) /usr/bin/crontab -l'))).toEqual([])
   })
 
   it('(root) ALL is full root, with NOPASSWD when present', () => {
-    const rule = (r: string) => `User jay may run the following commands on web01:\n    ${r}\n`
+    const rule = (r: string) => `User zoe may run the following commands on web01:\n    ${r}\n`
     expect(sudoVectors(rule('(root) ALL'))).toEqual(['sudo: full root (root)'])
     expect(sudoVectors(rule('(root) NOPASSWD: ALL'))).toEqual(['sudo: full root (root) NOPASSWD'])
   })
 
   it('a NOEXEC rule files nothing', () => {
-    const rule = 'User jay may run the following commands on web01:\n    (root) NOEXEC: /usr/bin/vim\n'
+    const rule = 'User zoe may run the following commands on web01:\n    (root) NOEXEC: /usr/bin/vim\n'
     expect(sudoVectors(rule)).toEqual([])
   })
 
   it('env_keep+=LD_PRELOAD is a vector', () => {
-    const out = 'Matching Defaults entries for jay on web01:\n    env_reset, env_keep+=LD_PRELOAD\nUser jay may run the following commands on web01:\n    (root) /bin/ls\n'
+    const out = 'Matching Defaults entries for zoe on web01:\n    env_reset, env_keep+=LD_PRELOAD\nUser zoe may run the following commands on web01:\n    (root) /bin/ls\n'
     expect(sudoVectors(out)).toEqual(['sudo LD_PRELOAD kept'])
   })
 })
@@ -95,7 +95,7 @@ describe('getcap', () => {
 })
 
 describe('cron', () => {
-  const script = '/home/jay/.scripts/nightly_backup.sh'
+  const script = '/home/zoe/.scripts/nightly_backup.sh'
 
   it('a root cron job without proof of writability files nothing', () => {
     const r = interpret({ command: './pspy64', output: pspy })

@@ -728,10 +728,10 @@ mod tests {
                VALUES ('e','Synthetic lab','lab','[]','corp.example','active',1,1); \
              INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('h1','e','WEB01','192.0.2.10',1,1); \
              INSERT INTO usernames (id,engagement_id,username,domain,source_host_id,source,created_at) VALUES \
-               ('u1','e','jay',NULL,'h1','nxc',1), ('u2','e','jay','CORP',NULL,NULL,2), ('u3','e','jay','corp.example',NULL,NULL,3), \
-               ('u4','e','jay','WEB01','h1','lookupsid',4), ('u5','e','Admin','.',NULL,NULL,5); \
+               ('u1','e','zoe',NULL,'h1','nxc',1), ('u2','e','zoe','CORP',NULL,NULL,2), ('u3','e','zoe','corp.example',NULL,NULL,3), \
+               ('u4','e','zoe','WEB01','h1','lookupsid',4), ('u5','e','Admin','.',NULL,NULL,5); \
              INSERT INTO credentials (id,engagement_id,type,username,secret,scope,created_at,updated_at) \
-               VALUES ('c1','e','password','jay','Winter2024!','domain',1,1); \
+               VALUES ('c1','e','password','zoe','Winter2024!','domain',1,1); \
              INSERT INTO access_grants (id,engagement_id,username_id,host_id,level,via,at) VALUES ('g1','e','u4','h1','admin','winrm',1); \
              INSERT INTO cred_attempts (id,engagement_id,cred_id,username_id,host_id,service,result,auth_mode,at) \
                VALUES ('a1','e','c1','u1','h1','smb','valid','domain',1);",
@@ -765,13 +765,13 @@ mod tests {
                 rusqlite::params![id, user, domain, scope, host],
             )
         };
-        assert!(insert("x1", "JAY", Some("corp"), "unknown", None).is_err());
-        assert!(insert("x2", "jay", Some("CORP"), "domain", None).is_ok());
-        assert!(insert("x3", "jay", None, "local", Some("h1")).is_ok());
-        assert!(insert("x4", "Jay", None, "local", Some("h1")).is_err());
-        assert!(insert("x5", "jay", None, "bogus", None).is_err());
+        assert!(insert("x1", "ZOE", Some("corp"), "unknown", None).is_err());
+        assert!(insert("x2", "zoe", Some("CORP"), "domain", None).is_ok());
+        assert!(insert("x3", "zoe", None, "local", Some("h1")).is_ok());
+        assert!(insert("x4", "Zoe", None, "local", Some("h1")).is_err());
+        assert!(insert("x5", "zoe", None, "bogus", None).is_err());
         c.execute("INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('h2','e','SQL01','192.0.2.11',1,1)", []).unwrap();
-        insert("x6", "jay", None, "local", Some("h2")).unwrap();
+        insert("x6", "zoe", None, "local", Some("h2")).unwrap();
         c.execute("DELETE FROM hosts WHERE id IN ('h1','h2')", []).unwrap();
         assert_eq!(count(&c, "SELECT count(*) FROM usernames WHERE scope = 'local' AND local_host_id IS NULL"), 2);
         assert_eq!(count(&c, "SELECT count(*) FROM pragma_foreign_key_check"), 0);

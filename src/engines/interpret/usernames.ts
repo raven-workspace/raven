@@ -6,7 +6,7 @@ const NXC_HEADER = /-Username-/
 // A --users row: name (may contain spaces), then the Last PW Set column anchors where it ends.
 const USER_ROW = /^([^\s[-].*?)\s+(?:<never>|\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\d+(?:\s|$)/
 const NXC_DOMAIN = /\(domain:([^)\s]+)\)/
-// nxc --rid-brute and impacket-lookupsid: "1103: CORP\jay (SidTypeUser)"  // unverified: no real sample yet (owner collects in next lab)
+// nxc --rid-brute and impacket-lookupsid: "1103: CORP\zoe (SidTypeUser)"  // unverified: no real sample yet (owner collects in next lab)
 const RID_LINE = /\b\d+: ([^\\\s]+)\\(.+?) \(SidTypeUser\)/
 // kerbrute userenum  // unverified: no real sample yet (owner collects in next lab)
 const KERBRUTE = /VALID USERNAME:\s+(\S+)@(\S+)/

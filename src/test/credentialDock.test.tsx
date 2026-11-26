@@ -120,9 +120,9 @@ describe("credential dock", () => {
   });
 
   it("password reuse is listed under Reused on, never as a valid result under Works on or in the state chip", () => {
-    const jay = cred({ id: "cj", username: "jay", secret: "Winter2024!", scope: "local", localHostId: "h1" });
+    const zoe = cred({ id: "cj", username: "zoe", secret: "Winter2024!", scope: "local", localHostId: "h1" });
     const reuse = attempt({ id: "r", credId: "cj", service: "other", authMode: "local", detail: "password reuse" });
-    const { unmount } = mount({ cred: jay, attempts: [reuse] });
+    const { unmount } = mount({ cred: zoe, attempts: [reuse] });
     const facts = screen.getByTestId("dock-facts");
     expect(within(facts).getByText("Reused on")).toHaveClass("credential-dock__fact-label");
     expect(within(facts).getByText("sql01")).toHaveAttribute("title", "same password, reused on sql01");
@@ -131,7 +131,7 @@ describe("credential dock", () => {
     expect(within(screen.getByTestId("dock-header")).queryByText(/^valid$/)).not.toBeInTheDocument();
     unmount();
     // A real result on another service is no reuse, and no matrix cell either.
-    mount({ cred: jay, attempts: [attempt({ id: "o", credId: "cj", service: "other", authMode: "local" })] });
+    mount({ cred: zoe, attempts: [attempt({ id: "o", credId: "cj", service: "other", authMode: "local" })] });
     expect(screen.queryByText("Reused on")).not.toBeInTheDocument();
   });
 

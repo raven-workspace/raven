@@ -131,7 +131,7 @@ describe("views refetch after a write", () => {
       return useCredentialMutations("e1");
     }, { wrapper });
     await waitFor(() => expect(m.triedPairsList).toHaveBeenCalledTimes(1));
-    await act(() => result.current.create.mutateAsync({ type: "password", username: "jay", secret: "x" } as Parameters<typeof result.current.create.mutateAsync>[0]).then(() => undefined));
+    await act(() => result.current.create.mutateAsync({ type: "password", username: "zoe", secret: "x" } as Parameters<typeof result.current.create.mutateAsync>[0]).then(() => undefined));
     await waitFor(() => expect(m.triedPairsList).toHaveBeenCalledTimes(2));
   });
 

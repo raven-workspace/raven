@@ -5,12 +5,12 @@ Each `.txt` file is real tool output captured in a lab, anonymised before it ent
 ## Sources
 
 - the owner's lab notes (outside the repo) (markdown code blocks)
-- a file outside the repo (`machines[].logEntries[].blocks[].output`)
+- a Raven backup (outside the repo) (`machines[].logEntries[].blocks[].output`)
 
 ## Anonymisation rules
 
 - IPs become `10.10.x.x`.
-- Users, hosts and domains become stock names: `jay`, `drew`, `DC01`, `corp.lan`.
+- Users, hosts and domains become stock names: `zoe`, `omar`, `DC01`, `corp.lan`.
 - Hashes and passwords become synthetic values of the same shape (same length and character set).
 - Keep every structural line: headers, banners, column layout.
 - Real data never enters the repo.

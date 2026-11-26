@@ -444,7 +444,7 @@ mod tests {
     fn cred(c: &Connection, e: &str, id: &str, secret: &str, updated_at: i64) {
         c.execute(
             "INSERT INTO credentials (id,engagement_id,type,username,domain,secret,scope,created_at,updated_at) \
-             VALUES (?1,?2,'password','jay','corp.lan',?3,'domain',1,?4)",
+             VALUES (?1,?2,'password','zoe','corp.lan',?3,'domain',1,?4)",
             params![id, e, secret, updated_at],
         )
         .unwrap();
@@ -460,7 +460,7 @@ mod tests {
     }
 
     fn save_now(c: &Connection, f: &Fx, record: ExtractionRecord) -> Extraction {
-        let summary = ExtractionSummary { wins: vec!["Credential jay".into()], counts: vec![], ticks: vec![] };
+        let summary = ExtractionSummary { wins: vec!["Credential zoe".into()], counts: vec![], ticks: vec![] };
         save(c, &f.entry, &f.e, &summary, &record).unwrap()
     }
 
@@ -520,11 +520,11 @@ mod tests {
         c.execute("INSERT INTO services (id,host_id,port,created_at,updated_at) VALUES ('s1','h2',445,1,1)", []).unwrap();
         c.execute("INSERT INTO checklist_items (owner_id,engagement_id,goal_id,status,auto,updated_at) VALUES ('h2',?1,'g','done',1,1)", [&f.e]).unwrap();
         cred(c, &f.e, "c1", "Winter2024!", 1);
-        c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES ('u1',?1,'jay','corp.lan',1)", [&f.e]).unwrap();
+        c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES ('u1',?1,'zoe','corp.lan',1)", [&f.e]).unwrap();
         attempt(c, &f.e, "a1", "c1", &f.h, "valid", Some("l1"), 1);
         c.execute(
             "INSERT INTO tried_pairs (id,engagement_id,username,secret,secret_kind,host_id,service,auth_mode,log_entry_id,at) \
-             VALUES ('t1',?1,'drew','Spring2024!','password','h1','smb','domain','l1',1)",
+             VALUES ('t1',?1,'omar','Spring2024!','password','h1','smb','domain','l1',1)",
             [&f.e],
         )
         .unwrap();
@@ -651,7 +651,7 @@ mod tests {
         log_entry(c, &f.e, "l2");
         cred(c, &f.e, "c1", "aad3b435b51404eeaad3b435b51404ee:22222222222222222222222222222222", 1);
         cred(c, &f.e, "c2", "Winter2024!", 1);
-        for (id, user) in [("u1", "jay"), ("u2", "drew")] {
+        for (id, user) in [("u1", "zoe"), ("u2", "omar")] {
             c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES (?1,?2,?3,'nowhere.local',1)", params![id, f.e, user]).unwrap();
         }
         c.execute("UPDATE credentials SET username='mia' WHERE id IN ('c1','c2')", []).unwrap();
@@ -664,7 +664,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        // l2 dumped the same hash and listed jay again; it created nothing.
+        // l2 dumped the same hash and listed zoe again; it created nothing.
         let s = ExtractionSummary::default();
         let later = ExtractionRecord { reproved_credential_ids: vec!["c1".into()], reproved_username_ids: vec!["u1".into()], ..Default::default() };
         save(c, "l2", &f.e, &s, &later).unwrap();
@@ -698,17 +698,17 @@ mod tests {
         log_entry(c, &f.e, "l0");
         let before = HostIdentity {
             host_id: "h1".into(),
-            username: "corp\\drew".into(),
+            username: "corp\\omar".into(),
             privileges: vec!["SeShutdownPrivilege".into()],
             groups: vec!["Users".into()],
             entry_id: Some("l0".into()),
             updated_at: 1,
         };
-        // The save: h1 os linux -> windows, identity drew -> jay; h3 got its first identity.
+        // The save: h1 os linux -> windows, identity omar -> zoe; h3 got its first identity.
         c.execute("UPDATE hosts SET os='windows' WHERE id='h1'", []).unwrap();
         c.execute(
             "INSERT INTO host_identity (host_id,username,privileges,groups,entry_id,updated_at) VALUES \
-             ('h1','corp\\jay','[\"SeImpersonatePrivilege\"]','[]','l1',2), ('h3','nt authority\\system','[]','[]','l1',2)",
+             ('h1','corp\\zoe','[\"SeImpersonatePrivilege\"]','[]','l1',2), ('h3','nt authority\\system','[]','[]','l1',2)",
             [],
         )
         .unwrap();
@@ -736,7 +736,7 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let f = setup(c);
-        c.execute("INSERT INTO host_identity (host_id,username,privileges,groups,updated_at) VALUES ('h1','corp\\jay','[]','[]',2)", []).unwrap();
+        c.execute("INSERT INTO host_identity (host_id,username,privileges,groups,updated_at) VALUES ('h1','corp\\zoe','[]','[]',2)", []).unwrap();
         let x = save_now(
             c,
             &f,
@@ -747,11 +747,11 @@ mod tests {
             },
         );
         c.execute("UPDATE hosts SET os='windows', updated_at=?1 WHERE id='h1'", [x.created_at + 1]).unwrap();
-        c.execute("UPDATE host_identity SET username='corp\\drew', updated_at=?1 WHERE host_id='h1'", [x.created_at + 1]).unwrap();
+        c.execute("UPDATE host_identity SET username='corp\\omar', updated_at=?1 WHERE host_id='h1'", [x.created_at + 1]).unwrap();
         undo(c, "l1").unwrap();
         let os: Option<String> = c.query_row("SELECT os FROM hosts WHERE id='h1'", [], |r| r.get(0)).unwrap();
         assert_eq!(os.as_deref(), Some("windows"));
-        assert_eq!(crate::host_facts::identity_get(c, "h1").unwrap().unwrap().username, "corp\\drew");
+        assert_eq!(crate::host_facts::identity_get(c, "h1").unwrap().unwrap().username, "corp\\omar");
     }
 
     #[test]
@@ -820,14 +820,14 @@ mod tests {
         let c = v.conn().unwrap();
         let f = setup(c);
         log_entry(c, &f.e, "l2");
-        for (id, user) in [("u1", "jay"), ("u2", "drew"), ("u3", "paul"), ("u4", "mia"), ("u5", "sam"), ("u6", "tom")] {
+        for (id, user) in [("u1", "zoe"), ("u2", "omar"), ("u3", "noah"), ("u4", "mia"), ("u5", "sam"), ("u6", "tom")] {
             c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES (?1,?2,?3,'corp.lan',1)", params![id, f.e, user]).unwrap();
         }
-        cred(c, &f.e, "c9", "Summer2024!", 1); // a credential for jay from elsewhere (not in this record)
-        c.execute("UPDATE credentials SET username='JAY' WHERE id='c9'", []).unwrap();
+        cred(c, &f.e, "c9", "Summer2024!", 1); // a credential for zoe from elsewhere (not in this record)
+        c.execute("UPDATE credentials SET username='ZOE' WHERE id='c9'", []).unwrap();
         cred(c, &f.e, "c1", "Winter2024!", 1);
         c.execute("UPDATE credentials SET username='mia' WHERE id='c1'", []).unwrap();
-        // drew: a later entry's attempt; paul: a hand-made access grant; sam: only this entry's own attempt.
+        // omar: a later entry's attempt; noah: a hand-made access grant; sam: only this entry's own attempt.
         attempt(c, &f.e, "a2", "c9", &f.h, "valid", Some("l2"), 1);
         c.execute("UPDATE cred_attempts SET username_id='u2' WHERE id='a2'", []).unwrap();
         c.execute("INSERT INTO access_grants (id,engagement_id,username_id,host_id,level,via,at) VALUES ('g1',?1,'u3','h1','user','rdp',1)", [&f.e]).unwrap();
@@ -865,22 +865,22 @@ mod tests {
         let f = setup(c);
         c.execute("UPDATE engagements SET domain='corp.lan' WHERE id=?1", [&f.e]).unwrap();
         log_entry(c, &f.e, "l2");
-        // This save listed jay, drew, paul and mia under the NetBIOS name.
-        for (id, user) in [("u1", "jay"), ("u2", "drew"), ("u3", "paul"), ("u4", "mia")] {
+        // This save listed zoe, omar, noah and mia under the NetBIOS name.
+        for (id, user) in [("u1", "zoe"), ("u2", "omar"), ("u3", "noah"), ("u4", "mia")] {
             c.execute("INSERT INTO usernames (id,engagement_id,username,domain,created_at) VALUES (?1,?2,?3,'CORP',1)", params![id, f.e, user]).unwrap();
         }
-        // jay: a hand-made credential under the engagement's FQDN (the helper stores jay@corp.lan).
+        // zoe: a hand-made credential under the engagement's FQDN (the helper stores zoe@corp.lan).
         cred(c, &f.e, "c9", "Summer2024!", 1);
-        // drew: a later entry's tried pair under the FQDN.
+        // omar: a later entry's tried pair under the FQDN.
         c.execute(
             "INSERT INTO tried_pairs (id,engagement_id,username,domain,secret,secret_kind,host_id,service,auth_mode,log_entry_id,at) \
-             VALUES ('t1',?1,'Drew','corp.lan','Spring2024!','password','h1','smb','domain','l2',1)",
+             VALUES ('t1',?1,'Omar','corp.lan','Spring2024!','password','h1','smb','domain','l2',1)",
             [&f.e],
         )
         .unwrap();
-        // paul: a credential in another domain whose first label is also CORP; mia: one for a host's account.
+        // noah: a credential in another domain whose first label is also CORP; mia: one for a host's account.
         cred(c, &f.e, "c8", "Autumn2024!", 1);
-        c.execute("UPDATE credentials SET username='paul', domain='corp.local' WHERE id='c8'", []).unwrap();
+        c.execute("UPDATE credentials SET username='noah', domain='corp.local' WHERE id='c8'", []).unwrap();
         cred(c, &f.e, "c7", "Autumn2024!", 1);
         c.execute("UPDATE credentials SET username='mia', domain='mia.corp.lan' WHERE id='c7'", []).unwrap();
         save_now(c, &f, ExtractionRecord { created_username_ids: ["u1", "u2", "u3", "u4"].map(String::from).to_vec(), ..Default::default() });

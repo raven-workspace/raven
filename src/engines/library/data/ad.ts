@@ -26,7 +26,7 @@ const COMMANDS: LibraryCommand[] = [
     match: NXC_SMB_NULL,
     matchExamples: {
       hit: ["nxc smb 10.0.0.1 -u '' -p '' --shares --users", "nxc smb 10.0.0.1 -u guest -p ''", "nxc smb 10.0.0.1 -u anonymous -p ''"],
-      miss: ["nxc smb 10.0.0.1 -u jace -p 'Pw1' --users", "nxc ldap 10.0.0.1 -u '' -p ''"],
+      miss: ["nxc smb 10.0.0.1 -u ruth -p 'Pw1' --users", "nxc ldap 10.0.0.1 -u '' -p ''"],
     },
   },
   {
@@ -62,7 +62,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-nocreds-smb-null'],
     source: 'oscp-notes',
     match: { bins: ['enum4linux-ng', 'enum4linux'], none: [String.raw`(^|\s)-u\s*(?!''|""|'guest'|guest(\s|$))\S`] },
-    matchExamples: { hit: ['enum4linux-ng -A 10.0.0.1'], miss: ["enum4linux-ng -A -u jace -p 'Pw1' 10.0.0.1"] },
+    matchExamples: { hit: ['enum4linux-ng -A 10.0.0.1'], miss: ["enum4linux-ng -A -u ruth -p 'Pw1' 10.0.0.1"] },
   },
   {
     id: 'ad-nocreds-spider',
@@ -88,7 +88,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: impacket('samrdump'), none: [String.raw`/[^\s/:@]+:[^\s@]+@`, String.raw`-hashes`] },
     matchExamples: {
       hit: ['impacket-samrdump 10.0.0.1', 'samrdump.py 10.0.0.1'],
-      miss: ["impacket-samrdump corp.local/jace:'Pw1'@10.0.0.1", 'rpcclient -U "" -N 10.0.0.1'],
+      miss: ["impacket-samrdump corp.local/ruth:'Pw1'@10.0.0.1", 'rpcclient -U "" -N 10.0.0.1'],
     },
   },
   {
@@ -104,7 +104,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: ['rpcclient'], any: [String.raw`-U\s*(''|""|'%'|"%")(?=\s|$)`, String.raw`(^|\s)-N(?=\s|$)`] },
     matchExamples: {
       hit: ["rpcclient -U '' -N 10.0.0.1", "rpcclient -U '' -N 10.0.0.1 -c 'enumdomusers'"],
-      miss: ["rpcclient -U 'corp/jace%Pw1' 10.0.0.1 -c enumdomusers"],
+      miss: ["rpcclient -U 'corp/ruth%Pw1' 10.0.0.1 -c enumdomusers"],
     },
   },
   // ---------------------------------------------------------------- RID cycling
@@ -120,7 +120,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: impacket('lookupsid'), any: [String.raw`-no-pass`, String.raw`(^|['"/\s])guest:?['"]?@`] },
     matchExamples: {
       hit: ["impacket-lookupsid 'guest:'@10.0.0.1 10000", 'lookupsid.py -no-pass guest@10.0.0.1 10000'],
-      miss: ["impacket-lookupsid corp.local/jace:'Pw1'@10.0.0.1 10000"],
+      miss: ["impacket-lookupsid corp.local/ruth:'Pw1'@10.0.0.1 10000"],
     },
   },
   {
@@ -136,7 +136,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: NXC, all: [NXC_SMB, String.raw`--rid-brute`, NULL_USER, EMPTY_PASS] },
     matchExamples: {
       hit: ["nxc smb 10.0.0.1 -u '' -p '' --rid-brute 10000", "nxc smb 10.0.0.1 -u guest -p '' --rid-brute"],
-      miss: ["nxc smb 10.0.0.1 -u jace -p 'Pw1' --rid-brute 10000", "nxc smb 10.0.0.1 -u '' -p '' --shares"],
+      miss: ["nxc smb 10.0.0.1 -u ruth -p 'Pw1' --rid-brute 10000", "nxc smb 10.0.0.1 -u '' -p '' --shares"],
     },
   },
   // ---------------------------------------------------------------- LDAP
@@ -152,7 +152,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: ['ldapsearch'], all: [String.raw`(^|\s)-x(?=\s)`], none: [String.raw`(^|\s)-[dwy](?=\s|$)`] },
     matchExamples: {
       hit: ['ldapsearch -x -H ldap://10.0.0.1 -s base namingcontexts'],
-      miss: ['ldapsearch -x -H ldap://10.0.0.1 -D "jace@corp.local" -w Pw1 -b "DC=corp,DC=local"'],
+      miss: ['ldapsearch -x -H ldap://10.0.0.1 -D "ruth@corp.local" -w Pw1 -b "DC=corp,DC=local"'],
     },
   },
   {
@@ -168,7 +168,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: NXC, all: [NXC_LDAP, NULL_USER, EMPTY_PASS] },
     matchExamples: {
       hit: ["nxc ldap 10.0.0.1 -u '' -p '' -M get-desc-users", "nxc ldap 10.0.0.1 -u '' -p '' --users"],
-      miss: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' -M get-desc-users"],
+      miss: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' -M get-desc-users"],
     },
   },
   {
@@ -226,7 +226,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: impacket('GetNPUsers'), all: [String.raw`-no-pass`] },
     matchExamples: {
       hit: ['impacket-GetNPUsers corp.local/ -dc-ip 10.0.0.1 -usersfile users.txt -no-pass', 'GetNPUsers.py corp.local/ -no-pass -usersfile u.txt'],
-      miss: ["impacket-GetNPUsers corp.local/jace:'Pw1' -dc-ip 10.0.0.1 -request"],
+      miss: ["impacket-GetNPUsers corp.local/ruth:'Pw1' -dc-ip 10.0.0.1 -request"],
     },
   },
   {
@@ -241,7 +241,7 @@ const COMMANDS: LibraryCommand[] = [
     match: { bins: NXC, all: [NXC_LDAP, String.raw`--asreproast`, EMPTY_PASS] },
     matchExamples: {
       hit: ["nxc ldap 10.0.0.1 -u users.txt -p '' --asreproast asrep.txt"],
-      miss: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' --asreproast asrep.txt"],
+      miss: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --asreproast asrep.txt"],
     },
   },
   {

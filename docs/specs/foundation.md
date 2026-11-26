@@ -11,7 +11,7 @@ Raven is the user's personal work surface for penetration testing. It covers the
 It replaces two things:
 
 1. **The old Raven** (repo the old app's repo). It is a React/IndexedDB web app that grew out of an HTB/THM box tracker. Its newest parts are good and fit engagement work: the command log, engagement credentials, the goal-based checklist with auto-tick, and the command library. Everything around them is CTF-shaped, cluttered and redundant, and browser storage is a dead end for a long-term tool.
-2. **The user's Obsidian notes for engagements.** Today Claude writes up the user's pasted output into Obsidian host notes (for example a host note in Obsidian). Claude isn't available during the exam, so Raven alone has to be fast enough to record everything by hand, as it happens.
+2. **The user's Obsidian notes for engagements.** Today Claude writes up the user's pasted output into Obsidian host notes (for example, a host note in Obsidian). Claude isn't available during the exam, so Raven alone has to be fast enough to record everything by hand, as it happens.
 
 Raven has four jobs:
 

@@ -580,9 +580,9 @@ test("jumping to a block from the contents strip leaves its outline clear of the
 // ---------------------------------------------------------------- interpreters and the save summary
 
 const NXC_PASTE = [
-  "$ nxc smb 10.10.20.10 -u jay drew -p 'Synth123!' 'Guess1' --continue-on-success",
-  "SMB  10.10.20.10  445  DC01  [+] acme.corp\\jay:Synth123! (Pwn3d!)",
-  "SMB  10.10.20.10  445  DC01  [-] acme.corp\\drew:Guess1 STATUS_LOGON_FAILURE",
+  "$ nxc smb 10.10.20.10 -u zoe omar -p 'Synth123!' 'Guess1' --continue-on-success",
+  "SMB  10.10.20.10  445  DC01  [+] acme.corp\\zoe:Synth123! (Pwn3d!)",
+  "SMB  10.10.20.10  445  DC01  [-] acme.corp\\omar:Guess1 STATUS_LOGON_FAILURE",
 ].join("\n");
 
 /** Opens the capture sheet on a host page, pastes `text` and saves with the Save button. */
@@ -598,12 +598,12 @@ test("saving nxc spray output shows the win in the toast and the Extracted line,
   await open(page, "/e/e-lab/h/h-dc01", 1280);
   await captureAndSave(page, NXC_PASTE);
   const toast = page.getByRole("status").filter({ has: page.getByRole("button", { name: "Close summary" }) });
-  await expect(toast.getByText(/jay:Synth123! works on SMB/)).toBeVisible();
+  await expect(toast.getByText(/zoe:Synth123! works on SMB/)).toBeVisible();
 
   // The new entry's own Extracted line shows without a reload.
   await page.getByRole("tab", { name: "Log" }).click();
   await page.getByRole("button", { name: /nxc/ }).first().click();
-  const extracted = page.getByRole("button", { name: /Extracted: jay:Synth123! works on SMB/ });
+  const extracted = page.getByRole("button", { name: /Extracted: zoe:Synth123! works on SMB/ });
   await expect(extracted).toBeVisible();
 
   // Navigating inside the app keeps the fake backend's state (a reload would restore the fixtures).
@@ -647,7 +647,7 @@ test("tried pairs render muted in the test matrix with no sideways scroll", asyn
     await open(page, "/e/e-lab/s/credentials", width);
     const tried = page.locator("tr[data-tried]");
     await tried.first().waitFor();
-    await expect(tried.first()).toContainText("drew");
+    await expect(tried.first()).toContainText("omar");
     await expect(tried.first()).toContainText("tried");
     await expect(tried.first()).toHaveClass(/test-grid__row--tried/); // muted (TestGrid.scss)
     await expect(tried.first().getByRole("img", { name: /failed \(tried\)/ }).first()).toBeVisible();
@@ -1385,8 +1385,8 @@ test("Report: a long note with an IP in the ports table stays in its cell and on
     const notes = await table.locator("tr").first().locator("th, td").evaluateAll((cells) => cells.findIndex((c) => c.textContent?.trim() === "Notes"));
     expect(notes).toBeGreaterThanOrEqual(0);
     await caretAtEnd(p, table.locator("tr").nth(1).locator("td").nth(notes));
-    await p.keyboard.type("172.31.166.143 WORKSTATION-FINANCE-WWW-01 admin panel behind basic auth, default credentials rejected");
-    await expect(table).toContainText("172.31.166.143");
+    await p.keyboard.type("10.10.20.143 WORKSTATION-FINANCE-WWW-01 admin panel behind basic auth, default credentials rejected");
+    await expect(table).toContainText("10.10.20.143");
     const result = await table.evaluate((t) => {
       const doc = t.closest(".ProseMirror")!;
       const style = getComputedStyle(doc);

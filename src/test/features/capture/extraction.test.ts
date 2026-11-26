@@ -119,19 +119,19 @@ describe("what an output proves", () => {
   });
 
   it("a --local-auth result: the username is the answering host's own account, keyed by that host for its attempts", async () => {
-    stored.credentials = [cred({ id: "cJen", username: "jay", secret: "SyntheticPw01", scope: "local", localHostId: "hC" })];
+    stored.credentials = [cred({ id: "cJen", username: "zoe", secret: "SyntheticPw01", scope: "local", localHostId: "hC" })];
     const out = [
-      "SMB  10.10.1.6  445  WEB01  [+] WEB01\\jay:SyntheticPw01",
+      "SMB  10.10.1.6  445  WEB01  [+] WEB01\\zoe:SyntheticPw01",
       "SMB  10.10.1.5  445  SRV12  [-] SRV12\\kim:SyntheticPw01 STATUS_LOGON_FAILURE",
     ].join("\n");
     const { proved } = await prove([{ command: "nxc smb 10.10.1.5-6 -u users.txt -p 'SyntheticPw01' --local-auth", output: out }]);
     const intake = proved!.proofs.intake!;
     // The store decides the scope: `.` with the host it answered from is that host's local account.
     expect(intake.usernames).toEqual([
-      { key: "e1|jay|.|local:hW", input: { username: "jay", domain: ".", sourceHostId: "hW", source: "nxc" } },
+      { key: "e1|zoe|.|local:hW", input: { username: "zoe", domain: ".", sourceHostId: "hW", source: "nxc" } },
       { key: "e1|kim|.|local:hC", input: { username: "kim", domain: ".", sourceHostId: "hC", source: "nxc" } },
     ]);
-    // jay's secret is a local credential stored for SRV12: a result of that credential on WEB01 (password reuse).
+    // zoe's secret is a local credential stored for SRV12: a result of that credential on WEB01 (password reuse).
     expect(intake.attempts).toEqual([
       expect.objectContaining({ credId: "cJen", hostId: "hW", result: "valid", authMode: "local" }),
       expect.objectContaining({ credId: "cJen", usernameKey: "e1|kim|.|local:hC", hostId: "hC", result: "failed" }),
@@ -139,7 +139,7 @@ describe("what an output proves", () => {
   });
 
   it("secretsdump of an unknown IP: a new host, the SAM hashes local to it, the machine account dropped", async () => {
-    const { proved } = await prove([{ command: "impacket-secretsdump corp.lan/jay:Synth123!@10.10.1.9", output: sam }]);
+    const { proved } = await prove([{ command: "impacket-secretsdump corp.lan/zoe:Synth123!@10.10.1.9", output: sam }]);
     const { newHosts, credentials } = proved!.proofs;
     expect(newHosts).toEqual([{ key: "new-host:10.10.1.9", ip: "10.10.1.9" }]);
     const local = credentials.filter((c) => c.scope === "local");
@@ -149,34 +149,34 @@ describe("what an output proves", () => {
   });
 
   it("a DC's $MACHINE.ACC is named after its host", async () => {
-    const { proved } = await prove([{ command: "impacket-secretsdump corp.lan/jay:Synth123!@10.10.1.10", output: sam }], [], [DC01]);
+    const { proved } = await prove([{ command: "impacket-secretsdump corp.lan/zoe:Synth123!@10.10.1.10", output: sam }], [], [DC01]);
     expect(proved!.proofs.newHosts).toEqual([]);
     expect(proved!.proofs.credentials).toContainEqual(expect.objectContaining({ username: "DC01$", secret: "000c000c000c000c000c000c000c000c", type: "hash" }));
   });
 
   it("hashcat cracks a captured NetNTLMv2 hash stored in another case", async () => {
-    const captured = "jay::corp:1122334455667788:0123456789abcdef0123456789abcdef:0101000000000000aabbccdd00000000";
-    stored.credentials = [cred({ id: "cN", type: "hash", username: "jay", domain: "corp", secret: captured, hashType: "NetNTLMv2" })];
+    const captured = "zoe::corp:1122334455667788:0123456789abcdef0123456789abcdef:0101000000000000aabbccdd00000000";
+    stored.credentials = [cred({ id: "cN", type: "hash", username: "zoe", domain: "corp", secret: captured, hashType: "NetNTLMv2" })];
     const { proved } = await prove([{ command: "hashcat -m 5600 responder.txt --show", output: `${captured.toUpperCase()}:Password1` }]);
     expect(proved!.proofs.cracks).toEqual([{ plaintext: "Password1", credentialIds: ["cN"], proofCredentials: [] }]);
   });
 
   it("a crack names a hash dumped in the same entry by its place in the proofs", async () => {
-    const dump = "[*] Dumping Domain Credentials (domain\\uid:rid:lmhash:nthash)\ncorp.lan\\paul:1106:aad3b435b51404eeaad3b435b51404ee:0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f:::";
+    const dump = "[*] Dumping Domain Credentials (domain\\uid:rid:lmhash:nthash)\ncorp.lan\\noah:1106:aad3b435b51404eeaad3b435b51404ee:0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f:::";
     const { proved } = await prove([
-      { command: "impacket-secretsdump corp.lan/jay:Synth123!@10.10.1.5", output: dump },
+      { command: "impacket-secretsdump corp.lan/zoe:Synth123!@10.10.1.5", output: dump },
       { command: "hashcat -m 1000 hashes.txt --show", output: "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f:Winter2000!" },
     ]);
-    const at = proved!.proofs.credentials.findIndex((c) => c.username === "paul");
+    const at = proved!.proofs.credentials.findIndex((c) => c.username === "noah");
     expect(proved!.proofs.cracks).toEqual([{ plaintext: "Winter2000!", credentialIds: [], proofCredentials: [at] }]);
   });
 
   describe("john cracks", () => {
     const hashes = [
-      cred({ id: "hNt", type: "hash", username: "jay", domain: "corp.lan", secret: "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f", hashType: "NTLM", crackStatus: "uncracked" }),
-      cred({ id: "hTgs", type: "hash", username: "jay", domain: "corp.lan", secret: "$krb5tgs$23$*jay$CORP.LAN$http/web01*$aabbccdd$eeff0011", hashType: "Kerberoast TGS-REP (etype 23, RC4)", crackStatus: "uncracked" }),
+      cred({ id: "hNt", type: "hash", username: "zoe", domain: "corp.lan", secret: "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f", hashType: "NTLM", crackStatus: "uncracked" }),
+      cred({ id: "hTgs", type: "hash", username: "zoe", domain: "corp.lan", secret: "$krb5tgs$23$*zoe$CORP.LAN$http/web01*$aabbccdd$eeff0011", hashType: "Kerberoast TGS-REP (etype 23, RC4)", crackStatus: "uncracked" }),
     ];
-    const show = "jay:Winter2000!\n\n1 password hash cracked, 0 left";
+    const show = "zoe:Winter2000!\n\n1 password hash cracked, 0 left";
     const cracked = async (command: string, output = show) => (await prove([{ command, output }])).proved!.proofs.cracks.flatMap((k) => k.credentialIds);
 
     it("with --format, the user's hash of that type", async () => {
@@ -209,8 +209,8 @@ describe("what an output proves", () => {
   });
 
   it("an IP change places the results on the known host and makes none", async () => {
-    stored.credentials = [cred({ id: "cJen", username: "jay", domain: "corp.lan", secret: "Synth123!" })];
-    const { proved } = await prove([{ command: "nxc smb 10.10.1.77 -u jay -p 'Synth123!'", output: "SMB  10.10.1.77  445  WEB01  [+] corp.lan\\jay:Synth123!" }]);
+    stored.credentials = [cred({ id: "cJen", username: "zoe", domain: "corp.lan", secret: "Synth123!" })];
+    const { proved } = await prove([{ command: "nxc smb 10.10.1.77 -u zoe -p 'Synth123!'", output: "SMB  10.10.1.77  445  WEB01  [+] corp.lan\\zoe:Synth123!" }]);
     expect(proved!.proofs.newHosts).toEqual([]);
     expect(proved!.proofs.intake!.attempts.map((a) => a.hostId)).toEqual(["hW"]);
     expect(proved!.plan!.ipChanges).toEqual([expect.objectContaining({ hostName: "web01", to: "10.10.1.77" })]);
@@ -218,8 +218,8 @@ describe("what an output proves", () => {
 
   it("results outside the engagement's scope prove no host and are dropped", async () => {
     const { r, proved } = await prove([
-      { command: "nxc smb 10.20.0.9 -u jay -p 'Synth123!'", output: "SMB  10.20.0.9  445  GHOST  [+] corp.lan\\jay:Synth123!" },
-      { command: "impacket-secretsdump corp.lan/jay:Synth123!@10.20.0.9", output: sam },
+      { command: "nxc smb 10.20.0.9 -u zoe -p 'Synth123!'", output: "SMB  10.20.0.9  445  GHOST  [+] corp.lan\\zoe:Synth123!" },
+      { command: "impacket-secretsdump corp.lan/zoe:Synth123!@10.20.0.9", output: sam },
     ]);
     expect(proved!.proofs.newHosts).toEqual([]);
     expect(proved!.proofs.credentials.every((c) => c.scope === "domain" && c.localHostId === null)).toBe(true);
@@ -256,20 +256,20 @@ describe("the summary of what the store filed", () => {
 
   it("password reuse from a dump reads as reuse, never as works on OTHER", async () => {
     const { r, proved } = await prove([{ command: SPRAY_CMD, output: SPRAY }], ["hC"]);
-    // jay's local password, stored for web01, found again in a dump on Srv12.
-    const jay = cred({ id: "cJ", username: "jay", secret: "Synth123!", scope: "local", localHostId: "hW" });
+    // zoe's local password, stored for web01, found again in a dump on Srv12.
+    const zoe = cred({ id: "cJ", username: "zoe", secret: "Synth123!", scope: "local", localHostId: "hW" });
     const reuse = attempt({ id: "a1", credId: "cJ", service: "other", authMode: "local", detail: "password reuse" });
     const other = attempt({ id: "a2", credId: "cJ", hostId: "hW", service: "other", authMode: "local" });
-    const f = filed({ credentials: [jay], attempts: [reuse, other], record: { reprovedCredentialIds: ["cJ"] } });
+    const f = filed({ credentials: [zoe], attempts: [reuse, other], record: { reprovedCredentialIds: ["cJ"] } });
     const summary = summarize({ r, plan: proved!.plan, filed: f, identityHostId: null, hostName: names([SRV12, WEB01]), ticked: NO_TICKS });
     // A real result on another service still reads as one.
-    expect(summary.wins).toEqual(["jay:Synth123! reused on Srv12 (same password as web01)", "jay:Synth123! works on OTHER, web01"]);
+    expect(summary.wins).toEqual(["zoe:Synth123! reused on Srv12 (same password as web01)", "zoe:Synth123! works on OTHER, web01"]);
   });
 
   it("a DC's machine account hash is a win; other hashes are counted", async () => {
     m.hostsList.mockResolvedValue([{ ...DC01, adSetEffective: true }]);
     m.servicesListEngagement.mockResolvedValue([service("s88", "hD", 88), service("s389", "hD", 389)]);
-    const { r, proved } = await prove([{ command: "impacket-secretsdump corp.lan/jay:Synth123!@10.10.1.10", output: sam }], [], [DC01]);
+    const { r, proved } = await prove([{ command: "impacket-secretsdump corp.lan/zoe:Synth123!@10.10.1.10", output: sam }], [], [DC01]);
     const created = proved!.proofs.credentials.map((c, i) => cred({ ...(c as Partial<Credential>), id: `c${i}` }));
     const f = filed({ credentials: created, record: { createdCredentialIds: created.map((c) => c.id) } });
     const ticked = await outputTicks("e1", r, (p) => proved!.hostOf(p, f));
@@ -280,11 +280,11 @@ describe("the summary of what the store filed", () => {
 
   it("words every kind of news in order", async () => {
     const { r, proved } = await prove([{ command: SPRAY_CMD, output: SPRAY }], ["hC"]);
-    const hash = cred({ id: "cH", type: "hash", username: "paul", secret: "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f", crackStatus: "cracked" });
-    const pw = cred({ id: "cP", username: "paul", secret: "Winter2000!", crackedFrom: "cH" });
-    const jay = cred({ id: "cJ", username: "jay", secret: "Synth123!" });
+    const hash = cred({ id: "cH", type: "hash", username: "noah", secret: "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f", crackStatus: "cracked" });
+    const pw = cred({ id: "cP", username: "noah", secret: "Winter2000!", crackedFrom: "cH" });
+    const zoe = cred({ id: "cJ", username: "zoe", secret: "Synth123!" });
     const f = filed({
-      credentials: [hash, pw, jay],
+      credentials: [hash, pw, zoe],
       attempts: [attempt({ id: "a1", credId: "cJ", service: "smb", result: "admin" }), attempt({ id: "a2", credId: "cJ", hostId: "hW", result: "failed" })],
       cracked: [{ hashId: "cH", plaintext: "Winter2000!" }],
       vectors: [{ id: "v1", hostId: "hC", title: "SeImpersonatePrivilege abuse", status: "try", source: "auto", createdAt: 1, updatedAt: 1 }],
@@ -295,7 +295,7 @@ describe("the summary of what the store filed", () => {
     });
     const hostName = names([SRV12, WEB01, host({ id: "hN", name: "10.10.1.9" })]);
     expect(summarize({ r, plan: proved!.plan, filed: f, identityHostId: "hC", hostName, ticked: NO_TICKS })).toEqual({
-      wins: ["jay:Synth123! works on SMB, Srv12 (admin)", "SeImpersonatePrivilege abuse on Srv12", "paul:Winter2000! cracked"],
+      wins: ["zoe:Synth123! works on SMB, Srv12 (admin)", "SeImpersonatePrivilege abuse on Srv12", "noah:Winter2000! cracked"],
       counts: [
         "New host 10.10.1.9",
         "2 failed attempts recorded",
@@ -315,14 +315,14 @@ describe("the summary of what the store filed", () => {
   });
 
   it("results kept out, and a host that moved, are news even when nothing was filed", async () => {
-    const out = "SMB  10.10.1.88  445  GHOST  [-] corp.lan\\jay:Nope1 STATUS_LOGON_FAILURE";
-    const dropped = await prove([{ command: "nxc smb 10.10.1.88 -u jay -p 'Nope1'", output: out }]);
+    const out = "SMB  10.10.1.88  445  GHOST  [-] corp.lan\\zoe:Nope1 STATUS_LOGON_FAILURE";
+    const dropped = await prove([{ command: "nxc smb 10.10.1.88 -u zoe -p 'Nope1'", output: out }]);
     expect(dropped.proved!.proofs.newHosts).toEqual([]);
     expect(dropped.proved!.proofs.triedPairs).toEqual([]);
     expect(summarize({ r: dropped.r, plan: dropped.proved!.plan, filed: filed(), identityHostId: null, hostName: names([]), ticked: NO_TICKS })).toEqual({
       wins: [], counts: ["1 result on hosts not in this engagement"], ticks: [],
     });
-    const moved = await prove([{ command: "nxc smb 10.10.1.77 -u jay -p 'Synth123!'", output: "SMB  10.10.1.77  445  WEB01  [+] corp.lan\\jay:Synth123!" }]);
+    const moved = await prove([{ command: "nxc smb 10.10.1.77 -u zoe -p 'Synth123!'", output: "SMB  10.10.1.77  445  WEB01  [+] corp.lan\\zoe:Synth123!" }]);
     const summary = summarize({ r: moved.r, plan: moved.proved!.plan, filed: filed(), identityHostId: null, hostName: names([]), ticked: NO_TICKS });
     expect(summary.counts).toEqual(["web01 answered on 10.10.1.77"]);
   });

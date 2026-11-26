@@ -866,23 +866,23 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let e = eng_on(c, "a", Some("corp.lan"));
-        let first = super::create(c, &e, on(cin("password", "jay", "Winter2024!"), "CORP")).unwrap();
+        let first = super::create(c, &e, on(cin("password", "zoe", "Winter2024!"), "CORP")).unwrap();
         assert!(!first.existed);
-        let again = super::create(c, &e, on(cin("password", "JAY", "Winter2024!"), "corp.lan")).unwrap();
+        let again = super::create(c, &e, on(cin("password", "ZOE", "Winter2024!"), "corp.lan")).unwrap();
         assert_eq!((again.credential.id.as_str(), again.existed), (first.credential.id.as_str(), true));
         // Another FQDN with the same first label, or no domain, is another credential.
-        assert!(!super::create(c, &e, on(cin("password", "jay", "Winter2024!"), "corp.local")).unwrap().existed);
-        assert!(!super::create(c, &e, cin("password", "jay", "Winter2024!")).unwrap().existed);
+        assert!(!super::create(c, &e, on(cin("password", "zoe", "Winter2024!"), "corp.local")).unwrap().existed);
+        assert!(!super::create(c, &e, cin("password", "zoe", "Winter2024!")).unwrap().existed);
         // Nothing was written for the duplicate.
         assert_eq!(list(c, &e).unwrap().len(), 3);
         // A crack finds the password stored in the other spelling.
-        let hash = create(c, &e, on(cin("hash", "jay", &"ab".repeat(16)), "corp.lan")).unwrap();
+        let hash = create(c, &e, on(cin("hash", "zoe", &"ab".repeat(16)), "corp.lan")).unwrap();
         assert_eq!(crack(c, &hash.id, "Winter2024!").unwrap().id, first.credential.id);
 
         // With no engagement domain the two spellings are two credentials.
         let e2 = eng_on(c, "b", None);
-        let a = super::create(c, &e2, on(cin("password", "jay", "Winter2024!"), "CORP")).unwrap();
-        let b = super::create(c, &e2, on(cin("password", "jay", "Winter2024!"), "corp.lan")).unwrap();
+        let a = super::create(c, &e2, on(cin("password", "zoe", "Winter2024!"), "CORP")).unwrap();
+        let b = super::create(c, &e2, on(cin("password", "zoe", "Winter2024!"), "corp.lan")).unwrap();
         assert!(!a.existed && !b.existed);
         assert_ne!(a.credential.id, b.credential.id);
     }
@@ -907,16 +907,16 @@ mod tests {
         assert!(super::create(c, &e, asrep("svc_sql", "33$44")).unwrap().existed);
         assert!(!super::create(c, &e, on(cin("hash", "svc_web", "$krb5tgs$23$*svc_web$CORP.LAN$http/web01*$aa$bb"), "corp.lan")).unwrap().existed);
         // NetNTLM, by its shape or by its hash type.
-        let ntlmv2 = |chal: &str| on(cin("hash", "jay", &format!("jay::CORP:{chal}:0101aa:0101bb")), "CORP");
+        let ntlmv2 = |chal: &str| on(cin("hash", "zoe", &format!("zoe::CORP:{chal}:0101aa:0101bb")), "CORP");
         let n1 = super::create(c, &e, ntlmv2("1122334455667788")).unwrap();
         assert!(!n1.existed);
         assert!(super::create(c, &e, ntlmv2("8877665544332211")).unwrap().existed);
-        let mut typed = on(cin("hash", "jay", "opaque-capture-bytes"), "corp.lan");
+        let mut typed = on(cin("hash", "zoe", "opaque-capture-bytes"), "corp.lan");
         typed.hash_type = Some("NetNTLMv2".into());
         assert_eq!(super::create(c, &e, typed).unwrap().credential.id, n1.credential.id);
         // An NT hash is identified by its value.
-        let nt1 = super::create(c, &e, on(cin("hash", "jay", &"ab".repeat(16)), "corp.lan")).unwrap();
-        let nt2 = super::create(c, &e, on(cin("hash", "jay", &"cd".repeat(16)), "corp.lan")).unwrap();
+        let nt1 = super::create(c, &e, on(cin("hash", "zoe", &"ab".repeat(16)), "corp.lan")).unwrap();
+        let nt2 = super::create(c, &e, on(cin("hash", "zoe", &"cd".repeat(16)), "corp.lan")).unwrap();
         assert!(!nt1.existed && !nt2.existed);
     }
 
@@ -929,21 +929,21 @@ mod tests {
         for (id, domain) in [("c1", "CORP"), ("c2", "corp.lan")] {
             c.execute(
                 "INSERT INTO credentials (id,engagement_id,type,username,domain,secret,scope,created_at,updated_at) \
-                 VALUES (?1,?2,'password','jay',?3,'Winter2024!','domain',1,1)",
+                 VALUES (?1,?2,'password','zoe',?3,'Winter2024!','domain',1,1)",
                 params![id, e, domain],
             )
             .unwrap();
         }
-        let mut notes = on(cin("password", "jay", "Winter2024!"), "CORP");
+        let mut notes = on(cin("password", "zoe", "Winter2024!"), "CORP");
         notes.notes = Some("from the share".into());
         assert_eq!(update(c, "c1", notes).unwrap().notes.as_deref(), Some("from the share"));
         assert_eq!(list(c, &e).unwrap().len(), 2);
         // Creating it again returns the row spelled the same.
-        let again = super::create(c, &e, on(cin("password", "jay", "Winter2024!"), "corp.lan")).unwrap();
+        let again = super::create(c, &e, on(cin("password", "zoe", "Winter2024!"), "corp.lan")).unwrap();
         assert_eq!((again.credential.id.as_str(), again.existed), ("c2", true));
         // Editing another credential into this one is refused, in either spelling.
-        let other = create(c, &e, on(cin("password", "jay", "Spring2024!"), "corp.lan")).unwrap();
-        let (field_name, message) = field(update(c, &other.id, on(cin("password", "jay", "Winter2024!"), "CORP")));
+        let other = create(c, &e, on(cin("password", "zoe", "Spring2024!"), "corp.lan")).unwrap();
+        let (field_name, message) = field(update(c, &other.id, on(cin("password", "zoe", "Winter2024!"), "CORP")));
         assert_eq!((field_name.as_str(), message.as_str()), ("secret", "A credential with these values already exists"));
     }
 
@@ -1461,27 +1461,27 @@ mod tests {
         };
 
         // Domain: a blank domain is the engagement's own, in either spelling.
-        let dom = mk("jay", None, Some("domain"), None);
+        let dom = mk("zoe", None, Some("domain"), None);
         assert_eq!((dom.scope.as_str(), dom.local_host_id.as_deref()), ("domain", None));
-        assert_eq!(mk("JAY", Some("CORP"), Some("domain"), None).id, dom.id);
-        assert_eq!(mk("jay", Some("corp.lan"), Some("domain"), None).id, dom.id);
-        assert_ne!(mk("jay", Some("corp.local"), Some("domain"), None).id, dom.id);
+        assert_eq!(mk("ZOE", Some("CORP"), Some("domain"), None).id, dom.id);
+        assert_eq!(mk("zoe", Some("corp.lan"), Some("domain"), None).id, dom.id);
+        assert_ne!(mk("zoe", Some("corp.local"), Some("domain"), None).id, dom.id);
 
         // Unknown keeps today's rule, and never merges with a domain username.
-        let unknown = mk("jay", None, None, None);
+        let unknown = mk("zoe", None, None, None);
         assert_eq!(unknown.scope, "unknown");
         assert_ne!(unknown.id, dom.id);
-        let unknown_corp = mk("jay", Some("CORP"), None, None);
+        let unknown_corp = mk("zoe", Some("CORP"), None, None);
         assert_ne!(unknown_corp.id, dom.id);
         assert_ne!(unknown_corp.id, unknown.id);
-        assert_eq!(mk("jay", Some("corp.lan"), Some("unknown"), None).id, unknown_corp.id);
-        assert_eq!(mk("Jay", None, Some("unknown"), None).id, unknown.id);
+        assert_eq!(mk("zoe", Some("corp.lan"), Some("unknown"), None).id, unknown_corp.id);
+        assert_eq!(mk("Zoe", None, Some("unknown"), None).id, unknown.id);
 
         // Local: one per name on each host, never a domain or unknown one. Its domain is its host, so none is kept.
-        let on_web = mk("jay", Some("WEB01"), Some("local"), Some(&web));
+        let on_web = mk("zoe", Some("WEB01"), Some("local"), Some(&web));
         assert_eq!((on_web.scope.as_str(), on_web.local_host_id.as_deref(), on_web.domain.as_deref()), ("local", Some(web.as_str()), None));
-        assert_eq!(mk("JAY", None, Some("local"), Some(&web)).id, on_web.id);
-        let on_sql = mk("jay", None, Some("local"), Some(&sql));
+        assert_eq!(mk("ZOE", None, Some("local"), Some(&web)).id, on_web.id);
+        let on_sql = mk("zoe", None, Some("local"), Some(&sql));
         assert_ne!(on_sql.id, on_web.id);
         for other in [&dom.id, &unknown.id, &unknown_corp.id] {
             assert_ne!(&on_web.id, other);
@@ -1491,9 +1491,9 @@ mod tests {
 
         // With no engagement domain, a blank domain is only blank.
         let e2 = eng_on(c, "b", None);
-        let blank = username_create(c, &e2, uin("jay", None, Some("domain"), None)).unwrap();
-        assert_ne!(username_create(c, &e2, uin("jay", Some("CORP"), Some("domain"), None)).unwrap().id, blank.id);
-        assert_eq!(username_create(c, &e2, uin("jay", Some(" "), Some("domain"), None)).unwrap().id, blank.id);
+        let blank = username_create(c, &e2, uin("zoe", None, Some("domain"), None)).unwrap();
+        assert_ne!(username_create(c, &e2, uin("zoe", Some("CORP"), Some("domain"), None)).unwrap().id, blank.id);
+        assert_eq!(username_create(c, &e2, uin("zoe", Some(" "), Some("domain"), None)).unwrap().id, blank.id);
     }
 
     #[test]
@@ -1504,11 +1504,11 @@ mod tests {
         let e2 = eng(c, "b");
         let (h, foreign) = (host(c, &e, "192.0.2.10"), host(c, &e2, "192.0.2.20"));
         let err = |i: UsernameInput| field(username_create(c, &e, i));
-        assert_eq!(err(uin("jay", None, Some("local"), None)), ("localHostId".into(), "a local username needs its host".into()));
-        assert_eq!(err(uin("jay", None, Some("domain"), Some(&h))), ("localHostId".into(), "only a local username has a host".into()));
-        assert_eq!(err(uin("jay", None, None, Some(&h))).0, "localHostId");
-        assert_eq!(err(uin("jay", None, Some("app"), None)), ("scope".into(), "scope must be domain, local or unknown".into()));
-        assert_eq!(username_create(c, &e, uin("jay", None, Some("local"), Some(&foreign))), Err(AppError::NotFound));
+        assert_eq!(err(uin("zoe", None, Some("local"), None)), ("localHostId".into(), "a local username needs its host".into()));
+        assert_eq!(err(uin("zoe", None, Some("domain"), Some(&h))), ("localHostId".into(), "only a local username has a host".into()));
+        assert_eq!(err(uin("zoe", None, None, Some(&h))).0, "localHostId");
+        assert_eq!(err(uin("zoe", None, Some("app"), None)), ("scope".into(), "scope must be domain, local or unknown".into()));
+        assert_eq!(username_create(c, &e, uin("zoe", None, Some("local"), Some(&foreign))), Err(AppError::NotFound));
         assert!(usernames_list(c, &e).unwrap().is_empty());
     }
 
@@ -1518,8 +1518,8 @@ mod tests {
         let c = v.conn().unwrap();
         let e = eng(c, "a");
         let (web, sql, files) = (host(c, &e, "192.0.2.10"), host(c, &e, "192.0.2.11"), host(c, &e, "192.0.2.12"));
-        let on_web = username_create(c, &e, uin("jay", None, Some("local"), Some(&web))).unwrap();
-        let on_sql = username_create(c, &e, uin("jay", None, Some("local"), Some(&sql))).unwrap();
+        let on_web = username_create(c, &e, uin("zoe", None, Some("local"), Some(&web))).unwrap();
+        let on_sql = username_create(c, &e, uin("zoe", None, Some("local"), Some(&sql))).unwrap();
         grant_create(c, &e, AccessGrantInput { username_id: on_web.id.clone(), ..ginput(&files) }).unwrap();
         hosts::delete(c, &web).unwrap();
         hosts::delete(c, &sql).unwrap();
@@ -1534,8 +1534,8 @@ mod tests {
         assert_eq!(grants_list(c, &e).unwrap().len(), 1);
 
         // A new local username still needs its host, and is a new username on that host.
-        assert_eq!(field(username_create(c, &e, uin("jay", None, Some("local"), None))).0, "localHostId");
-        let on_files = username_create(c, &e, uin("jay", None, Some("local"), Some(&files))).unwrap();
+        assert_eq!(field(username_create(c, &e, uin("zoe", None, Some("local"), None))).0, "localHostId");
+        let on_files = username_create(c, &e, uin("zoe", None, Some("local"), Some(&files))).unwrap();
         assert!(on_files.id != on_web.id && on_files.id != on_sql.id);
     }
 

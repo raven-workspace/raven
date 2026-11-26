@@ -119,7 +119,7 @@ export const caps: Parser = {
 // pspy: "2026/01/01 00:00:01 CMD: UID=0     PID=1234   | /bin/bash /opt/backup.sh"
 // unverified: no real sample yet (owner collects in next lab)
 const PSPY_ROOT = /\bCMD: UID=0\s+PID=\d+\s+\|\s*(.+)$/
-// syslog: "... CRON[1330]: (root) CMD (/bin/bash /home/jay/.scripts/backup.sh)"
+// syslog: "... CRON[1330]: (root) CMD (/bin/bash /home/zoe/.scripts/backup.sh)"
 const SYSLOG_ROOT = /CRON\[\d+\]: \(root\) CMD \((.+)\)\s*$/
 // ls -l line: regular file only (a symlink proves nothing), then rwx for user, group, other; other-write is the 9th permission character.
 const LS_LINE = /^-[rwxsStT-]{6}[r-]w[xtT-]\.?\s+\d+\s+.*\s(\/\S+)$/

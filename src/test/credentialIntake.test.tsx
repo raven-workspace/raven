@@ -258,7 +258,7 @@ const SPRAY = [
   "kali@kali:~$ nxc smb 10.10.10.5 10.10.10.6 -u bob -p 'Pass1' --continue-on-success",
   "SMB  10.10.10.5  445  DC01   [+] corp.local\\bob:Pass1 (Pwn3d!)",
   "SMB  10.10.10.6  445  WEB07  [-] corp.local\\bob:Pass1 STATUS_LOGON_FAILURE",
-  "SMB  10.10.10.5  445  DC01   [+] corp.local\\drew:Fresh1",
+  "SMB  10.10.10.5  445  DC01   [+] corp.local\\omar:Fresh1",
   "SMB  10.10.10.6  445  WEB07  [-] corp.local\\eve:Nope1 STATUS_LOGON_FAILURE",
   "SMB  10.10.10.99 445  GHOST  [+] corp.local\\bob:Pass1",
 ].join("\n");
@@ -330,13 +330,13 @@ describe("nxc results on save", () => {
       ["h2", "failed"],
       ["new-host:10.10.10.99", "valid"],
     ]);
-    // drew worked: a new credential with its own result; eve only failed: a tried pair, never a credential
-    expect(pending("drew")).toMatchObject({ accepted: true, input: { type: "password", secret: "Fresh1", domain: "corp.local", scope: "domain", sourceHostId: "h1" } });
-    expect(pending("drew").attempts.map((a) => [a.hostId, a.result])).toEqual([["h1", "valid"]]);
+    // omar worked: a new credential with its own result; eve only failed: a tried pair, never a credential
+    expect(pending("omar")).toMatchObject({ accepted: true, input: { type: "password", secret: "Fresh1", domain: "corp.local", scope: "domain", sourceHostId: "h1" } });
+    expect(pending("omar").attempts.map((a) => [a.hostId, a.result])).toEqual([["h1", "valid"]]);
     expect(pending("eve").accepted).toBe(false);
     expect(p.triedPairs.map((t) => [t.username, t.secret, t.hostId])).toEqual([["eve", "Nope1", "h2"]]);
     // usernames seen in the output are listed
-    expect(p.intake!.usernames.map((u) => u.input.username).sort()).toEqual(["bob", "drew", "eve"]);
+    expect(p.intake!.usernames.map((u) => u.input.username).sort()).toEqual(["bob", "eve", "omar"]);
     // the unknown host's [+] line proves 10.10.10.99
     expect(p.newHosts).toEqual([{ key: "new-host:10.10.10.99", ip: "10.10.10.99" }]);
   });

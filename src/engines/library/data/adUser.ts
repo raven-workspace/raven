@@ -31,7 +31,7 @@ const COMMANDS: LibraryCommand[] = [
       none: [String.raw`-no-pass`, String.raw`(^|['"/\s])guest:?['"]?@`],
     },
     matchExamples: {
-      hit: ["impacket-lookupsid corp.local/jace:'Pw1'@10.0.0.1 10000", 'lookupsid.py -hashes :abc corp/jace@10.0.0.1'],
+      hit: ["impacket-lookupsid corp.local/ruth:'Pw1'@10.0.0.1 10000", 'lookupsid.py -hashes :abc corp/ruth@10.0.0.1'],
       miss: ["impacket-lookupsid 'guest:'@10.0.0.1 10000", 'impacket-lookupsid -no-pass corp/guest@10.0.0.1'],
     },
   },
@@ -47,8 +47,8 @@ const COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_SMB, String.raw`--rid-brute`], none: DOMAIN_ONLY },
     matchExamples: {
-      hit: ["nxc smb 10.0.0.1 -u jace -p 'Pw1' --rid-brute 10000", 'nxc smb 10.0.0.1 -u jace -H abc --rid-brute'],
-      miss: ["nxc smb 10.0.0.1 -u '' -p '' --rid-brute 10000", "nxc smb 10.0.0.1 -u jace -p 'Pw1' --users", LOCAL_RID],
+      hit: ["nxc smb 10.0.0.1 -u ruth -p 'Pw1' --rid-brute 10000", 'nxc smb 10.0.0.1 -u ruth -H abc --rid-brute'],
+      miss: ["nxc smb 10.0.0.1 -u '' -p '' --rid-brute 10000", "nxc smb 10.0.0.1 -u ruth -p 'Pw1' --users", LOCAL_RID],
     },
   },
   {
@@ -61,7 +61,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-user-rid'],
     source: 'oscp-notes',
     match: { bins: ['crackmapexec', 'cme'], all: [NXC_SMB, String.raw`--rid-brute`], none: DOMAIN_ONLY },
-    matchExamples: { hit: ["crackmapexec smb 10.0.0.1 -u jace -p 'Pw1' --rid-brute"], miss: ["crackmapexec smb 10.0.0.1 -u '' -p '' --rid-brute", LOCAL_RID.replace('nxc', 'crackmapexec')] },
+    matchExamples: { hit: ["crackmapexec smb 10.0.0.1 -u ruth -p 'Pw1' --rid-brute"], miss: ["crackmapexec smb 10.0.0.1 -u '' -p '' --rid-brute", LOCAL_RID.replace('nxc', 'crackmapexec')] },
   },
   // ---------------------------------------------------------------- users, groups, policy
   {
@@ -81,11 +81,11 @@ const COMMANDS: LibraryCommand[] = [
       none: DOMAIN_ONLY,
     },
     matchExamples: {
-      hit: ["nxc smb 10.0.0.1 -u jace -p 'Pw1' --users", "nxc ldap 10.0.0.1 -u jace -p 'Pw1' --groups", 'nxc smb 10.0.0.1 -u jace -H abc --pass-pol'],
+      hit: ["nxc smb 10.0.0.1 -u ruth -p 'Pw1' --users", "nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --groups", 'nxc smb 10.0.0.1 -u ruth -H abc --pass-pol'],
       miss: [
         "nxc smb 10.0.0.1 -u '' -p '' --users",
-        "nxc smb 10.0.0.1 -u jace -p 'Pw1' --shares",
-        "nxc smb 10.0.0.1 -u jace -p 'Pw1'",
+        "nxc smb 10.0.0.1 -u ruth -p 'Pw1' --shares",
+        "nxc smb 10.0.0.1 -u ruth -p 'Pw1'",
         'nxc smb 10.0.0.5 -u bob -p Pw1 --local-auth --users',
       ],
     },
@@ -126,8 +126,8 @@ const COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP, String.raw`get-desc-users`], none: NOT_NULL },
     matchExamples: {
-      hit: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' -M get-desc-users"],
-      miss: ["nxc ldap 10.0.0.1 -u '' -p '' -M get-desc-users", "nxc ldap 10.0.0.1 -u jace -p 'Pw1' --users"],
+      hit: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' -M get-desc-users"],
+      miss: ["nxc ldap 10.0.0.1 -u '' -p '' -M get-desc-users", "nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --users"],
     },
   },
   {
@@ -141,7 +141,7 @@ const COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP], any: [String.raw`--password-not-required`, String.raw`--admin-count`], none: NOT_NULL },
     matchExamples: {
-      hit: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' --password-not-required"],
+      hit: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --password-not-required"],
       miss: ["nxc ldap 10.0.0.1 -u '' -p '' --admin-count"],
     },
   },
@@ -158,7 +158,7 @@ const COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
     match: { bins: ['ldapsearch'], all: [String.raw`(^|\s)-D\s`, String.raw`description|useraccountcontrol`] },
     matchExamples: {
-      hit: ['ldapsearch -x -H ldap://10.0.0.1 -D "jace@corp.local" -w Pw1 -b "DC=corp,DC=local" "(description=*)"'],
+      hit: ['ldapsearch -x -H ldap://10.0.0.1 -D "ruth@corp.local" -w Pw1 -b "DC=corp,DC=local" "(description=*)"'],
       miss: ['ldapsearch -x -H ldap://10.0.0.1 -s base namingcontexts'],
     },
   },
@@ -172,7 +172,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-user-ldap', 'e-ad-user-users'],
     source: 'oscp-notes',
     match: { bins: ['ldapdomaindump'], all: [String.raw`(^|\s)-u\s`] },
-    matchExamples: { hit: ["ldapdomaindump -u 'corp\\jace' -p 'Pw1' 10.0.0.1 -o ldapdump"], miss: ['ldapdomaindump ldap://10.0.0.1 -o ldapdump'] },
+    matchExamples: { hit: ["ldapdomaindump -u 'corp\\ruth' -p 'Pw1' 10.0.0.1 -o ldapdump"], miss: ['ldapdomaindump ldap://10.0.0.1 -o ldapdump'] },
   },
   // ---------------------------------------------------------------- BloodHound
   {
@@ -186,7 +186,7 @@ const COMMANDS: LibraryCommand[] = [
     why: 'Mark the user owned and run "Shortest paths from owned principals".',
     source: 'oscp-notes',
     match: { bins: ['bloodhound-python', 'bloodhound-ce-python', 'bloodhound.py'] },
-    matchExamples: { hit: ["bloodhound-python -u jace -p 'Pw1' -d corp.local -ns 10.0.0.1 -c All --zip"], miss: ['bloodhound'] },
+    matchExamples: { hit: ["bloodhound-python -u ruth -p 'Pw1' -d corp.local -ns 10.0.0.1 -c All --zip"], miss: ['bloodhound'] },
   },
   {
     id: 'ad-user-bloodhound-nxc',
@@ -198,7 +198,7 @@ const COMMANDS: LibraryCommand[] = [
     goals: ['e-ad-user-bloodhound'],
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP, String.raw`--bloodhound`] },
-    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' --bloodhound -c All"], miss: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' --users"] },
+    matchExamples: { hit: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --bloodhound -c All"], miss: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --users"] },
   },
   {
     id: 'ad-user-sharphound',
@@ -226,8 +226,8 @@ const COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
     match: { bins: impacket('GetUserSPNs'), all: [String.raw`(^|\s)-request(-user)?(?=\s|$)`] },
     matchExamples: {
-      hit: ["impacket-GetUserSPNs corp.local/jace:'Pw1' -dc-ip 10.0.0.1 -request", 'GetUserSPNs.py corp/jace -hashes :abc -request-user svc_sql'],
-      miss: ["impacket-GetUserSPNs corp.local/jace:'Pw1' -dc-ip 10.0.0.1"],
+      hit: ["impacket-GetUserSPNs corp.local/ruth:'Pw1' -dc-ip 10.0.0.1 -request", 'GetUserSPNs.py corp/ruth -hashes :abc -request-user svc_sql'],
+      miss: ["impacket-GetUserSPNs corp.local/ruth:'Pw1' -dc-ip 10.0.0.1"],
     },
   },
   {
@@ -241,8 +241,8 @@ const COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP, String.raw`--kerberoasting`] },
     matchExamples: {
-      hit: ["nxc ldap 10.0.0.1 -u 'jace' -p 'Pw1' -d corp.local --kerberoasting kerb.txt --asreproast asrep.txt"],
-      miss: ["nxc ldap 10.0.0.1 -u jace -p 'Pw1' --asreproast asrep.txt"],
+      hit: ["nxc ldap 10.0.0.1 -u 'ruth' -p 'Pw1' -d corp.local --kerberoasting kerb.txt --asreproast asrep.txt"],
+      miss: ["nxc ldap 10.0.0.1 -u ruth -p 'Pw1' --asreproast asrep.txt"],
     },
   },
   {
@@ -280,7 +280,7 @@ const COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
     match: { bins: impacket('GetNPUsers'), all: [String.raw`(^|\s)-request(?=\s|$)`], none: [String.raw`-no-pass`] },
     matchExamples: {
-      hit: ["impacket-GetNPUsers corp.local/jace:'Pw1' -dc-ip 10.0.0.1 -request"],
+      hit: ["impacket-GetNPUsers corp.local/ruth:'Pw1' -dc-ip 10.0.0.1 -request"],
       miss: ['impacket-GetNPUsers corp.local/ -dc-ip 10.0.0.1 -usersfile users.txt -no-pass'],
     },
   },
@@ -295,7 +295,7 @@ const COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
     match: { bins: NXC, all: [NXC_LDAP, String.raw`--asreproast`], none: NOT_NULL },
     matchExamples: {
-      hit: ["nxc ldap 10.0.0.1 -u 'jace' -p 'Pw1' -d corp.local --kerberoasting kerb.txt --asreproast asrep.txt"],
+      hit: ["nxc ldap 10.0.0.1 -u 'ruth' -p 'Pw1' -d corp.local --kerberoasting kerb.txt --asreproast asrep.txt"],
       miss: ["nxc ldap 10.0.0.1 -u users.txt -p '' --asreproast asrep.txt"],
     },
   },
@@ -333,7 +333,7 @@ const COMMANDS: LibraryCommand[] = [
     why: 'Sets a temporary SPN on each account you can write, roasts it and removes it.',
     source: 'oscp-notes',
     match: { bins: ['python3', 'python', 'targetedkerberoast.py'], all: [String.raw`targetedkerberoast`] },
-    matchExamples: { hit: ["python3 targetedKerberoast.py -v -d corp.local -u jace -p 'Pw1'"], miss: ['python3 -m http.server 80'] },
+    matchExamples: { hit: ["python3 targetedKerberoast.py -v -d corp.local -u ruth -p 'Pw1'"], miss: ['python3 -m http.server 80'] },
   },
   {
     id: 'ad-user-targeted-powerview',

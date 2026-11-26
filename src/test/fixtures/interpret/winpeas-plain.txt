@@ -58,7 +58,7 @@ ADVISORY: winpeas should be used for authorized penetration testing and/or educa
 
 ����͹ Display information about local users (T1087.001)
    Computer Name           :   MS01
-   User Name               :   jay
+   User Name               :   zoe
    User Id                 :   1004
    Is Enabled              :   True
    User Type               :   Administrator

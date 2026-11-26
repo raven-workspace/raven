@@ -47,7 +47,7 @@ export default function UiGallery() {
         <Section title="Field · Input · Select">
           <div className="ui-gallery__stack">
             <Field label="Name" hint="Shown on the dashboard.">
-              <Input placeholder="Mock exam A" />
+              <Input placeholder="Mock exam" />
             </Field>
             <Field label="Scope" error="10.10.0.300/24 is not a valid CIDR.">
               <Input mono defaultValue="10.10.0.300/24" />
@@ -100,7 +100,7 @@ export default function UiGallery() {
             }
           >
             <Field label="Name">
-              <Input autoFocus placeholder="Mock exam A" />
+              <Input autoFocus placeholder="Mock exam" />
             </Field>
           </Dialog>
         </Section>

@@ -29,7 +29,7 @@
     { "do": "noteSave", "args": ["$gone", null, "doomed notes", false] },
     { "do": "noteSave", "args": ["$gone", "$h", "doomed host notes", true] },
     { "do": "ruledOutCreate", "args": [{ "engagementId": "$gone", "text": "SQLi", "reason": "parameterised" }] },
-    { "do": "credentialCreate", "args": ["$gone", { "type": "password", "username": "drew", "secret": "Autumn2026!" }], "bind": { "cred": "credential.id" } },
+    { "do": "credentialCreate", "args": ["$gone", { "type": "password", "username": "omar", "secret": "Autumn2026!" }], "bind": { "cred": "credential.id" } },
     { "do": "usernameCreate", "args": ["$gone", { "username": "erin" }], "as": "erin" },
     { "do": "accessGrantCreate", "args": ["$gone", { "usernameId": "$erin", "hostId": "$h", "level": "admin", "via": "psexec" }] },
     { "do": "credAttemptsUpsert", "args": ["$gone", [{ "credId": "$cred", "hostId": "$h", "service": "http", "result": "valid" }]] },

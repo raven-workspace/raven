@@ -39,7 +39,7 @@ import { loadTickContext } from "../checklist/ticks";
 // What an output proves (the proofs the store files, `extraction_file`), and the summary of what the store filed.
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
-/** An impacket target (`corp.lan/jay:pw@10.10.1.5`): the host the dump came from, whatever the shell. */
+/** An impacket target (`corp.lan/zoe:pw@10.10.1.5`): the host the dump came from, whatever the shell. */
 const IMPACKET_TARGET = /@(\d{1,3}(?:\.\d{1,3}){3})(?=\s|$)/;
 
 export const NOTHING_NEW: ExtractionSummary = { wins: [], counts: ["Nothing new: already recorded"], ticks: [] };

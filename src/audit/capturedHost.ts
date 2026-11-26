@@ -1,5 +1,5 @@
-// xfer03: a mock-exam host captured the way the owner really captures (real engagement "Mock exam A", host Vega,
-// 2026-11-12), built by running the pastes through Raven's own capture code rather than by writing log rows by hand:
+// xfer03: a mock-exam host captured the way the owner really captures,
+// built by running the pastes through Raven's own capture code rather than by writing log rows by hand:
 // the draft builder (`buildDraft`, the kind, title, host and content a save stores), the pasted-credential reader and
 // the nxc intake planner (`planCredentialIntake`, the credential results a save files). The capture form's own rules
 // (src/features/capture/resolve.ts: the host preset when capture is opened from the host's view, the flag kind from the

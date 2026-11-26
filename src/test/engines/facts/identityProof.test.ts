@@ -39,14 +39,14 @@ describe("flag proof as a transcript", () => {
   });
 
   it("Windows cmd chain in a proof yields the administrator", () => {
-    const proof = "C:\\Users\\jay\\Desktop> whoami & hostname & ipconfig\nsrv13\\administrator\nSRV13\n\nWindows IP Configuration";
+    const proof = "C:\\Users\\zoe\\Desktop> whoami & hostname & ipconfig\nsrv13\\administrator\nSRV13\n\nWindows IP Configuration";
     expect(usernames(flag(proof, "Kali (VM)"), SRV13)).toEqual(["srv13\\administrator"]);
   });
 });
 
 describe("parseIdentity on chains led by whoami / id", () => {
   it("whoami & hostname & ipconfig reads the first output line", () => {
-    expect(parseIdentity("C:\\Users\\jay\\Desktop> whoami & hostname & ipconfig", "srv13\\administrator\nSRV13\n...")).toEqual({
+    expect(parseIdentity("C:\\Users\\zoe\\Desktop> whoami & hostname & ipconfig", "srv13\\administrator\nSRV13\n...")).toEqual({
       username: "srv13\\administrator", privileges: [], groups: [],
     });
   });

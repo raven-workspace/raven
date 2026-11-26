@@ -985,11 +985,11 @@ mod tests {
         c.prepare(sql).unwrap().query_map([], |r| r.get(0)).unwrap().map(|x| x.unwrap()).collect()
     }
 
-    /// What earlier work left: dina failed with Synth01! on SRV12's SSH (entry l0), a stored NT hash for paul, SSH on
+    /// What earlier work left: dina failed with Synth01! on SRV12's SSH (entry l0), a stored NT hash for noah, SSH on
     /// SRV12, and who the user is there.
     fn earlier_work(c: &Connection) {
         tried(c, "t1", "dina", "CORP", "Synth01!", "ssh", "l0");
-        let hash = credentials::create(c, "e", cred("hash", "paul", Some("corp.lan"), "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f")).unwrap();
+        let hash = credentials::create(c, "e", cred("hash", "noah", Some("corp.lan"), "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f")).unwrap();
         c.execute("UPDATE credentials SET id='cH' WHERE id=?1", [hash.credential.id]).unwrap();
         c.execute(
             "INSERT INTO services (id,host_id,port,protocol,state,nmap_service,nmap_version,created_at,updated_at) \
@@ -998,7 +998,7 @@ mod tests {
         )
         .unwrap();
         c.execute(
-            "INSERT INTO host_identity (host_id,username,privileges,groups,entry_id,updated_at) VALUES ('h1','corp\\jay','[]','[]','l0',1)",
+            "INSERT INTO host_identity (host_id,username,privileges,groups,entry_id,updated_at) VALUES ('h1','corp\\zoe','[]','[]','l0',1)",
             [],
         )
         .unwrap();
@@ -1020,7 +1020,7 @@ mod tests {
             ],
             identity: Some(IdentityProof {
                 host_id: "h1".into(),
-                username: "corp\\jay".into(),
+                username: "corp\\zoe".into(),
                 privileges: vec!["SeImpersonatePrivilege".into()],
                 groups: vec![],
             }),
@@ -1178,9 +1178,9 @@ mod tests {
     #[test]
     fn a_credential_takes_over_only_the_tried_pairs_in_its_domain() {
         let c = vault();
-        tried(&c, "tNetbios", "jay", "CORP", "Synth999!", "ssh", "l0");
-        tried(&c, "tOther", "jay", "corp.local", "Synth999!", "ssh", "l0");
-        let proofs = ExtractionProofs { credentials: vec![cred("password", "jay", Some("corp.lan"), "Synth999!")], ..Default::default() };
+        tried(&c, "tNetbios", "zoe", "CORP", "Synth999!", "ssh", "l0");
+        tried(&c, "tOther", "zoe", "corp.local", "Synth999!", "ssh", "l0");
+        let proofs = ExtractionProofs { credentials: vec![cred("password", "zoe", Some("corp.lan"), "Synth999!")], ..Default::default() };
         let r = file(&c, "e", "l1", &proofs).unwrap().extraction.record;
         assert_eq!(ids(&c, "SELECT id FROM tried_pairs"), vec!["tOther"]);
         assert_eq!(r.promoted_tried_pairs[0].tried_pairs.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), vec!["tNetbios"]);
@@ -1193,13 +1193,13 @@ mod tests {
     fn promoted_pairs_stay_promoted_while_another_entry_proves_the_credential() {
         let c = vault();
         entry(&c, "l2", 20);
-        tried(&c, "t1", "jay", "corp.lan", "Synth999!", "ssh", "l0");
-        let jay = || ExtractionProofs { credentials: vec![cred("password", "jay", Some("corp.lan"), "Synth999!")], ..Default::default() };
-        file(&c, "e", "l1", &jay()).unwrap();
-        // l2 dumps jay again: it proves the credential l1 created.
-        assert_eq!(file(&c, "e", "l2", &jay()).unwrap().extraction.record.reproved_credential_ids.len(), 1);
+        tried(&c, "t1", "zoe", "corp.lan", "Synth999!", "ssh", "l0");
+        let zoe = || ExtractionProofs { credentials: vec![cred("password", "zoe", Some("corp.lan"), "Synth999!")], ..Default::default() };
+        file(&c, "e", "l1", &zoe()).unwrap();
+        // l2 dumps zoe again: it proves the credential l1 created.
+        assert_eq!(file(&c, "e", "l2", &zoe()).unwrap().extraction.record.reproved_credential_ids.len(), 1);
         undo(&c, "l1").unwrap();
-        assert_eq!(ids(&c, "SELECT username FROM credentials"), vec!["jay"]);
+        assert_eq!(ids(&c, "SELECT username FROM credentials"), vec!["zoe"]);
         assert!(ids(&c, "SELECT id FROM tried_pairs").is_empty());
         assert_eq!(ids(&c, "SELECT log_entry_id FROM cred_attempts"), vec!["l0"]);
     }
@@ -1226,7 +1226,7 @@ mod tests {
     #[test]
     fn a_hash_cracked_before_is_proved_again_with_its_password() {
         let c = vault();
-        let hash = credentials::create(&c, "e", cred("hash", "paul", Some("corp.lan"), "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f")).unwrap().credential;
+        let hash = credentials::create(&c, "e", cred("hash", "noah", Some("corp.lan"), "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f")).unwrap().credential;
         let pw = credentials::crack(&c, &hash.id, "Winter2000!").unwrap();
         let crack = CrackProof { plaintext: "Winter2000!".into(), credential_ids: vec![hash.id.clone()], proof_credentials: vec![] };
         let filed = file(&c, "e", "l1", &ExtractionProofs { cracks: vec![crack], ..Default::default() }).unwrap();
@@ -1238,7 +1238,7 @@ mod tests {
     fn a_crack_can_name_a_hash_dumped_in_the_same_save() {
         let c = vault();
         let proofs = ExtractionProofs {
-            credentials: vec![cred("hash", "paul", Some("corp.lan"), "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f")],
+            credentials: vec![cred("hash", "noah", Some("corp.lan"), "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f")],
             cracks: vec![CrackProof { plaintext: "Winter2000!".into(), credential_ids: vec![], proof_credentials: vec![0] }],
             ..Default::default()
         };
@@ -1264,7 +1264,7 @@ mod tests {
     fn an_unchanged_identity_is_not_written() {
         let c = vault();
         earlier_work(&c);
-        let identity = IdentityProof { host_id: "h1".into(), username: "corp\\jay".into(), privileges: vec![], groups: vec![] };
+        let identity = IdentityProof { host_id: "h1".into(), username: "corp\\zoe".into(), privileges: vec![], groups: vec![] };
         let filed = file(&c, "e", "l1", &ExtractionProofs { identity: Some(identity), ..Default::default() }).unwrap();
         assert!(!filed.identity_changed && filed.extraction.record.identity_before.is_empty());
         assert_eq!(host_facts::identity_get(&c, "h1").unwrap().unwrap().entry_id.as_deref(), Some("l0"));
@@ -1273,13 +1273,13 @@ mod tests {
     #[test]
     fn a_record_stored_before_promotions_were_recorded_still_undoes() {
         let c = vault();
-        // What the earlier frontend filed for l1 (an nxc hit for jay, whose l0 failure it promoted, and a failed pair
+        // What the earlier frontend filed for l1 (an nxc hit for zoe, whose l0 failure it promoted, and a failed pair
         // for sam) and the record it stored, in that record's shape: no promotedTriedPairs.
-        let jay = credentials::create(&c, "e", cred("password", "jay", Some("corp.lan"), "Synth999!")).unwrap().credential;
+        let zoe = credentials::create(&c, "e", cred("password", "zoe", Some("corp.lan"), "Synth999!")).unwrap().credential;
         c.execute(
             "INSERT INTO cred_attempts (id,engagement_id,cred_id,host_id,service,result,auth_mode,log_entry_id,at) VALUES \
              ('aHit','e',?1,'h1','smb','valid','domain','l1',10), ('aPromoted','e',?1,'h1','ssh','failed','domain','l0',5)",
-            [&jay.id],
+            [&zoe.id],
         )
         .unwrap();
         tried(&c, "tSam", "sam", "corp.lan", "Guess1", "smb", "l1");
@@ -1288,7 +1288,7 @@ mod tests {
               "createdCredentialIds":["{}"],"credentialsBefore":[],"createdUsernameIds":[],"createdAttemptIds":["aHit","aPromoted"],
               "attemptsBefore":[],"createdTriedPairIds":["tSam"],"createdVectorIds":[],"outputTicks":[],
               "reprovedCredentialIds":[],"reprovedUsernameIds":[]}}"#,
-            jay.id
+            zoe.id
         );
         c.execute(
             "INSERT INTO extractions (log_entry_id,engagement_id,summary,record,created_at) VALUES ('l1','e','{\"wins\":[],\"counts\":[],\"ticks\":[]}',?1,?2)",
@@ -1301,7 +1301,7 @@ mod tests {
         // credential.
         assert!(ids(&c, "SELECT id FROM tried_pairs").is_empty());
         assert_eq!(ids(&c, "SELECT id FROM cred_attempts"), vec!["aPromoted"]);
-        assert_eq!(ids(&c, "SELECT id FROM credentials"), vec![jay.id]);
+        assert_eq!(ids(&c, "SELECT id FROM credentials"), vec![zoe.id]);
     }
 
     /// Adds WEB01 (`hW`) and sql01.corp.lan (`hS`) to the vault.
@@ -1420,20 +1420,20 @@ mod tests {
         assert_eq!(scopes, vec!["unknown", "unknown"]);
     }
 
-    /// The stored local credential jay / Winter2024! on WEB01, which the reuse tests find again on SQL01.
+    /// The stored local credential zoe / Winter2024! on WEB01, which the reuse tests find again on SQL01.
     fn jen_on_web(c: &Connection) -> Credential {
         two_windows_hosts(c);
-        credentials::create(c, "e", local_cred("password", "jay", "Winter2024!", "hW")).unwrap().credential
+        credentials::create(c, "e", local_cred("password", "zoe", "Winter2024!", "hW")).unwrap().credential
     }
 
     #[test]
     fn a_local_account_whose_name_and_secret_are_stored_for_another_host_is_password_reuse() {
         let c = vault();
         let web = jen_on_web(&c);
-        // nxc --local-auth against SQL01: `SQL01\JAY:Winter2024!`. The frontend finds the stored credential by name and
+        // nxc --local-auth against SQL01: `SQL01\ZOE:Winter2024!`. The frontend finds the stored credential by name and
         // secret, so its result is an attempt of that credential, and plans the local username.
         let spray = IntakeProof {
-            usernames: vec![PlannedUsername { key: "k-jay".into(), input: user("JAY", Some("."), Some("hS")) }],
+            usernames: vec![PlannedUsername { key: "k-zoe".into(), input: user("ZOE", Some("."), Some("hS")) }],
             attempts: vec![PlannedAttempt { cred_id: web.id.clone(), auth_mode: Some("local".into()), ..attempt("hS", "smb", "valid") }],
             ..Default::default()
         };
@@ -1446,7 +1446,7 @@ mod tests {
         assert_eq!(tried, vec![(web.id.clone(), "hS".into(), "valid".into(), "local".into())]);
 
         // A dump on SQL01 holding the same account and secret: no new credential, an attempt of the stored one there.
-        let dump = ExtractionProofs { credentials: vec![local_cred("password", "Jay", "Winter2024!", "hS")], ..Default::default() };
+        let dump = ExtractionProofs { credentials: vec![local_cred("password", "Zoe", "Winter2024!", "hS")], ..Default::default() };
         let r = file(&c, "e", "l0", &dump).unwrap().extraction.record;
         assert!(r.created_credential_ids.is_empty() && r.created_username_ids.is_empty());
         assert_eq!(r.reproved_credential_ids, vec![web.id.clone()]);
@@ -1470,8 +1470,8 @@ mod tests {
     fn a_reused_nt_hash_matches_whatever_its_case() {
         let c = vault();
         two_windows_hosts(&c);
-        let web = credentials::create(&c, "e", local_cred("hash", "jay", &"AB".repeat(16), "hW")).unwrap().credential;
-        let dump = ExtractionProofs { credentials: vec![local_cred("hash", "jay", &"ab".repeat(16), "hS")], ..Default::default() };
+        let web = credentials::create(&c, "e", local_cred("hash", "zoe", &"AB".repeat(16), "hW")).unwrap().credential;
+        let dump = ExtractionProofs { credentials: vec![local_cred("hash", "zoe", &"ab".repeat(16), "hS")], ..Default::default() };
         file(&c, "e", "l1", &dump).unwrap();
         assert_eq!(ids(&c, "SELECT id FROM credentials"), vec![web.id.clone()]);
         assert_eq!(ids(&c, "SELECT cred_id || '@' || host_id FROM cred_attempts"), vec![format!("{}@hS", web.id)]);
@@ -1481,24 +1481,24 @@ mod tests {
     fn a_different_secret_or_none_files_a_new_local_username() {
         let c = vault();
         let web = jen_on_web(&c);
-        // nxc --local-auth against SQL01 with another password: a new local credential, and jay's username on SQL01.
+        // nxc --local-auth against SQL01 with another password: a new local credential, and zoe's username on SQL01.
         let other = IntakeProof {
-            usernames: vec![PlannedUsername { key: "k-jay".into(), input: user("jay", Some("."), Some("hS")) }],
-            credentials: vec![pending(local_cred("password", "jay", "Spring2025!", "hS"), true, vec![attempt("hS", "smb", "valid")])],
+            usernames: vec![PlannedUsername { key: "k-zoe".into(), input: user("zoe", Some("."), Some("hS")) }],
+            credentials: vec![pending(local_cred("password", "zoe", "Spring2025!", "hS"), true, vec![attempt("hS", "smb", "valid")])],
             ..Default::default()
         };
         let r = file(&c, "e", "l1", &ExtractionProofs { intake: Some(other), ..Default::default() }).unwrap().extraction.record;
         assert_eq!(r.created_credential_ids.len(), 1);
-        assert_eq!(scoped(&c), vec![("jay".into(), None, "local".into(), Some("hS".into()))]);
+        assert_eq!(scoped(&c), vec![("zoe".into(), None, "local".into(), Some("hS".into()))]);
         let sql_cred = credentials::get(&c, &r.created_credential_ids[0]).unwrap();
         assert_eq!((sql_cred.local_host_id.as_deref(), sql_cred.secret.as_str()), (Some("hS"), "Spring2025!"));
         assert_ne!(sql_cred.id, web.id);
         undo(&c, "l1").unwrap();
 
-        // Enumeration alone (`SQL01\jay`, no secret) files the local username on SQL01 too.
-        let listed = ExtractionProofs { usernames: vec![user("jay", Some("SQL01"), Some("hS"))], ..Default::default() };
+        // Enumeration alone (`SQL01\zoe`, no secret) files the local username on SQL01 too.
+        let listed = ExtractionProofs { usernames: vec![user("zoe", Some("SQL01"), Some("hS"))], ..Default::default() };
         file(&c, "e", "l0", &listed).unwrap();
-        assert_eq!(scoped(&c), vec![("jay".into(), None, "local".into(), Some("hS".into()))]);
+        assert_eq!(scoped(&c), vec![("zoe".into(), None, "local".into(), Some("hS".into()))]);
         assert_eq!(credentials::list(&c, "e").unwrap().len(), 1);
     }
 
@@ -1507,13 +1507,13 @@ mod tests {
         let c = vault();
         let web = jen_on_web(&c);
         let both = IntakeProof {
-            usernames: vec![PlannedUsername { key: "k-jay".into(), input: user("jay", Some("."), Some("hS")) }],
+            usernames: vec![PlannedUsername { key: "k-zoe".into(), input: user("zoe", Some("."), Some("hS")) }],
             attempts: vec![PlannedAttempt { cred_id: web.id.clone(), auth_mode: Some("local".into()), ..attempt("hS", "smb", "valid") }],
-            credentials: vec![pending(local_cred("password", "jay", "Spring2025!", "hS"), true, vec![attempt("hS", "winrm", "valid")])],
+            credentials: vec![pending(local_cred("password", "zoe", "Spring2025!", "hS"), true, vec![attempt("hS", "winrm", "valid")])],
             ..Default::default()
         };
         file(&c, "e", "l1", &ExtractionProofs { intake: Some(both), ..Default::default() }).unwrap();
-        assert_eq!(scoped(&c), vec![("jay".into(), None, "local".into(), Some("hS".into()))]);
+        assert_eq!(scoped(&c), vec![("zoe".into(), None, "local".into(), Some("hS".into()))]);
         assert_eq!(credentials::list(&c, "e").unwrap().len(), 2);
     }
 
@@ -1521,8 +1521,8 @@ mod tests {
     fn deleting_a_host_keeps_the_local_usernames_capture_filed_on_it() {
         let c = vault();
         two_windows_hosts(&c);
-        file(&c, "e", "l1", &ExtractionProofs { usernames: vec![user("jay", Some("."), Some("hW"))], ..Default::default() }).unwrap();
+        file(&c, "e", "l1", &ExtractionProofs { usernames: vec![user("zoe", Some("."), Some("hW"))], ..Default::default() }).unwrap();
         hosts::delete(&c, "hW").unwrap();
-        assert_eq!(scoped(&c), vec![("jay".into(), None, "local".into(), None)]);
+        assert_eq!(scoped(&c), vec![("zoe".into(), None, "local".into(), None)]);
     }
 }

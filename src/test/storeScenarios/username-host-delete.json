@@ -5,9 +5,9 @@
     { "do": "hostCreate", "args": ["$eng", { "name": "WEB01", "ip": "192.0.2.10" }], "as": "web" },
     { "do": "hostCreate", "args": ["$eng", { "name": "SQL01", "ip": "192.0.2.11" }], "as": "sql" },
     { "do": "hostCreate", "args": ["$eng", { "name": "FILES01", "ip": "192.0.2.12" }], "as": "files" },
-    { "do": "usernameCreate", "args": ["$eng", { "username": "jay", "scope": "local", "localHostId": "$web", "sourceHostId": "$web" }], "as": "webJen" },
-    { "do": "usernameCreate", "args": ["$eng", { "username": "jay", "scope": "local", "localHostId": "$sql" }], "as": "sqlJen" },
-    { "do": "usernameCreate", "args": ["$eng", { "username": "jay", "domain": "CORP", "scope": "domain" }], "as": "domJen" },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "scope": "local", "localHostId": "$web", "sourceHostId": "$web" }], "as": "webJen" },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "scope": "local", "localHostId": "$sql" }], "as": "sqlJen" },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "domain": "CORP", "scope": "domain" }], "as": "domJen" },
     { "do": "accessGrantCreate", "args": ["$eng", { "usernameId": "$webJen", "hostId": "$files", "level": "user", "via": "winrm" }] },
 
     { "do": "hostDelete", "args": ["$web"] },
@@ -22,8 +22,8 @@
       ]
     },
     { "do": "accessGrantsList", "args": ["$eng"], "expect": [{ "usernameId": "$webJen", "hostId": "$files" }] },
-    { "do": "usernameCreate", "args": ["$eng", { "username": "jay", "scope": "local" }], "error": { "code": "validation", "field": "localHostId" } },
-    { "do": "usernameCreate", "args": ["$eng", { "username": "jay", "scope": "local", "localHostId": "$files" }], "as": "filesJen" },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "scope": "local" }], "error": { "code": "validation", "field": "localHostId" } },
+    { "do": "usernameCreate", "args": ["$eng", { "username": "zoe", "scope": "local", "localHostId": "$files" }], "as": "filesJen" },
     { "do": "usernamesList", "args": ["$eng"], "expect": [{ "id": "$webJen" }, { "id": "$sqlJen" }, { "id": "$domJen" }, { "id": "$filesJen", "localHostId": "$files" }] }
   ]
 }
