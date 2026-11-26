@@ -69,3 +69,7 @@ docs/
 | [`DESIGN.md`](DESIGN.md) | The Ink design system: tokens, type roles, layout rules, do's and don'ts (full version in `.impeccable/design-full.md`) |
 | [`docs/specs/`](docs/specs/README.md) | Why features work the way they do |
 | [`AGENTS.md`](AGENTS.md) | Instructions for AI coding agents working in the repo |
+
+## Licence
+
+Raven Workspace Community Edition is licensed under the [GNU AGPL-3.0](LICENSE) (`AGPL-3.0-only`). Copyright (C) 2026 Keegan Techentin. Trademark and third-party notices are in [`NOTICE`](NOTICE). Before contributing, read [Licence and ownership](CONTRIBUTING.md#licence-and-ownership).

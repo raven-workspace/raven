@@ -2,6 +2,15 @@
 
 Setup and commands are in the [README](README.md). This file covers how work moves through the repo and the rules the code follows.
 
+## Licence and ownership
+
+Raven Workspace Community Edition is open source under the [GNU AGPL-3.0](LICENSE) (`AGPL-3.0-only`). Keegan Techentin owns and maintains Raven and holds the copyright in its code.
+
+- **Contributor Licence Agreement (CLA):** before your first pull request can be merged, you sign the Raven CLA. You keep the copyright in your contribution and give Keegan Techentin a permanent, irrevocable licence to use, change and relicense it, including in commercial editions of Raven. Pull requests without a signed CLA can't be merged.
+- **Only your own work:** contribute only code you wrote and have the right to give, that no employer or school owns.
+- **Third-party code and data:** ask in the issue before adding anything from another project. Anything added is listed in [`NOTICE`](NOTICE) with its licence.
+- **Name and logo:** the licence covers the code, not the "Raven Workspace" name or logo. See [`NOTICE`](NOTICE).
+
 ## Tracking work
 
 Issues live in Linear, in the **RAV** team: create and work them there. Linear syncs each issue to a GitHub issue, so you'll see them on GitHub too, but those are copies. Don't open or edit issues on GitHub.

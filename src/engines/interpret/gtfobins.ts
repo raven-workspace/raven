@@ -1,4 +1,5 @@
 // Bundled from the GTFOBins repository: https://github.com/GTFOBins/GTFOBins.github.io (_gtfobins/*).
+// GTFOBins is licensed GPL-3.0. Only the binary-to-mechanism mapping is bundled here; see NOTICE.
 // Commit acd524623f9c406acedd2754ebd9c2431f3675ad (2026-05-27), fetched 2026-11-07.
 // Generated from each entry's `contexts:` keys (suid, sudo, capabilities, limited-suid); aliases copy their target.
 // This commit has no limited-suid contexts and no `sh` entry; the type keeps limited-suid for the interface.
