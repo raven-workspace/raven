@@ -56,7 +56,7 @@ The checklist (what they've done, what their options are next) and the host fact
 | `M` | the Manual, at the last note read |
 | `H` | stuck view (on a host) |
 | number keys | engagement sections |
-| `Esc` | closes overlays |
+| `Esc` | backs out: closes an overlay, cancels an edit, leaves a mode. It never selects or does anything else. |
 
 ## Capabilities and Constraints
 
