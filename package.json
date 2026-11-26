@@ -1,6 +1,8 @@
 {
   "name": "raven",
   "private": true,
+  "license": "AGPL-3.0-only",
+  "author": "Keegan Techentin",
   "version": "0.1.0",
   "type": "module",
   "scripts": {

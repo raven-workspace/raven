@@ -28,6 +28,8 @@
     }
   },
   "bundle": {
+    "license": "AGPL-3.0-only",
+    "copyright": "Copyright (C) 2026 Keegan Techentin",
     "active": true,
     "targets": "all",
     "icon": [

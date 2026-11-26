@@ -2,7 +2,8 @@
 name = "raven"
 version = "0.1.0"
 description = "Raven"
-authors = []
+authors = ["Keegan Techentin"]
+license = "AGPL-3.0-only"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
