@@ -100,7 +100,7 @@ describe("guidesOf", () => {
 
   it("reads the garnet draft's guides in page order", () => {
     const garnet = buildPlainTarget(garnetFixtures(1_700_000_000_000), { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] }, {});
-    expect(guidesOf(garnet, "target").slice(0, 4)).toEqual(["result", "ports", "vuln", "steps"]);
+    expect(guidesOf(garnet, "target").slice(0, 4)).toEqual(["result", "ports", "vuln", "exploit"]);
   });
 
   it("reads the summary draft: the page's guide, the findings table, the Recommendations heading", () => {

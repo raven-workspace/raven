@@ -831,7 +831,7 @@
           "content": [
             {
               "type": "text",
-              "text": "Affected: http-git (port 80)"
+              "text": "Affected: grafana (port 3000)"
             }
           ]
         },

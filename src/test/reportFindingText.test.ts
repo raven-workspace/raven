@@ -4,7 +4,7 @@ import { findingBlocks, labelled, terminalBlocks } from "../engines/report";
 import type { ReportNode } from "../engines/report";
 
 const fixtures = examFixtures(1_700_000_000_000);
-const gitCreds = fixtures.findings.find((f) => f.id === "f-exam-grafana-repo")!;
+const grafanaRepo = fixtures.findings.find((f) => f.id === "f-exam-grafana-repo")!;
 
 const all = (n: ReportNode): ReportNode[] => [n, ...(n.content ?? []).flatMap(all)];
 const textOf = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map(textOf).join("");
@@ -12,12 +12,12 @@ const doc = (blocks: ReportNode[]): ReportNode => ({ type: "doc", content: block
 
 describe("terminalBlocks", () => {
   it("splits the grafana-repo description into prose, the pasted commit and diff as code, then prose", () => {
-    const runs = terminalBlocks(gitCreds.description);
+    const runs = terminalBlocks(grafanaRepo.description);
     expect(runs.map((r) => r.kind)).toEqual(["prose", "code", "prose"]);
-    expect(runs[1].text.startsWith("commit 4be1")).toBe(true);
-    expect(runs[1].text.endsWith("+} +?>")).toBe(true);
-    expect(runs[1].text).toContain('-    private $password = "CopperKite71";');
-    expect(runs[2].text.trim()).toBe("Affected: http-git (port 80)");
+    expect(runs[1].text.startsWith("commit 7d41")).toBe(true);
+    expect(runs[1].text.endsWith("       maxOpenConns: 10")).toBe(true);
+    expect(runs[1].text).toContain("+      password: CopperKite71");
+    expect(runs[2].text.trim()).toBe("Affected: grafana (port 3000)");
   });
 
   it("takes a fenced block as code, fences dropped", () => {
@@ -68,10 +68,10 @@ describe("findingBlocks", () => {
   });
 
   it("reads the grafana-repo description as prose, the diff in a code block, inline code as a code mark, no italics", () => {
-    const blocks = doc(findingBlocks(gitCreds.description));
+    const blocks = doc(findingBlocks(grafanaRepo.description));
     expect(blocks.content!.find((n) => n.type === "codeBlock")?.content?.[0].text).toContain("diff --git a/datasources/mysql.yaml");
     expect(all(blocks).some((n) => n.marks?.some((m) => m.type === "italic"))).toBe(false);
-    expect(all(blocks).some((n) => n.text === "/.git/" && n.marks?.some((m) => m.type === "code"))).toBe(true);
+    expect(all(blocks).some((n) => n.text === "/opt/grafana-provisioning" && n.marks?.some((m) => m.type === "code"))).toBe(true);
   });
 
   it("reads a pipe table as a table", () => {

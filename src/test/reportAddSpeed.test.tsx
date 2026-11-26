@@ -81,7 +81,7 @@ describe("placing evidence never builds a draft", () => {
 
   it("+ add reads the same plan for the entry it places", async () => {
     const editor = await ready(bare);
-    const entry = garnet.log.find((e) => e.id === "l-garnet-head")!;
+    const entry = garnet.log.find((e) => e.id === "l-garnet-version")!;
     plans.mockClear();
     drafts.mockClear();
     act(() => void insertEntry(editor, garnet, target, entry, false));
