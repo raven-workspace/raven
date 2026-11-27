@@ -10,17 +10,23 @@
 #
 # A failing check fails its job, and so the PR. Within a job, later checks still run, so one red
 # run shows every failure at once.
+#
+# The Rust cache is saved only by runs on develop. A PR can restore its base branch's caches but
+# not another PR's, so the push run after each merge keeps every PR's first run warm, and PRs
+# don't fill the repo's 10 GB cache quota with copies of their own.
 name: CI
 
 on:
   pull_request:
     branches: [develop, main]
+  push:
+    branches: [develop]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -121,6 +127,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: src-tauri
+          save-if: ${{ github.ref == 'refs/heads/develop' }}
 
       # RAV-69: Zig 0.17 and the libghostty-vt build cache go here, once the terminal spike settles
       # how libghostty-vt is built. They feed the `terminal` Cargo feature (docs/specs/terminal.md §4),
