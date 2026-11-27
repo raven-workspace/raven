@@ -25,7 +25,8 @@ impl DataPaths {
             .path()
             .app_data_dir()
             .map_err(|e| AppError::Io(e.to_string()))?;
-        let dir = if cfg!(debug_assertions) { "raven-dev" } else { "raven" };
+        let override_dir = std::env::var(DATA_DIR_ENV).ok();
+        let dir = data_dir_name(cfg!(debug_assertions), override_dir.as_deref())?;
         DataPaths::prepare(base.join(dir))
     }
 
@@ -38,6 +39,34 @@ impl DataPaths {
         tighten_existing(&paths, set_mode);
         Ok(paths)
     }
+}
+
+/// Debug builds only: the data folder to use instead of `raven-dev`, so a run of in-progress work
+/// (`npm run tauri:overhaul`) never migrates the vault a plain `tauri dev` opens. Release builds ignore it.
+pub const DATA_DIR_ENV: &str = "RAVEN_DATA_DIR";
+
+/// The data folder's name under the app data dir. Release: `raven`. Debug: `raven-dev`, or the
+/// `RAVEN_DATA_DIR` override. The override is a folder name, not a path, and must start with `raven-`
+/// (lowercase letters, digits and `-`), so it can't point at the release vault or outside the app data dir.
+/// A bad override is an error, not a fallback: a typo must never quietly open the `raven-dev` vault.
+fn data_dir_name(debug: bool, override_dir: Option<&str>) -> AppResult<String> {
+    if !debug {
+        return Ok("raven".into());
+    }
+    let Some(name) = override_dir.filter(|n| !n.is_empty()) else {
+        return Ok("raven-dev".into());
+    };
+    let rest = name.strip_prefix("raven-").unwrap_or("");
+    let valid = !rest.is_empty() && rest.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if !valid {
+        return Err(AppError::Validation {
+            field: DATA_DIR_ENV.into(),
+            message: format!(
+                "{DATA_DIR_ENV} must be a folder name like raven-overhaul (raven- then lowercase letters, digits or -), got {name:?}"
+            ),
+        });
+    }
+    Ok(name.into())
 }
 
 /// Best-effort 0600 on existing files (db, vault.json, backups). A file we can't chmod
@@ -100,6 +129,35 @@ mod tests {
         assert_eq!(p.vault_meta, PathBuf::from("/x/vault.json"));
         assert_eq!(p.backups, PathBuf::from("/x/backups"));
         assert_eq!(p.root, PathBuf::from("/x"));
+    }
+
+    #[test]
+    fn release_always_uses_raven_and_ignores_the_override() {
+        assert_eq!(data_dir_name(false, None).unwrap(), "raven");
+        assert_eq!(data_dir_name(false, Some("raven-overhaul")).unwrap(), "raven");
+        assert_eq!(data_dir_name(false, Some("../elsewhere")).unwrap(), "raven");
+    }
+
+    #[test]
+    fn debug_uses_raven_dev_without_an_override() {
+        assert_eq!(data_dir_name(true, None).unwrap(), "raven-dev");
+        assert_eq!(data_dir_name(true, Some("")).unwrap(), "raven-dev");
+    }
+
+    #[test]
+    fn debug_override_picks_its_own_folder() {
+        assert_eq!(data_dir_name(true, Some("raven-overhaul")).unwrap(), "raven-overhaul");
+        assert_eq!(data_dir_name(true, Some("raven-rav-71")).unwrap(), "raven-rav-71");
+    }
+
+    #[test]
+    fn debug_override_rejects_anything_but_a_raven_folder_name() {
+        for bad in ["raven", "raven-", "overhaul", "Raven-overhaul", "raven-Overhaul", "raven-a/b", "raven-../x", "/tmp/raven-x", "raven- x"] {
+            assert!(
+                matches!(data_dir_name(true, Some(bad)), Err(AppError::Validation { .. })),
+                "{bad:?} should be rejected"
+            );
+        }
     }
 
     #[cfg(unix)]

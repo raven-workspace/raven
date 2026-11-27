@@ -34,7 +34,7 @@ Issues live in Linear, in the **RAV** team: create and work them there. Linear s
 2. **Commit in conventional form:** `type(scope): subject`, with the scope a feature area, for example `fix(services): list services in port order`.
    - `feat`, `fix`, `perf` and `style` are for shipped, user-visible changes only, because those commits feed a public build log.
    - Everything else uses `refactor`, `chore`, `build`, `ci`, `docs` or `test`.
-3. **Open the PR against `develop`.** `main` takes releases from `develop`. A PR body has three parts:
+3. **Open the PR against `develop`.** `main` takes releases from `develop`, and nothing is committed on `main` directly. Hotfixes are no exception: branch `fix/rav-<n>-…` from `develop`, merge it there, then release `develop` to `main`. A PR body has three parts:
    - **Summary:** the change as a small diagram, tree or diff sketch.
    - **Evidence:** a before and after, as a screenshot, test run or command output.
    - **Merge danger:** whether the change is easy to walk back (a two-way door) or not (one-way), and its blast radius.
@@ -51,7 +51,9 @@ CI runs the same checks on every PR, judged by the hooks on the base branch, so 
 
 Raven's vault holds real engagement data (since 2026-10-25). Treat every schema change as irreversible for the owner.
 
-- **Change the schema only through a new numbered migration** in `src-tauri/migrations/`. Never edit one that has shipped.
+- **Change the schema only through a new numbered migration** in `src-tauri/migrations/`. A migration counts as shipped once it merges to `develop`, because the owner runs `develop` on the real vault: never edit it after that. A mistake gets a new migration that fixes it.
+- **Try migrations against a separate vault.** On a feature branch, run `npm run tauri:overhaul`, which opens its own vault (`raven-overhaul`, picked by `RAVEN_DATA_DIR` in debug builds). Plain `tauri dev` opens the real dev vault, and once it has been migrated, `develop` can't open it until the migration lands there too.
+- **During the terminal overhaul, migrations only add** tables or nullable columns. Nothing is renamed, reshaped or dropped until the old layout is removed (RAV-90); see `docs/specs/terminal.md` §4.
 - **Leave the backup to the runner:** it copies an existing database before any change and applies all pending migrations in one transaction.
   - A migration's SQL must not contain `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT` or `VACUUM`.
   - A table rebuild that needs foreign keys off starts with the line `-- raven:foreign-keys-off`.
