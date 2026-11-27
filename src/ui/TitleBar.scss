@@ -1,7 +1,8 @@
 @use "@/styles/abstracts" as *;
 
 // The 38px window chrome. Content is pinned to the window edges: the wordmark after 94px on the left (the macOS traffic
-// lights' 78px plus 16px of air), the controls 24px from the right.
+// lights' 78px plus 16px of air), the controls 24px from the right. On Linux the desktop's own title bar sits above, so
+// the wordmark sits 24px from the left edge too.
 @layer components {
   .title-bar {
     display: grid;
@@ -16,6 +17,10 @@
     @include type(meta);
     color: var(--muted-2);
     user-select: none;
+  }
+
+  .title-bar--below-native {
+    padding-left: var(--space-xl);
   }
 
   .title-bar__left {
