@@ -1,5 +1,6 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { isDialogOpen } from "../../../lib/keys";
+import { keyLabel, matches, SHORTCUTS } from "../../../lib/shortcuts";
 import type { Engagement } from "../../../types/engagement";
 import { BELOW_TITLE_BAR, Kbd, Toolbar, labelClass, useDrawerPresence } from "../../../ui/index";
 import { cx } from "../../../lib/cx";
@@ -49,7 +50,7 @@ export function NotesPanel({ engagement, hostId }: { engagement: Engagement; hos
       if (e.key === "Escape") {
         e.preventDefault();
         close();
-      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "e" && hostId) {
+      } else if (matches(SHORTCUTS.notesScope, e) && hostId) {
         e.preventDefault();
         setScope(scope === "host" ? "engagement" : "host");
       }
@@ -142,7 +143,7 @@ function PanelBody({
               Engagement
             </Segment>
           </div>
-          <Kbd aria-hidden>⌘E</Kbd>
+          <Kbd aria-hidden>{keyLabel(SHORTCUTS.notesScope)}</Kbd>
         </Toolbar>
       </header>
       <NoteEditor target={target} textRef={textRef} className="notes-panel__editor" />

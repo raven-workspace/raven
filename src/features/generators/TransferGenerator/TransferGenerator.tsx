@@ -13,6 +13,7 @@ import { useFillBase } from "../../commands/fillData";
 import { FilePicker } from "../FilePicker/FilePicker";
 import { RavenError } from "../../../types/errors";
 import "./TransferGenerator.scss";
+import { keyLabel, matches, SHORTCUTS } from "../../../lib/shortcuts";
 
 type Os = "windows" | "linux";
 const DEFAULT_DIR: Record<Os, string> = { windows: "C:\\Windows\\Temp", linux: "/tmp" };
@@ -104,7 +105,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
   // The target half as one command, a line each, so the cleanup list sees every line; it runs on the target.
   const targetCmd = method && target.length > 0 ? joinCommands(`transfer:${method.id}`, method.label, target) : null;
   const focusToken = useCallback((t: string) => (t === "FILE" || t === "SCRIPT" ? fileRef.current?.focus() : focusOuter(t)), [focusOuter]);
-  const guard = useCommandCopy({ to: copyTo({ d, host }), focusToken, repeatKey: "⌘↵ or Copy" });
+  const guard = useCommandCopy({ to: copyTo({ d, host }), focusToken, repeatKey: `${keyLabel(SHORTCUTS.copyAndLog)} or Copy` });
   const logTarget = async () => {
     setStatus(undefined);
     if (!targetCmd || !guard.canLog) return;
@@ -118,7 +119,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
     }
   };
   useKeydown((e) => {
-    if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || e.isComposing || isDialogOpen() || e.defaultPrevented) return;
+    if (!matches(SHORTCUTS.copyAndLog, e) || e.isComposing || isDialogOpen() || e.defaultPrevented) return;
     e.preventDefault();
     void logTarget();
   });
@@ -217,7 +218,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
               <h3 title={hostName} className="transfer-generator__half-title transfer-generator__half-title--truncate">{kali.length > 0 ? "2" : "1"}. On {hostName}</h3>
               <CommandList commands={target} hostName={shortName} focusToken={focusToken} guard={guard} {...(targetCmd ? { guardAs: targetCmd } : {})} />
               <p className="transfer-generator__note">
-                <Kbd>⌘↵</Kbd> copies the {host ? hostName : "target"} half and logs it{host ? "" : " (pick a host)"}.
+                <Kbd>{keyLabel(SHORTCUTS.copyAndLog)}</Kbd> copies the {host ? hostName : "target"} half and logs it{host ? "" : " (pick a host)"}.
               </p>
             </div>
           )}

@@ -6,6 +6,7 @@ import { useEditor, useExtension } from "prosekit/react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Button, IconButton, Input, Toolbar } from "../../../../ui/index";
 import type { EditingExtension } from "../extension";
+import { matches, SHORTCUTS } from "../../../../lib/shortcuts";
 import "./FindBar.scss";
 
 /** A match in the page's text: its range in the document. */
@@ -101,7 +102,7 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
   const onReplaceKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      if (e.metaKey) editor.commands.replaceAll();
+      if (matches(SHORTCUTS.replaceAll, e)) editor.commands.replaceAll();
       else replaceOne();
     } else if (e.key === "Escape") {
       e.preventDefault();

@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
 import { metasploitHostIds, metasploitWarning } from "../../../engines/checklist/index";
 import { useLibrary } from "../../../engines/library/store";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
@@ -130,15 +131,14 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     if (!pd.text.trim().includes("\n")) enterSaves(e);
   }
 
-  /** ⌘ shortcuts; Ctrl, Shift or Alt with them does nothing. */
+  /** The form's chords (⌘ on macOS, Ctrl on Linux); other modifiers with them do nothing. */
   function onKeyDown(e: KeyboardEvent<HTMLElement>) {
-    if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-    const n = Number(e.key);
-    if (Number.isInteger(n) && n >= 1 && n <= KINDS.length) set({ kind: KINDS[n - 1]!.kind });
-    else if (e.key.toLowerCase() === "p") set({ private: !pd.private });
-    else if (e.key === "." && kind === "command") set({ returnedNothing: !pd.returnedNothing });
-    else if (e.key.toLowerCase() === "j" && r.credentials.length) set({ asNote: !pd.asNote });
-    else if (e.key === "Enter") void save();
+    const n = SHORTCUTS.captureKinds.findIndex((sc) => matches(sc, e));
+    if (n >= 0 && n < KINDS.length) set({ kind: KINDS[n]!.kind });
+    else if (matches(SHORTCUTS.capturePrivate, e)) set({ private: !pd.private });
+    else if (matches(SHORTCUTS.captureReturnedNothing, e) && kind === "command") set({ returnedNothing: !pd.returnedNothing });
+    else if (matches(SHORTCUTS.captureAsNote, e) && r.credentials.length) set({ asNote: !pd.asNote });
+    else if (matches(SHORTCUTS.captureSave, e)) void save();
     else return;
     e.preventDefault();
   }
@@ -257,16 +257,16 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
 
         <Toolbar>
           {kind === "command" && (
-            <Toggle on={pd.returnedNothing} keys="⌘." onChange={() => set({ returnedNothing: !pd.returnedNothing })}>
+            <Toggle on={pd.returnedNothing} keys={SHORTCUTS.captureReturnedNothing} onChange={() => set({ returnedNothing: !pd.returnedNothing })}>
               Returned nothing
             </Toggle>
           )}
           {r.credentials.length > 0 && (
-            <Toggle on={!pd.asNote} keys="⌘J" onChange={() => set({ asNote: !pd.asNote })}>
+            <Toggle on={!pd.asNote} keys={SHORTCUTS.captureAsNote} onChange={() => set({ asNote: !pd.asNote })}>
               Add as {r.credentials.length === 1 ? "credential" : "credentials"}
             </Toggle>
           )}
-          <Toggle on={pd.private} keys="⌘P" onChange={() => set({ private: !pd.private })}>
+          <Toggle on={pd.private} keys={SHORTCUTS.capturePrivate} onChange={() => set({ private: !pd.private })}>
             Private
           </Toggle>
         </Toolbar>

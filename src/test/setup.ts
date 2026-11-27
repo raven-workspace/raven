@@ -1,9 +1,15 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
+import { setOs } from '../lib/shortcuts';
 
 // Vitest globals are off, so Testing Library can't register its own cleanup.
 afterEach(() => cleanup());
+
+// The suite presses ⌘ chords, as drawn: on every runner (CI runs Linux too) the keys are macOS's unless a test pins
+// Linux itself. jsdom's navigator.platform is empty, so it would otherwise read as Linux.
+setOs('mac');
+afterEach(() => setOs('mac'));
 
 // jsdom gaps that Radix Select relies on.
 globalThis.ResizeObserver ??= class {

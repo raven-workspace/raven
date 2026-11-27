@@ -6,6 +6,7 @@ import { highlight as highlightText, rangesOf } from "../../../ui/highlight";
 import { useNoteCommand, type FillBase } from "../useNoteCommand";
 import { escapeRegExp } from "../../../engines/regex";
 import "./InlineCommand.scss";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 
 /**
  * An inline code span that reads as a command (`isInlineCommand`), filled for the host in view and copied on click:
@@ -26,7 +27,7 @@ export function InlineCommand({ command, base, highlight }: { command: LibraryCo
   });
 
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
-    if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.nativeEvent.isComposing) return;
+    if (!matches(SHORTCUTS.copyAndLog, e) || e.nativeEvent.isComposing) return;
     e.preventDefault();
     e.stopPropagation();
     void copyAndLog();

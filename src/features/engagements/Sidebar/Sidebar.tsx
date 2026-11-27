@@ -29,6 +29,7 @@ import {
   SidebarSeparator,
 } from "../../../ui/shadcn/sidebar";
 import { isDialogOpen, useKeydown } from "../../../lib/keys";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 import type { Host } from "../../../types/host";
 import { HostDialog } from "../../hosts/HostDialog/HostDialog";
 import { HostGlyph } from "../../hosts/HostGlyph/HostGlyph";
@@ -175,9 +176,9 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
   const toggle = useSidebarStore((s) => s.toggle);
   const list = hosts.data ?? [];
 
-  // ⌘B is a meta chord, so `isFreeKey` (which refuses meta) does not apply; a dialog still wins.
+  // ⌘B (Ctrl+B on Linux) is a chord, so `isFreeKey` (which refuses modifiers) does not apply; a dialog still wins.
   useKeydown((e) => {
-    if (e.key.toLowerCase() !== "b" || !e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented || isDialogOpen()) return;
+    if (!matches(SHORTCUTS.toggleSidebar, e) || e.defaultPrevented || isDialogOpen()) return;
     e.preventDefault();
     toggle();
   });
@@ -196,7 +197,7 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
               <IconButton
                 icon={SidebarSimple}
                 label={label}
-                shortcut="⌘B"
+                shortcut={SHORTCUTS.toggleSidebar}
                 aria-expanded={!collapsed}
                 onClick={toggle}
               />

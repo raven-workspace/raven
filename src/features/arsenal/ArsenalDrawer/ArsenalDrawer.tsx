@@ -27,6 +27,7 @@ import { usePayloadsStore } from "../../payloads/usePayloadsStore";
 import "./ArsenalDrawer.scss";
 import { useFillScope } from "../useFillScope";
 import { RavenError } from "../../../types/errors";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 
 type Row = ResultRow & ({ kind: "category"; category: string } | { kind: "hit"; hit: ArsenalHit });
 
@@ -198,7 +199,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
       if (!current) return;
       e.preventDefault();
       if (current.kind === "category") openCategory(current.category);
-      else if (current.hit.type === "command") void copyCommand(e.metaKey || e.ctrlKey);
+      else if (current.hit.type === "command") void copyCommand(matches(SHORTCUTS.copyAndLog, e));
       else openHit(current.hit, false);
     } else if (e.key === "ArrowRight" && onList && current && e.currentTarget.selectionStart === e.currentTarget.value.length) {
       // → goes in: a category lists its hits, a card or generator opens, a command opens at its block.
@@ -215,7 +216,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     if (current?.kind !== "hit" || current.hit.type !== "command") return;
     e.preventDefault();
     e.stopPropagation();
-    void copyCommand(e.metaKey || e.ctrlKey);
+    void copyCommand(matches(SHORTCUTS.copyAndLog, e));
   };
   // Enter in one of the preview's fields copies too; Enter on a chip chooses, never copies.
   const onPreviewKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -223,7 +224,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     if (e.target instanceof HTMLElement && e.target.getAttribute("aria-haspopup") === "listbox") return;
     if (current?.kind !== "hit" || current.hit.type !== "command") return;
     e.preventDefault();
-    void copyCommand(e.metaKey || e.ctrlKey);
+    void copyCommand(matches(SHORTCUTS.copyAndLog, e));
   };
 
   const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit };
@@ -240,7 +241,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     return onList
       ? [
           { keys: "↵", label: "copy", priority: 1 },
-          { keys: "⌘↵", label: host ? "copy and log" : "copy and log, no host", priority: 1 },
+          { keys: SHORTCUTS.copyAndLog, label: host ? "copy and log" : "copy and log, no host", priority: 1 },
           { keys: "→", label: "in card", priority: 2 },
           ...pickers,
           { keys: "Esc", label: inCategory ? "back" : "close", priority: 1 },

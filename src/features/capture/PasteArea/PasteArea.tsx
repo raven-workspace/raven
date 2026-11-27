@@ -1,16 +1,17 @@
 import type { ClipboardEvent, KeyboardEvent } from "react";
+import { keyLabel, SHORTCUTS } from "../../../lib/shortcuts";
 import type { LogKind } from "../../../types/log";
 import { XIcon } from "@phosphor-icons/react";
 import { IconButton, Textarea } from "../../../ui/index";
 import type { PastedImage } from "../imagePaste";
 import "./PasteArea.scss";
 
-const PLACEHOLDER: Record<LogKind, string> = {
-  command: "Paste a terminal block",
-  screenshot: "Paste an image (⌘V)",
-  http: "Paste a request (and response)",
-  note: "Anything that isn't a command, screenshot, request or flag: e.g. read the exploit source, CVE-2020-13151 applies (UDF enabled)",
-  flag: "Flag value",
+const PLACEHOLDER: Record<LogKind, () => string> = {
+  command: () => "Paste a terminal block",
+  screenshot: () => `Paste an image (${keyLabel(SHORTCUTS.paste)})`,
+  http: () => "Paste a request (and response)",
+  note: () => "Anything that isn't a command, screenshot, request or flag: e.g. read the exploit source, CVE-2020-13151 applies (UDF enabled)",
+  flag: () => "Flag value",
 };
 
 export interface PasteAreaProps {
@@ -55,7 +56,7 @@ export function PasteArea({ kind, text, image, bindRef, onText, onPaste, onKeyDo
         aria-label="Paste"
         mono
         rows={kind === "note" ? 8 : 10}
-        placeholder={PLACEHOLDER[kind]}
+        placeholder={PLACEHOLDER[kind]()}
         value={text}
         onChange={(e) => onText(e.target.value)}
         onPaste={onPaste}

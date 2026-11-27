@@ -1,13 +1,15 @@
 import type { Icon } from "@phosphor-icons/react";
 import type { ButtonHTMLAttributes } from "react";
 import { cx } from "../lib/cx";
+import { keyLabel, type Keys } from "../lib/shortcuts";
 import { Tooltip } from "./Tooltip";
 import "./IconButton.scss";
 
 export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
   icon: Icon;
   label: string;
-  shortcut?: string;
+  /** Shown in the tooltip: a shortcut (for this OS) or a key that is the same everywhere. */
+  shortcut?: Keys;
   tone?: "default" | "destructive";
   active?: boolean;
 }
@@ -27,7 +29,7 @@ export function IconButton({
       content={
         <>
           <span>{label}</span>
-          {shortcut && <span className="tooltip__key">{shortcut}</span>}
+          {shortcut && <span className="tooltip__key">{keyLabel(shortcut)}</span>}
         </>
       }
     >

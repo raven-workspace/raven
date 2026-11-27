@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKe
 import { SCROLL_PANE } from "../../../ui/controlStyles";
 import { shortHostName, hostLabel } from "../../../lib/hostName";
 import { isDialogOpen, isFreeKey, isTypingTarget } from "../../../lib/keys";
+import { keyLabel, matches, SHORTCUTS } from "../../../lib/shortcuts";
 import type { Finding } from "../../../types/findings";
 import { Button } from "../../../ui/index";
 import { useEngagementServices } from "../../services/queries";
@@ -15,7 +16,7 @@ import "./FindingSplit.scss";
 type Pane = "context" | "editor";
 
 /** ⌘\ by character, or by the physical key where layouts put "\" elsewhere. */
-const isFlipChord = (e: KeyboardEvent) => (e.metaKey || e.ctrlKey) && !e.altKey && (e.key === "\\" || e.code === "Backslash");
+const isFlipChord = (e: KeyboardEvent) => matches(SHORTCUTS.flipSplit, e);
 
 /**
  * Adding or editing a finding, in place: the host's Log, Facts and Notes stay live on the left while the form
@@ -129,7 +130,7 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
       className="finding-split"
     >
       <div className="finding-split__flip">
-        <Button size="sm" title="Flip between the finding and the host (⌘\)" onClick={() => setPane(pane === "editor" ? "context" : "editor")}>
+        <Button size="sm" title={`Flip between the finding and the host (${keyLabel(SHORTCUTS.flipSplit)})`} onClick={() => setPane(pane === "editor" ? "context" : "editor")}>
           {pane === "editor" ? "Show the host's log, facts and notes" : "Back to the finding"}
         </Button>
       </div>

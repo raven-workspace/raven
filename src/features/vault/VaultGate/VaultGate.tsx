@@ -21,6 +21,7 @@ import { applySnapshot, cacheFieldManual, useVaultNewer } from "../../fieldManua
 import { useAutoLock } from "../useAutoLock";
 import { clearSecretClipboard } from "../../../lib/clipboard";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../../lib/keys";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 import { SaveSummary } from "../../capture/SaveSummary/SaveSummary";
 import { ArsenalDrawer } from "../../arsenal/ArsenalDrawer/ArsenalDrawer";
 import { MANUAL_NOTE_ID, manualKeysBlocked } from "../../manual/keys";
@@ -63,8 +64,8 @@ const EVERYWHERE: Hint[] = [
   { keys: "A", label: "Arsenal", priority: 1 },
   { keys: "M", label: "Manual", priority: 1 },
   { keys: "P", label: "Payloads", priority: 1 },
-  { keys: "⌘K", label: "search", priority: 1 },
-  { keys: "⌘L", label: "lock", priority: 1 },
+  { keys: SHORTCUTS.search, label: "search", priority: 1 },
+  { keys: SHORTCUTS.lock, label: "lock", priority: 1 },
 ];
 
 /**
@@ -234,7 +235,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!unlocked) return;
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.altKey || e.shiftKey || e.key.toLowerCase() !== "k") return;
+      if (!matches(SHORTCUTS.search, e)) return;
       e.preventDefault();
       const palette = usePaletteStore.getState();
       if (palette.isOpen) palette.close();
@@ -334,10 +335,10 @@ export function VaultGate({ children }: { children: ReactNode }) {
         <TitleBarButton hint="M" icon={BookOpenText} current={onManual} onClick={openManual}>Manual</TitleBarButton>
         <TitleBarButton hint="P" icon={Package} open={payloadsOpen} onClick={() => usePayloadsStore.getState().toggle()}>Payloads</TitleBarButton>
       </TitleBarGroup>
-      <TitleBarButton hint="⌘K" icon={MagnifyingGlass} onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
+      <TitleBarButton hint={SHORTCUTS.search} icon={MagnifyingGlass} onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
       <TitleBarGroup>
         <TitleBarShortcuts everywhere={EVERYWHERE} />
-        <TitleBarIconButton icon={Lock} label="Lock" shortcut="⌘L" onClick={() => lock()} />
+        <TitleBarIconButton icon={Lock} label="Lock" shortcut={SHORTCUTS.lock} onClick={() => lock()} />
         <span
           title={vaultNewer ? "The Field Manual has changes to import" : undefined}
           className="vault-gate__settings"

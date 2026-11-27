@@ -9,6 +9,7 @@ import { refreshBlocks } from "../../../../engines/report/index";
 import { Button, Dialog, Tooltip } from "../../../../ui/index";
 import { currentRun, deleteBlockAt, isEdited, refreshLabel, refreshRun, sourceRun, type SourceRun } from "../pageActions";
 import { usePageContext } from "../ReportDataContext/ReportDataContext";
+import { keyLabel, SHORTCUTS } from "../../../../lib/shortcuts";
 import { MENU, MENU_ITEM, MENU_ITEM_DESTRUCTIVE, MENU_ITEM_PAGE, walkMenuItems } from "../../menuItems/menuItems";
 
 type Hovered = { node: PMNode; pos: number } | null;
@@ -183,7 +184,7 @@ export function BlockHandle() {
         open={confirm !== null}
         onOpenChange={(open) => !open && setConfirm(null)}
         title="Replace this block with the current version?"
-        description="Your edits to this block are replaced. ⌘Z brings them back."
+        description={`Your edits to this block are replaced. ${keyLabel(SHORTCUTS.undo)} brings them back.`}
         onCloseAutoFocus={(e) => {
           e.preventDefault();
           editor.focus();

@@ -42,6 +42,7 @@ import {
   type SectionMeta,
 } from "../../../engines/report/index";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../../lib/keys";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 import { cx } from "../../../lib/cx";
 import { useWidthRef } from "../../../lib/useWidth";
 import { reportError } from "../../../lib/lockSignal";
@@ -96,14 +97,14 @@ const HINTS: Hint[] = [
   { keys: "↵", label: "open the tab", priority: 2 },
   { keys: "⌥← ⌥→", label: "reorder targets and pages", priority: 3 },
   { keys: "⌥1–3", label: "tabs, page, evidence", priority: 4 },
-  { keys: "⌘↵", label: "insert evidence", priority: 6 },
+  { keys: SHORTCUTS.insertEvidence, label: "insert evidence", priority: 6 },
   { keys: "/", label: "insert on the page", priority: 7 },
-  { keys: "⌘F", label: "find and replace", priority: 8 },
+  { keys: SHORTCUTS.find, label: "find and replace", priority: 8 },
   // ⌘K is search, so the page's link key takes Shift.
-  { keys: "⌘⇧K", label: "link", priority: 9 },
-  { keys: "⌘B ⌘I ⌘U", label: "bold, italic, underline", priority: 10 },
-  { keys: "⌘⇧S ⌘E ⌘⇧H", label: "strikethrough, code, highlight", priority: 11 },
-  { keys: "⌥⌘1 ⌥⌘2 ⌥⌘3 ⌥⌘0", label: "heading 1, 2, 3, paragraph", priority: 12 },
+  { keys: SHORTCUTS.link, label: "link", priority: 9 },
+  { keys: [SHORTCUTS.bold, SHORTCUTS.italic, SHORTCUTS.underline], label: "bold, italic, underline", priority: 10 },
+  { keys: [SHORTCUTS.strikethrough, SHORTCUTS.inlineCode, SHORTCUTS.highlight], label: "strikethrough, code, highlight", priority: 11 },
+  { keys: [SHORTCUTS.heading1, SHORTCUTS.heading2, SHORTCUTS.heading3, SHORTCUTS.paragraph], label: "heading 1, 2, 3, paragraph", priority: 12 },
   { keys: "# ## ###", label: "at a line's start: heading 1, 2, 3", priority: 13 },
   { keys: "- 1. []", label: "at a line's start: bulleted, numbered, task list", priority: 14 },
   { keys: "> ``` ---", label: "at a line's start: quote, code block, divider", priority: 15 },
@@ -753,7 +754,7 @@ function ReportBody({
   });
   // ⌘F: the page's find bar, while focus is anywhere in the Report view (⌘K stays the app's search).
   useKeydown((e) => {
-    if (!e.metaKey || e.altKey || e.ctrlKey || e.shiftKey || e.key.toLowerCase() !== "f" || e.defaultPrevented || isDialogOpen()) return;
+    if (!matches(SHORTCUTS.find, e) || e.defaultPrevented || isDialogOpen()) return;
     if (!pageEditor || !sectionRef.current?.contains(document.activeElement)) return;
     e.preventDefault();
     openFindBar(pageEditor);

@@ -20,6 +20,7 @@ import { Priority } from "prosekit/core";
 import { NodeSelection } from "prosekit/pm/state";
 import { useEditor, useKeymap } from "prosekit/react";
 import { cx } from "../../../../lib/cx";
+import { editorKey, SHORTCUTS } from "../../../../lib/shortcuts";
 import { IconButton, Input, Select, Toolbar } from "../../../../ui/index";
 import { HEADING_TOOLS, keepFocus, TEXT_MARKS, type MarkTool } from "../BubbleMenu/BubbleMenu";
 import { applyLink, BLOCK_KINDS, blockKindAt, inPageHeading, insertTable, linkAt, setBlockKind, type BlockKind, type PageEditor } from "../commands";
@@ -33,14 +34,14 @@ const SCRIPTS: MarkTool[] = [
   {
     icon: TextSubscript,
     label: "Subscript",
-    shortcut: "⌘,",
+    shortcut: SHORTCUTS.subscript,
     run: (e) => e.commands.toggleSubscript(),
     active: (e) => e.marks.subscript.isActive(),
   },
   {
     icon: TextSuperscript,
     label: "Superscript",
-    shortcut: "⌘.",
+    shortcut: SHORTCUTS.superscript,
     run: (e) => e.commands.toggleSuperscript(),
     active: (e) => e.marks.superscript.isActive(),
   },
@@ -94,10 +95,10 @@ export function FormatToolbar({
     setLinkOpen(false);
     editor.focus();
   };
-  // ⌘⇧K with nothing selected and no link under the cursor: the address goes in here (the bubble menu takes the rest).
+  // ⌘⇧K (Ctrl+Shift+K on Linux) with nothing selected and no link under the cursor: the address goes in here (the bubble menu takes the rest).
   const keymap = useMemo(
     () => ({
-      "Mod-Shift-k": () => {
+      [editorKey(SHORTCUTS.link)]: () => {
         if (editor.state.selection instanceof NodeSelection) return false;
         openLink();
         return true;
@@ -229,7 +230,7 @@ export function FormatToolbar({
           key="link"
           icon={Link}
           label="Link"
-          shortcut="⌘⇧K"
+          shortcut={SHORTCUTS.link}
           disabled={!ready || marksOff}
           active={linkOpen || (ready && !marksOff && linkAt(editor) !== "")}
           onMouseDown={keepFocus}
@@ -252,7 +253,7 @@ export function FormatToolbar({
       group: "insert",
       priority: 45,
       width: 28,
-      node: <IconButton key="image" icon={Image} label="Insert image" shortcut="⌘V" disabled={!ready} onMouseDown={keepFocus} onClick={() => actions.pickImage()} />,
+      node: <IconButton key="image" icon={Image} label="Insert image" shortcut={SHORTCUTS.paste} disabled={!ready} onMouseDown={keepFocus} onClick={() => actions.pickImage()} />,
     },
     {
       id: "divider",
@@ -293,7 +294,7 @@ export function FormatToolbar({
       group: "find",
       priority: 50,
       width: 28,
-      node: <IconButton key="find" icon={MagnifyingGlass} label="Find and replace" shortcut="⌘F" disabled={!ready} onClick={onFind} />,
+      node: <IconButton key="find" icon={MagnifyingGlass} label="Find and replace" shortcut={SHORTCUTS.find} disabled={!ready} onClick={onFind} />,
     },
     {
       id: "undo",
@@ -305,7 +306,7 @@ export function FormatToolbar({
           key="undo"
           icon={ArrowCounterClockwise}
           label="Undo"
-          shortcut="⌘Z"
+          shortcut={SHORTCUTS.undo}
           disabled={!ready || !editor.commands.undo.canExec()}
           onMouseDown={keepFocus}
           onClick={() => editor.commands.undo()}
@@ -322,7 +323,7 @@ export function FormatToolbar({
           key="redo"
           icon={ArrowClockwise}
           label="Redo"
-          shortcut="⇧⌘Z"
+          shortcut={SHORTCUTS.redo}
           disabled={!ready || !editor.commands.redo.canExec()}
           onMouseDown={keepFocus}
           onClick={() => editor.commands.redo()}

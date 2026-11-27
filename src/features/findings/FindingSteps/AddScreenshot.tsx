@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import { cx } from "../../../lib/cx";
+import { keyLabel, SHORTCUTS } from "../../../lib/shortcuts";
 import { Button, Input } from "../../../ui/index";
 import { clipboardImage, readImage, releaseImage, type PastedImage } from "../../capture/imagePaste";
 import { saveScreenshot } from "../../log/saveScreenshot";
@@ -89,7 +90,7 @@ export function AddScreenshot({ eid, hostIds, onAdded, onLink, onClose }: {
           <div
             ref={zone}
             tabIndex={0}
-            aria-label="Screenshot: paste (⌘V), drop or choose an image"
+            aria-label={`Screenshot: paste (${keyLabel(SHORTCUTS.paste)}), drop or choose an image`}
             onPaste={onPaste}
             onDragOver={(e) => {
               e.preventDefault();
@@ -102,7 +103,7 @@ export function AddScreenshot({ eid, hostIds, onAdded, onLink, onClose }: {
             {image ? (
               <img src={image.objectUrl} alt="The screenshot to add" className="finding-shot__image" />
             ) : (
-              <span className="finding-shot__prompt">Paste (⌘V) or drop an image here</span>
+              <span className="finding-shot__prompt">Paste ({keyLabel(SHORTCUTS.paste)}) or drop an image here</span>
             )}
           </div>
           <Input

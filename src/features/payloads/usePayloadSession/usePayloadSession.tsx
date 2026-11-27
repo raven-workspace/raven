@@ -19,6 +19,7 @@ import { usePayloadsStore } from "../usePayloadsStore";
 import { RavenError } from "../../../types/errors";
 import { anyDrawerOpen } from "../../drawers";
 import "./usePayloadSession.scss";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 
 /** In ⌥1–⌥6 order. */
 export const GENERATORS: { id: GeneratorId; label: string }[] = [
@@ -37,7 +38,7 @@ export const GENERATORS: { id: GeneratorId; label: string }[] = [
 export function hintsFor(g: GeneratorId, esc: string, extra: Hint[] = [], ordered = false, filter = false): Hint[] {
   const generator: Hint = { keys: "⌥1–6", label: "generator", priority: 5 };
   const tail: Hint[] = [...extra, { keys: "Esc", label: esc, priority: 1 }];
-  const copyLog: Hint = { keys: "⌘↵", label: "copy and log", priority: 3 };
+  const copyLog: Hint = { keys: SHORTCUTS.copyAndLog, label: "copy and log", priority: 3 };
   if (g === "transfer") return [{ ...copyLog, priority: 1 }, generator, ...tail];
   if (g === "sql") return [{ keys: "↵", label: "copy step", priority: 1 }, generator, ...tail];
   if (g === "encode") return [{ keys: "↵", label: "copy payload", priority: 1 }, copyLog, generator, ...tail];
@@ -310,7 +311,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     if (e.key === "Enter" && !e.altKey && !e.shiftKey) {
       if (t.tagName === "BUTTON" || t.getAttribute("aria-haspopup") === "listbox") return;
       e.preventDefault();
-      void copy(e.metaKey || e.ctrlKey);
+      void copy(matches(SHORTCUTS.copyAndLog, e));
     } else if (e.key === "Tab" && !e.shiftKey && ranked && t === bodyRef.current) {
       // ⇥ skips past a key to press (Ctrl-Z): there is nothing to copy there. Past the last fit ⇥ is plain Tab again,
       // so focus can leave the body.

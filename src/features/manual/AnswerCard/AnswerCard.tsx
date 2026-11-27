@@ -14,6 +14,7 @@ import { ExamLine } from "../ManualCommand/ManualCommand";
 import { useNoteCommand, type FillBase } from "../useNoteCommand";
 import "../ManualCommand/ManualCommand.scss";
 import "./AnswerCard.scss";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 
 /** Command rows shown before "+ n more". */
 const SHOWN = 3;
@@ -26,7 +27,7 @@ function CardCommand({ command, base }: { command: LibraryCommand; base: FillBas
   const { cmd, copy, copyAndLog, examLine } = useNoteCommand(command, { fill: true, output: false, base });
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Enter" || e.altKey || e.shiftKey || e.nativeEvent.isComposing || e.defaultPrevented) return;
-    if (e.metaKey || e.ctrlKey) {
+    if (matches(SHORTCUTS.copyAndLog, e)) {
       e.preventDefault();
       void copyAndLog();
     } else if (e.target === root.current) {
