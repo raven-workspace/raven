@@ -1,0 +1,185 @@
+# Builds and tests Raven on every pull request: the five checks from CONTRIBUTING's "Before you
+# open a PR" (typecheck, lint, npm test, cargo test and a Tauri app build). All jobs run at once.
+#
+# - The frontend checks run once, on Linux amd64. Vitest runs in Node and jsdom, and nothing in
+#   src/ depends on the OS or the CPU, so other targets would repeat the same run. npm test is
+#   split into shards to keep the wait short.
+# - The Rust checks run on each platform Raven ships for (docs/specs/terminal.md §3): macOS arm64,
+#   Linux amd64 and Linux arm64. The Tauri build also runs the frontend build there, so a Vite,
+#   Sass or esbuild binary that fails on one platform still shows up.
+#
+# A failing check fails its job, and so the PR. Within a job, later checks still run, so one red
+# run shows every failure at once.
+#
+# The Rust cache is saved only by runs on develop. A PR can restore its base branch's caches but
+# not another PR's, so the push run after each merge keeps every PR's first run warm, and PRs
+# don't fill the repo's 10 GB cache quota with copies of their own.
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-and-lint:
+    name: Typecheck and lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        id: npm-ci
+        run: npm ci
+
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        run: npm run typecheck
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        run: npm run lint
+
+  npm-test:
+    name: npm test (${{ matrix.shard }}/3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: npm test
+        # A longer timeout than the local 5s: the .tsx tests are slow, not stuck, on a busy runner.
+        run: npm test -- --shard=${{ matrix.shard }}/3 --testTimeout=15000
+
+  rust:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            runner: macos-15
+          - name: Linux amd64
+            runner: ubuntu-24.04
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+    env:
+      # File and line numbers in backtraces, without full debug info: faster links, smaller cache.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Name the apt cache
+        if: runner.os == 'Linux'
+        id: apt-cache-key
+        run: echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      # The downloaded .deb files, about 65 MB. apt still updates its lists and installs as usual, so
+      # a stale cache only means some packages download again. A new runner image or a change to
+      # this file saves a fresh copy; restore-keys reuses the last one until then.
+      - name: Restore downloaded apt packages
+        if: runner.os == 'Linux'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.arch }}-${{ steps.apt-cache-key.outputs.image }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-${{ runner.arch }}-
+
+      - name: Install Linux system packages
+        if: runner.os == 'Linux'
+        # Tauri's WebKitGTK stack (https://v2.tauri.app/start/prerequisites/#linux). The vendored
+        # SQLCipher and OpenSSL that rusqlite builds need only the compiler, perl and make the
+        # runner already has.
+        run: |
+          # Skip rebuilding the man page index after the install: nobody reads man pages here.
+          sudo rm -f /var/lib/man-db/auto-update
+          # The cache is owned by the runner user, and apt's own archive by root, so copy across.
+          if compgen -G ~/apt-archives/'*.deb' > /dev/null; then
+            sudo cp ~/apt-archives/*.deb /var/cache/apt/archives/
+          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+          mkdir -p ~/apt-archives
+          cp /var/cache/apt/archives/*.deb ~/apt-archives/
+          echo "apt archive: $(ls ~/apt-archives/*.deb | wc -l) packages, $(du -sh ~/apt-archives | cut -f1)"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+          save-if: ${{ github.ref == 'refs/heads/develop' }}
+
+      # RAV-69: Zig 0.17 and the libghostty-vt build cache go here, once the terminal spike settles
+      # how libghostty-vt is built. They feed the `terminal` Cargo feature (docs/specs/terminal.md §4),
+      # so the cargo steps below will also need `--features terminal` then.
+
+      - name: Install npm dependencies
+        id: npm-ci
+        # The Tauri CLI and the frontend build that the app build embeds.
+        run: npm ci
+
+      - name: Match the Tauri build's macOS deployment target
+        if: runner.os == 'macOS'
+        # tauri build sets MACOSX_DEPLOYMENT_TARGET to bundle.macOS.minimumSystemVersion (Tauri's
+        # default, 10.13, while tauri.conf.json leaves it unset). Crates whose build scripts read it,
+        # such as the cc-built ones, otherwise build twice, once for cargo test and once for the app,
+        # and come out of the cache stale every run. Change both together.
+        run: echo "MACOSX_DEPLOYMENT_TARGET=10.13" >> "$GITHUB_ENV"
+
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test --locked
+
+      - name: Build the Tauri app
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        # A debug build with the frontend embedded, as a release build would have it, reusing the
+        # dependencies cargo test just compiled. Packaging (the Linux .deb) is RAV-67's job.
+        run: npx tauri build --debug --no-bundle -- --locked
+
+      # RAV-73: generate THIRD_PARTY_NOTICES here, from the npm and Cargo dependency trees, and fail
+      # if the committed file is out of date.
