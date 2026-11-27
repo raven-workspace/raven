@@ -19,6 +19,7 @@ pub mod notes;
 pub mod nvd;
 pub mod migrations;
 pub mod paths;
+mod platform;
 pub mod services;
 pub mod payload_builds;
 pub mod reports;
@@ -34,6 +35,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(platform::init())
         .setup(|app| {
             let paths = paths::DataPaths::resolve(app.handle())?;
             app.manage(Mutex::new(vault::Vault::new(paths)));

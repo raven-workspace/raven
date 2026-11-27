@@ -1,35 +1,35 @@
 import { render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { hasNativeTitleBar } from "../lib/platform";
 import { TitleBar } from "../ui/TitleBar";
 
-const MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)";
-const LINUX_AMD64 = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)";
-const LINUX_ARM64 = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/605.1.15 (KHTML, like Gecko)";
-
+// window.__RAVEN_OS__ is set by the Rust side (src-tauri/src/platform.rs) before any page script.
 describe("hasNativeTitleBar", () => {
-  it("is true in WebKitGTK on Linux, amd64 and arm64", () => {
-    expect(hasNativeTitleBar(LINUX_AMD64)).toBe(true);
-    expect(hasNativeTitleBar(LINUX_ARM64)).toBe(true);
+  it("is true only on Linux", () => {
+    expect(hasNativeTitleBar("linux")).toBe(true);
+    expect(hasNativeTitleBar("macos")).toBe(false);
   });
 
-  it("is false in WKWebView on macOS", () => {
-    expect(hasNativeTitleBar(MAC)).toBe(false);
+  it("is false outside the app, where nothing sets the OS (audit mode, tests)", () => {
+    expect(hasNativeTitleBar(undefined)).toBe(false);
   });
 });
 
 describe("TitleBar chrome per platform", () => {
-  afterEach(() => vi.restoreAllMocks());
-  const bar = (ua: string) => {
-    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(ua);
+  afterEach(() => {
+    delete window.__RAVEN_OS__;
+  });
+  const bar = (os?: string) => {
+    window.__RAVEN_OS__ = os;
     return render(<TitleBar title="Lab A" />).container.firstElementChild!;
   };
 
-  it("keeps the traffic-light inset on macOS", () => {
-    expect(bar(MAC).className).toBe("title-bar");
+  it("keeps the traffic-light inset on macOS and outside the app", () => {
+    expect(bar("macos").className).toBe("title-bar");
+    expect(bar(undefined).className).toBe("title-bar");
   });
 
-  it("drops it under the desktop's own title bar on Linux", () => {
-    expect(bar(LINUX_AMD64).classList).toContain("title-bar--below-native");
+  it("drops it on Linux", () => {
+    expect(bar("linux").classList).toContain("title-bar--below-native");
   });
 });

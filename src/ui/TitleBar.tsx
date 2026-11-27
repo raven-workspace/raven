@@ -32,8 +32,8 @@ export const BELOW_TITLE_BAR = "below-title-bar";
  * The bar's content is pinned to the window edges on every screen (owner, 2026-11-09): the controls at pr-6, the
  * wordmark after 94px on the left, which is the macOS traffic lights' 78px (titleBarStyle Overlay) plus 16px of air.
  * A window-chrome constant, not a spacing step, allowed by name in the conventions test (SPACING_ALLOWED).
- * On Linux the desktop's own title bar sits above, with nothing under the bar's left edge, so the bar drops the inset
- * (`title-bar--below-native`, docs/specs/terminal.md §3).
+ * On Linux the desktop's own title bar sits above (or none, under a tiling compositor), with nothing under the bar's
+ * left edge, so the bar drops the inset (`title-bar--below-native`, docs/specs/terminal.md §3).
  */
 export function TitleBar({ left, title, right, className }: TitleBarProps) {
   return (
