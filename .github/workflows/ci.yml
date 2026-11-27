@@ -83,8 +83,8 @@ jobs:
 
       - name: npm test
         if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
-        # One file at a time: the .tsx tests time out on a loaded machine when files run in parallel.
-        run: npm test -- --no-file-parallelism
+        # Files run in parallel. If the .tsx tests start timing out under load, add -- --no-file-parallelism.
+        run: npm test
 
       - name: cargo test
         if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
