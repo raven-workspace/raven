@@ -1,0 +1,101 @@
+# Builds and tests Raven on every pull request, on each platform it ships for (docs/specs/terminal.md §3):
+# macOS arm64, Linux amd64 and Linux arm64. Each target runs the five checks from CONTRIBUTING's
+# "Before you open a PR": typecheck, lint, npm test, cargo test and a Tauri app build.
+# A failing check fails the job, and so the PR. The checks after it still run, so one red run
+# shows every failure at once.
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            runner: macos-15
+          - name: Linux amd64
+            runner: ubuntu-24.04
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Linux system packages
+        if: runner.os == 'Linux'
+        # Tauri's WebKitGTK stack (https://v2.tauri.app/start/prerequisites/#linux). The vendored
+        # SQLCipher and OpenSSL that rusqlite builds need only the compiler, perl and make the
+        # runner already has.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+
+      # RAV-69: Zig 0.17 and the libghostty-vt build cache go here, once the terminal spike settles
+      # how libghostty-vt is built. They feed the `terminal` Cargo feature (docs/specs/terminal.md §4),
+      # so the cargo steps below will also need `--features terminal` then.
+
+      - name: Install npm dependencies
+        id: npm-ci
+        run: npm ci
+
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        run: npm run typecheck
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        run: npm run lint
+
+      - name: npm test
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        # One file at a time: the .tsx tests time out on a loaded machine when files run in parallel.
+        run: npm test -- --no-file-parallelism
+
+      - name: cargo test
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        working-directory: src-tauri
+        run: cargo test --locked
+
+      - name: Build the Tauri app
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        # A debug build with the frontend embedded, as a release build would have it, reusing the
+        # dependencies cargo test just compiled. Packaging (the Linux .deb) is RAV-67's job.
+        run: npx tauri build --debug --no-bundle -- --locked
+
+      # RAV-73: generate THIRD_PARTY_NOTICES here, from the npm and Cargo dependency trees, and fail
+      # if the committed file is out of date.
