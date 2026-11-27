@@ -1,8 +1,15 @@
-# Builds and tests Raven on every pull request, on each platform it ships for (docs/specs/terminal.md §3):
-# macOS arm64, Linux amd64 and Linux arm64. Each target runs the five checks from CONTRIBUTING's
-# "Before you open a PR": typecheck, lint, npm test, cargo test and a Tauri app build.
-# A failing check fails the job, and so the PR. The checks after it still run, so one red run
-# shows every failure at once.
+# Builds and tests Raven on every pull request: the five checks from CONTRIBUTING's "Before you
+# open a PR" (typecheck, lint, npm test, cargo test and a Tauri app build). All jobs run at once.
+#
+# - The frontend checks run once, on Linux amd64. Vitest runs in Node and jsdom, and nothing in
+#   src/ depends on the OS or the CPU, so other targets would repeat the same run. npm test is
+#   split into shards to keep the wait short.
+# - The Rust checks run on each platform Raven ships for (docs/specs/terminal.md §3): macOS arm64,
+#   Linux amd64 and Linux arm64. The Tauri build also runs the frontend build there, so a Vite,
+#   Sass or esbuild binary that fails on one platform still shows up.
+#
+# A failing check fails its job, and so the PR. Within a job, later checks still run, so one red
+# run shows every failure at once.
 name: CI
 
 on:
@@ -17,10 +24,57 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  typecheck-and-lint:
+    name: Typecheck and lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        id: npm-ci
+        run: npm ci
+
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        run: npm run typecheck
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        run: npm run lint
+
+  npm-test:
+    name: npm test (${{ matrix.shard }}/3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: npm test
+        # A longer timeout than the local 5s: the .tsx tests are slow, not stuck, on a busy runner.
+        run: npm test -- --shard=${{ matrix.shard }}/3 --testTimeout=15000
+
+  rust:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -31,6 +85,9 @@ jobs:
             runner: ubuntu-24.04
           - name: Linux arm64
             runner: ubuntu-24.04-arm
+    env:
+      # File and line numbers in backtraces, without full debug info: faster links, smaller cache.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,23 +128,10 @@ jobs:
 
       - name: Install npm dependencies
         id: npm-ci
+        # The Tauri CLI and the frontend build that the app build embeds.
         run: npm ci
 
-      - name: Typecheck
-        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
-        run: npm run typecheck
-
-      - name: Lint
-        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
-        run: npm run lint
-
-      - name: npm test
-        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
-        # Files run in parallel. If the .tsx tests start timing out under load, add -- --no-file-parallelism.
-        run: npm test
-
       - name: cargo test
-        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
         working-directory: src-tauri
         run: cargo test --locked
 
