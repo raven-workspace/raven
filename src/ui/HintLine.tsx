@@ -1,12 +1,14 @@
 import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isTypingTarget } from "../lib/keys";
+import { keyLabel, type Keys } from "../lib/shortcuts";
 import { Kbd } from "./Kbd";
 import "./HintLine.scss";
 import "./Tooltip.scss";
 
 export interface Hint {
-  keys: string;
+  /** A shortcut (shown for this OS), several as one hint, or a key that is the same everywhere ("Esc", "⌥H"). */
+  keys: Keys;
   label: string;
   /** 1 = always shown; higher numbers drop out first. */
   priority: number;
@@ -17,7 +19,7 @@ export function HintUnit({ hint }: { hint: Hint }) {
     <span data-hint className="hint">
       {/* "⌥H ⌥C" is two caps side by side in one unit. */}
       <span className="hint__keys">
-        {hint.keys.split(" ").map((k) => (
+        {keyLabel(hint.keys).split(" ").map((k) => (
           <Kbd key={k}>{k}</Kbd>
         ))}
       </span>

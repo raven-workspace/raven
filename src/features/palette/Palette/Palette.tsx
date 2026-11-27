@@ -28,6 +28,7 @@ import { usePaletteStore } from "../usePaletteStore";
 import type { SuggestContext } from "../suggest";
 import { RavenError } from "../../../types/errors";
 import "./Palette.scss";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 
 const MAX_RESULTS = 30;
 
@@ -214,7 +215,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     // Enter on the host chip chooses a host, never copies (the chip stops it; this is a backstop).
     if (e.key !== "Enter" || e.nativeEvent.isComposing || (e.target instanceof HTMLElement && e.target.getAttribute("aria-haspopup") === "listbox")) return;
     e.preventDefault();
-    void run(e.metaKey || e.ctrlKey);
+    void run(matches(SHORTCUTS.copyAndLog, e));
   };
 
   // The copy guard put focus on the credential chip: Enter there copies anyway (the chip would open its list).
@@ -223,7 +224,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     if (!(e.target instanceof HTMLElement && e.target.getAttribute("aria-label")?.startsWith("Fill with credential"))) return;
     e.preventDefault();
     e.stopPropagation();
-    void run(e.metaKey || e.ctrlKey);
+    void run(matches(SHORTCUTS.copyAndLog, e));
   };
 
   const hasUnfilled = filled?.tokens.some((n) => filled.auto[n]?.unresolved && !overrides[n]) ?? false;
@@ -233,7 +234,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     () => [
       { keys: "↵", label: onManual ? "open note" : "copy", priority: 1 },
       // A Manual row opens its note: nothing to log, no card to go into.
-      ...(onManual ? [] : [{ keys: "⌘↵", label: host ? "copy and log" : "log (no host)", priority: 2 }]),
+      ...(onManual ? [] : [{ keys: SHORTCUTS.copyAndLog, label: host ? "copy and log" : "log (no host)", priority: 2 }]),
       ...(engagementId ? [{ keys: "⌥H", label: "host", priority: 3 }, { keys: "⌥C", label: "credential", priority: 3 }] : []),
       ...(onManual ? [] : [{ keys: "→", label: onLookup ? "open in Manual" : "in card", priority: 4 }]),
       // ⇥ jumps only to a value still missing; with every value filled Tab moves on to the host picker, so no hint.

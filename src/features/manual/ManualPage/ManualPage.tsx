@@ -4,6 +4,7 @@ import type { ManualNote } from "../../../engines/manual/index";
 import { isInlineCommand, lookupRows, type LookupRow } from "../../../engines/manual/lookup";
 import { useLibrary } from "../../../engines/library/store";
 import { isFreeKey, isTypingTarget, useKeydown } from "../../../lib/keys";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 import { useFontsLoaded } from "../../../lib/useFontsLoaded";
 import { RavenError } from "../../../types/errors";
 import { Button, Disclosure, EmptyState, ErrorState, HintLine, labelClass, useFadeOnChange, type Hint } from "../../../ui/index";
@@ -33,8 +34,8 @@ const HINTS: Hint[] = [
   // The line keeps five (DESIGN.md); the rest wait in the ? list, and "/" and "⌘[" take a slot when copy hints go.
   { keys: "/", label: "filter", priority: 4 },
   { keys: "↵", label: "copy command", priority: 2 },
-  { keys: "⌘↵", label: "copy and log", priority: 2 },
-  { keys: "⌘[", label: "previous note", priority: 4 },
+  { keys: SHORTCUTS.copyAndLog, label: "copy and log", priority: 2 },
+  { keys: SHORTCUTS.previousNote, label: "previous note", priority: 4 },
   { keys: "[ ]", label: "section", priority: 3 },
   { keys: "⌥H", label: "host", priority: 3 },
   { keys: "Esc", label: "back", priority: 1 },
@@ -51,7 +52,7 @@ const hasCommands = (note: ManualNote | undefined): boolean =>
   !!note && (/^\s*(```|~~~)/m.test(note.body) || [...note.body.matchAll(/`([^`\n]+)`/g)].some((m) => isInlineCommand(m[1]!)));
 
 /** Hints for copying a command mean nothing on a note without one. */
-const withoutCopy = (hints: Hint[]): Hint[] => hints.filter((h) => h.keys !== "↵" && h.keys !== "⌘↵");
+const withoutCopy = (hints: Hint[]): Hint[] => hints.filter((h) => h.keys !== "↵" && h.keys !== SHORTCUTS.copyAndLog);
 
 /** Without notes only Esc applies. */
 const HINTS_EMPTY: Hint[] = HINTS.slice(-1);
@@ -67,7 +68,7 @@ const HINTS_SEARCH: Hint[] = [
 const HINTS_CARD: Hint[] = HINTS_SEARCH.map((h) => (h.keys === "Esc" ? { ...h, label: "close card" } : h));
 
 /** No engagement or no host: ⌘↵ copies but has nowhere to log, worded as the Arsenal drawer words it. */
-const noHost = (hints: Hint[]): Hint[] => hints.map((h) => (h.keys === "⌘↵" ? { ...h, label: "log (no host)" } : h));
+const noHost = (hints: Hint[]): Hint[] => hints.map((h) => (h.keys === SHORTCUTS.copyAndLog ? { ...h, label: "log (no host)" } : h));
 
 const EMPTY_TITLE: Record<Exclude<ManualStatus, "loading" | "ready" | "error">, string> = {
   "never-imported": "Import your Field Manual to fill the Manual",
@@ -442,7 +443,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
 
   useKeydown((e) => {
     if (e.defaultPrevented || manualKeysBlocked()) return;
-    if (e.key === "[" && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+    if (matches(SHORTCUTS.previousNote, e)) {
       if (isTypingTarget(e.target)) return;
       e.preventDefault();
       const prev = useManualStore.getState().back();

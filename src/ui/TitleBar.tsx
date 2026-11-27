@@ -2,6 +2,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { QuestionIcon, type Icon } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { isTypingTarget } from "../lib/keys";
+import { ariaKeys, keyLabel, type Keys } from "../lib/shortcuts";
 import { HintUnit, type Hint } from "./HintLine";
 import { labelClass } from "./Label";
 import { usePageShortcutsStore } from "./pageShortcuts";
@@ -62,7 +63,7 @@ export function TitleBarButton({
   onClick,
 }: {
   children: ReactNode;
-  hint: string;
+  hint: Keys;
   icon?: Icon;
   /** This control's destination is the page on screen: its icon and word turn accent. */
   current?: boolean;
@@ -80,7 +81,7 @@ export function TitleBarButton({
     >
       {Glyph && <Glyph size={16} weight="regular" aria-hidden />}
       {children}
-      <Kbd variant="inline" aria-hidden="true">{hint}</Kbd>
+      <Kbd variant="inline" aria-hidden="true">{keyLabel(hint)}</Kbd>
     </button>
   );
 }
@@ -95,18 +96,18 @@ export function TitleBarIconButton({
 }: {
   icon: Icon;
   label: string;
-  shortcut?: string;
+  shortcut?: Keys;
   /** This control's destination is the page on screen. */
   current?: boolean;
   onClick?: () => void;
 }) {
   return (
-    <Tooltip side="bottom" content={<span>{label}{shortcut && <span className="tooltip__key">{shortcut}</span>}</span>}>
+    <Tooltip side="bottom" content={<span>{label}{shortcut && <span className="tooltip__key">{keyLabel(shortcut)}</span>}</span>}>
       <button
         type="button"
         aria-label={label}
         aria-current={current ? "page" : undefined}
-        aria-keyshortcuts={shortcut?.replace("⌘", "Meta+")}
+        aria-keyshortcuts={shortcut && ariaKeys(shortcut)}
         onClick={onClick}
         className="title-bar-control title-bar-control--icon"
       >
@@ -143,7 +144,7 @@ export function TitleBarShortcuts({ everywhere }: { everywhere: Hint[] }) {
   const group = (title: string, hints: Hint[]) => (
     <section aria-label={title} className="shortcuts-popover__group">
       <h2 className={labelClass}>{title}</h2>
-      {hints.map((h) => <HintUnit key={h.keys} hint={h} />)}
+      {hints.map((h) => <HintUnit key={keyLabel(h.keys)} hint={h} />)}
     </section>
   );
   return (

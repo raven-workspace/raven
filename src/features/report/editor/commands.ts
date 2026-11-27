@@ -1,4 +1,5 @@
 import type { Editor } from "prosekit/core";
+import { SHORTCUTS, type Keys } from "../../../lib/shortcuts";
 import { addTableRowBelow as addRowAfter, isCellSelection } from "prosekit/extensions/table";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { NodeSelection, TextSelection, type Command } from "prosekit/pm/state";
@@ -45,12 +46,12 @@ export function applyLink(editor: PageEditor, href: string) {
 /** What the toolbar's block-type select offers. */
 export type BlockKind = "paragraph" | "h1" | "h2" | "h3" | "quote" | "code";
 export const HEADING_KINDS = ["h1", "h2", "h3"] as const;
-export const BLOCK_KINDS: { value: BlockKind; label: string; shortcut: string }[] = [
-  { value: "paragraph", label: "Paragraph", shortcut: "⌥⌘0" },
-  { value: "h1", label: "Heading 1", shortcut: "⌥⌘1" },
-  { value: "h2", label: "Heading 2", shortcut: "⌥⌘2" },
-  { value: "h3", label: "Heading 3", shortcut: "⌥⌘3" },
-  { value: "quote", label: "Quote", shortcut: "⌘⇧B" },
+export const BLOCK_KINDS: { value: BlockKind; label: string; shortcut: Keys }[] = [
+  { value: "paragraph", label: "Paragraph", shortcut: SHORTCUTS.paragraph },
+  { value: "h1", label: "Heading 1", shortcut: SHORTCUTS.heading1 },
+  { value: "h2", label: "Heading 2", shortcut: SHORTCUTS.heading2 },
+  { value: "h3", label: "Heading 3", shortcut: SHORTCUTS.heading3 },
+  { value: "quote", label: "Quote", shortcut: SHORTCUTS.quote },
   { value: "code", label: "Code block", shortcut: "```" },
 ];
 

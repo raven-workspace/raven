@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { isDialogOpen, isTypingTarget, useKeydown, useNow } from "../../../lib/keys";
+import { keyLabel, matches, SHORTCUTS } from "../../../lib/shortcuts";
 import { Button, DASHBOARD_COLUMN, EmptyState, Input, Kbd, labelClass, queryState } from "../../../ui/index";
 import { ActiveCard } from "../ActiveCard/ActiveCard";
 import { EngagementDialog } from "../EngagementDialog/EngagementDialog";
@@ -16,7 +17,7 @@ export function Dashboard() {
   const pastId = useId();
 
   useKeydown((e) => {
-    if (!e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== "n") return;
+    if (!matches(SHORTCUTS.newEngagement, e)) return;
     // Same rules as the number keys: not while typing, not over a dialog.
     if (!e.defaultPrevented && !isTypingTarget(e.target) && !isDialogOpen()) {
       e.preventDefault();
@@ -35,7 +36,7 @@ export function Dashboard() {
       <header className="dashboard__head">
         <h1 className="dashboard__title">Engagements</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
-          New engagement <Kbd variant="inline" aria-hidden>⌘N</Kbd>
+          New engagement <Kbd variant="inline" aria-hidden>{keyLabel(SHORTCUTS.newEngagement)}</Kbd>
         </Button>
       </header>
 

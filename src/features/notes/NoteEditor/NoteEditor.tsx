@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { openThreads, toggleThreadPrefix } from "../../../engines/notes/threads";
 import { cx } from "../../../lib/cx";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 import { RavenError } from "../../../types/errors";
 import { ErrorState, Textarea, Toggle } from "../../../ui/index";
 import { CloseThreadDialog, type ClosingThread } from "../CloseThreadDialog/CloseThreadDialog";
@@ -21,15 +22,6 @@ const NO_TEXT_SERVICES = {
   autoComplete: "off",
   writingsuggestions: "false",
 } as const;
-
-/**
- * ⌘/ on any layout: the character "/" (some layouts need Shift for it), or the physical key where US
- * keyboards have "/" (Canadian CSA types "é" there). Shift on that physical key is ⌘?, left to macOS Help.
- */
-function isSlashChord(e: KeyboardEvent): boolean {
-  if (e.key === "/") return true;
-  return e.code === "Slash" && !e.shiftKey;
-}
 
 /**
  * One note's text: open threads, the textarea (autosaved through the notes store, so text is never dropped),
@@ -62,7 +54,9 @@ export function NoteEditor({ target, textRef, className }: {
   const ready = note.data !== undefined || pending !== undefined;
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!(e.metaKey || e.ctrlKey) || e.altKey || !isSlashChord(e)) return;
+    // ⌘/ on any layout: the character "/" (some layouts need Shift for it), or the physical key where US keyboards
+    // have "/" (Canadian CSA types "é" there). Shift on that physical key is ⌘?, left to macOS Help.
+    if (!matches(SHORTCUTS.toggleThread, e)) return;
     const ta = e.currentTarget;
     if (ta.readOnly) return;
     e.preventDefault();

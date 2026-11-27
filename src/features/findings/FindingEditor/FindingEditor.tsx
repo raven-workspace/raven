@@ -6,6 +6,7 @@ import { copyPlain } from "../../../lib/clipboard";
 import { CopySecretButton } from "../../credentials/MaskedSecret/MaskedSecret";
 import { shortHostName, hostLabel } from "../../../lib/hostName";
 import { isDialogOpen } from "../../../lib/keys";
+import { keyLabel, matches, SHORTCUTS } from "../../../lib/shortcuts";
 import { reportError } from "../../../lib/lockSignal";
 import { RavenError } from "../../../types/errors";
 import type { Host } from "../../../types/host";
@@ -310,7 +311,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Not while a dialog (capture, a confirmation) is up: its own ⌘↵ is meant.
-      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || e.defaultPrevented || isDialogOpen()) return;
+      if (!matches(SHORTCUTS.saveFinding, e) || e.defaultPrevented || isDialogOpen()) return;
       e.preventDefault();
       saveRef.current();
     };
@@ -348,7 +349,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
           {dirty && (
             <Button size="sm" onClick={() => setConfirmDiscard(true)}>Discard changes</Button>
           )}
-          <Button size="sm" variant="primary" disabled={busy} title="Save (⌘↵)" onClick={save}>Save</Button>
+          <Button size="sm" variant="primary" disabled={busy} title={`Save (${keyLabel(SHORTCUTS.saveFinding)})`} onClick={save}>Save</Button>
           <IconButton icon={X} label="Close, keeping the draft" aria-label="Close" shortcut="Esc" disabled={busy} onClick={onClose} />
         </ActionCell>
       </header>

@@ -4,6 +4,7 @@ import { CommandBlock } from "../../../ui/index";
 import { useNoteCommand, type FillBase } from "../useNoteCommand";
 import { cx } from "../../../lib/cx";
 import "./ManualCommand.scss";
+import { matches, SHORTCUTS } from "../../../lib/shortcuts";
 
 export type { FillBase };
 
@@ -42,7 +43,7 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
       return;
     }
     if (e.key !== "Enter" || e.altKey || e.shiftKey || e.nativeEvent.isComposing || e.defaultPrevented) return;
-    if (e.metaKey || e.ctrlKey) {
+    if (matches(SHORTCUTS.copyAndLog, e)) {
       e.preventDefault();
       void copyAndLog();
     } else if (e.target === root.current) {

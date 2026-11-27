@@ -52,6 +52,7 @@ import { moveCell } from "./commands";
 import { CodeBlockView } from "./nodes/CodeBlockView/CodeBlockView";
 import { FigureView } from "./nodes/FigureView/FigureView";
 import { figureWidth } from "./nodes/figureWidth";
+import { editorKey, SHORTCUTS } from "../../../lib/shortcuts";
 
 /** Clicks and typing in controls inside a node view (the code block's language picker) stay with the control, not
  *  ProseMirror. */
@@ -350,14 +351,14 @@ const guardStructureMarkdown = (numbers: SubNumbers) =>
 /** The page's keys beyond ProseKit's own: headings 1 to 3, paragraph, sub- and superscript, table cells. */
 const pageKeymap = (numbers: SubNumbers) =>
   defineKeymap({
-    "Mod-Alt-0": sparingStructure(numbers, withSkipCodeBlock(setBlockType({ type: "paragraph" }))),
-    "Mod-Alt-1": sparingStructure(numbers, withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 1 } }))),
-    "Mod-Alt-2": sparingStructure(numbers, withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 2 } }))),
-    "Mod-Alt-3": sparingStructure(numbers, withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 3 } }))),
+    [editorKey(SHORTCUTS.paragraph)]: sparingStructure(numbers, withSkipCodeBlock(setBlockType({ type: "paragraph" }))),
+    [editorKey(SHORTCUTS.heading1)]: sparingStructure(numbers, withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 1 } }))),
+    [editorKey(SHORTCUTS.heading2)]: sparingStructure(numbers, withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 2 } }))),
+    [editorKey(SHORTCUTS.heading3)]: sparingStructure(numbers, withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 3 } }))),
     Tab: moveCell(1),
     "Shift-Tab": moveCell(-1),
-    "Mod-,": toggleMark({ type: "subscript" }),
-    "Mod-.": toggleMark({ type: "superscript" }),
+    [editorKey(SHORTCUTS.subscript)]: toggleMark({ type: "subscript" }),
+    [editorKey(SHORTCUTS.superscript)]: toggleMark({ type: "superscript" }),
   });
 
 /** What an empty block says while the cursor is in it. A hint paragraph shows its own hint, so it takes none here. */

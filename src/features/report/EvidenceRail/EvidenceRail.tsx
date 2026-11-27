@@ -20,6 +20,7 @@ import { openThreads } from "../../../engines/notes/threads";
 import { detectAndParseScan } from "../../../engines/parse/scan";
 import { cx } from "../../../lib/cx";
 import { isDialogOpen, isTypingTarget } from "../../../lib/keys";
+import { keyLabel, SHORTCUTS } from "../../../lib/shortcuts";
 import type { Credential } from "../../../types/credentials";
 import type { LogEntry } from "../../../types/log";
 import { BELOW_TITLE_BAR, Button, IconButton, labelClass, Tooltip, useDrawerPresence } from "../../../ui/index";
@@ -148,7 +149,7 @@ function RailItem({ row, onAct }: { row: RailRow; onAct(row: RailRow, from: HTML
         content={
           <>
             <span>Add to the step you're on, else the end of its phase</span>
-            <span className="tooltip__key">⌘↵</span>
+            <span className="tooltip__key">{keyLabel(SHORTCUTS.insertEvidence)}</span>
           </>
         }
       >

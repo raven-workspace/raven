@@ -20,6 +20,7 @@ import { TextSelection } from "prosekit/pm/state";
 import { useEditor, useKeymap } from "prosekit/react";
 import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { copyPlain } from "../../../../lib/clipboard";
+import { editorKey, SHORTCUTS, type Keys } from "../../../../lib/shortcuts";
 import { IconButton, Input, Toolbar } from "../../../../ui/index";
 import { applyLink, blockKindAt, inPageHeading, linkAt, toggleHeading, type PageEditor } from "../commands";
 import type { EditingExtension } from "../extension";
@@ -28,34 +29,34 @@ import "./BubbleMenu.scss";
 export interface MarkTool {
   icon: Icon;
   label: string;
-  shortcut: string;
+  shortcut: Keys;
   run(editor: PageEditor): void;
   active(editor: PageEditor): boolean;
 }
 
 /** The text marks, in the order the bubble menu and the toolbar show them. */
 export const TEXT_MARKS: MarkTool[] = [
-  { icon: TextB, label: "Bold", shortcut: "⌘B", run: (e) => e.commands.toggleBold(), active: (e) => e.marks.bold.isActive() },
-  { icon: TextItalic, label: "Italic", shortcut: "⌘I", run: (e) => e.commands.toggleItalic(), active: (e) => e.marks.italic.isActive() },
+  { icon: TextB, label: "Bold", shortcut: SHORTCUTS.bold, run: (e) => e.commands.toggleBold(), active: (e) => e.marks.bold.isActive() },
+  { icon: TextItalic, label: "Italic", shortcut: SHORTCUTS.italic, run: (e) => e.commands.toggleItalic(), active: (e) => e.marks.italic.isActive() },
   {
     icon: TextUnderline,
     label: "Underline",
-    shortcut: "⌘U",
+    shortcut: SHORTCUTS.underline,
     run: (e) => e.commands.toggleUnderline(),
     active: (e) => e.marks.underline.isActive(),
   },
   {
     icon: TextStrikethrough,
     label: "Strikethrough",
-    shortcut: "⌘⇧S",
+    shortcut: SHORTCUTS.strikethrough,
     run: (e) => e.commands.toggleStrike(),
     active: (e) => e.marks.strike.isActive(),
   },
-  { icon: Code, label: "Inline code", shortcut: "⌘E", run: (e) => e.commands.toggleCode(), active: (e) => e.marks.code.isActive() },
+  { icon: Code, label: "Inline code", shortcut: SHORTCUTS.inlineCode, run: (e) => e.commands.toggleCode(), active: (e) => e.marks.code.isActive() },
   {
     icon: HighlighterCircle,
     label: "Highlight",
-    shortcut: "⌘⇧H",
+    shortcut: SHORTCUTS.highlight,
     run: (e) => e.commands.toggleHighlight(),
     active: (e) => e.marks.highlight.isActive(),
   },
@@ -81,9 +82,9 @@ function linkUnderCursor(editor: PageEditor): LinkHere | null {
 /** The owner's headings, one click each; the same button again turns the line back into a paragraph. */
 export const HEADING_TOOLS: MarkTool[] = (
   [
-    [TextHOne, "h1", "Heading 1", "⌥⌘1"],
-    [TextHTwo, "h2", "Heading 2", "⌥⌘2"],
-    [TextHThree, "h3", "Heading 3", "⌥⌘3"],
+    [TextHOne, "h1", "Heading 1", SHORTCUTS.heading1],
+    [TextHTwo, "h2", "Heading 2", SHORTCUTS.heading2],
+    [TextHThree, "h3", "Heading 3", SHORTCUTS.heading3],
   ] as const
 ).map(([icon, kind, label, shortcut]) => ({
   icon,
@@ -147,10 +148,10 @@ export function BubbleMenu() {
   // While the page has focus: the popover is about where the owner is typing.
   const link = pinned ?? (editor.mounted && editor.view.hasFocus() ? linkUnderCursor(editor) : null);
 
-  // ⌘⇧K edits the selection's link in the bubble, or the link the cursor is in; elsewhere the toolbar's field takes it.
+  // ⌘⇧K (Ctrl+Shift+K on Linux) edits the selection's link in the bubble, or the link the cursor is in; elsewhere the toolbar's field takes it.
   const keymap = useMemo(
     () => ({
-      "Mod-Shift-k": () => {
+      [editorKey(SHORTCUTS.link)]: () => {
         const { selection } = editor.state;
         if (!(selection instanceof TextSelection)) return false;
         if (!selection.empty) {
@@ -195,7 +196,7 @@ export function BubbleMenu() {
                 <IconButton
                   icon={Link}
                   label="Link"
-                  shortcut="⌘⇧K"
+                  shortcut={SHORTCUTS.link}
                   active={href !== ""}
                   onMouseDown={keepFocus}
                   onClick={() => setEditing(true)}
@@ -250,7 +251,7 @@ function LinkPopover({ anchor, href, editing, onEditing }: { anchor: HTMLElement
                 {href}
               </span>
               <Toolbar gap={2}>
-                <IconButton icon={PencilSimple} label="Edit link" shortcut="⌘⇧K" onMouseDown={keepFocus} onClick={() => onEditing(true)} />
+                <IconButton icon={PencilSimple} label="Edit link" shortcut={SHORTCUTS.link} onMouseDown={keepFocus} onClick={() => onEditing(true)} />
                 <IconButton icon={Copy} label="Copy link" onMouseDown={keepFocus} onClick={() => void copyPlain(href)} />
                 <IconButton
                   icon={LinkBreak}

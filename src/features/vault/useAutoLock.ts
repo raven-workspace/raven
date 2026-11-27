@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { matches, SHORTCUTS } from "../../lib/shortcuts";
 
 /** Matches the backend range. */
 const MAX_MINUTES = 240;
@@ -47,7 +48,7 @@ export function useAutoLock(minutes: number, { enabled, onLock }: Options) {
       lastActivity = Date.now();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey && e.key.toLowerCase() === "l") {
+      if (matches(SHORTCUTS.lock, e)) {
         e.preventDefault();
         lockNow();
         return;
