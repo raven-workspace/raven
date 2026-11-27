@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "raven-workspace",
+  "mainBinaryName": "raven-workspace",
+  "app": {
+    "windows": [
+      {
+        "title": "Raven",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1100,
+        "minHeight": 700,
+        "dragDropEnabled": false
+      }
+    ]
+  },
+  "bundle": {
+    "targets": [
+      "deb"
+    ],
+    "category": "Utility",
+    "linux": {
+      "deb": {
+        "desktopTemplate": "linux/raven-workspace.desktop"
+      }
+    }
+  }
+}

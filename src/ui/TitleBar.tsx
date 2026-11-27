@@ -6,6 +6,7 @@ import { HintUnit, type Hint } from "./HintLine";
 import { labelClass } from "./Label";
 import { usePageShortcutsStore } from "./pageShortcuts";
 import { cx } from "../lib/cx";
+import { hasNativeTitleBar } from "../lib/platform";
 import { Kbd } from "./Kbd";
 import { Tooltip } from "./Tooltip";
 import "./TitleBar.scss";
@@ -21,22 +22,24 @@ export interface TitleBarProps {
 }
 
 /**
- * The 38px window chrome. The bar is the drag region (`data-tauri-drag-region`);
- * The bar's content is pinned to the window edges on every screen (owner, 2026-11-09): the controls at pr-6, the
- * wordmark after 94px on the left, which is the macOS traffic lights' 78px (titleBarStyle Overlay) plus 16px of air.
- * A window-chrome constant, not a spacing step, allowed by name in the conventions test (SPACING_ALLOWED).
- */
-/**
  * Where a non-modal drawer docks: under the title bar, never over it, so the bar's controls stay whole and the window
  * keeps its drag region. Modal panels with an overlay (Capture) cover the whole window instead.
  */
 export const BELOW_TITLE_BAR = "below-title-bar";
 
+/**
+ * The 38px window chrome. The bar is the drag region (`data-tauri-drag-region`);
+ * The bar's content is pinned to the window edges on every screen (owner, 2026-11-09): the controls at pr-6, the
+ * wordmark after 94px on the left, which is the macOS traffic lights' 78px (titleBarStyle Overlay) plus 16px of air.
+ * A window-chrome constant, not a spacing step, allowed by name in the conventions test (SPACING_ALLOWED).
+ * On Linux the desktop's own title bar sits above (or none, under a tiling compositor), with nothing under the bar's
+ * left edge, so the bar drops the inset (`title-bar--below-native`, docs/specs/terminal.md §3).
+ */
 export function TitleBar({ left, title, right, className }: TitleBarProps) {
   return (
     <div
       data-tauri-drag-region
-      className={cx("title-bar", className)}
+      className={cx("title-bar", hasNativeTitleBar() && "title-bar--below-native", className)}
     >
       <div className="title-bar__left">{left}</div>
       {/* pointer-events-none so a drag on the text still lands on the drag region */}

@@ -1,12 +1,14 @@
 # Builds and tests Raven on every pull request: the five checks from CONTRIBUTING's "Before you
-# open a PR" (typecheck, lint, npm test, cargo test and a Tauri app build). All jobs run at once.
+# open a PR" (typecheck, lint, npm test, cargo test and a Tauri app build), and packages the Linux
+# .deb files. All jobs run at once.
 #
 # - The frontend checks run once, on Linux amd64. Vitest runs in Node and jsdom, and nothing in
 #   src/ depends on the OS or the CPU, so other targets would repeat the same run. npm test is
 #   split into shards to keep the wait short.
 # - The Rust checks run on each platform Raven ships for (docs/specs/terminal.md §3): macOS arm64,
 #   Linux amd64 and Linux arm64. The Tauri build also runs the frontend build there, so a Vite,
-#   Sass or esbuild binary that fails on one platform still shows up.
+#   Sass or esbuild binary that fails on one platform still shows up. On Linux it is a release
+#   build, packaged and uploaded as the run's .deb artifacts (raven-deb-amd64, raven-deb-arm64).
 #
 # A failing check fails its job, and so the PR. Within a job, later checks still run, so one red
 # run shows every failure at once.
@@ -80,7 +82,8 @@ jobs:
   rust:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    # The Linux release build (LTO, one codegen unit) is the long pole.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -176,10 +179,25 @@ jobs:
         run: cargo test --locked
 
       - name: Build the Tauri app
-        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' && runner.os == 'macOS' }}
         # A debug build with the frontend embedded, as a release build would have it, reusing the
-        # dependencies cargo test just compiled. Packaging (the Linux .deb) is RAV-67's job.
+        # dependencies cargo test just compiled.
         run: npx tauri build --debug --no-bundle -- --locked
+
+      - name: Build the .deb
+        id: deb
+        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' && runner.os == 'Linux' }}
+        # A release build, packaged as the .deb a tester installs: release so it opens the release
+        # vault (raven/, not raven-dev/). tauri.linux.conf.json bundles only the .deb.
+        run: npx tauri build -- --locked
+
+      - name: Upload the .deb
+        if: ${{ !cancelled() && steps.deb.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raven-deb-${{ runner.arch == 'ARM64' && 'arm64' || 'amd64' }}
+          path: src-tauri/target/release/bundle/deb/*.deb
+          if-no-files-found: error
 
       # RAV-73: generate THIRD_PARTY_NOTICES here, from the npm and Cargo dependency trees, and fail
       # if the committed file is out of date.
