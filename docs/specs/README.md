@@ -22,6 +22,7 @@ Later specs override earlier ones where they overlap, and a few sections say so 
 | [prelab-batch.md](prelab-batch.md) | Fixes batched before the first lab session | Shipped |
 | [network.md](network.md) | The Network section: tunnels, hops and the attack-path tree | Shipped |
 | [reports.md](reports.md) | The Report: OffSec's grading rules, the smart draft, the editor, checks, and export | Shipped (PDF/.7z export: RAV-28, docs/adr/0002; screenshots on findings: RAV-26) |
+| [terminal.md](terminal.md) | The built-in terminal (v1): sessions, Capture, history, security, Linux, and the IDE relayout around it | In progress (RAV-65 to RAV-90; docs/adr/0003) |
 
 ## Mockups
 
