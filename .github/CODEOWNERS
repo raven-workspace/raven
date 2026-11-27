@@ -1,0 +1,5 @@
+# Code owners: GitHub asks them to review every pull request that touches their paths, and the develop and main
+# rulesets require their approval before a merge.
+# The last matching pattern wins. Add narrower patterns below this line only when someone else owns a part.
+
+* @ktchntn
