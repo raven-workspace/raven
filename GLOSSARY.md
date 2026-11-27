@@ -116,3 +116,55 @@ _Avoid_: interpretation (an interpretation is what an output proves; the extract
 A series of store commands and the lists expected after them, run against both the real store and the in-browser fake, so the two can't drift apart.
 _Avoid_: fixture (a fixture is data, not a check)
 
+
+## Layout
+
+**Chrome bar**:
+The window's title bar, carrying the Engagement and Target pickers, search and Build report.
+_Avoid_: title bar, top bar, header
+
+**Rail**:
+The narrow column of view buttons at the window's left edge: Explorer, Terminals, the engagement's sections, then Field notes, Arsenal, Payloads and Manual.
+_Avoid_: sidebar, nav, activity bar
+
+**Explorer**:
+The column listing the engagement's hosts, notes, findings and logs, from which any of them opens in an editor tab.
+_Avoid_: sidebar, tree, file list
+
+**Editor tab**:
+One open page in the editor area: a host, a note, a finding, a section, the capture tab. A page is open in at most one editor tab.
+_Avoid_: page tab, document, view
+
+**Target**:
+The host in view, set both by the Target picker and by selecting a host; it stays on the last host picked when the page in view has no host.
+_Avoid_: current host, active host, selected host
+
+## Terminal
+
+**Session**:
+One shell and its terminal state, belonging to one engagement and pinned to the host that was Target when it opened, or to the engagement alone if there was none. It lives on through page switches, hidden panels and vault lock, and ends only when closed.
+_Avoid_: terminal, shell, PTY, tab
+
+**Terminal panel**:
+The docked area under the editor that shows the engagement's sessions.
+_Avoid_: console, terminal drawer
+
+**Terminal tab**:
+A tab in the terminal panel; each shows one session.
+_Avoid_: session tab, terminal (a terminal tab is the label, the session is the shell)
+
+**Pane**:
+A viewport in the terminal panel showing one session: the main pane shows the selected terminal tab's session, the split pane a different one. A pane never mirrors another pane's session.
+_Avoid_: split, view, window
+
+**Capture**:
+Raven filing each finished terminal command and its output as a Log entry on the host it touched, or at engagement level, while the engagement's "Capture to engagement" setting is on.
+_Avoid_: recording, session log, auto-log
+
+**Log entry tab**:
+The editor tab, labelled "New log entry", where the owner pastes or types a Log entry by hand. One at a time; its draft survives closing.
+_Avoid_: capture tab, capture sheet, capture panel (capture is the terminal's automatic filing)
+
+**Engagement folder**:
+The ordinary, unencrypted directory on disk where an engagement's sessions start and where tools write their own files. It is outside the vault and outside Raven's encryption promise.
+_Avoid_: workspace, engagement workspace, working directory
