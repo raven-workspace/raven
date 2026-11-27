@@ -140,6 +140,9 @@ jobs:
 
       - name: cargo test
         working-directory: src-tauri
+        # TEMPORARY: logs why cargo rebuilds crates on macOS despite a cache hit. Remove before merge.
+        env:
+          CARGO_LOG: ${{ runner.os == 'macOS' && 'cargo::core::compiler::fingerprint=info' || '' }}
         run: cargo test --locked
 
       - name: Build the Tauri app
