@@ -5,7 +5,27 @@
 Date: 2026-11-26.
 Linear: the Terminal Emulator project (RAV-69 to RAV-90), with its foundations in Raven Workspace CE (RAV-65 to RAV-68).
 Source documents: the Notion pages "Raven Terminal: Feature Spec" (requirements FR-1 to FR-18, SR-1 to SR-7) and "Raven Workspace IDE layout" (the design spec, with every measurement read off the artboards). This file carries the decisions and reasoning, so an agent can work without Notion; the two pages hold the full tables of sizes, colours and states. Requirement ids (FR-n, SR-n) and section numbers (design §n) below refer to them.
+Figma: the artboards the design spec was measured from are in the [Raven Workspace](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace) file (key `Z49qXmfYnFfPxk3qhECLme`). Open the frame for the area before building it; the frame map follows.
 Decision record: `docs/adr/0003-rust-owns-terminal-state.md`. Vocabulary: `GLOSSARY.md`, sections Layout and Terminal.
+
+### Frame map
+
+Both artboards are 1440×900. There is no 1100px artboard, so the narrow-window rules (section 8 below) have no frame.
+
+| Area | Design spec | Node |
+|---|---|---|
+| Host View artboard (whole window) | §1, §2.2 | [1-2612](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace?node-id=1-2612) |
+| Chrome bar (Engagement, Target, search, Build report) | §1.3 | [1-2613](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace?node-id=1-2613) |
+| Rail | §1.2 | [1-2642](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace?node-id=1-2642) |
+| Explorer | §1.4 | [1-2701](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace?node-id=1-2701) |
+| Editor tab strip | §2.1 | [1-2797](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace?node-id=1-2797) |
+| Host page | §2.2 | [1-2814](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace?node-id=1-2814) |
+| Terminal panel | §3 | [1-2911](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace?node-id=1-2911) |
+| Status bar | §1.5–§1.7 | [1-2998](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace?node-id=1-2998) |
+| Log entry tab artboard | §2.5 | [1-2187](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace?node-id=1-2187) |
+| Log entry tab form | §2.5 | [1-2396](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace?node-id=1-2396) |
+
+Read a frame through the Figma MCP: `create_session` with the file key, then `get_design_context` (sizes, colours, text) and `get_screenshot` (layout) on the node id. The Host View artboard (1-2612) renders with some text missing: the host name "forge" in the Explorer and in the host header, and the Next work tab. Many of its text layers have zero height, so this is a fault in the file, not in the Figma MCP. Take text from the design context rather than from Host View screenshots. The Log entry tab artboard (1-2187) renders completely and shows the same chrome bar, rail, Explorer, terminal panel and status bar, so use it as a second reference for those areas.
 
 ## 1. Intent
 
