@@ -52,6 +52,8 @@
   --radius: 8px;
   --radius-sm: 6px;
   --radius-full: 9999px;
+  /* The workspace frame's corners only (design §1.1); the conventions test keeps it there. */
+  --radius-frame: 16px;
 
   --font-ui: "Instrument Sans Variable", "Instrument Sans Fallback", -apple-system, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;

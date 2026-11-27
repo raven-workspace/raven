@@ -7,14 +7,14 @@ import { collectA11yIssues } from "./checks/a11y";
 import { collectOptOuts } from "./checks/optouts";
 import { collectUxIssues } from "./checks/ux";
 import { writeIssues } from "./report";
-import { SCREENS, widthsOf } from "./screens";
+import { VISUAL_SCREENS, widthsOf } from "./screens";
 import { CHECK_IDS, gateFailures } from "./types";
 
 const SHOTS = fileURLToPath(new URL("../audit-output/shots/", import.meta.url));
 
 test.beforeAll(async () => { await mkdir(SHOTS, { recursive: true }); });
 
-for (const screen of SCREENS) {
+for (const screen of VISUAL_SCREENS) {
   for (const width of widthsOf(screen)) {
     test(`${screen.id}@${width}`, async ({ page }) => {
       const errors: string[] = [];

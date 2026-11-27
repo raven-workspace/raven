@@ -1,0 +1,87 @@
+@use "@/styles/abstracts" as *;
+
+// The window grid (design §1.1): the chrome bar over the workspace, the rail beside the frame.
+@layer features {
+  .workspace-shell {
+    display: grid;
+    grid-template-rows: 38px minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+  }
+
+  // Inside an engagement the frame keeps 8px off the window's right and bottom edges; the rail is its left margin.
+  .workspace-shell--engagement {
+    padding: 0 var(--space-sm) var(--space-sm) 0;
+  }
+
+  .workspace-shell__page {
+    position: relative;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .workspace-shell__workspace {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .workspace-shell__rail {
+    min-height: 0;
+  }
+
+  .workspace-shell__frame {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) 36px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-frame);
+    background-color: var(--bg);
+  }
+
+  .workspace-shell__frame-body {
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .workspace-shell__explorer {
+    min-height: 0;
+    border-right: 1px solid var(--line);
+  }
+
+  .workspace-shell__work {
+    display: grid;
+    grid-template-rows: 40px minmax(0, 1fr) var(--terminal-h, 360px);
+    min-width: 0;
+    min-height: 0;
+  }
+
+  // No terminal panel yet: its row takes no height.
+  .workspace-shell__work--no-terminal {
+    --terminal-h: 0px;
+  }
+
+  .workspace-shell__tabs {
+    border-bottom: 1px solid var(--line);
+  }
+
+  // The page in view. Pages lay themselves out in it as they do in the engagement shell's main column.
+  .workspace-shell__editor {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .workspace-shell__terminal {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .workspace-shell__status {
+    border-top: 1px solid var(--line);
+  }
+}

@@ -17,7 +17,7 @@ sudo apt install build-essential file libayatana-appindicator3-dev librsvg2-dev 
 ```sh
 npm install            # also points git at the repo's hooks in .githooks/
 npm run tauri dev      # build and open the desktop app
-npm run tauri:overhaul # the same, with its own vault and port (1430), so it runs beside tauri dev
+npm run tauri:overhaul # the new workspace shell, with its own vault and port (1430), so it runs beside tauri dev
 ```
 
 On first launch Raven asks you to create a vault password. The vault lives under `~/Library/Application Support/app.raven.desktop/` on macOS and `~/.local/share/app.raven.desktop/` on Linux: in `raven-dev/` for `tauri dev`, `raven-overhaul/` for `tauri:overhaul`, and `raven/` for a release build. It's yours and never leaves the machine. A newer schema can't be opened by older code, so run work in progress with `tauri:overhaul`, never against the vault you use for real work.

@@ -32,7 +32,9 @@ import { usePayloadsStore } from "../../payloads/usePayloadsStore";
 import { Palette } from "../../palette/Palette/Palette";
 import { usePaletteStore } from "../../palette/usePaletteStore";
 import { useSettings } from "../../settings/queries";
+import { cx } from "../../../lib/cx";
 import { prefersReducedMotion } from "../../../ui/motion";
+import { useTargetStore } from "../../workspace/useTargetStore";
 import "../screens.scss";
 import "./VaultGate.scss";
 
@@ -70,10 +72,11 @@ const EVERYWHERE: Hint[] = [
 
 /**
  * Setup when there is no vault, unlock when locked, children when unlocked.
- * Renders the TitleBar on every screen. Locking clears the query cache and
- * unmounts the children, so open dialogs and drafts are discarded.
+ * Renders the TitleBar on every screen, except that with `chrome="workspace"` the unlocked children draw the window's
+ * chrome bar themselves (the workspace shell). Locking clears the query cache and unmounts the children, so open
+ * dialogs and drafts are discarded.
  */
-export function VaultGate({ children }: { children: ReactNode }) {
+export function VaultGate({ children, chrome = "title-bar" }: { children: ReactNode; chrome?: "title-bar" | "workspace" }) {
   const qc = useQueryClient();
   const [status, setStatus] = useState<VaultStatus | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -122,6 +125,8 @@ export function VaultGate({ children }: { children: ReactNode }) {
     useCredPickStore.getState().reset();
     // So is the engagement full-screen Arsenal remembers.
     useLastEngagementStore.setState({ engagementId: null, hostId: null });
+    // And the workspace shell's Target per engagement.
+    useTargetStore.getState().reset();
     // Notes too: after a lock no note text stays in memory. `lock()` has already started the
     // flush, which works from a snapshot.
     discardNotes();
@@ -402,9 +407,12 @@ export function VaultGate({ children }: { children: ReactNode }) {
     );
   }
 
+  // The workspace shell's chrome bar replaces the title bar once unlocked; setup and unlock keep the title bar.
+  const chromeless = chrome === "workspace" && unlocked && !loadFailed;
+
   return (
-    <div className="vault-gate">
-      <TitleBar
+    <div className={cx("vault-gate", chromeless && "vault-gate--chromeless")}>
+      {!chromeless && <TitleBar
         left={
           unlocked ? (
             <Link to="/" className="vault-gate__home">
@@ -415,7 +423,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
         // Setup and unlock carry the wordmark themselves; only the load error needs this one.
         title={!unlocked && (!status || loadFailed) ? <Wordmark className="vault-gate__wordmark" /> : undefined}
         right={right}
-      />
+      />}
       <div className="vault-gate__stage">
         {showCipher && <CipherBackdrop ref={cipherRef} front={sweeping || closing} onClosed={closing ? endClose : undefined} />}
         {closing && <div ref={frozenHostRef} aria-hidden="true" className="vault-gate__frozen" />}
