@@ -537,3 +537,30 @@ export const SCREENS: Screen[] = [
     },
   },
 ];
+
+/** Adds the audit switch for the workspace shell (src/lib/shell.ts) to a screen's path. */
+const workspace = (path: string) => `${path}${path.includes("?") ? "&" : "?"}workspace`;
+/** The chrome bar, ready once the Engagement picker shows its value. */
+const chromeReady = (page: Page) => page.locator(".chrome-bar").getByRole("button", { name: /^Engagement: / }).waitFor();
+
+/**
+ * The workspace shell (`npm run tauri:overhaul`) at the window's minimum and its drawn size (design §1.1, §1.7). Run by
+ * visual.spec only: audit:pixel compares the old shell, which must not move while the new one is built.
+ */
+export const WORKSPACE_SCREENS: Screen[] = [
+  { id: "workspace-dashboard", path: workspace("/"), ready: ".chrome-bar >> role=button[name='Search hosts, notes and commands']", widths: [1100, 1440] },
+  { id: "workspace-board", path: workspace(E), ready: "section[aria-label='Information gathering']", widths: [1100, 1440], setup: chromeReady },
+  { id: "workspace-host", path: workspace(H), ready: "role=tab[name='Next'][selected]", widths: [1100, 1440], setup: chromeReady },
+  {
+    id: "workspace-engagement-picker", path: workspace(E), ready: "role=listbox[name='Engagements']", widths: [1100, 1440],
+    setup: (page) => page.locator(".chrome-bar").getByRole("button", { name: /^Engagement: / }).click(),
+  },
+  {
+    id: "workspace-target-picker", path: workspace(H), ready: "role=listbox[name='Hosts']", widths: [1100, 1440],
+    setup: (page) => page.locator(".chrome-bar").getByRole("button", { name: /^Target/ }).click(),
+  },
+];
+
+/** Every screen visual.spec runs: the old shell's, then the workspace shell's. */
+export const VISUAL_SCREENS: Screen[] = [...SCREENS, ...WORKSPACE_SCREENS];
+

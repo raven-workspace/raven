@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCREENS, widthsOf } from "./screens";
+import { VISUAL_SCREENS, widthsOf } from "./screens";
 import { FAILING_CHECKS, type Issue, type RawIssue } from "./types";
 
 const OUT = fileURLToPath(new URL("../audit-output/", import.meta.url));
@@ -90,7 +90,7 @@ export function renderMarkdown(all: Issue[], screenIds: string[], shots: Set<str
     lines.push("", `## ${s}`, "");
     const { groups, more } = groupRows(issues.filter((x) => x.screen === s));
     const ranAt = (w: number) => ran.has(`${s}@${w}`) || shots.has(`${s}@${w}.png`);
-    const widths = widthsOf(SCREENS.find((x) => x.id === s));
+    const widths = widthsOf(VISUAL_SCREENS.find((x) => x.id === s));
     const didRun = screenIds.includes(s) ? widths.some(ranAt) : true;
     if (!didRun) lines.push("Did not run.");
     else if (groups.length === 0) lines.push("No issues.");
@@ -129,5 +129,5 @@ export default async function globalTeardown(): Promise<void> {
   issues.sort((a, b) => cmp(a.screen, b.screen) || cmp(a.width, b.width) || cmp(a.check, b.check) || cmp(a.selector, b.selector));
   const ran = new Set(files.map((f) => f.slice(0, -".json".length)));
   await writeFile(join(OUT, "report.json"), JSON.stringify(issues, null, 2));
-  await writeFile(join(OUT, "report.md"), renderMarkdown(issues, SCREENS.map((x) => x.id), shots, ran));
+  await writeFile(join(OUT, "report.md"), renderMarkdown(issues, VISUAL_SCREENS.map((x) => x.id), shots, ran));
 }

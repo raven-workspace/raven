@@ -10,6 +10,11 @@
     background-color: var(--bg);
   }
 
+  // The workspace shell draws its own chrome bar: the body is the whole window.
+  .vault-gate--chromeless {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
   // The title bar's wordmark, a link home once unlocked.
   .vault-gate__home {
     display: grid;

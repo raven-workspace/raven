@@ -20,8 +20,12 @@ import { SECTIONS, SectionView, sectionPath, type SectionId } from "../sections/
 import { engagementKey, engagementsKey } from "../queries";
 import "./EngagementShell.scss";
 
-/** Layout for `/e/:id/*`: sidebar, header, status strip and the routed section. */
-export function EngagementShell() {
+/**
+ * Layout for `/e/:id/*`: sidebar, header, status strip and the routed section. In the workspace shell
+ * (`layout="workspace"`) the frame around the page is the shell's, so this renders only the page and the engagement's
+ * keys, sync and panels.
+ */
+export function EngagementShell({ layout = "sidebar" }: { layout?: "sidebar" | "workspace" }) {
   const { id = "", hostId, section } = useParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -79,6 +83,23 @@ export function EngagementShell() {
   // The Report section has its own strip (file name, due in, gaps) in this one's place: never two strips stacked.
   const strip = section !== "report";
   const bars = (hostId ? 0 : 1) + (strip ? 1 : 0);
+  const panels = (
+    <>
+      <CapturePanel engagement={e} />
+      <NotesPanel engagement={e} hostId={hostId ?? null} />
+    </>
+  );
+
+  if (layout === "workspace") {
+    return (
+      <>
+        <main className={cx("engagement-shell__main", strip && "engagement-shell__main--padded")}>
+          <Outlet />
+        </main>
+        {panels}
+      </>
+    );
+  }
 
   return (
     <div className="engagement-shell">
@@ -92,8 +113,7 @@ export function EngagementShell() {
           <Outlet />
         </main>
       </div>
-      <CapturePanel engagement={e} />
-      <NotesPanel engagement={e} hostId={hostId ?? null} />
+      {panels}
     </div>
   );
 }

@@ -73,6 +73,14 @@ describe("conventions", () => {
     expect(bad).toEqual([]);
   });
 
+  it("--radius-frame is the workspace frame's alone (design §1.1)", () => {
+    // The allow-list: the only sheets that may round a corner with the frame's radius.
+    const ALLOWED = ["src/features/workspace/WorkspaceShell/WorkspaceShell.scss"];
+    expect(read("src/styles/tokens.css")).toMatch(/--radius-frame:\s*16px;/);
+    const users = files.filter((f) => f.endsWith(".scss") && read(f).includes("--radius-frame")).sort();
+    expect(users).toEqual(ALLOWED);
+  });
+
   it("type tokens exist", () => {
     const css = readFileSync(join(ROOT, "src/styles/tokens.css"), "utf8");
     const sizes = {
