@@ -98,12 +98,34 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Name the apt cache
+        if: runner.os == 'Linux'
+        id: apt-cache-key
+        run: echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      # The downloaded .deb files, about 65 MB. apt still updates its lists and installs as usual, so
+      # a stale cache only means some packages download again. A new runner image or a change to
+      # this file saves a fresh copy; restore-keys reuses the last one until then.
+      - name: Restore downloaded apt packages
+        if: runner.os == 'Linux'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.arch }}-${{ steps.apt-cache-key.outputs.image }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-${{ runner.arch }}-
+
       - name: Install Linux system packages
         if: runner.os == 'Linux'
         # Tauri's WebKitGTK stack (https://v2.tauri.app/start/prerequisites/#linux). The vendored
         # SQLCipher and OpenSSL that rusqlite builds need only the compiler, perl and make the
         # runner already has.
         run: |
+          # Skip rebuilding the man page index after the install: nobody reads man pages here.
+          sudo rm -f /var/lib/man-db/auto-update
+          # The cache is owned by the runner user, and apt's own archive by root, so copy across.
+          if compgen -G ~/apt-archives/'*.deb' > /dev/null; then
+            sudo cp ~/apt-archives/*.deb /var/cache/apt/archives/
+          fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
@@ -113,6 +135,9 @@ jobs:
             libssl-dev \
             libwebkit2gtk-4.1-dev \
             libxdo-dev
+          mkdir -p ~/apt-archives
+          cp /var/cache/apt/archives/*.deb ~/apt-archives/
+          echo "apt archive: $(ls ~/apt-archives/*.deb | wc -l) packages, $(du -sh ~/apt-archives | cut -f1)"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
