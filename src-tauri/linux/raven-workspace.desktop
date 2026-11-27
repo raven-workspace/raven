@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories={{categories}}
+Comment=Penetration-test engagement workspace
+Exec={{exec}}
+StartupWMClass={{exec}}
+Icon={{icon}}
+Name=Raven Workspace
+Terminal=false
+Type=Application

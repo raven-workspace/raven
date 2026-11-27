@@ -27,4 +27,16 @@ describe("Tauri config", () => {
   it("Linux bundles only the .deb", () => {
     expect(linux.bundle.targets).toEqual(["deb"]);
   });
+
+  // `raven` is taken on Kali (its own package, and other tools on the PATH), so on Linux the package, the program and
+  // its menu entry are raven-workspace. The deb's package name is productName in kebab case. macOS keeps "Raven".
+  it("Linux installs as raven-workspace, never plain raven", () => {
+    expect(base.productName).toBe("Raven");
+    expect(base.mainBinaryName).toBeUndefined();
+    expect(linux.productName).toBe("raven-workspace");
+    expect(linux.mainBinaryName).toBe("raven-workspace");
+    const desktop = readFileSync(join(ROOT, "src-tauri", linux.bundle.linux.deb.desktopTemplate), "utf8");
+    expect(desktop).toMatch(/^Name=Raven Workspace$/m);
+    expect(desktop).toMatch(/^Exec=\{\{exec\}\}$/m);
+  });
 });

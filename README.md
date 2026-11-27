@@ -27,11 +27,12 @@ On first launch Raven asks you to create a vault password. The vault lives under
 CI builds a `.deb` for amd64 and arm64 on every pull request and every push to `develop`. Open the run in the repo's Actions tab, download `raven-deb-amd64` or `raven-deb-arm64` (arm64 for Kali in a VM on Apple Silicon; `dpkg --print-architecture` tells you which), unzip it, and install it with apt, which pulls in WebKitGTK:
 
 ```sh
-sudo apt install ./Raven_*.deb
-raven                  # or Raven in the applications menu
+cp raven-workspace_*.deb /tmp/   # apt's _apt user can't read your home folder on Kali
+sudo apt install /tmp/raven-workspace_*.deb
+raven-workspace        # or Raven Workspace in the applications menu
 ```
 
-To build the `.deb` yourself, run `npx tauri build` on the Linux machine; it lands in `src-tauri/target/release/bundle/deb/`. On Linux, Raven keeps the desktop's own title bar.
+On Linux the package, the program and its menu entry are all `raven-workspace`, because `raven` is already taken on Kali. To build the `.deb` yourself, run `npx tauri build` on the Linux machine; it lands in `src-tauri/target/release/bundle/deb/`. On Linux, Raven keeps the desktop's own title bar.
 
 You don't need the desktop app or a vault to work on most of the UI:
 
