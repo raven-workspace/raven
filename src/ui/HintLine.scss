@@ -2,9 +2,12 @@
 
 @layer components {
   // One hint: its key caps, then its label.
+  // Every track is max-content: a key cap's explicit min-width would otherwise let the grid squeeze caps below their
+  // text, and the line would never overflow, so HintLine would never drop a hint.
   .hint {
     display: inline-grid;
     grid-auto-flow: column;
+    grid-auto-columns: max-content;
     align-items: center;
     justify-content: start;
     gap: 6px;
@@ -17,6 +20,7 @@
   .hint__keys {
     display: inline-grid;
     grid-auto-flow: column;
+    grid-auto-columns: max-content;
     align-items: center;
     justify-content: start;
     gap: var(--space-xs);
@@ -26,6 +30,7 @@
   .hint-line {
     display: grid;
     grid-auto-flow: column;
+    grid-auto-columns: max-content;
     align-items: center;
     justify-content: start;
     column-gap: var(--space-xl);
