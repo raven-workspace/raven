@@ -1,12 +1,12 @@
 # Raven (desktop): design
 
-> **Frozen record, shipped** (written 2026-11-03, last revised 2026-11-07). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
+> **Frozen record, shipped** (written 2026-11-03, last revised 2026-11-27: Linux is now a target, RAV-67). This spec records the decisions and reasoning at the time. For how Raven works now, read `PRODUCT.md`, `DESIGN.md` and the code; where this spec and the app differ, the app wins.
 
 Date: 2026-11-03.
 
 ## 1. Intent: what this is and why
 
-Raven is the user's personal work surface for penetration testing. It covers the OSCP exam (not yet booked; realistically early 2027), the OffSec challenge labs before it, and real client engagements after it. It is single-user, local-only, and runs as a macOS desktop app.
+Raven is the user's personal work surface for penetration testing. It covers the OSCP exam (not yet booked; realistically early 2027), the OffSec challenge labs before it, and real client engagements after it. It is single-user, local-only, and runs as a desktop app on macOS and on Linux (Kali, as a `.deb` for amd64 and arm64; added 2026-11-27).
 
 It replaces two things:
 
@@ -52,7 +52,7 @@ This design builds a **new app in a new repo**, not a rework of the old one. The
 - Hebrew/RTL support and i18n of any kind.
 - Sync between machines and multiple users.
 - A browser build. The UI is only viewed in the desktop dev window and the built app.
-- Windows and Linux builds, for now.
+- Windows builds, for now. (Linux was a non-goal until 2026-11-27: the built-in terminal is tested live on Kali, so Raven ships as a `.deb` there too. See `docs/specs/terminal.md` §3.)
 - Any network calls, telemetry or cloud features. Exception: NIST NVD CVE lookups, user decision 2026-11-06.
 - The old CPTS field manual content, the Writeup Studio, the exam simulator's extras (burndown, bio breaks, quick-action drawer), and the old global variables bar.
 
@@ -68,14 +68,14 @@ This design builds a **new app in a new repo**, not a rework of the old one. The
 
 | Choice | Decision | Whose |
 |---|---|---|
-| Form | macOS desktop app; dev viewed with `npm run tauri dev` (hot reload), no browser mode | user (desktop + dev window); my call (macOS only) |
+| Form | Desktop app on macOS, and on Linux as a `.deb` for amd64 and arm64 (since 2026-11-27); dev viewed with `npm run tauri dev` (hot reload), no browser mode | user (desktop + dev window; Linux for Kali, 2026-11-27); my call (macOS only, until then) |
 | Shell | **Tauri 2** (Rust backend, system WebView) | my call, user did not object |
 | UI | React + TypeScript + Vite. Tailwind is allowed as a utility layer, but the visual design is custom (§8) | user (Tailwind OK, no generic look); my call (React/TS, so engines and tests port) |
 | Database | **SQLite, encrypted with SQLCipher**, one file in the app data directory, accessed from the Rust side | user (real DB, encrypted); my call (SQLCipher) |
 | Evidence files | Screenshots and attachments are stored **inside the encrypted database** as blobs, so a backup is one encrypted file | my call |
 | Tests | Vitest for TS engines and UI; Rust unit tests for the storage layer | my call |
 
-**Setup:** the user's Mac needs the Rust toolchain and Xcode Command Line Tools. The builder checks for and installs these as the first task.
+**Setup:** the user's Mac needs the Rust toolchain and Xcode Command Line Tools. The builder checks for and installs these as the first task. On Linux, building needs Tauri's WebKitGTK packages; installing the `.deb` needs only `apt`, and the window keeps the desktop's own title bar (README, Getting started).
 
 ## 4. Security and data
 
@@ -319,7 +319,7 @@ Each phase gets its own plan and must leave a usable app.
 
 ## 12. Calls I made (the user should check these)
 1. Tauri 2 + SQLCipher, with evidence stored inside the database.
-2. macOS only; no sync.
+2. macOS only; no sync. (Linux added 2026-11-27, at the user's call, for Kali.)
 3. Phase order: Arsenal (2) before Reporting (3), because the exam needs both and the Arsenal is used mid-attempt.
 4. Output interpreters moved to phase 2, to keep phase 1 tight.
 5. The cleanup list is suggested from commands, but every suggestion needs user confirmation.

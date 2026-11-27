@@ -1,6 +1,6 @@
 # Raven
 
-Raven is a local-only macOS desktop app for penetration testers. You keep one engagement in it from start to finish: hosts and services, every command and screenshot as you take it, checklists that tick themselves from what you logged, credentials, findings, a command library with your values filled in, and the exam report written from that record.
+Raven is a local-only desktop app for penetration testers, on macOS and on Linux (Kali). You keep one engagement in it from start to finish: hosts and services, every command and screenshot as you take it, checklists that tick themselves from what you logged, credentials, findings, a command library with your values filled in, and the exam report written from that record.
 
 It's built for one person preparing for the OSCP and doing lab and client work afterwards, so it's keyboard-first, fast to capture into, and quiet on screen. `PRODUCT.md` describes who it's for and every feature in detail.
 
@@ -8,7 +8,11 @@ Everything stays on the machine. Data lives in an encrypted SQLite vault unlocke
 
 ## Getting started
 
-You need macOS, Node 22 with npm, and Rust stable (through rustup).
+You need Node 22 with npm and Rust stable (through rustup), on macOS or Linux. On macOS, also the Xcode Command Line Tools. On Kali or another Debian-based Linux, also Tauri's WebKitGTK build packages:
+
+```sh
+sudo apt install build-essential file libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+```
 
 ```sh
 npm install            # also points git at the repo's hooks in .githooks/
@@ -16,7 +20,18 @@ npm run tauri dev      # build and open the desktop app
 npm run tauri:overhaul # the same, with its own vault and port (1430), so it runs beside tauri dev
 ```
 
-On first launch Raven asks you to create a vault password. The vault lives under `~/Library/Application Support/app.raven.desktop/`: in `raven-dev/` for `tauri dev`, `raven-overhaul/` for `tauri:overhaul`, and `raven/` for a release build. It's yours and never leaves the machine. A newer schema can't be opened by older code, so run work in progress with `tauri:overhaul`, never against the vault you use for real work.
+On first launch Raven asks you to create a vault password. The vault lives under `~/Library/Application Support/app.raven.desktop/` on macOS and `~/.local/share/app.raven.desktop/` on Linux: in `raven-dev/` for `tauri dev`, `raven-overhaul/` for `tauri:overhaul`, and `raven/` for a release build. It's yours and never leaves the machine. A newer schema can't be opened by older code, so run work in progress with `tauri:overhaul`, never against the vault you use for real work.
+
+### Installing on Kali
+
+CI builds a `.deb` for amd64 and arm64 on every pull request and every push to `develop`. Open the run in the repo's Actions tab, download `raven-deb-amd64` or `raven-deb-arm64` (arm64 for Kali in a VM on Apple Silicon; `dpkg --print-architecture` tells you which), unzip it, and install it with apt, which pulls in WebKitGTK:
+
+```sh
+sudo apt install ./Raven_*.deb
+raven                  # or Raven in the applications menu
+```
+
+To build the `.deb` yourself, run `npx tauri build` on the Linux machine; it lands in `src-tauri/target/release/bundle/deb/`. On Linux, Raven keeps the desktop's own title bar.
 
 You don't need the desktop app or a vault to work on most of the UI:
 
