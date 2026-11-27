@@ -4,6 +4,7 @@ Drives the real UI against the in-memory fake backend (`npm run dev:audit`, port
 
 - Run: `npm run audit:visual` (selftest + visual + keyboard + ux: flows and states). Playwright starts and stops the dev server itself.
 - `npm run audit:selftest` runs only the self-tests; it also boots the 5199 dev server and writes a "No screens ran" report.
+- Linux keys: `AUDIT_OS=linux npx playwright test -c audit/playwright.config.ts visual` runs the screens with a Linux `navigator.platform`, so every shortcut shows its Linux key (`src/lib/shortcuts.ts`) and the gate judges the wider key caps.
 - State screens: the fake backend honours `?audit=empty|loading|error`, which `ux.spec.ts` uses for the `<screen>~empty|loading|error` runs.
 - Report sections say "Did not run" (or "Did not run at: <widths>") for anything without an issue file or screenshot.
 - Output (gitignored): `audit-output/report.md` (summary table, then one section per screen), `report.json`,

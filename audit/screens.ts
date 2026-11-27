@@ -16,6 +16,9 @@ export const WIDTHS = [900, 1024, 1280, 1440] as const;
 /** The widths a screen runs at. */
 export const widthsOf = (screen: Pick<Screen, "widths"> | undefined): readonly number[] => screen?.widths ?? WIDTHS;
 
+/** ⌘ on macOS; Ctrl under `AUDIT_OS=linux`, where the app reads a Linux platform (visual.spec.ts). */
+const MOD = process.env.AUDIT_OS === "linux" ? "Control" : "Meta";
+
 const E = `/e/${AUDIT_IDS.labEngagement}`;
 const H = `${E}/h/${AUDIT_IDS.webHost}`;
 
@@ -138,7 +141,7 @@ export const SCREENS: Screen[] = [
     // The sidebar starts collapsed below 1000px, so only press ⌘B when it is open.
     setup: async (page) => {
       await focusBody(page);
-      if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+      if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press(`${MOD}+B`);
     },
   },
   {
@@ -146,7 +149,7 @@ export const SCREENS: Screen[] = [
     // The collapsed rail's host tooltip (name and IP), opened by keyboard focus.
     setup: async (page) => {
       await focusBody(page);
-      if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+      if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press(`${MOD}+B`);
       await page.locator(`nav[aria-label='Engagement'] a[href$='/h/${AUDIT_IDS.webHost}']`).focus();
     },
   },
@@ -243,7 +246,7 @@ export const SCREENS: Screen[] = [
   {
     id: "palette", path: H, ready: "role=listbox[name='Results']",
     setup: async (page) => {
-      await page.keyboard.press("Meta+K");
+      await page.keyboard.press(`${MOD}+K`);
       await page.getByRole("combobox").first().fill("smb");
     },
   },
@@ -251,14 +254,14 @@ export const SCREENS: Screen[] = [
     // A lookup row's key: its Lookup group comes first, the options are its commands ready to fill.
     id: "palette-lookup", path: H, ready: "role=group[name^='STATUS_ZZ_DENIED'] >> role=option >> nth=0",
     setup: async (page) => {
-      await page.keyboard.press("Meta+K");
+      await page.keyboard.press(`${MOD}+K`);
       await page.getByRole("combobox").first().fill("STATUS_ZZ_DENIED");
     },
   },
   {
     id: "palette-credmenu", path: FS01, ready: "role=listbox[name^='Fill with credential']",
     setup: async (page) => {
-      await page.keyboard.press("Meta+K");
+      await page.keyboard.press(`${MOD}+K`);
       await page.getByRole("combobox").first().waitFor();
       await page.keyboard.press("Alt+KeyC");
     },
@@ -266,7 +269,7 @@ export const SCREENS: Screen[] = [
   {
     id: "palette-guard", path: FS01, ready: "text=/not filled. Press ↵ again to copy anyway/",
     setup: async (page) => {
-      await page.keyboard.press("Meta+K");
+      await page.keyboard.press(`${MOD}+K`);
       await page.getByRole("combobox", { name: "Search" }).fill(GUARD_QUERY);
       await page.keyboard.press("Enter");
     },
@@ -274,7 +277,7 @@ export const SCREENS: Screen[] = [
   {
     id: "palette-suggest", path: FS01, ready: "role=listbox[name^='Suggestions for']",
     setup: async (page) => {
-      await page.keyboard.press("Meta+K");
+      await page.keyboard.press(`${MOD}+K`);
       await page.getByRole("combobox", { name: "Search" }).fill("psexec");
       // TARGET_IP is filled from the host and offers every host's address as a suggestion.
       await page.getByRole("combobox", { name: "Value for TARGET_IP" }).focus();
@@ -283,7 +286,7 @@ export const SCREENS: Screen[] = [
   {
     id: "palette-hostmenu", path: H, ready: "role=listbox[name='Fill for host']",
     setup: async (page) => {
-      await page.keyboard.press("Meta+K");
+      await page.keyboard.press(`${MOD}+K`);
       await page.getByRole("combobox").first().waitFor();
       await page.keyboard.press("Alt+H");
     },
