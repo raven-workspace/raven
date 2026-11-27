@@ -1,14 +1,17 @@
 # Builds and tests Raven on every pull request: the five checks from CONTRIBUTING's "Before you
-# open a PR" (typecheck, lint, npm test, cargo test and a Tauri app build), and packages the Linux
-# .deb files. All jobs run at once.
+# open a PR" (typecheck, lint, npm test, cargo test and a Tauri app build). Pushes to develop and
+# manual runs also package the Linux .deb files. All jobs run at once.
 #
 # - The frontend checks run once, on Linux amd64. Vitest runs in Node and jsdom, and nothing in
 #   src/ depends on the OS or the CPU, so other targets would repeat the same run. npm test is
 #   split into shards to keep the wait short.
 # - The Rust checks run on each platform Raven ships for (docs/specs/terminal.md §3): macOS arm64,
 #   Linux amd64 and Linux arm64. The Tauri build also runs the frontend build there, so a Vite,
-#   Sass or esbuild binary that fails on one platform still shows up. On Linux it is a release
-#   build, packaged and uploaded as the run's .deb artifacts (raven-deb-amd64, raven-deb-arm64).
+#   Sass or esbuild binary that fails on one platform still shows up. On a PR it is a debug build
+#   everywhere. On a push to develop or a manual run (Actions > CI > Run workflow, from any branch),
+#   Linux makes a release build instead, packaged and uploaded as the run's .deb artifacts
+#   (raven-deb-amd64, raven-deb-arm64). PRs skip it: the release link (LTO, one codegen unit) takes
+#   about 6 minutes on one core, and a tester installs from develop.
 #
 # A failing check fails its job, and so the PR. Within a job, later checks still run, so one red
 # run shows every failure at once.
@@ -16,6 +19,9 @@
 # The Rust cache is saved only by runs on develop. A PR can restore its base branch's caches but
 # not another PR's, so the push run after each merge keeps every PR's first run warm, and PRs
 # don't fill the repo's 10 GB cache quota with copies of their own.
+#
+# A new push to a PR cancels the PR's older run. Push and manual runs each get their own group and
+# always finish, so every merge to develop gets its .deb and saves its cache.
 name: CI
 
 on:
@@ -23,13 +29,14 @@ on:
     branches: [develop, main]
   push:
     branches: [develop]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   typecheck-and-lint:
@@ -82,7 +89,7 @@ jobs:
   rust:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-    # The Linux release build (LTO, one codegen unit) is the long pole.
+    # The Linux release build (LTO, one codegen unit) on develop is the long pole.
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -179,14 +186,18 @@ jobs:
         run: cargo test --locked
 
       - name: Build the Tauri app
-        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' && runner.os == 'macOS' }}
+        if: >-
+          ${{ !cancelled() && steps.npm-ci.outcome == 'success' &&
+              (runner.os == 'macOS' || github.event_name == 'pull_request') }}
         # A debug build with the frontend embedded, as a release build would have it, reusing the
-        # dependencies cargo test just compiled.
+        # dependencies cargo test just compiled. On Linux, only on PRs: the .deb step replaces it.
         run: npx tauri build --debug --no-bundle -- --locked
 
       - name: Build the .deb
         id: deb
-        if: ${{ !cancelled() && steps.npm-ci.outcome == 'success' && runner.os == 'Linux' }}
+        if: >-
+          ${{ !cancelled() && steps.npm-ci.outcome == 'success' &&
+              runner.os == 'Linux' && github.event_name != 'pull_request' }}
         # A release build, packaged as the .deb a tester installs: release so it opens the release
         # vault (raven/, not raven-dev/). tauri.linux.conf.json bundles only the .deb.
         run: npx tauri build -- --locked

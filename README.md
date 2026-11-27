@@ -24,7 +24,7 @@ On first launch Raven asks you to create a vault password. The vault lives under
 
 ### Installing on Kali
 
-CI builds a `.deb` for amd64 and arm64 on every pull request and every push to `develop`. Open the run in the repo's Actions tab, download `raven-deb-amd64` or `raven-deb-arm64` (arm64 for Kali in a VM on Apple Silicon; `dpkg --print-architecture` tells you which), unzip it, and install it with apt, which pulls in WebKitGTK:
+CI builds a `.deb` for amd64 and arm64 on every push to `develop` (pull requests only check that the app builds). For another branch, start CI by hand from the Actions tab (CI, Run workflow). Open the run in the repo's Actions tab, download `raven-deb-amd64` or `raven-deb-arm64` (arm64 for Kali in a VM on Apple Silicon; `dpkg --print-architecture` tells you which), unzip it, and install it with apt, which pulls in WebKitGTK:
 
 ```sh
 cp raven-workspace_*.deb /tmp/   # apt's _apt user can't read your home folder on Kali
