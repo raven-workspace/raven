@@ -1,0 +1,17 @@
+@use "@/styles/abstracts" as *;
+
+// Settings › About and its Open source licences dialog.
+@layer features {
+  .about-section__text {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  // THIRD_PARTY_NOTICES as plain text: it is laid out for a 100-column terminal, so long lines wrap.
+  .about-section__notices {
+    @include type(code);
+    color: var(--fg-2);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}

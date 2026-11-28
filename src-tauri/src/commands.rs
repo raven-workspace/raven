@@ -129,6 +129,15 @@ pub async fn tun0_address() -> AppResult<Option<String>> {
     off_main(|| Ok(crate::tun0::address())).await
 }
 
+/// THIRD_PARTY_NOTICES as the app bundle ships it (a bundle resource, `tauri.conf.json`), for
+/// Settings › About. Read from the bundle rather than built into the binary, so the page shows the
+/// same file a user finds in the app's folder. No vault needed.
+#[tauri::command]
+pub async fn third_party_notices(app: AppHandle) -> AppResult<String> {
+    let path = app.path().resolve("THIRD_PARTY_NOTICES", tauri::path::BaseDirectory::Resource).map_err(|e| AppError::Io(e.to_string()))?;
+    off_main(move || Ok(std::fs::read_to_string(path)?)).await
+}
+
 #[tauri::command]
 pub async fn settings_update(app: AppHandle, patch: SettingsPatch) -> AppResult<Settings> {
     with_vault(app, move |v| settings::update(v.conn()?, patch)).await

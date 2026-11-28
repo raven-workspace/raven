@@ -52,6 +52,7 @@ pub fn run() {
             commands::settings_get,
             commands::tun0_address,
             commands::settings_update,
+            commands::third_party_notices,
             commands::nvd_lookup,
             commands::backup_now,
             commands::backups_list,
