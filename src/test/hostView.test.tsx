@@ -3,9 +3,10 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { HostView } from "../features/hosts/HostView/HostView";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -297,5 +298,82 @@ describe("host view", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("{Escape}");
     expect(screen.getByTestId("where")).toHaveTextContent(/^\/e\/e1$/);
+  });
+});
+
+/** The host page alone, laid out for one shell or the other (the shell decides it; the page does not). */
+function mountHostView(workspace: boolean) {
+  return render(
+    <QueryClientProvider client={makeQueryClient()}>
+      <MemoryRouter initialEntries={["/e/e1/h/h1"]}>
+        <HostView engagementId="e1" hostId="h1" workspace={workspace} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe("host view in the workspace shell (design §2.2)", () => {
+  // The editor's host page at the 1100px window: about 722px wide inside its padding (Spec 1 §1.7).
+  const narrow = () => vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 722 } as DOMRect);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("keeps Facts beside the work column below 760px, where the engagement shell stacks them", async () => {
+    narrow();
+    const { unmount } = mountHostView(false);
+    await screen.findByRole("region", { name: "Facts" });
+    expect(document.querySelector(".host-view")).toHaveAttribute("data-host-layout", "stacked");
+    unmount();
+    narrow();
+    mountHostView(true);
+    await screen.findByRole("region", { name: "Facts" });
+    const root = document.querySelector(".host-view")!;
+    expect(root).toHaveAttribute("data-host-layout", "columns");
+    expect(root).toHaveClass("host-view--workspace");
+    const scss = readFileSync("src/features/hosts/HostView/HostView.scss", "utf8");
+    expect(scss).toMatch(/\.host-view--workspace \{\s*\.host-view__body \{\s*grid-template-columns: minmax\(16rem, 1fr\) minmax\(0, 1\.4fr\);/);
+  });
+
+  it("puts the header on one row; the engagement shell keeps two", async () => {
+    const { unmount } = mountHostView(false);
+    expect(await screen.findByRole("region", { name: "Host" })).not.toHaveClass("host-header--inline");
+    unmount();
+    mountHostView(true);
+    const header = await screen.findByRole("region", { name: "Host" });
+    expect(header).toHaveClass("host-header--inline");
+    expect(within(header).getByText("10.10.10.5")).toHaveClass("host-header__ip");
+    expect(within(header).getByText("user")).toHaveAttribute("data-variant", "accent");
+  });
+
+  it("groups the facts as the workspace shell spaces them", async () => {
+    mountHostView(true);
+    expect(await screen.findByRole("region", { name: "Facts" })).toHaveClass("facts-column--workspace");
+  });
+
+  it("Full checklist is a small button that toggles the full checklist", async () => {
+    const user = userEvent.setup();
+    mountHostView(true);
+    const full = await screen.findByRole("button", { name: "Full checklist" });
+    expect(full).toHaveClass("button", "button--sm");
+    expect(full).toHaveAttribute("aria-expanded", "false");
+    await user.click(full);
+    expect(full).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("Stuck? names its H key in a tooltip, not inline, so the row fits at 1100px", async () => {
+    mountHostView(true);
+    await screen.findByRole("tab", { name: "Next" });
+    const stuck = screen.getByRole("button", { name: "Stuck?" });
+    expect(stuck).toHaveTextContent(/^Stuck\?$/);
+    act(() => stuck.focus());
+    const tip = await screen.findByRole("tooltip");
+    expect(within(tip).getByText("H")).toHaveClass("tooltip__key");
+  });
+
+  it("H still opens Stuck", async () => {
+    const user = userEvent.setup();
+    mountHostView(true);
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("h");
+    expect(await screen.findByRole("complementary", { name: /^Stuck on/ })).toBeInTheDocument();
   });
 });

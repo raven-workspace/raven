@@ -79,4 +79,71 @@
     display: grid;
     gap: var(--space-md);
   }
+
+  // The workspace shell (design §2.2). Both columns at every width: the window's 1100px minimum leaves the editor about
+  // 770px, room for both (Spec 1, "At 1100px, the minimum").
+  .host-view--workspace {
+    .host-view__body {
+      grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.4fr);
+      grid-template-rows: repeat(1, minmax(0, 1fr));
+      gap: var(--space-xl);
+    }
+
+    .host-view__facts {
+      max-height: none;
+    }
+
+    // The work tabs sit straight on the content.
+    .host-view__tabs {
+      gap: 0;
+    }
+
+    // A 36px row over a hairline: Next, Log and Findings, then the tab's control and Stuck?.
+    .host-view__tab-bar {
+      height: 36px;
+      box-shadow: inset 0 -1px 0 var(--line);
+    }
+
+    .host-view__tab-controls {
+      gap: var(--space-lg);
+    }
+
+    .tabs__list {
+      height: 100%;
+      gap: 0;
+    }
+
+    .tabs__trigger {
+      height: 100%;
+      padding-inline: var(--space-md);
+      border-radius: 0;
+      font-weight: 500;
+      color: var(--muted-2);
+
+      &[aria-selected="true"] {
+        color: var(--fg);
+      }
+    }
+
+    // The selected tab's 2px accent underline, inset 8px each side, over the row's hairline.
+    .tab-mark {
+      border-radius: 0;
+      background-color: transparent;
+      box-shadow: none;
+
+      &::after {
+        content: "";
+        position: absolute;
+        right: var(--space-sm);
+        bottom: 0;
+        left: var(--space-sm);
+        height: 2px;
+        background-color: var(--accent);
+      }
+    }
+
+    .host-view__panel {
+      border-top: 0;
+    }
+  }
 }

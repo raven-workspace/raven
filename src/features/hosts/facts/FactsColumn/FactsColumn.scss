@@ -4,4 +4,10 @@
   .facts-column {
     display: grid;
   }
+
+  // The workspace shell (design §2.2): groups 12px apart, their headers without a hairline.
+  .facts-column--workspace {
+    align-content: start;
+    gap: var(--space-md);
+  }
 }

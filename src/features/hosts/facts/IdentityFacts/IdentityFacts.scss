@@ -105,4 +105,20 @@
     @include type(meta);
     color: var(--muted);
   }
+
+  // The workspace shell (design §2.2): a 64px label column, each row at least 28px.
+  .facts-column--workspace .identity-facts__kv {
+    grid-template-columns: 64px minmax(0, 1fr);
+    row-gap: 0;
+
+    > dt,
+    > dd {
+      min-height: 1.75rem;
+      padding-top: var(--space-xs);
+    }
+  }
+
+  .facts-column--workspace .identity-facts__key {
+    color: var(--muted-2);
+  }
 }

@@ -42,4 +42,30 @@
     @include type(meta);
     color: var(--fg-2);
   }
+
+  // The workspace shell (design §2.2): one row. The name and its pencil, then the details run on one line. The details
+  // keep their width; a long name truncates (its full name in the title) rather than pushing them out of the editor.
+  .host-header--inline {
+    grid-template-columns: minmax(0, auto) max-content;
+    justify-content: start;
+    align-items: center;
+    column-gap: var(--space-sm);
+
+    .host-header__name-row {
+      column-gap: var(--space-sm);
+    }
+
+    .host-header__details {
+      display: grid;
+      grid-auto-flow: column;
+      justify-content: start;
+      gap: var(--space-sm);
+      padding-left: var(--space-sm);
+    }
+
+    .host-header__os {
+      gap: var(--space-xs);
+      color: var(--muted-2);
+    }
+  }
 }

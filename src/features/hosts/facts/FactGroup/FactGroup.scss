@@ -157,4 +157,14 @@
   .entry-link__label {
     @include truncate;
   }
+
+  // The workspace shell's host page (design §2.2): no hairline under the header; the column's gap spaces the groups.
+  .facts-column--workspace .fact-group__header {
+    min-height: 1.75rem;
+    border-bottom: 0;
+  }
+
+  .facts-column--workspace .fact-group__body {
+    padding-bottom: 0;
+  }
 }
