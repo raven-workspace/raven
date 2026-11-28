@@ -12,7 +12,7 @@ import { searchPalette } from "../features/palette/search";
 import { setImported } from "../engines/library/store";
 import type { LibraryCommand } from "../engines/library/types";
 import { useCredPickStore } from "../features/checklist/credPick";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../features/arsenal/useFillScope";
@@ -60,7 +60,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   usePaletteStore.getState().close();
   useLastEngagementStore.setState({ engagementId: null, hostId: null });
   setImported({

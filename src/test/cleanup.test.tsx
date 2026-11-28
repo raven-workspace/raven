@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { useCredPickStore } from "../features/checklist/credPick";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -55,7 +55,7 @@ function mount(opts: { log?: LogEntry[]; path?: string } = {}) {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   useCredPickStore.getState().reset();
   store = [];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });

@@ -1,4 +1,5 @@
-import type { ClipboardEvent, KeyboardEvent } from "react";
+import type { ClipboardEvent, DragEvent, KeyboardEvent } from "react";
+import { cx } from "../../../lib/cx";
 import { keyLabel, SHORTCUTS } from "../../../lib/shortcuts";
 import type { LogKind } from "../../../types/log";
 import { XIcon } from "@phosphor-icons/react";
@@ -21,15 +22,21 @@ export interface PasteAreaProps {
   bindRef: (el: HTMLElement | null) => void;
   onText: (text: string) => void;
   onPaste: (e: ClipboardEvent<HTMLElement>) => void;
+  /** A dragged image file lands here too (the log entry tab). */
+  onDragOver?: (e: DragEvent<HTMLElement>) => void;
+  onDrop?: (e: DragEvent<HTMLElement>) => void;
   onKeyDown: (e: KeyboardEvent<HTMLElement>) => void;
   onRemoveImage: () => void;
+  /** Fill the parent's height, with no resize handle: the log entry tab's paste column. */
+  fill?: boolean;
 }
 
 /**
  * Where the paste lands (label "Paste"): a screenshot's preview, else a text area. A flag shows
- * its image as a removable thumbnail above the value.
+ * its image as a removable thumbnail above the value. Filling (the log entry tab), it takes its parent's height: the
+ * preview fits the image inside it, and the text area grows to it.
  */
-export function PasteArea({ kind, text, image, bindRef, onText, onPaste, onKeyDown, onRemoveImage }: PasteAreaProps) {
+export function PasteArea({ kind, text, image, bindRef, onText, onPaste, onDragOver, onDrop, onKeyDown, onRemoveImage, fill = false }: PasteAreaProps) {
   if (kind === "screenshot" && image) {
     return (
       <div
@@ -37,15 +44,18 @@ export function PasteArea({ kind, text, image, bindRef, onText, onPaste, onKeyDo
         tabIndex={0}
         aria-label="Paste"
         onPaste={onPaste}
-        className="paste-area__preview"
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        className={cx("paste-area__preview", fill && "paste-area__preview--fill")}
       >
         <img src={image.objectUrl} alt="Pasted screenshot" className="paste-area__image" />
       </div>
     );
   }
-  return (
+  const thumb = kind === "flag" && image;
+  const area = (
     <>
-      {kind === "flag" && image && (
+      {thumb && (
         <div className="paste-area__thumb-row">
           <img src={image.objectUrl} alt="Pasted image" className="paste-area__thumb" />
           <IconButton icon={XIcon} label="Remove image" onClick={onRemoveImage} />
@@ -60,8 +70,13 @@ export function PasteArea({ kind, text, image, bindRef, onText, onPaste, onKeyDo
         value={text}
         onChange={(e) => onText(e.target.value)}
         onPaste={onPaste}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
         onKeyDown={onKeyDown}
+        className={fill ? "paste-area__text--fill" : undefined}
       />
     </>
   );
+  // Filling, the thumbnail (when there is one) sits over the text area, which takes the rest of the height.
+  return fill ? <div className={cx("paste-area--fill", thumb && "paste-area--fill-thumb")}>{area}</div> : area;
 }

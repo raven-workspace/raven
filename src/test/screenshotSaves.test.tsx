@@ -12,7 +12,7 @@ import type { Editor } from "prosekit/core";
 import { TextSelection } from "prosekit/pm/state";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReportData, ReportNode, ReportTarget } from "../engines/report";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { CHECKLIST_FAILED, resetFirstOpens } from "../features/checklist/sync";
 import { useFindingDraftStore } from "../features/findings/useFindingDraftStore";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext/ReportDataContext";
@@ -64,7 +64,7 @@ Range.prototype.getBoundingClientRect ??= () => new DOMRect();
 
 beforeEach(() => {
   localStorage.clear();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   useFindingDraftStore.getState().clearAll();
   resetFirstOpens();
   resetFake();

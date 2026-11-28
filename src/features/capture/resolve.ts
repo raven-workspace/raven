@@ -6,7 +6,7 @@ import { BOARD_COLUMNS, type Host, type HostOs } from "../../types/host";
 import type { FlagKind, LogContent, LogEntry, LogKind } from "../../types/log";
 import { shortHostName } from "../../lib/hostName";
 import type { CaptureEdits } from "./saveCapture";
-import type { PanelDraft } from "./useCaptureStore";
+import type { LogEntryDraft } from "./useLogEntryStore";
 
 export const KINDS: { kind: LogKind; label: string }[] = [
   { kind: "command", label: "Command" },
@@ -57,7 +57,7 @@ export interface Resolved {
 }
 
 /** Turns the panel's input plus the engine's suggestions into the fields that will be saved. */
-export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
+export function resolveCapture(pd: LogEntryDraft, ctx: CaptureContext): Resolved {
   const { hosts } = ctx;
   const kind = pd.kind ?? detectKind(pd.text, pd.image !== null, ctx.library);
   const draftInput: DraftInput = {

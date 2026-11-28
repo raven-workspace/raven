@@ -10,7 +10,7 @@ import { setImported } from "../../../engines/library/store";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../../../features/arsenal/useFillScope";
-import { useCaptureStore } from "../../../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../../../features/capture/useLogEntryStore";
 import { logCommand } from "../../../features/capture/logCommand";
 import { useManualStore } from "../../../features/manual/useManualStore";
 import { useNotesStore } from "../../../features/notes/useNotesStore";
@@ -70,7 +70,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   Element.prototype.scrollIntoView = vi.fn() as unknown as Element["scrollIntoView"];
   useManualStore.setState({ place: null, history: [] });
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   usePaletteStore.getState().close();
   useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
   useArsenalStore.setState({ open: false, cardId: null, blockId: null, solo: null });

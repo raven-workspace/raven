@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { EXPLORER_KEY, useExplorerStore } from "../features/workspace/useExplorerStore";
 import { useTargetStore } from "../features/workspace/useTargetStore";
@@ -44,6 +44,7 @@ function renderAt(path: string) {
             <Route path="e/:id/h/:hostId" element={<Where />} />
             <Route path="e/:id/f/:findingId" element={<Where />} />
             <Route path="e/:id/notes/:hostId?" element={<Where />} />
+            <Route path="e/:id/log-entry" element={<Where />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -81,7 +82,7 @@ beforeEach(() => {
 afterEach(() => {
   useTargetStore.getState().reset();
   useExplorerStore.getState().reset();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   useNotesStore.setState({ open: false });
 });
 
@@ -179,9 +180,13 @@ describe("Explorer (design §1.4)", () => {
     useExplorerStore.getState().setAddingHost(false);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
+    // Add log entry opens the log entry tab, Target linked to start (design §2.5).
     await user.click(group(/^Logs/).getByRole("button", { name: "Add log entry" }));
-    expect(useCaptureStore.getState()).toMatchObject({ open: true, engagementId: "e1", hostId: "h3" });
-    useCaptureStore.getState().reset();
+    await waitFor(() => expect(where().textContent).toBe("/e/e1/log-entry"));
+    expect(useLogEntryStore.getState()).toMatchObject({ open: false, engagementId: "e1", hostId: "h3", returnRoute: "/e/e1/h/h3" });
+    useLogEntryStore.getState().reset();
+    await user.click(group(/^Hosts/).getByRole("button", { name: /^db01/ }));
+    expect(where().textContent).toBe("/e/e1/h/h3");
 
     // On a host's page, Add note opens that host's notes tab.
     await user.click(group(/^Notes/).getByRole("button", { name: "Add note" }));

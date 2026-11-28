@@ -1,0 +1,36 @@
+@use "@/styles/abstracts/index" as *;
+
+// The log entry's fields: the hosts with their label (tab only), the services and credentials lines, Ran on.
+@layer features {
+  .log-entry-fields__hosts {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .log-entry-fields__services {
+    @include type(code);
+    color: var(--muted);
+  }
+
+  // The only cue that saving writes credential rows: foreground text with an accent key.
+  .log-entry-fields__credentials {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-sm);
+    @include type(code);
+    color: var(--fg);
+  }
+
+  .log-entry-fields__key {
+    color: var(--accent);
+  }
+
+  .log-entry-fields__credentials-text {
+    min-width: 0;
+  }
+
+  .log-entry-fields__ran-on {
+    width: 14rem;
+  }
+}

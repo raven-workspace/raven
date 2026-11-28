@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { api } from "../../../lib/api";
 import { onLockedError, reportError } from "../../../lib/lockSignal";
 import { useSaveSummaryStore } from "../../capture/useSaveSummaryStore";
-import { useCaptureStore } from "../../capture/useCaptureStore";
+import { useLogEntryStore } from "../../capture/useLogEntryStore";
 import { useCredPickStore } from "../../checklist/credPick";
 import { useFindingDraftStore } from "../../findings/useFindingDraftStore";
 import { discardReports, flushReports, hasPendingReports } from "../../report/saveQueue";
@@ -124,7 +124,7 @@ export function VaultGate({ children, chrome = "title-bar" }: { children: ReactN
   const markLocked = useCallback(() => {
     qc.clear();
     // Unsaved capture drafts hold engagement data: they go with the lock.
-    useCaptureStore.getState().reset();
+    useLogEntryStore.getState().reset();
     useSaveSummaryStore.getState().close();
     // Finding drafts too: they live in memory only and never outlive the session.
     useFindingDraftStore.getState().clearAll();

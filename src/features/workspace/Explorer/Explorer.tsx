@@ -8,7 +8,7 @@ import { shortHostName } from "../../../lib/hostName";
 import { SHORTCUTS, type Keys } from "../../../lib/shortcuts";
 import type { Host } from "../../../types/host";
 import { Chip, Collapse, DisclosureCaret, IconButton, labelClass } from "../../../ui/index";
-import { useCaptureStore } from "../../capture/useCaptureStore";
+import { useLogEntryStore } from "../../capture/useLogEntryStore";
 import { sectionPath } from "../../engagements/sections/sections";
 import { useFindings } from "../../findings/queries";
 import { COLUMN_LABELS } from "../../hosts/columns";
@@ -116,12 +116,15 @@ function HostRow({ host, services, selected, onSelect }: {
 /**
  * The Explorer (design §1.4): the engagement's hosts, notes, findings and logs, in that order. Selecting a host makes
  * it Target and opens its page; the selected row is always Target, so a pick in the Target picker selects it here, and
- * on a page with no host the last host picked stays selected. A note or a finding opens in its own editor tab; a log row opens the Log, filtered to
- * its host. Each opens by its route, so a page already open has its tab focused, never a second one.
+ * on a page with no host the last host picked stays selected (except on the log entry tab, where no row is). A note or
+ * a finding opens in its own editor tab; a log row opens the Log, filtered to its host; the Logs Plus opens the log
+ * entry tab. Each opens by its route, so a page already open has its tab focused, never a second one.
  */
 export function Explorer({ engagementId }: { engagementId: string }) {
   const navigate = useNavigate();
   const routeHostId = useMatch("/e/:id/h/:hostId")?.params.hostId ?? null;
+  // On the log entry tab no row is selected, though Target stays on the last host (design §2.5).
+  const onLogEntry = useMatch("/e/:id/log-entry") !== null;
   const targetId = useTargetStore((s) => s.byEngagement[engagementId] ?? null);
   const hosts = useHosts(engagementId).data ?? NO_HOSTS;
   const notes = useNotes(engagementId).data;
@@ -129,7 +132,7 @@ export function Explorer({ engagementId }: { engagementId: string }) {
   const findings = useFindings(engagementId).data;
   const { servicesByHost } = useEngagementServices(engagementId);
   const setAddingHost = useExplorerStore((s) => s.setAddingHost);
-  const openCapture = useCaptureStore((s) => s.openCapture);
+  const openLogEntry = useLogEntryStore((s) => s.openLogEntry);
 
   const notesList = useMemo(() => noteRows(hosts, notes ?? [], shortName), [hosts, notes]);
   const logsList = useMemo(() => logRows(hosts, log ?? [], shortName), [hosts, log]);
@@ -164,7 +167,7 @@ export function Explorer({ engagementId }: { engagementId: string }) {
               key={h.id}
               host={h}
               services={serviceRows(servicesByHost.get(h.id) ?? [])}
-              selected={h.id === targetId}
+              selected={!onLogEntry && h.id === targetId}
               onSelect={() => selectHost(h.id)}
             />
           ))}
@@ -189,7 +192,7 @@ export function Explorer({ engagementId }: { engagementId: string }) {
           count={logsList.length}
           add="Add log entry"
           addKeys="L"
-          onAdd={() => openCapture({ engagementId, hostId: routeHostId })}
+          onAdd={() => openLogEntry({ engagementId, hostId: routeHostId })}
         >
           {logsList.map((row) => (
             <ItemRow key={row.hostId ?? ""} label={row.label} onOpen={() => openLog(row)} />

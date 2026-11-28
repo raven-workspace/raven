@@ -2,7 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveCapture } from "../../../features/capture/resolve";
 import { saveCapture } from "../../../features/capture/saveCapture";
-import { EMPTY_DRAFT } from "../../../features/capture/useCaptureStore";
+import { EMPTY_DRAFT } from "../../../features/capture/useLogEntryStore";
 import { api } from "../../../lib/api";
 import type { Credential } from "../../../types/credentials";
 import type { Engagement } from "../../../types/engagement";

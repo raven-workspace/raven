@@ -4,7 +4,7 @@ import { api, resetAuditState } from "../audit/fakeApi";
 import { capturedHost, editsOf, XFER, XFER_CAPTURES, XFER_DOMAIN, XFER_MACHINES, XFER_SCOPE } from "../audit/capturedHost";
 import { BUILTIN_LIBRARY } from "../engines/library/data";
 import { resolveCapture } from "../features/capture/resolve";
-import { EMPTY_DRAFT } from "../features/capture/useCaptureStore";
+import { EMPTY_DRAFT } from "../features/capture/useLogEntryStore";
 import { FIXTURES } from "../audit/fixtures";
 import { AUDIT_PNGS } from "../audit/images";
 import {

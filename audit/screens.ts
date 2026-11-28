@@ -540,6 +540,12 @@ export const SCREENS: Screen[] = [
   },
 ];
 
+/** A request and its response, as the Log entry tab artboard has pasted. */
+export const LOG_ENTRY_HTTP = [
+  "POST /upload HTTP/1.1", "Host: web-portal.acme.corp", "Content-Type: application/x-www-form-urlencoded", "Content-Length: 29", "",
+  "url=http://127.0.0.1/&remote=1", "", "HTTP/1.1 200 OK", "Server: Apache/2.4.41 (Ubuntu)", "Content-Type: text/html; charset=UTF-8",
+].join("\n");
+
 /** Adds the audit switch for the workspace shell (src/lib/shell.ts) to a screen's path. */
 const workspace = (path: string) => `${path}${path.includes("?") ? "&" : "?"}workspace`;
 const HOUR = 60 * 60_000;
@@ -627,6 +633,18 @@ export const WORKSPACE_SCREENS: Screen[] = [
   { id: "workspace-arsenal-tab", path: workspace(`${E}/arsenal`), ready: "role=main[name='Arsenal']", widths: [1100, 1440], setup: chromeReady },
   { id: "workspace-manual-tab", path: workspace(`${E}${MANUAL_LONG}`), ready: `${NOTE_PANE} article[aria-label='Zz Status Codes'] table`, widths: [1100, 1440], setup: chromeReady },
   { id: "workspace-payloads-tab", path: workspace(`${E}/payloads`), ready: "role=main[name='Payloads']", widths: [1100, 1440], setup: chromeReady },
+  // The log entry tab (design §2.5), as on the Log entry tab artboard: an HTTP request pasted, Target linked.
+  {
+    id: "workspace-log-entry-tab", path: workspace(H), ready: "role=region[name='New log entry'] >> role=radio[name=/^HTTP/][checked]",
+    widths: [1100, 1440],
+    setup: async (page) => {
+      await chromeReady(page);
+      await focusBody(page);
+      await page.keyboard.press("l");
+      await page.getByRole("region", { name: "New log entry" }).getByLabel("Paste").waitFor();
+      await page.keyboard.insertText(LOG_ENTRY_HTTP);
+    },
+  },
   { id: "workspace-finding-tab", path: workspace(`${E}/f/f-3`), ready: "role=tab[name='SNMP community string public'][selected]", widths: [1100, 1440], setup: chromeReady },
   // The status bar (design §1.5–§1.7) on the exam sim, which has every cell: at 1100 the cells drop in their order.
   { id: "workspace-exam-host", path: workspace(EXAM_DC), ready: TIMEBOX, widths: [1100, 1440], setup: chromeReady },

@@ -14,6 +14,7 @@ import { WorkspaceShell } from "./features/workspace/WorkspaceShell/WorkspaceShe
 import { ArsenalTab } from "./features/workspace/ArsenalTab/ArsenalTab";
 import { NotesPage } from "./features/notes/NotesPage/NotesPage";
 import { FindingPage } from "./features/findings/FindingPage/FindingPage";
+import { LogEntryTab } from "./features/capture/LogEntryTab/LogEntryTab";
 import { WORKSPACE_SHELL } from "./lib/shell";
 
 // Dev-only component gallery. `import.meta.env.DEV` is false in builds, so the
@@ -36,7 +37,8 @@ export default function App() {
         <Route index element={<SectionView section="board" />} />
         <Route path="s/:section" element={<SectionRoute />} />
         <Route path="h/:hostId" element={<HostRoute />} />
-        {/* In the workspace shell the drawers are editor tabs, and a finding opens in one (design §2.1). */}
+        {/* In the workspace shell the drawers are editor tabs, and a finding (design §2.1) and the log entry
+            (§2.5) each open in one. */}
         {WORKSPACE_SHELL && (
           <>
             <Route path="f/:findingId" element={<FindingPage />} />
@@ -44,6 +46,7 @@ export default function App() {
             <Route path="arsenal" element={<ArsenalTab />} />
             <Route path="manual/:noteId?" element={<ManualPage />} />
             <Route path="payloads" element={<PayloadsWorkbench />} />
+            <Route path="log-entry" element={<LogEntryTab />} />
           </>
         )}
       </Route>

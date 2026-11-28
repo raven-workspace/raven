@@ -8,7 +8,7 @@ import { setImported } from "../../../engines/library/store";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../../../features/arsenal/useFillScope";
 import { logCommand } from "../../../features/capture/logCommand";
-import { useCaptureStore } from "../../../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../../../features/capture/useLogEntryStore";
 import { useNotesStore } from "../../../features/notes/useNotesStore";
 import { usePaletteStore } from "../../../features/palette/usePaletteStore";
 import { usePayloadsStore } from "../../../features/payloads/usePayloadsStore";
@@ -73,7 +73,7 @@ beforeEach(() => {
   builds = [];
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   usePaletteStore.getState().close();
   useLastEngagementStore.setState({ engagementId: null, hostId: null });
   useArsenalStore.setState({ open: false, cardId: null, blockId: null });

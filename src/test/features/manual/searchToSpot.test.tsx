@@ -10,7 +10,7 @@ import type { LibraryCommand } from "../../../engines/library/types";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../../../features/arsenal/useFillScope";
-import { useCaptureStore } from "../../../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../../../features/capture/useLogEntryStore";
 import { useManualStore } from "../../../features/manual/useManualStore";
 import { useNotesStore } from "../../../features/notes/useNotesStore";
 import { usePaletteStore } from "../../../features/palette/usePaletteStore";
@@ -103,7 +103,7 @@ beforeEach(() => {
   scrolled = [];
   Element.prototype.scrollIntoView = scrollSpy as unknown as Element["scrollIntoView"];
   useManualStore.setState({ place: null, history: [] });
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   usePaletteStore.getState().close();
   useLastEngagementStore.setState({ engagementId: null, hostId: null });
   useArsenalStore.setState({ open: false, cardId: null, blockId: null, solo: null });

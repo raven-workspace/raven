@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeTab, dropTabs, hostOfRoute, pageOf, parseStored, routeKey, storedForm, visit, type EditorTab } from "../../engines/tabs";
+import { closeTab, dropTabs, hostOfRoute, LOG_ENTRY_KEY, logEntryRoute, pageOf, parseStored, routeKey, storedForm, visit, type EditorTab } from "../../engines/tabs";
 
 const E = "e1";
 const open = (...routes: string[]) => routes.reduce<readonly EditorTab[]>((tabs, r) => visit(E, tabs, r), []);
@@ -16,6 +16,7 @@ describe("editor tab pages", () => {
     expect(pageOf(E, "/e/e1/arsenal?q=nmap")).toEqual({ kind: "reference", page: "arsenal" });
     expect(pageOf(E, "/e/e1/payloads?generator=sql")).toEqual({ kind: "reference", page: "payloads" });
     expect(pageOf(E, "/e/e1/manual/tools%2Fnmap#scan")).toEqual({ kind: "reference", page: "manual" });
+    expect(pageOf(E, "/e/e1/log-entry")).toEqual({ kind: "log-entry" });
   });
 
   it("knows no route outside the engagement or its pages", () => {
@@ -26,6 +27,7 @@ describe("editor tab pages", () => {
     expect(pageOf(E, "/e/e1/h")).toBeNull();
     expect(pageOf(E, "/e/e1/h/h1/extra")).toBeNull();
     expect(pageOf(E, "/e/e1/arsenal/x")).toBeNull();
+    expect(pageOf(E, "/e/e1/log-entry/x")).toBeNull();
     expect(pageOf(E, "/e/e1/elsewhere")).toBeNull();
     expect(pageOf(E, "/e/e1/h/%E0%A4%A")).toBeNull();
   });
@@ -35,6 +37,13 @@ describe("editor tab pages", () => {
     expect(routeKey(E, "/e/e1/h/h1")).toBe(routeKey(E, "/e/e1/h/h1#x"));
     expect(routeKey(E, "/e/e1/notes/h1")).not.toBe(routeKey(E, "/e/e1/h/h1"));
     expect(routeKey(E, "/e/e1/notes")).not.toBe(routeKey(E, "/e/e1/notes/h1"));
+    expect(routeKey(E, logEntryRoute(E))).toBe(LOG_ENTRY_KEY);
+  });
+
+  it("opens one log entry tab, at the end, and focuses it in place after that", () => {
+    const tabs = open("/e/e1/h/h1", "/e/e1/log-entry", "/e/e1/h/h2", "/e/e1/log-entry");
+    expect(keys(tabs)).toEqual(["h:h1", LOG_ENTRY_KEY, "h:h2"]);
+    expect(hostOfRoute(E, "/e/e1/log-entry")).toBeNull();
   });
 });
 

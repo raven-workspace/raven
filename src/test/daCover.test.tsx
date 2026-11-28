@@ -7,7 +7,7 @@ import App from "../App";
 import { syncChecklist } from "../features/checklist/sync";
 import { useChecklist } from "../features/checklist/queries";
 import { useHostMutations } from "../features/hosts/queries";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
@@ -103,7 +103,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   // The store's conditional fact write, as the Rust command does it.
   m.checklistApplyFacts.mockImplementation(async (_e, done, revert) => {
     const find = (g: { ownerId: string; goalId: string }) => store.find((i) => i.ownerId === g.ownerId && i.goalId === g.goalId);
