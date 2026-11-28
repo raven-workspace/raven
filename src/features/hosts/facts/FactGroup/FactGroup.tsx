@@ -1,7 +1,7 @@
 import { ArrowUpRightIcon, CaretRightIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { cx } from "../../../../lib/cx";
-import { Collapse, Toolbar, Tooltip, labelClass } from "../../../../ui/index";
+import { Collapse, Toolbar, labelClass } from "../../../../ui/index";
 import "./FactGroup.scss";
 
 /**
@@ -37,7 +37,8 @@ export function SummaryCell({ label, count, tone, shrink = "value", children }: 
  * One fact group. Its header looks the same open or folded: the caret on the left (it only rotates), then the title as
  * a section label. Folded, the summary sits on the line under the title (it wraps in a narrow column); open, the
  * header carries the group's actions over the content.
- * `shortcut` is named in the toggle's tooltip.
+ * The toggle has no tooltip: its label is on screen (DESIGN.md). `shortcut` goes on the toggle as `aria-keyshortcuts`;
+ * the page lists it in the Shortcuts popover.
  */
 export function FactGroup({ title, summary, open, onToggle, shortcut, actions, children }: {
   title: string;
@@ -51,20 +52,19 @@ export function FactGroup({ title, summary, open, onToggle, shortcut, actions, c
   children: ReactNode;
 }) {
   return (
-    <section aria-label={title}>
+    <section aria-label={title} className="fact-group">
       <header className="fact-group__header">
-        <Tooltip content={<span>{open ? "Fold" : "Open"} {title}{shortcut && <span className="tooltip__key">{shortcut}</span>}</span>}>
-          <button
-            type="button"
-            aria-expanded={open}
-            onClick={onToggle}
-            className="fact-group__toggle"
-          >
-            <CaretRightIcon size={16} weight="regular" aria-hidden className={cx("fact-group__caret", open && "fact-group__caret--open")} />
-            <h2 className={cx(labelClass, "fact-group__title")}>{title}</h2>
-            {!open && summary && <span className="fact-group__summary">{summary}</span>}
-          </button>
-        </Tooltip>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-keyshortcuts={shortcut}
+          onClick={onToggle}
+          className="fact-group__toggle"
+        >
+          <CaretRightIcon size={16} weight="regular" aria-hidden className={cx("fact-group__caret", open && "fact-group__caret--open")} />
+          <h2 className={cx(labelClass, "fact-group__title")}>{title}</h2>
+          {!open && summary && <span className="fact-group__summary">{summary}</span>}
+        </button>
         {open && actions && <Toolbar>{actions}</Toolbar>}
       </header>
       <Collapse open={open} contentClassName="fact-group__body">{children}</Collapse>
