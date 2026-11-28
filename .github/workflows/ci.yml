@@ -172,7 +172,17 @@ jobs:
       # builds from Ghostty's source. Each target builds it once per Ghostty commit and Zig version,
       # caches the installed library, and cargo links that copy through libghostty-rs's pkg-config
       # feature instead of building it again in a build script.
+      # Zig itself, about 50 MB, cached by version and target and saved from any run, like the
+      # library below: mirrors are sometimes slow enough to add minutes to a run.
+      - name: Restore Zig
+        id: zig-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/zig
+          key: zig-0.17.1-${{ runner.os }}-${{ runner.arch }}
+
       - name: Install Zig
+        if: steps.zig-cache.outputs.cache-hit != 'true'
         env:
           ZIG_VERSION: 0.17.1
         # The official tarball, checked against ziglang.org's published SHA-256. ziglang.org asks
@@ -185,17 +195,31 @@ jobs:
             *) echo "no Zig for $RUNNER_OS-$RUNNER_ARCH"; exit 1 ;;
           esac
           file="zig-$target-$ZIG_VERSION.tar.xz"
-          for mirror in https://pkg.hexops.org/zig https://zigmirror.com https://ziglang.org/download/$ZIG_VERSION; do
-            if curl -fsSL --retry 2 --max-time 300 -o "$RUNNER_TEMP/$file" "$mirror/$file?source=github-actions" &&
+          for mirror in https://pkg.hexops.org/zig https://zigmirror.com https://zig.linus.dev/zig \
+                        https://ziglang.freetls.fastly.net https://ziglang.org/download/$ZIG_VERSION; do
+            # A slow mirror gives way to the next after two minutes.
+            if curl -fsSL --max-time 120 -o "$RUNNER_TEMP/$file" "$mirror/$file?source=github-actions" &&
                echo "$sha  $RUNNER_TEMP/$file" | shasum -a 256 -c -; then
+              echo "Zig from $mirror"
               break
             fi
             rm -f "$RUNNER_TEMP/$file"
           done
           test -f "$RUNNER_TEMP/$file"
-          tar -xJf "$RUNNER_TEMP/$file" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/zig-$target-$ZIG_VERSION" >> "$GITHUB_PATH"
-          echo "ZIG_VERSION=$ZIG_VERSION" >> "$GITHUB_ENV"
+          mkdir -p ~/zig
+          tar -xJf "$RUNNER_TEMP/$file" -C ~/zig --strip-components=1
+
+      - name: Save Zig
+        if: steps.zig-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/zig
+          key: ${{ steps.zig-cache.outputs.cache-primary-key }}
+
+      - name: Put Zig on PATH
+        run: |
+          echo "$HOME/zig" >> "$GITHUB_PATH"
+          echo "ZIG_VERSION=$("$HOME/zig/zig" version)" >> "$GITHUB_ENV"
 
       - name: Find the pinned Ghostty commit
         id: ghostty
