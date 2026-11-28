@@ -17,10 +17,32 @@ sudo apt install build-essential file libayatana-appindicator3-dev librsvg2-dev 
 ```sh
 npm install            # also points git at the repo's hooks in .githooks/
 npm run tauri dev      # build and open the desktop app
-npm run tauri:overhaul # the new workspace shell, with its own vault and port (1430), so it runs beside tauri dev
+npm run tauri:overhaul # the new workspace shell and terminal, with its own vault and port (1430); needs Zig (below)
 ```
 
 On first launch Raven asks you to create a vault password. The vault lives under `~/Library/Application Support/app.raven.desktop/` on macOS and `~/.local/share/app.raven.desktop/` on Linux: in `raven-dev/` for `tauri dev`, `raven-overhaul/` for `tauri:overhaul`, and `raven/` for a release build. It's yours and never leaves the machine. A newer schema can't be opened by older code, so run work in progress with `tauri:overhaul`, never against the vault you use for real work.
+
+### Zig, for the terminal
+
+`npm run tauri:overhaul` and `cargo test --features terminal` build the built-in terminal, which needs Zig 0.17.1 on your `PATH` (or named by `ZIG`) to compile libghostty-vt. Plain `npm run tauri dev` needs no Zig. Install it under your home folder from the official tarball, without `sudo` or Homebrew, and check it against the SHA-256 that [ziglang.org/download](https://ziglang.org/download/) publishes (the same pins as `.github/workflows/ci.yml`):
+
+| Platform | Tarball | SHA-256 |
+|---|---|---|
+| macOS, Apple Silicon | `zig-aarch64-macos-0.17.1.tar.xz` | `75f1bc7a1e9852f17ec9a0c1895f767c4ec56d46bc8a834920eece1d0359dd8d` |
+| Linux, amd64 | `zig-x86_64-linux-0.17.1.tar.xz` | `3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a` |
+| Linux, arm64 | `zig-aarch64-linux-0.17.1.tar.xz` | `a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795` |
+
+```sh
+file=zig-aarch64-macos-0.17.1.tar.xz        # your platform's tarball from the table
+sha=75f1bc7a1e9852f17ec9a0c1895f767c4ec56d46bc8a834920eece1d0359dd8d
+curl -fLO "https://ziglang.org/download/0.17.1/$file"
+echo "$sha  $file" | shasum -a 256 -c -     # stop here unless it prints OK
+mkdir -p ~/zig && tar -xJf "$file" -C ~/zig --strip-components=1
+export PATH="$HOME/zig:$PATH"               # add this line to your shell's rc file too
+zig version                                 # 0.17.1
+```
+
+The terminal's sessions start in the engagement folder, `~/Raven/<engagement>/`: an ordinary, unencrypted folder for the files your tools write, outside the vault.
 
 ### Installing on Kali
 
