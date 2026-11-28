@@ -12,6 +12,8 @@ export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
   shortcut?: Keys;
   tone?: "default" | "destructive";
   active?: boolean;
+  /** Where the tooltip opens; above by default (the rail's open to the right). */
+  tooltipSide?: "top" | "right" | "bottom" | "left";
 }
 
 export function IconButton({
@@ -20,12 +22,14 @@ export function IconButton({
   shortcut,
   tone = "default",
   active,
+  tooltipSide,
   type = "button",
   className,
   ...rest
 }: IconButtonProps) {
   return (
     <Tooltip
+      {...(tooltipSide ? { side: tooltipSide } : {})}
       content={
         <>
           <span>{label}</span>

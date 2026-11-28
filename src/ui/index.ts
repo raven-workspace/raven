@@ -13,7 +13,7 @@ export { EmptyState, type EmptyStateProps } from "./EmptyState";
 export { DASHBOARD_COLUMN, SETTINGS_COLUMN, type PageColumn } from "./pageColumns";
 export { BELOW_TITLE_BAR, TitleBar, TitleBarButton, TitleBarGroup, TitleBarIconButton, TitleBarShortcuts, type TitleBarProps } from "./TitleBar";
 export { Toggle, type ToggleProps } from "./Toggle";
-export { Wordmark } from "./Wordmark";
+export { RavenMark, Wordmark } from "./Wordmark";
 export { Tooltip, TooltipProvider } from "./Tooltip";
 export { IconButton, type IconButtonProps } from "./IconButton";
 export { Toolbar } from "./Toolbar";

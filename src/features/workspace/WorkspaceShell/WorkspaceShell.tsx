@@ -8,6 +8,7 @@ import { HostDialog } from "../../hosts/HostDialog/HostDialog";
 import { ChromeBar } from "../ChromeBar/ChromeBar";
 import { EDITOR_PANEL_ID, EditorTabs } from "../EditorTabs/EditorTabs";
 import { Explorer } from "../Explorer/Explorer";
+import { Rail } from "../Rail/Rail";
 import { StatusBar } from "../StatusBar/StatusBar";
 import { useDrawerTabs } from "../useDrawerTabs";
 import { useEditorTabsStore } from "../useEditorTabsStore";
@@ -47,9 +48,8 @@ function useTabRouting(engagementId: string | undefined) {
 
 /**
  * The window grid around an engagement (design §1.1): the rail beside the frame, and in the frame the Explorer, the
- * editor area (editor tabs over the page) and the terminal panel, over the status bar. The rail is still an empty box
- * that a later issue fills (RAV-74), and the terminal panel comes after it. No terminal panel yet, so its row is
- * collapsed.
+ * editor area (editor tabs over the page) and the terminal panel, over the status bar. No terminal panel yet, so its
+ * row is collapsed.
  *
  * ⌘B toggles the Explorer (closed, the editor takes its 264px back) and ⌘N adds a host, open or closed. Both are
  * chords, so `isFreeKey` (which refuses modifiers) does not apply; a dialog, or an editor that took the key (the
@@ -71,7 +71,9 @@ function EngagementFrame({ engagementId }: { engagementId: string }) {
   });
   return (
     <div className="workspace-shell__workspace">
-      <div data-slot="rail" className="workspace-shell__rail" />
+      <div data-slot="rail" className="workspace-shell__rail">
+        <Rail engagementId={engagementId} />
+      </div>
       <div className="workspace-shell__frame">
         <div className={cx("workspace-shell__frame-body", !explorerOpen && "workspace-shell__frame-body--no-explorer")}>
           {explorerOpen && (

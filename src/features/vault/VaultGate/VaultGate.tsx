@@ -49,6 +49,11 @@ interface VaultContextValue {
 
 const VaultContext = createContext<VaultContextValue | null>(null);
 
+/** The vault's lock, or nothing outside VaultGate (a shell rendered on its own, as in a unit test). */
+export function useVaultLock(): (() => void) | null {
+  return useContext(VaultContext)?.lock ?? null;
+}
+
 export function useVault(): VaultContextValue {
   const ctx = useContext(VaultContext);
   if (!ctx) throw new Error("useVault must be used inside VaultGate");

@@ -218,7 +218,11 @@ export const SHORTCUTS = {
   /* Everywhere */
   search: shortcut("⌘K"),
   lock: shortcut("⌘L"),
+  /** Opens Settings (the workspace shell's rail). The report editor's own ⌘, (subscript) wins while it has focus. */
+  settings: shortcut("⌘,"),
   toggleSidebar: shortcut("⌘B"),
+  /** Shows and hides the terminal panel (design §3.1). A Ctrl chord: the same on both OSes. */
+  toggleTerminal: shortcut("⌃`"),
   newEngagement: shortcut("⌘N"),
   /** Closes the editor tab in view (workspace shell). */
   closeTab: shortcut("⌘W"),
