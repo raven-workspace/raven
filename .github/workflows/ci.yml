@@ -12,6 +12,9 @@
 #   Linux makes a release build instead, packaged and uploaded as the run's .deb artifacts
 #   (raven-deb-amd64, raven-deb-arm64). PRs skip it: the release link (LTO, one codegen unit) takes
 #   about 6 minutes on one core, and a tester installs from develop.
+# - cargo test runs with the `terminal` feature, so each platform also installs Zig and builds
+#   libghostty-vt, cached per Ghostty commit. The app build and the .deb leave the feature off,
+#   as plain `tauri dev` does, until the terminal ships (RAV-90).
 #
 # A failing check fails its job, and so the PR. Within a job, later checks still run, so one red
 # run shows every failure at once.
@@ -144,7 +147,8 @@ jobs:
             librsvg2-dev \
             libssl-dev \
             libwebkit2gtk-4.1-dev \
-            libxdo-dev
+            libxdo-dev \
+            pkg-config
           mkdir -p ~/apt-archives
           cp /var/cache/apt/archives/*.deb ~/apt-archives/
           echo "apt archive: $(ls ~/apt-archives/*.deb | wc -l) packages, $(du -sh ~/apt-archives | cut -f1)"
@@ -164,9 +168,88 @@ jobs:
           workspaces: src-tauri
           save-if: ${{ github.ref == 'refs/heads/develop' }}
 
-      # RAV-69: Zig 0.17 and the libghostty-vt build cache go here, once the terminal spike settles
-      # how libghostty-vt is built. They feed the `terminal` Cargo feature (docs/specs/terminal.md §4),
-      # so the cargo steps below will also need `--features terminal` then.
+      # The `terminal` Cargo feature (docs/specs/terminal.md §4-5) links libghostty-vt, which Zig
+      # builds from Ghostty's source. Each target builds it once per Ghostty commit and Zig version,
+      # caches the installed library, and cargo links that copy through libghostty-rs's pkg-config
+      # feature instead of building it again in a build script.
+      - name: Install Zig
+        env:
+          ZIG_VERSION: 0.17.1
+        # The official tarball, checked against ziglang.org's published SHA-256. ziglang.org asks
+        # CI to download from its community mirrors; it is the last resort here.
+        run: |
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            macOS-ARM64) target=aarch64-macos sha=75f1bc7a1e9852f17ec9a0c1895f767c4ec56d46bc8a834920eece1d0359dd8d ;;
+            Linux-X64)   target=x86_64-linux  sha=3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a ;;
+            Linux-ARM64) target=aarch64-linux sha=a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795 ;;
+            *) echo "no Zig for $RUNNER_OS-$RUNNER_ARCH"; exit 1 ;;
+          esac
+          file="zig-$target-$ZIG_VERSION.tar.xz"
+          for mirror in https://pkg.hexops.org/zig https://zigmirror.com https://ziglang.org/download/$ZIG_VERSION; do
+            if curl -fsSL --retry 2 --max-time 300 -o "$RUNNER_TEMP/$file" "$mirror/$file?source=github-actions" &&
+               echo "$sha  $RUNNER_TEMP/$file" | shasum -a 256 -c -; then
+              break
+            fi
+            rm -f "$RUNNER_TEMP/$file"
+          done
+          test -f "$RUNNER_TEMP/$file"
+          tar -xJf "$RUNNER_TEMP/$file" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-$target-$ZIG_VERSION" >> "$GITHUB_PATH"
+          echo "ZIG_VERSION=$ZIG_VERSION" >> "$GITHUB_ENV"
+
+      - name: Find the pinned Ghostty commit
+        id: ghostty
+        working-directory: src-tauri
+        # libghostty-vt-sys pins the Ghostty source in its build.rs. Reading it from there keeps the
+        # cache key and the bindings on the same commit when the libghostty-rs pin moves.
+        run: |
+          sys=$(cargo metadata --locked --format-version 1 --features terminal |
+            jq -r '.packages[] | select(.name == "libghostty-vt-sys") | .manifest_path')
+          commit=$(sed -n 's/^const GHOSTTY_COMMIT: &str = "\([0-9a-f]\{40\}\)";$/\1/p' "$(dirname "$sys")/build.rs")
+          test -n "$commit"
+          echo "Ghostty $commit"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      # Saved from any run, PRs included: the key names an exact commit, Zig version and target, so
+      # every copy is identical, and it is a few MB. A PR's first run warms its own reruns; the push
+      # run after the merge warms every later PR.
+      - name: Restore libghostty-vt
+        id: libghostty-vt-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/libghostty-vt
+          key: libghostty-vt-${{ steps.ghostty.outputs.commit }}-zig-${{ env.ZIG_VERSION }}-${{ runner.os }}-${{ runner.arch }}-ReleaseFast
+
+      - name: Build libghostty-vt
+        if: steps.libghostty-vt-cache.outputs.cache-hit != 'true'
+        env:
+          GHOSTTY_COMMIT: ${{ steps.ghostty.outputs.commit }}
+        # The same zig build libghostty-vt-sys's build.rs runs, as a release build for every
+        # profile, with Zig's portable baseline CPU so the .deb runs on older machines.
+        run: |
+          start=$SECONDS
+          git clone --quiet --filter=blob:none --no-checkout https://github.com/ghostty-org/ghostty.git "$RUNNER_TEMP/ghostty"
+          git -C "$RUNNER_TEMP/ghostty" checkout --quiet "$GHOSTTY_COMMIT"
+          cd "$RUNNER_TEMP/ghostty"
+          zig build -Demit-lib-vt=true -Doptimize=ReleaseFast -Dcpu=baseline \
+            -Demit-xcframework=false -Dapp-runtime=none --prefix "$HOME/libghostty-vt"
+          echo "libghostty-vt built in $((SECONDS - start))s"
+          ls -l "$HOME/libghostty-vt/lib"
+
+      - name: Save libghostty-vt
+        if: steps.libghostty-vt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/libghostty-vt
+          key: ${{ steps.libghostty-vt-cache.outputs.cache-primary-key }}
+
+      - name: Point cargo at libghostty-vt
+        # Fails here, not with a silent source build inside cargo, if the cached copy is unusable.
+        run: |
+          command -v pkg-config > /dev/null || brew install pkgconf
+          echo "PKG_CONFIG_PATH=$HOME/libghostty-vt/lib/pkgconfig" >> "$GITHUB_ENV"
+          PKG_CONFIG_PATH="$HOME/libghostty-vt/lib/pkgconfig" \
+            pkg-config --print-errors --static --libs libghostty-vt-static
 
       - name: Install npm dependencies
         id: npm-ci
@@ -183,7 +266,9 @@ jobs:
 
       - name: cargo test
         working-directory: src-tauri
-        run: cargo test --locked
+        # With the terminal, so its PTY and libghostty-vt tests run on every target. The app build
+        # below leaves it off, as plain `tauri dev` does, so the default build is checked too.
+        run: cargo test --locked --features terminal,libghostty-vt/pkg-config
 
       - name: Build the Tauri app
         if: >-

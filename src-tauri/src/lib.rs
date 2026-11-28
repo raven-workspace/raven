@@ -26,6 +26,8 @@ pub mod reports;
 pub mod tried_pairs;
 pub mod tun0;
 pub mod settings;
+#[cfg(feature = "terminal")]
+pub mod terminal;
 pub mod vault;
 
 use std::sync::Mutex;
