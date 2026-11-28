@@ -5,9 +5,15 @@
     display: grid;
   }
 
-  // The workspace shell (design §2.2): groups 12px apart, their headers without a hairline.
+  // The workspace shell (design §2.2): groups 12px apart, their headers without a hairline. A hairline divides each fact
+  // group from the one before it, whatever it holds (owner override, RAV-101; docs/design/workspace-ide/README.md).
   .facts-column--workspace {
     align-content: start;
     gap: var(--space-md);
+  }
+
+  .facts-column--workspace .fact-group + .fact-group {
+    border-top: 1px solid var(--line);
+    padding-top: var(--space-md);
   }
 }

@@ -33,6 +33,7 @@ export const AUDIT_IDS = {
   pgHost: "h-pay-pg",
   boardEngagement: "e-board",
   findingsListEngagement: "e-fl",
+  windowsHost: "h-fl-win",
 } as const;
 
 /** 2026-11-05 14:00 UTC. The browser clock is frozen here when auditing. */
@@ -180,6 +181,9 @@ const hosts: Host[] = [
   host("h-fl-2", "e-fl", "dc01.example.test", "192.0.2.11", "windows", { access: "root" }),
   host("h-fl-3", "e-fl", "fs01.example.test", "192.0.2.12", "windows"),
   host("h-fl-4", "e-fl", "web01.example.test", "192.0.2.13", "linux"),
+  // A Windows host after a foothold with every fact group showing, some empty, and no privesc vectors: the workspace
+  // host page's dividers (RAV-101). In e-fl, archived, so it shows only in e-fl's counts and host list.
+  host("h-fl-win", "e-fl", "finance-reporting-app-server-02.branch-office.example.test", "192.0.2.20", "windows", { boardColumn: "privilege-escalation", access: "user" }),
 ];
 
 // ---------------------------------------------------------------- services
@@ -255,6 +259,12 @@ const services: Service[] = [
   svc("h-pay-pg", 22, "ssh", "OpenSSH 8.9p1 Ubuntu 3ubuntu0.6"),
   svc("h-pay-pg", 5432, "postgresql", "PostgreSQL DB 14.10 - 14.11"),
   svc("h-old-1", 443, "ssl/http", "nginx 1.22.1"),
+  // Last, so the services above keep their ids.
+  svc("h-fl-win", 80, "http", "Microsoft IIS httpd 10.0", confirmed("IIS", "10.0")),
+  svc("h-fl-win", 135, "msrpc", "Microsoft Windows RPC"),
+  svc("h-fl-win", 445, "microsoft-ds?", null),
+  svc("h-fl-win", 3389, "ms-wbt-server", "Microsoft Terminal Services"),
+  svc("h-fl-win", 5985, "http", "Microsoft HTTPAPI httpd 2.0"),
 ];
 
 // ---------------------------------------------------------------- log
@@ -499,6 +509,8 @@ const ruledOut: RuledOut[] = [
 
 const hostIdentity: HostIdentity[] = [
   { hostId: "h-exam-ms01", username: "ms01\\iis_apppool", privileges: ["SeImpersonatePrivilege"], groups: ["BUILTIN\\IIS_IUSRS"], entryId: null, updatedAt: ago(30 * MIN) },
+  // Only privileges with no privesc vector in them, so the host has none.
+  { hostId: "h-fl-win", username: "finance\\svc_reports", privileges: ["SeChangeNotifyPrivilege", "SeIncreaseWorkingSetPrivilege"], groups: ["BUILTIN\\Users", "BUILTIN\\Remote Management Users"], entryId: null, updatedAt: ago(17 * 24 * HOUR) },
 ];
 
 const vectors: PrivescVector[] = [

@@ -381,14 +381,15 @@ describe("services grid", () => {
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s3", "candidate", undefined);
   });
 
-  it("a fact group's toggle explains itself in a tooltip on keyboard focus, with its key, not a title (RAV-22)", async () => {
+  it("a fact group's toggle has no tooltip or title, since its label is on screen; its key is aria-keyshortcuts (RAV-101)", async () => {
     mount();
     const toggle = await toggleOf("Services");
     expect(toggle).not.toHaveAttribute("title");
+    expect(toggle).toHaveAttribute("aria-keyshortcuts", "S");
+    // A tooltip opens on keyboard focus without a delay, so focus is the quickest way to see that none comes.
     act(() => toggle.focus());
-    const tip = await screen.findByRole("tooltip");
-    expect(tip).toHaveTextContent(/^Fold Services/);
-    expect(within(tip).getByText("S")).toHaveClass("tooltip__key");
+    await act(() => new Promise((r) => setTimeout(r, 50)));
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
   it("a folded run of services explains itself in a tooltip on keyboard focus, not a title (RAV-22)", async () => {

@@ -34,6 +34,13 @@
     @include type(code);
   }
 
+  // A name longer than the column (SeIncreaseWorkingSetPrivilege at 1100px) breaks inside it rather than overflowing.
+  .identity-facts__item,
+  .identity-facts__item--notable {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
   .identity-facts__item {
     color: var(--muted);
   }

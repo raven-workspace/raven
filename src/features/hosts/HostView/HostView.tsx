@@ -40,6 +40,8 @@ const HINTS: Hint[] = [
   { keys: "F", label: "finding", priority: 3 },
   { keys: "L", label: "capture", priority: 2 },
   { keys: "⌥1–3", label: "tabs", priority: 4 },
+  // The Services toggle has no tooltip (its label is on screen), so its key is listed here.
+  { keys: "S", label: "services", priority: 5 },
 ];
 
 /** With a finding open in the split, J and the tab keys don't apply. */

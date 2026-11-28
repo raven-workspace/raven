@@ -562,6 +562,12 @@ export const WORKSPACE_SCREENS: Screen[] = [
     id: "workspace-host-postfoothold", path: workspace(`/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`),
     ready: "role=region[name='Who am I']", widths: [1100, 1440], setup: chromeReady,
   },
+  // A Windows host like the owner's: six fact groups, some empty, no privesc vectors and a long name. A hairline divides
+  // every group from the next, and the header's details sit 16px apart (owner overrides, RAV-101).
+  {
+    id: "workspace-host-windows", path: workspace(`/e/${AUDIT_IDS.findingsListEngagement}/h/${AUDIT_IDS.windowsHost}`),
+    ready: "role=region[name='Who am I']", widths: [1100, 1440], setup: chromeReady,
+  },
   // The work tab row with the Log tab's own control (Order) beside Stuck?, at the 1100 work column's width.
   { id: "workspace-host-log", path: workspace(H), ready: "role=tab[name='Log'][selected]", widths: [1100, 1440], setup: async (page) => { await chromeReady(page); await tab("Log")(page); } },
   {

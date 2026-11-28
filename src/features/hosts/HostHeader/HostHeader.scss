@@ -59,7 +59,8 @@
       display: grid;
       grid-auto-flow: column;
       justify-content: start;
-      gap: var(--space-sm);
+      // 16px between the details, not Spec 2's 8 (owner override, RAV-101). The OS icon and its label keep their 4.
+      gap: var(--space-lg);
       padding-left: var(--space-sm);
     }
 

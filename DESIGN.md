@@ -118,6 +118,7 @@ Don't:
 - Don't use amber at rest for an action, or more than one amber control at rest per screen.
 - Don't put Delete in a persistent header.
 - Don't put a bordered `Kbd` inside a bordered button, or an "esc" cap in a dialog corner.
+- Don't put a tooltip on a control whose label is already visible. Tooltips are for icon-only controls and for naming a key.
 - Don't use text glyphs (✓ ? ◐ ○ ▸ ▾ ⌄) as icons.
 - Don't use a brand logo for a tool-agnostic action.
 - Don't treat what already ships as approved.
