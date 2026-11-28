@@ -66,7 +66,7 @@ afterEach(() => {
 describe("the status bar's cells", () => {
   it("shows LHOST, listeners, Rooted, Flags, Metasploit and Cleanup in order, then the timebox", async () => {
     const b = await bar();
-    await within(b).findByRole("link", { name: "LHOST 192.0.2.10:4444" });
+    await within(b).findByRole("link", { name: "LHOST 192.0.2.10" });
     await within(b).findByText("0 listeners");
     await within(b).findByRole("group", { name: "Rooted 0/3" });
     expect(within(b).getByRole("group", { name: "Flags 2/6" })).toBeInTheDocument();
@@ -112,6 +112,13 @@ describe("LHOST", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("/settings");
   });
 
+  it("shows the address alone, never the listener port", async () => {
+    const b = await bar();
+    const value = await within(b).findByRole("link", { name: "LHOST 192.0.2.10" });
+    expect(value).toHaveTextContent(/^192\.0\.2\.10$/);
+    expect(b).not.toHaveTextContent("4444");
+  });
+
   it("not set reads amber, and Copy is off", async () => {
     m.settingsGet.mockResolvedValue(settings({ attackerIp: "", listenerPort: "" }));
     const b = await bar();
@@ -150,18 +157,18 @@ describe("LHOST", () => {
     m.tun0Address.mockResolvedValue("10.10.14.7");
     m.settingsUpdate.mockResolvedValue(settings({ attackerIp: "10.10.14.7" }));
     const b = await bar();
-    const offer = await within(b).findByRole("button", { name: "LHOST 192.0.2.10:4444. tun0 is 10.10.14.7. Use it" });
+    const offer = await within(b).findByRole("button", { name: "LHOST 192.0.2.10. tun0 is 10.10.14.7. Use it" });
     expect(offer).toHaveClass("lhost-cell__value--warn");
     await userEvent.click(offer);
     expect(m.settingsUpdate).toHaveBeenCalledWith({ attackerIp: "10.10.14.7" });
     // Settings now match tun0: back to the plain value.
-    await within(b).findByRole("link", { name: "LHOST 10.10.14.7:4444" });
+    await within(b).findByRole("link", { name: "LHOST 10.10.14.7" });
   });
 
   it("no change when tun0 matches Settings, or there is no tun0", async () => {
     m.tun0Address.mockResolvedValue("192.0.2.10");
     const b = await bar();
-    const value = await within(b).findByRole("link", { name: "LHOST 192.0.2.10:4444" });
+    const value = await within(b).findByRole("link", { name: "LHOST 192.0.2.10" });
     expect(value).toHaveClass("lhost-cell__value--set");
     await waitFor(() => expect(m.tun0Address).toHaveBeenCalled());
     expect(within(b).queryByRole("button", { name: /tun0/ })).toBeNull();

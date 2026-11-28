@@ -13,7 +13,7 @@ import { useTun0 } from "../queries";
 import "./LhostCell.scss";
 
 /**
- * LHOST on the status bar (design §1.5): your listener from Settings, as filled into checklist commands, with Copy
+ * LHOST on the status bar (design §1.5): your IP from Settings, as filled into checklist commands, with Copy
  * (⌘⇧L). The value opens Settings; "not set" is amber, because commands then show LHOST unresolved. When tun0's address
  * differs from Settings, the value turns amber and offers tun0 instead: a click sets it in Settings. No tun0: no change.
  * Never drops from the bar.
@@ -39,8 +39,8 @@ export function LhostCell() {
   });
   if (!s) return null;
 
-  const port = s.listenerPort.trim();
-  const value = ip ? (port ? `${ip}:${port}` : ip) : port ? `not set, LPORT ${port}` : "not set";
+  // The address alone: the port was a fixed setting only while listeners ran outside Raven.
+  const value = ip || "not set";
   const offer = tun0 !== null && tun0 !== ip ? tun0 : null;
   return (
     <span role="group" aria-label="LHOST" className="lhost-cell">
@@ -62,7 +62,7 @@ export function LhostCell() {
         <Link
           to="/settings"
           aria-label={`LHOST ${value}`}
-          title="Filled into checklist commands as LHOST and LPORT. Change it in Settings."
+          title="Filled into checklist commands as LHOST. Change it in Settings."
           className={cx("lhost-cell__value", ip ? "lhost-cell__value--set" : "lhost-cell__value--warn")}
         >
           {value}
