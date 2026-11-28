@@ -42,7 +42,7 @@
   @container log-entry-tab (min-width: 56rem) {
     .log-entry-tab__top .kind-chips__item .kbd,
     .log-entry-tab__top .toggle .kbd {
-      display: inline-flex;
+      display: revert-layer;
     }
   }
 
