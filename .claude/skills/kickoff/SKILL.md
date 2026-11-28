@@ -38,13 +38,20 @@ Show the owner a table (issue, title, what it unblocks, collision risk), and wai
    ```
 
 4. Check the new worktree's HEAD equals `origin/develop`. If it differs and the tree is clean, `git reset --hard origin/develop` there.
+5. Move the issue to In Progress, but only when the create result shows its agent started (`result.launch.outcome` with a handle, or `result.agentTerminalHandle` from an older Orca host) and the issue is in Backlog or Todo:
+
+   ```sh
+   orca linear status set RAV-<n> --to "In Progress" --json
+   ```
+
+   Pass the issue id: `--current` only works from inside the new worktree. If the issue is already started, done or canceled, leave it. If the launch failed, leave the status and report the failure.
 
 The brief, with the issue filled in:
 
-> Implement Linear issue RAV-<n> (<title>). Read it first: `orca linear issue RAV-<n> --json`. Then read AGENTS.md, CONTRIBUTING.md, GLOSSARY.md, and any spec or ADR the issue names (docs/specs/, docs/adr/). For UI work, read the design spec section the issue cites in docs/design/workspace-ide/ before writing code (its README maps each § to a spec file and heading; the specs win any conflict), then the matching `.dc.html` mockup for structure. Build with the repo's own `src/ui` components and tokens, never by copying the mockup's markup. For the PR's Evidence, screenshot `rendered/` beside `audit:visual` at 1440px; compare at 1440px only, and take 1100px behaviour from the spec text. If a UI issue cites no spec section, stop and ask. You are on branch <branch>; commit only there, in conventional form, with no AI attribution. See the UI through `npm run dev:audit` and the `src/audit/` fixtures, never the owner's vault. Verify before pushing: typecheck, lint, `npm test`, `cargo test` for Rust, `audit:visual` and `audit:pixel` for UI. Push, open a PR against develop in the repo's three-part format (`.claude/skills/pr`), and get CI green on every target. When only the owner can prove the work (Kali, real hardware, a live lab), end with exact steps for them to check it, and say it is unproven until they do. Attach the PR to RAV-<n> and post one short completion comment. Stop and ask when something needs the owner's decision.
+> Implement Linear issue RAV-<n> (<title>). Read it first: `orca linear issue RAV-<n> --json`. Before anything else, set RAV-<n> to In Progress with `orca linear status set --current --to "In Progress"`, unless it's already started, done or canceled. Then read AGENTS.md, CONTRIBUTING.md, GLOSSARY.md, and any spec or ADR the issue names (docs/specs/, docs/adr/). For UI work, read the design spec section the issue cites in docs/design/workspace-ide/ before writing code (its README maps each § to a spec file and heading; the specs win any conflict), then the matching `.dc.html` mockup for structure. Build with the repo's own `src/ui` components and tokens, never by copying the mockup's markup. For the PR's Evidence, screenshot `rendered/` beside `audit:visual` at 1440px; compare at 1440px only, and take 1100px behaviour from the spec text. If a UI issue cites no spec section, stop and ask. You are on branch <branch>; commit only there, in conventional form, with no AI attribution. See the UI through `npm run dev:audit` and the `src/audit/` fixtures, never the owner's vault. Verify before pushing: typecheck, lint, `npm test`, `cargo test` for Rust, `audit:visual` and `audit:pixel` for UI. Push, open a PR against develop in the repo's three-part format (`.claude/skills/pr`), and get CI green on every target. When only the owner can prove the work (Kali, real hardware, a live lab), end with exact steps for them to check it, and say it is unproven until they do. Attach the PR to RAV-<n> and post one short completion comment. Stop and ask when something needs the owner's decision.
 
-Done when every approved issue has a workspace on `origin/develop` with its agent started.
+Done when every approved issue has a workspace on `origin/develop` with its agent started, and each issue whose agent started is In Progress, unless it was already past Todo.
 
 ## 4. Report
 
-List each workspace's name, branch and issue, and confirm its agent launched (`launch.outcome` in the create result, or `orca agent list --json`).
+List each workspace's name, branch and issue, confirm its agent launched (`launch.outcome` in the create result, or `orca agent list --json`), and give the issue's status: moved to In Progress, left as it was (already started, done or canceled), or not moved because the launch failed.
