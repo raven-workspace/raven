@@ -1,0 +1,213 @@
+@use "@/styles/abstracts" as *;
+
+// The Explorer (design §1.4): a 40px header over the scrolling list of groups.
+@layer features {
+  .explorer {
+    display: grid;
+    grid-template-rows: 40px minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .explorer__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    padding: 0 var(--space-sm) 0 var(--space-lg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .explorer__list {
+    display: grid;
+    align-content: start;
+    gap: var(--space-sm);
+    padding: var(--space-sm) 0;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .explorer__group {
+    display: grid;
+    grid-template-rows: max-content;
+    min-width: 0;
+  }
+
+  // Label with its count, then the Plus button: all four buttons share the right edge.
+  .explorer__group-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 var(--space-sm) 0 var(--space-lg);
+  }
+
+  .explorer__rows {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  // Host rows: caret, then the host button (glyph, name over IP, access chip). Two lines, 44 tall.
+  .explorer__host {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .explorer__host-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-sm);
+    min-height: 44px;
+    padding: 0 var(--space-md) 0 var(--space-lg);
+  }
+
+  // The selected host: the raised surface and a full-height 2px accent bar on the left edge.
+  .explorer__host[data-selected] > .explorer__host-row {
+    background-color: var(--surface-hi);
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 2px;
+      background-color: var(--accent);
+    }
+  }
+
+  // The caret's track is 16px, but its target is 24 wide and the row's full height: it reaches 8px into the row's left
+  // padding, so the glyph stays in its track.
+  .explorer__caret {
+    display: grid;
+    place-items: center end;
+    align-self: stretch;
+    width: 24px;
+    margin-left: calc(var(--space-sm) * -1);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    color: var(--muted-2);
+    @include transition-colors;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+  }
+
+  .explorer__host-button {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    text-align: left;
+    color: var(--fg-2);
+    @include transition-colors;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+  }
+
+  .explorer__host[data-selected] .explorer__host-button {
+    color: var(--fg);
+  }
+
+  .explorer__host-text {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .explorer__host-name {
+    @include type(body);
+    @include truncate;
+  }
+
+  .explorer__host-ip {
+    @include truncate;
+    @include mono;
+    @include type(meta);
+    color: var(--faint);
+  }
+
+  // Services under an open host, lined up with the host's name: the caret and glyph tracks stay blank.
+  .explorer__services {
+    display: grid;
+    grid-template-columns: 16px 16px minmax(0, 1fr);
+    column-gap: var(--space-sm);
+    padding: 0 var(--space-md) 0 var(--space-lg);
+  }
+
+  .explorer__service-list {
+    grid-column: 3;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .explorer__service {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: center;
+    min-height: 28px;
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .explorer__service--filtered,
+  .explorer__service--none {
+    color: var(--muted);
+  }
+
+  .explorer__service--none {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .explorer__port {
+    @include mono;
+  }
+
+  .explorer__service-name {
+    @include truncate;
+  }
+
+  // Note, finding and log rows: the first track is blank, so the text lines up past the group's edge.
+  .explorer__item {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    min-height: 36px;
+    padding: 0 var(--space-md) 0 var(--space-lg);
+    border: 0;
+    background-color: transparent;
+    text-align: left;
+    @include type(body);
+    color: var(--fg-2);
+    @include transition-colors;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+  }
+
+  .explorer__item-text {
+    grid-column: 2;
+    @include truncate;
+  }
+}

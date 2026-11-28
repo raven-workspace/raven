@@ -37,10 +37,10 @@ function entry(over: Partial<LogEntry> & Pick<LogEntry, "id" | "title">): LogEnt
 
 let entries: LogEntry[];
 
-function mount() {
+function mount(path = "/e/e1/s/log") {
   return render(
     <QueryClientProvider client={makeQueryClient()}>
-      <MemoryRouter initialEntries={["/e/e1/s/log"]}>
+      <MemoryRouter initialEntries={[path]}>
         <App />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -117,6 +117,13 @@ describe("log", () => {
     await pick(user, "Host", "All");
     await pick(user, "Ran on", "Kali (VM)");
     expect(rows()).toHaveLength(1);
+  });
+
+  it("?host= opens the log filtered to that host (the workspace Explorer's host rows)", async () => {
+    mount("/e/e1/s/log?host=h1");
+    await screen.findByText("nmap scan");
+    expect(log().getByRole("combobox", { name: "Host" })).toHaveTextContent("dc01");
+    expect(titles()).toEqual([expect.stringMatching(/nmap scan/)]);
   });
 
   it("order button toggles between sort ascending and descending icons", async () => {
