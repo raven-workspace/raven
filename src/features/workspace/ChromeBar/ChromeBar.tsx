@@ -35,7 +35,10 @@ function EngagementPicker({ engagementId }: { engagementId: string }) {
   );
 }
 
-/** The Target picker: the host in view, kept on pages with no host. Picking a host opens its page. */
+/**
+ * The Target picker: the host in view, kept on pages with no host. Picking a host makes it Target (so the Explorer
+ * selects it) and opens its page, even when it already is Target and a page with no host is in view.
+ */
 function TargetPicker({ engagementId }: { engagementId: string }) {
   const navigate = useNavigate();
   const hosts = useHosts(engagementId).data ?? [];
@@ -51,6 +54,7 @@ function TargetPicker({ engagementId }: { engagementId: string }) {
       align="start"
       options={hosts.map((h) => ({ id: h.id, name: h.name, ...(h.ip ? { detail: h.ip } : {}) }))}
       value={target?.id ?? null}
+      repick
       onPick={(id) => {
         if (!id) return;
         useTargetStore.getState().pick(engagementId, id);

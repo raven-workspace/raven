@@ -217,3 +217,97 @@ describe("Explorer (design §1.4)", () => {
     await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("Add log entryL"));
   });
 });
+
+describe("Target works both ways (design §1.3)", () => {
+  const picker = (name: string) => screen.findByRole("button", { name });
+  const selected = () => group(/^Hosts/).getAllByRole("button", { current: true }).map((b) => b.textContent);
+  const tab = (name: string) => screen.getByRole("tab", { name });
+
+  it("selecting a host in the Explorer sets the Target picker", async () => {
+    const user = userEvent.setup();
+    renderAt("/e/e1");
+    expect(await picker("Target")).toBeVisible();
+    await user.click(await group(/^Hosts/).findByRole("button", { name: /^web02/ }));
+    expect(await picker("Target: web02")).toBeVisible();
+    await user.click(group(/^Hosts/).getByRole("button", { name: /^db01/ }));
+    expect(await picker("Target: db01")).toBeVisible();
+    expect(selected()).toEqual([expect.stringMatching(/^db01/)]);
+  });
+
+  it("picking a host in the Target picker selects it in the Explorer and opens its page", async () => {
+    const user = userEvent.setup();
+    renderAt("/e/e1/s/log");
+    await user.click(await picker("Target"));
+    await user.click(within(screen.getByRole("listbox", { name: "Hosts" })).getByRole("option", { name: /web02/ }));
+    expect(where().textContent).toBe("/e/e1/h/h2");
+    expect(selected()).toEqual([expect.stringMatching(/^web02/)]);
+    expect(await picker("Target: web02")).toBeVisible();
+  });
+
+  it("the menu lists each host's name with its IP", async () => {
+    const user = userEvent.setup();
+    renderAt("/e/e1");
+    await user.click(await picker("Target"));
+    const options = within(screen.getByRole("listbox", { name: "Hosts" })).getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["forge10.10.11.42", "web0210.10.11.51", "db0110.10.11.60"]);
+  });
+
+  it("on a page with no host, the picker and the Explorer keep the last host picked", async () => {
+    const user = userEvent.setup();
+    renderAt("/e/e1/h/h1");
+    expect(await picker("Target: forge")).toBeVisible();
+    await user.click(await group(/^Findings/).findByRole("button", { name: "SSRF in upload URL fetch" }));
+    expect(where().textContent).toBe("/e/e1/f/f2");
+    await user.click(group(/^Logs/).getByRole("button", { name: "web02" }));
+    expect(where().textContent).toBe("/e/e1/s/log?host=h2");
+    await user.click(group(/^Notes/).getByRole("button", { name: "Engagement" }));
+    expect(where().textContent).toBe("/e/e1/notes");
+    expect(screen.getByRole("button", { name: "Target: forge" })).toBeVisible();
+    expect(selected()).toEqual([expect.stringMatching(/^forge/)]);
+  });
+
+  it("switching tabs moves Target to the host in view, and a tab with no host leaves it", async () => {
+    const user = userEvent.setup();
+    renderAt("/e/e1/h/h1");
+    await user.click(await group(/^Hosts/).findByRole("button", { name: /^web02/ }));
+    await user.click(group(/^Findings/).getByRole("button", { name: "Sudo rule allows script edit" }));
+    await user.click(group(/^Notes/).getByRole("button", { name: "forge" }));
+    expect(await picker("Target: forge")).toBeVisible();
+
+    await user.click(tab("web02"));
+    expect(where().textContent).toBe("/e/e1/h/h2");
+    expect(await picker("Target: web02")).toBeVisible();
+    expect(selected()).toEqual([expect.stringMatching(/^web02/)]);
+
+    await user.click(tab("Sudo rule allows script edit"));
+    expect(where().textContent).toBe("/e/e1/f/f1");
+    expect(screen.getByRole("button", { name: "Target: web02" })).toBeVisible();
+
+    // A host's notes are about that host, so its tab makes it Target as the host's page does.
+    await user.click(tab("Notes: forge"));
+    expect(where().textContent).toBe("/e/e1/notes/h1");
+    expect(await picker("Target: forge")).toBeVisible();
+    expect(selected()).toEqual([expect.stringMatching(/^forge/)]);
+  });
+
+  it("picking the host that already is Target, from a page with no host, opens its page from the keyboard", async () => {
+    const user = userEvent.setup();
+    renderAt("/e/e1/h/h3");
+    await user.click(await group(/^Findings/).findByRole("button", { name: "SSRF in upload URL fetch" }));
+    const trigger = await picker("Target: db01");
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    expect(within(screen.getByRole("listbox", { name: "Hosts" })).getByRole("option", { name: /db01/ })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Enter}");
+    expect(where().textContent).toBe("/e/e1/h/h3");
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("each engagement keeps its own Target", async () => {
+    useTargetStore.getState().pick("e2", "h9");
+    const user = userEvent.setup();
+    renderAt("/e/e1");
+    await user.click(await group(/^Hosts/).findByRole("button", { name: /^forge/ }));
+    expect(useTargetStore.getState().byEngagement).toEqual({ e1: "h1", e2: "h9" });
+  });
+});
