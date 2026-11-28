@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { OrderButton } from "../OrderButton/OrderButton";
 import { byOrder, useLogOrder } from "../useLogOrder";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import type { LogKind } from "../../../types/log";
 import { EmptyState, Select, queryState } from "../../../ui/index";
 import { useHosts } from "../../hosts/queries";
@@ -21,7 +21,18 @@ export function LogSection() {
   const { id = "" } = useParams();
   const log = useLog(id);
   const hosts = useHosts(id).data ?? [];
-  const [host, setHost] = useState("all");
+  // The host filter lives in the URL (`?host=<id>`), so the workspace Explorer's host rows open that host's log.
+  const [params, setParams] = useSearchParams();
+  const host = params.get("host") ?? "all";
+  const setHost = (v: string) =>
+    setParams(
+      (p) => {
+        if (v === "all") p.delete("host");
+        else p.set("host", v);
+        return p;
+      },
+      { replace: true },
+    );
   const [kind, setKind] = useState("all");
   const [ranOn, setRanOn] = useState("all");
   const [order, setOrder] = useLogOrder("newest");
