@@ -40,6 +40,16 @@ typst-layout = "0.15.1"
 sevenz-rust2 = "0.25"
 md-5 = "0.10"
 tauri-plugin-dialog = "2"
+# The built-in terminal (docs/adr/0003, docs/specs/terminal.md §5), behind the `terminal` feature.
+# libghostty-rs from git: its crates.io release (0.2.2) predates libghostty-vt 1.0. This commit
+# builds Ghostty vt-1.0.2, pinned in libghostty-vt-sys's build.rs, which CI reads to key its cache.
+libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "4466c0f45f51f964f86d1974a50502dbec7cb0de", default-features = false, optional = true }
+portable-pty = { version = "0.9", optional = true }
+
+[features]
+# Off by default, so a plain `tauri dev` needs no Zig (docs/specs/terminal.md §4). Building it needs
+# Zig 0.17 on PATH, or named by ZIG.
+terminal = ["dep:libghostty-vt", "dep:portable-pty"]
 
 [dev-dependencies]
 tempfile = "3"
