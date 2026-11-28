@@ -1,0 +1,103 @@
+@use "@/styles/abstracts" as *;
+
+// The rail (design §1.2): mark, views, spacer, app group, in the window's left gutter beside the frame.
+@layer features {
+  .rail {
+    display: grid;
+    grid-template-rows: max-content max-content minmax(0, 1fr) max-content;
+    justify-items: center;
+    gap: var(--space-lg);
+    min-height: 0;
+    // Starts right under the chrome bar.
+    padding-top: 0;
+  }
+
+  // The wordmark's R, 20 × 15, centred in a 40px link.
+  .rail__mark {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    @include transition-colors;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+      }
+    }
+  }
+
+  // The views, 8px apart. Relative and isolated for the current-view marker drawn behind them.
+  .rail__views {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: 56px;
+    gap: var(--space-sm);
+    justify-items: center;
+  }
+
+  // Each view: a 56 × 36 slot with its 28 × 28 button centred.
+  .rail__slot {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 36px;
+  }
+
+  // The rail's buttons rest in --muted (IconButton's own hover lights them); the current view's icon is --fg.
+  .rail .icon-button {
+    color: var(--muted);
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+  }
+
+  .rail__slot[data-current="true"] .icon-button {
+    color: var(--fg);
+  }
+
+  // The marker takes the current slot's box; the bar is its 2 × 20 accent edge, 8px from the slot's top. No background
+  // (DESIGN.md: the current nav item is the bar only).
+  .rail__marker::before {
+    content: "";
+    position: absolute;
+    top: var(--space-sm);
+    left: 0;
+    width: 2px;
+    height: 20px;
+    border-radius: 0 2px 2px 0;
+    background-color: var(--accent);
+  }
+
+  // Three 4px circles: round dots, not a dotted border (browsers draw that as squares).
+  .rail__dots {
+    display: grid;
+    grid-template-columns: repeat(3, 4px);
+    gap: var(--space-xs);
+    justify-content: center;
+    align-items: center;
+    height: 8px;
+  }
+
+  .rail__dot {
+    width: 4px;
+    height: 4px;
+    border-radius: var(--radius-full);
+    background-color: var(--line-strong);
+  }
+
+  // Shortcuts, Lock, Settings at the foot: the last row, past the spacer track.
+  .rail__app {
+    grid-row: 4;
+    display: grid;
+    gap: var(--space-sm);
+    justify-items: center;
+    padding-bottom: var(--space-sm);
+  }
+}

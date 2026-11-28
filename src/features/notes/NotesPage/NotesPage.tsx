@@ -5,6 +5,7 @@ import { useEngagement } from "../../engagements/queries";
 import { useHosts } from "../../hosts/queries";
 import { NoteEditor } from "../NoteEditor/NoteEditor";
 import { flushQuietly, noteKey } from "../useNotesStore";
+import { NOTES_PAGE_ID } from "./notesPageId";
 import "./NotesPage.scss";
 
 /**
@@ -26,7 +27,7 @@ export function NotesPage() {
   useEffect(() => textRef.current?.focus(), [key]);
 
   return (
-    <section aria-label={name ? `Notes: ${name}` : "Notes"} className="notes-page">
+    <section id={NOTES_PAGE_ID} aria-label={name ? `Notes: ${name}` : "Notes"} className="notes-page">
       {/* The space keeps "Notes forge" readable as one heading name; the grid ignores it. */}
       <h2 className="notes-page__title">
         <span className={labelClass}>Notes</span>{" "}

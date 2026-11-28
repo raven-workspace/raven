@@ -10,6 +10,7 @@ import { cx } from "../lib/cx";
 import { hasNativeTitleBar } from "../lib/platform";
 import { Kbd } from "./Kbd";
 import { Tooltip } from "./Tooltip";
+import "./IconButton.scss";
 import "./TitleBar.scss";
 
 export interface TitleBarProps {
@@ -128,9 +129,11 @@ export function TitleBarGroup({ children }: { children: ReactNode }) {
 /**
  * The title bar's shortcut list: the page's own keys first (registered with `usePageShortcuts`), then the keys that
  * work everywhere. The `?` key opens it too, unless focus is inside a surface with its own list (a drawer, the Manual,
- * the palette) or a dialog.
+ * the palette) or a dialog. `place="rail"` is the workspace rail's foot (design §1.2): an IconButton-styled trigger
+ * whose tooltip and list open to its right.
  */
-export function TitleBarShortcuts({ everywhere }: { everywhere: Hint[] }) {
+export function TitleBarShortcuts({ everywhere, place = "title-bar" }: { everywhere: Hint[]; place?: "title-bar" | "rail" }) {
+  const rail = place === "rail";
   const [open, setOpen] = useState(false);
   const page = usePageShortcutsStore((s) => s.page);
   useEffect(() => {
@@ -152,20 +155,20 @@ export function TitleBarShortcuts({ everywhere }: { everywhere: Hint[] }) {
   );
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Tooltip side="bottom" content={<span>Shortcuts<span className="tooltip__key">?</span></span>}>
+      <Tooltip side={rail ? "right" : "bottom"} content={<span>Shortcuts<span className="tooltip__key">?</span></span>}>
         <Popover.Trigger asChild>
           <button
             type="button"
             aria-label="Shortcuts"
             aria-keyshortcuts="?"
-            className="title-bar-control title-bar-control--icon"
+            className={rail ? "icon-button" : "title-bar-control title-bar-control--icon"}
           >
             <QuestionIcon size={16} weight="regular" aria-hidden />
           </button>
         </Popover.Trigger>
       </Tooltip>
       <Popover.Portal>
-        <Popover.Content align="end" sideOffset={6} className="popover-panel shortcuts-popover">
+        <Popover.Content side={rail ? "right" : "bottom"} align="end" sideOffset={6} className="popover-panel shortcuts-popover">
           {page && group(page.title, page.hints)}
           {group("Everywhere", everywhere)}
         </Popover.Content>

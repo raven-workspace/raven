@@ -601,6 +601,22 @@ export const WORKSPACE_SCREENS: Screen[] = [
       await page.getByRole("tablist", { name: "Open editors" }).getByRole("tab", { name: /^web-portal/ }).click();
     },
   },
+  {
+    // The rail's tooltip, name then key (design §1.2), opened by keyboard focus.
+    id: "workspace-rail-tip", path: workspace(E), ready: "role=tooltip", widths: [1100, 1440],
+    setup: async (page) => {
+      await chromeReady(page);
+      await page.getByRole("navigation", { name: "Workspace" }).getByRole("button", { name: "Credentials" }).focus();
+    },
+  },
+  {
+    // The rail's Shortcuts list, opened by ?, beside the rail's foot.
+    id: "workspace-shortcuts", path: workspace(E), ready: "role=region[name='Everywhere']", widths: [1100, 1440],
+    setup: async (page) => {
+      await chromeReady(page);
+      await page.keyboard.press("?");
+    },
+  },
   { id: "workspace-notes-tab", path: workspace(`${E}/notes/${AUDIT_IDS.webHost}`), ready: "role=region[name=/^Notes: /]", widths: [1100, 1440], setup: chromeReady },
   { id: "workspace-arsenal-tab", path: workspace(`${E}/arsenal`), ready: "role=main[name='Arsenal']", widths: [1100, 1440], setup: chromeReady },
   { id: "workspace-manual-tab", path: workspace(`${E}${MANUAL_LONG}`), ready: `${NOTE_PANE} article[aria-label='Zz Status Codes'] table`, widths: [1100, 1440], setup: chromeReady },

@@ -1556,3 +1556,43 @@ test("workspace status bar: cells drop in order, LHOST and the timebox never", a
   for (const s of seen) expect(s).toEqual(order.slice(0, s.length));
   expect(seen.at(-1)).toEqual(["LHOST"]);
 });
+
+// The rail (design §1.2): 56 × 36 slots with 28 × 28 buttons, the views 8px apart, the app group at the foot, and the
+// current view's 2 × 20 accent bar at its slot's left edge, 8px down, following the route.
+test("workspace rail: slots, buttons, app group at the foot, and the current-view bar on the route's view", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/e/e-lab?workspace");
+  const rail = page.getByRole("navigation", { name: "Workspace" });
+  await rail.getByRole("button", { name: "Board", exact: true }).waitFor();
+  const geo = () => rail.evaluate((nav) => {
+    const box = (el: Element) => el.getBoundingClientRect();
+    const slots = [...nav.querySelectorAll("[data-rail-slot]")];
+    const current = nav.querySelector('[data-rail-slot][data-current="true"]');
+    const bar = nav.querySelector("[data-tab-marker]")!;
+    const before = getComputedStyle(bar, "::before");
+    const b = box(bar);
+    return {
+      slots: slots.map((s) => [Math.round(box(s).width), Math.round(box(s).height)]),
+      buttons: slots.map((s) => [Math.round(box(s.querySelector("button")!).width), Math.round(box(s.querySelector("button")!).height)]),
+      gaps: slots.slice(1).map((s, i) => Math.round(box(s).top - box(slots[i]!).bottom)),
+      current: current?.getAttribute("data-rail-slot") ?? null,
+      bar: current ? { dx: Math.round(b.left - box(current).left), dy: Math.round(b.top - box(current).top) } : null,
+      barSize: [before.width, before.height, before.top],
+      appBottom: Math.round(nav.getBoundingClientRect().bottom - box(nav.querySelector("[aria-label='Settings']")!).bottom),
+    };
+  });
+  const g = await geo();
+  expect(g.slots.every(([w, h]) => w === 56 && h === 36)).toBe(true);
+  expect(g.buttons.every(([w, h]) => w === 28 && h === 28)).toBe(true);
+  // 8px between slots; 24 = 8 + the separator's 8 + 8, between Terminals and Board.
+  expect(g.gaps).toEqual([8, 24, 8, 8, 8, 8, 8, 8, 8, 8, 8]);
+  expect(g.current).toBe("board");
+  expect(g.bar).toEqual({ dx: 0, dy: 0 });
+  expect(g.barSize).toEqual(["2px", "20px", "8px"]);
+  expect(g.appBottom).toBe(8);
+  await rail.getByRole("button", { name: "Network" }).click();
+  await expect(page).toHaveURL(/\/s\/network/);
+  await expect.poll(async () => (await geo()).current).toBe("network");
+  expect((await geo()).bar).toEqual({ dx: 0, dy: 0 });
+});

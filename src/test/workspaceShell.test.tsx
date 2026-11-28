@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceShell } from "../features/workspace/WorkspaceShell/WorkspaceShell";
 import { useTargetStore } from "../features/workspace/useTargetStore";
+import { useExplorerStore } from "../features/workspace/useExplorerStore";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
 import { api } from "../lib/api";
 import { readWorkspaceShell } from "../lib/shell";
@@ -36,6 +37,9 @@ function renderAt(path: string) {
             <Route path="e/:id" element={<Where />} />
             <Route path="e/:id/s/:section" element={<Where />} />
             <Route path="e/:id/h/:hostId" element={<Where />} />
+            <Route path="e/:id/notes/:hostId?" element={<Where />} />
+            <Route path="e/:id/:page" element={<Where />} />
+            <Route path="settings" element={<Where />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -146,5 +150,91 @@ describe("workspace shell", () => {
     await userEvent.click(within(screen.getByRole("listbox", { name: "Hosts" })).getByRole("option", { name: /web01/ }));
     expect(screen.getByTestId("where")).toHaveTextContent("/e/e1/h/h2");
     expect(await screen.findByRole("button", { name: "Target: web01" })).toBeVisible();
+  });
+});
+
+describe("the rail (design §1.2)", () => {
+  const rail = () => screen.getByRole("navigation", { name: "Workspace" });
+  const where = () => screen.getByTestId("where").textContent;
+
+  it("lists the views in order, then the app group, each named with its key", () => {
+    renderAt("/e/e1");
+    const names = within(rail()).getAllByRole("button").map((b) => [b.getAttribute("aria-label"), b.getAttribute("aria-keyshortcuts")]);
+    expect(names).toEqual([
+      ["Explorer", "Meta+B"],
+      ["Terminals", "Control+`"],
+      ["Board", "1"],
+      ["Log", "2"],
+      ["Credentials", "3"],
+      ["Findings", "4"],
+      ["Network", "5"],
+      ["Engagement checklist", "6"],
+      ["Field notes", "N"],
+      ["Arsenal", "A"],
+      ["Payloads", "P"],
+      ["Manual", "M"],
+      ["Shortcuts", "?"],
+      ["Lock", "Meta+L"],
+      ["Settings", "Meta+,"],
+    ]);
+    expect(within(rail()).getByRole("link", { name: "Raven home" })).toHaveAttribute("href", "/");
+  });
+
+  it("the tooltip shows the name then the key", async () => {
+    renderAt("/e/e1");
+    await userEvent.hover(within(rail()).getByRole("button", { name: "Credentials" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(/^Credentials3$/);
+  });
+
+  it("marks the current view from the route, and the mark follows a click", async () => {
+    renderAt("/e/e1");
+    const current = () => within(rail()).getByRole("button", { current: "page" }).getAttribute("aria-label");
+    expect(current()).toBe("Board");
+    await userEvent.click(within(rail()).getByRole("button", { name: "Network" }));
+    expect(where()).toBe("/e/e1/s/network");
+    expect(current()).toBe("Network");
+    expect(rail().querySelector('[data-current="true"]')).toHaveAttribute("data-rail-slot", "network");
+  });
+
+  it("sections, notes and the reference pages open from the rail", async () => {
+    renderAt("/e/e1/h/h1");
+    expect(within(rail()).getByRole("button", { current: "page" })).toHaveAccessibleName("Explorer");
+    await userEvent.click(within(rail()).getByRole("button", { name: "Field notes" }));
+    expect(where()).toBe("/e/e1/notes/h1");
+    for (const page of ["Arsenal", "Payloads", "Manual"]) {
+      await userEvent.click(within(rail()).getByRole("button", { name: page }));
+      expect(where()).toBe(`/e/e1/${page.toLowerCase()}`);
+    }
+    await userEvent.click(within(rail()).getByRole("button", { name: "Engagement checklist" }));
+    expect(where()).toBe("/e/e1/s/checklist");
+  });
+
+  it("Explorer toggles the Explorer, as ⌘B does", async () => {
+    const before = useExplorerStore.getState().open;
+    renderAt("/e/e1");
+    const button = within(rail()).getByRole("button", { name: "Explorer" });
+    expect(button).toHaveAttribute("aria-expanded", String(before));
+    await userEvent.click(button);
+    expect(useExplorerStore.getState().open).toBe(!before);
+    expect(button).toHaveAttribute("aria-expanded", String(!before));
+    await userEvent.click(button);
+  });
+
+  it("Settings opens Settings", async () => {
+    renderAt("/e/e1");
+    await userEvent.click(within(rail()).getByRole("button", { name: "Settings" }));
+    expect(where()).toBe("/settings");
+  });
+
+  it("⌘, opens Settings unless something else took it", async () => {
+    renderAt("/e/e1");
+    await userEvent.keyboard("{Meta>},{/Meta}");
+    expect(where()).toBe("/settings");
+  });
+
+  it("? opens the Shortcuts list", async () => {
+    renderAt("/e/e1");
+    await userEvent.keyboard("?");
+    expect(await screen.findByRole("region", { name: "Everywhere" })).toBeVisible();
   });
 });
