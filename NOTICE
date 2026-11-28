@@ -33,5 +33,7 @@ GTFOBins
            (suid, sudo, capabilities, limited-suid) only. No descriptions,
            commands or other text from GTFOBins are included.
 
-Dependencies installed through npm and Cargo are under their own licences,
-listed in each package's metadata.
+Dependencies installed through npm and Cargo, and the libraries and fonts
+built in from source, are under their own licences, listed with their full
+texts in THIRD_PARTY_NOTICES. The app ships that file and shows it under
+Settings, About, Open source licences.

@@ -1,6 +1,6 @@
 # Builds and tests Raven on every pull request: the five checks from CONTRIBUTING's "Before you
-# open a PR" (typecheck, lint, npm test, cargo test and a Tauri app build). Pushes to develop and
-# manual runs also package the Linux .deb files. All jobs run at once.
+# open a PR" (typecheck, lint, npm test, cargo test and a Tauri app build), plus the licence check.
+# Pushes to develop and manual runs also package the Linux .deb files. All jobs run at once.
 #
 # - The frontend checks run once, on Linux amd64. Vitest runs in Node and jsdom, and nothing in
 #   src/ depends on the OS or the CPU, so other targets would repeat the same run. npm test is
@@ -15,6 +15,11 @@
 # - cargo test runs with the `terminal` feature, so each platform also installs Zig and builds
 #   libghostty-vt, cached per Ghostty commit. The app build and the .deb leave the feature off,
 #   as plain `tauri dev` does, until the terminal ships (RAV-90).
+#
+# - The licence check runs once, on Linux amd64: `npm run notices -- --check` regenerates
+#   THIRD_PARTY_NOTICES for every shipped target and fails if a dependency's licence is missing or
+#   not on the allow-list (src-tauri/about.toml), or if the committed file is out of date. The app
+#   bundle on every platform ships that committed file (tauri.conf.json, bundle.resources).
 #
 # A failing check fails its job, and so the PR. Within a job, later checks still run, so one red
 # run shows every failure at once.
@@ -319,5 +324,35 @@ jobs:
           path: src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
 
-      # RAV-73: generate THIRD_PARTY_NOTICES here, from the npm and Cargo dependency trees, and fail
-      # if the committed file is out of date.
+  licences:
+    name: Licences
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        # The licence files are read from the installed packages.
+        run: npm ci
+
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      # The prebuilt release, checked against the SHA-256 in install-action's manifest. The version
+      # must match CARGO_ABOUT_VERSION in scripts/third-party-notices.mjs.
+      - name: Install cargo-about
+        uses: taiki-e/install-action@073e1fd0bc889c9aee68dbaaa927cde1b5653a83 # v2.90.11
+        with:
+          tool: cargo-about@0.9.3
+
+      - name: Check THIRD_PARTY_NOTICES
+        # Fails when a dependency's licence is missing or not on the allow-list in
+        # src-tauri/about.toml, and when the committed file doesn't match the lockfiles.
+        run: npm run notices -- --check

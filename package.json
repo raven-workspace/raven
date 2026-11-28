@@ -13,6 +13,7 @@
     "tauri:overhaul": "VITE_RAVEN_WORKSPACE=1 RAVEN_DATA_DIR=raven-overhaul RAVEN_DEV_PORT=1430 tauri dev --config src-tauri/tauri.overhaul.conf.json",
     "test": "vitest run",
     "lint": "eslint .",
+    "notices": "node scripts/third-party-notices.mjs",
     "typecheck": "tsc -b",
     "audit:visual": "playwright test -c audit/playwright.config.ts",
     "audit:selftest": "playwright test -c audit/playwright.config.ts selftest",

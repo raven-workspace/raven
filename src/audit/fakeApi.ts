@@ -729,6 +729,8 @@ const base = {
   settingsGet: async () => clone(db.settings),
   // No tun0 unless the page asks for one (`?tun0=10.10.14.7`), so the status bar's LHOST shows as set by default.
   tun0Address: async () => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tun0")),
+  // The repo's own file: the one the app bundle ships.
+  thirdPartyNotices: async () => (await import("../../THIRD_PARTY_NOTICES?raw")).default,
   settingsUpdate: async (patch) => {
     // The key itself is never stored or returned here either: only whether one is set.
     const { nvdApiKey, ...rest } = patch;

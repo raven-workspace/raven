@@ -54,6 +54,7 @@ npm run lint                    # ESLint
 npm run audit:visual            # Playwright audit of every screen at four widths
 npm run audit:baseline          # record a local pixel baseline (before a UI change)
 npm run audit:pixel             # pixel diff against that baseline (after it)
+npm run notices                 # rewrite THIRD_PARTY_NOTICES after a dependency change (needs cargo-about)
 ```
 
 The visual audit and its pass/fail rules are described in [`audit/README.md`](audit/README.md).
@@ -70,8 +71,10 @@ src/
 └── test/                 # Vitest tests, including conventions.test.ts
 src-tauri/
 ├── src/                  # Rust backend: one module per domain, the vault, migrations
-└── migrations/           # numbered SQL migrations
+├── migrations/           # numbered SQL migrations
+└── about.toml            # the licence allow-list for every dependency, Rust and npm
 audit/                    # Playwright visual audit
+third-party/              # licences of built-in code no package manager lists, for THIRD_PARTY_NOTICES
 docs/
 ├── specs/                # design specs per feature round, with the reasoning behind them
 ├── design/               # design hand-offs: the plan for a layout, not the app as it is
@@ -91,4 +94,4 @@ docs/
 
 ## Licence
 
-Raven Workspace Community Edition is licensed under the [GNU AGPL-3.0](LICENSE) (`AGPL-3.0-only`). Copyright (C) 2026 Keegan Techentin. Trademark and third-party notices are in [`NOTICE`](NOTICE). Before contributing, read [Licence and ownership](CONTRIBUTING.md#licence-and-ownership).
+Raven Workspace Community Edition is licensed under the [GNU AGPL-3.0](LICENSE) (`AGPL-3.0-only`). Copyright (C) 2026 Keegan Techentin. Trademark and third-party notices are in [`NOTICE`](NOTICE), and the licences of every dependency Raven ships are in [`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES), which the app also shows under Settings, About. Before contributing, read [Licence and ownership](CONTRIBUTING.md#licence-and-ownership).

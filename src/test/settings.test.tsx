@@ -30,6 +30,28 @@ beforeEach(() => {
 });
 
 describe("settings", () => {
+  it("About opens the open source licences from the app bundle, loading them only when asked (RAV-73)", async () => {
+    const user = userEvent.setup();
+    m.thirdPartyNotices.mockResolvedValue("Third-party notices for Raven Workspace Community Edition\n\nportable-pty 0.9.0");
+    mount();
+    const about = (await screen.findByRole("heading", { name: "About" })).closest("section")!;
+    expect(within(about).getByText(/free software under the GNU AGPL-3.0/)).toBeInTheDocument();
+    expect(m.thirdPartyNotices).not.toHaveBeenCalled();
+    await user.click(within(about).getByRole("button", { name: "Open source licences" }));
+    const dialog = await screen.findByRole("dialog", { name: "Open source licences" });
+    expect(await within(dialog).findByText(/portable-pty 0\.9\.0/)).toHaveClass("about-section__notices");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("About says when the licences can't be read", async () => {
+    const user = userEvent.setup();
+    m.thirdPartyNotices.mockRejectedValue(new RavenError("io", "io error: No such file or directory"));
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Open source licences" }));
+    expect(await screen.findByText("Couldn't load the licences")).toBeInTheDocument();
+  });
+
   it("the report text note says new reports copy it and started ones keep theirs (RAV-32)", async () => {
     mount();
     expect(await screen.findByText("Raven copies these into each new report. Changing them here doesn't change reports you've already started.")).toHaveClass("settings-page__note");

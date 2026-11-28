@@ -5,6 +5,7 @@ import type { BackupInfo } from "../../../types/backup";
 import type { Settings, SettingsPatch } from "../../../types/settings";
 import { isValidOsid } from "../../../engines/report/meta";
 import { Button, Chip, Dialog, EmptyState, Field, Input, Panel, SETTINGS_COLUMN, Textarea, queryState } from "../../../ui/index";
+import { AboutSection } from "../AboutSection/AboutSection";
 import { FieldManualSection } from "../FieldManualSection/FieldManualSection";
 import { settingsKey, useSettings } from "../queries";
 import { RavenError } from "../../../types/errors";
@@ -405,6 +406,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
         </ul>
       </Panel>
       <FieldManualSection />
+      <AboutSection />
       <Dialog
         open={restoreTarget !== null}
         onOpenChange={(o) => !o && setRestoreTarget(null)}
