@@ -240,6 +240,7 @@ All shared pieces live in `src/ui`. Feature code composes them and doesn't hand-
 ### Buttons and icon buttons
 
 - **Tooltips.** One `Tooltip` (`src/ui`), on hover and on keyboard focus, under the app's single `TooltipProvider`, so moving along a toolbar opens the next tooltip at once. It is the only tooltip: shadcn's was removed, and lint keeps it from being re-added. A native `title` doesn't show on keyboard focus, so it never carries the only statement of an action or shortcut.
+- **No tooltip on a visible label.** A control whose label is already on screen (a fact group's toggle, a text button) gets no tooltip: it would only repeat the label. Tooltips are for icon-only controls and for naming a key. A key such a control answers to goes in the page's Shortcuts list (`usePageShortcuts`) and in `aria-keyshortcuts`.
 - **IconButton.** A 28×28 box with a 16px Phosphor icon (regular weight). It has no border at rest, `--surface-hi` on hover, and the focus ring on focus. An `aria-label` and a tooltip are required; the tooltip names the action and its shortcut ("Copy · ⌘C").
 - **Icon or text.**
   - Universal verbs are icons:
@@ -414,6 +415,7 @@ One `CommandBlock` everywhere a command appears:
 - **Don't** use amber at rest for an action, or more than one amber control at rest per screen.
 - **Don't** put Delete in a persistent header.
 - **Don't** put a bordered `Kbd` inside a bordered button, or an "esc" cap in a dialog corner.
+- **Don't** put a tooltip on a control whose label is already visible. Tooltips are for icon-only controls and for naming a key.
 - **Don't** use text glyphs (✓ ? ◐ ○ ▸ ▾ ⌄) as icons.
 - **Don't** use a brand logo for a tool-agnostic action.
 - **Don't** treat what already ships as approved.

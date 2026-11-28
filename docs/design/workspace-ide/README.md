@@ -20,10 +20,22 @@ The canvas export also held `ds/`, a compiled copy of `src/ui` at `develop@c1e8d
 
 ## Which source wins
 
+The [owner overrides](#owner-overrides) win over all of these.
+
 1. **The specs say how to build it.** Grid tracks, sizes, tokens, keys and behaviour are written out in Specs 1–3. Read them first. When a spec and a mockup disagree, the spec wins.
 2. **The `.dc.html` mockups give the structure.** Every component is named outright, and the layout is the real grid markup.
 3. **`rendered/` shows what it looks like.** Use it for the visual check: colour, type, spacing and copy.
 4. **The repo's `DESIGN.md` and `src/ui` still govern anything these files don't cover.**
+
+## Owner overrides
+
+The owner has changed these after the hand-off. **They win over the specs and the mockups**: build to them, and don't put the spec's old values back.
+
+| Where | The spec or mockup says | Build this instead | Issue |
+|---|---|---|---|
+| §2.2 Host page, Facts | Groups 12px apart; the only lines are the Privesc vectors list's (a hairline on top, one under each row) | A hairline (`--line`) between every fact group and the next, whatever the group holds, empty ones included. The Privesc vectors list keeps its own lines. | RAV-101 |
+| §2.2 Host page, Header | The details run's gap is 8 | 16 (`--space-lg`) between the details. The OS icon and its label keep their 4. | RAV-101 |
+| §2.2 Host page, Facts | Nothing; the app gave each fact group's toggle a "Fold / Open {title}" tooltip (RAV-22) | No tooltip on the toggles, in either shell: the label is on screen. Services' `S` is listed in the Shortcuts popover instead. See `DESIGN.md`: no tooltip on a control whose label is already visible. | RAV-101 |
 
 ## How to use it for UI work
 
