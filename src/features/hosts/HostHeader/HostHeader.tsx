@@ -6,20 +6,22 @@ import { threadsLabel, useThreadCounts } from "../../notes/useThreadCounts";
 import { HostDialog } from "../HostDialog/HostDialog";
 import { COLUMN_LABELS, OS_LABELS } from "../columns";
 import { useEngagement } from "../../engagements/queries";
+import { cx } from "../../../lib/cx";
 import "./HostHeader.scss";
 
 /**
  * The host's name with its Edit pencil right beside it, so it reads as "edit this host". Stuck? lives at the end of the
- * work column's tab row and the full key list under the title bar's shortcuts button.
+ * work column's tab row and the full key list under the title bar's shortcuts button. `inline` (the workspace shell,
+ * design §2.2) puts the details on the name's row, after the pencil.
  */
-export function HostHeader({ host }: { host: Host }) {
+export function HostHeader({ host, inline = false }: { host: Host; inline?: boolean }) {
   const [editing, setEditing] = useState(false);
   const threads = useThreadCounts(host.engagementId).byHost.get(host.id) ?? 0;
   // The AD set only means something in an exam sim (it counts as one target there).
   const engagement = useEngagement(host.engagementId);
   const examSim = engagement.data?.kind === "exam-sim";
   return (
-    <section aria-label="Host" className="host-header">
+    <section aria-label="Host" className={cx("host-header", inline && "host-header--inline")}>
       {/* Its own grid: the details row below must not widen the name's track and push the pencil away from it. */}
       <div className="host-header__name-row">
         <h1 title={host.name} className="host-header__name">

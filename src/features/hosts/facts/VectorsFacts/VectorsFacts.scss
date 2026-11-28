@@ -85,4 +85,13 @@
     @include type(meta);
     color: var(--muted);
   }
+
+  // The workspace shell (design §2.2): a hairline over the list, each row at least 36px.
+  .facts-column--workspace .vectors-facts {
+    border-top: 1px solid var(--line);
+  }
+
+  .facts-column--workspace .vectors-facts__row {
+    min-height: 36px;
+  }
 }

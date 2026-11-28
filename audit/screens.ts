@@ -556,6 +556,18 @@ export const WORKSPACE_SCREENS: Screen[] = [
   { id: "workspace-dashboard", path: workspace("/"), ready: ".chrome-bar >> role=button[name='Search hosts, notes and commands']", widths: [1100, 1440] },
   { id: "workspace-board", path: workspace(E), ready: "section[aria-label='Information gathering']", widths: [1100, 1440], setup: chromeReady },
   { id: "workspace-host", path: workspace(H), ready: "role=tab[name='Next'][selected]", widths: [1100, 1440], setup: chromeReady },
+  // The host page in an editor tab (design §2.2), as on the Host View: a foothold, so Who am I and Privesc vectors open
+  // and Services folded to its line. Both columns stay at 1100 (Spec 1 §1.7).
+  {
+    id: "workspace-host-postfoothold", path: workspace(`/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`),
+    ready: "role=region[name='Who am I']", widths: [1100, 1440], setup: chromeReady,
+  },
+  // The work tab row with the Log tab's own control (Order) beside Stuck?, at the 1100 work column's width.
+  { id: "workspace-host-log", path: workspace(H), ready: "role=tab[name='Log'][selected]", widths: [1100, 1440], setup: async (page) => { await chromeReady(page); await tab("Log")(page); } },
+  {
+    id: "workspace-host-full-checklist", path: workspace(H), ready: "role=button[name='Full checklist'][expanded]", widths: [1100, 1440],
+    setup: async (page) => { await chromeReady(page); await page.getByRole("button", { name: "Full checklist" }).click(); },
+  },
   {
     // The Explorer with the host in view open on its services (design §1.4).
     id: "workspace-explorer-services", path: workspace(H), ready: "role=list[name$=' services']", widths: [1100, 1440],
@@ -583,7 +595,8 @@ export const WORKSPACE_SCREENS: Screen[] = [
       await page.getByRole("region", { name: /^Notes: / }).waitFor();
       await page.keyboard.press("Escape");
       await page.keyboard.press("4");
-      await page.getByRole("button", { name: "SNMP community string public", exact: true }).click();
+      // In the Findings section: the Explorer lists the same finding once it has loaded.
+      await page.getByRole("region", { name: "Findings", exact: true }).getByRole("button", { name: "SNMP community string public", exact: true }).click();
       await page.locator("role=tab[name='SNMP community string public'][selected]").waitFor();
       await page.getByRole("tablist", { name: "Open editors" }).getByRole("tab", { name: /^web-portal/ }).click();
     },

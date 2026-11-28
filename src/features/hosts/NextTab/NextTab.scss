@@ -18,4 +18,11 @@
       color: var(--fg);
     }
   }
+
+  // The workspace shell's button, while the full checklist shows.
+  .full-checklist-button[aria-expanded="true"] {
+    border-color: var(--line-strong);
+    background-color: var(--surface-hi);
+    color: var(--fg);
+  }
 }

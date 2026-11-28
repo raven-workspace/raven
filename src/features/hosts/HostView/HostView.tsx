@@ -4,6 +4,7 @@ import { SCROLL_PANE } from "../../../ui/controlStyles";
 import { useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../../lib/keys";
 import { cx } from "../../../lib/cx";
+import { WORKSPACE_SHELL } from "../../../lib/shell";
 import { Button, EmptyState, Kbd, LoadingState, queryState, Tooltip, usePageShortcuts, type Hint } from "../../../ui/index";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../ui/shadcn/tabs";
 import type { Finding } from "../../../types/findings";
@@ -20,7 +21,7 @@ import { useNotesStore } from "../../notes/useNotesStore";
 import { StuckView } from "../../stuck/StuckView/StuckView";
 import { FactsColumn } from "../facts/FactsColumn/FactsColumn";
 import { HostHeader } from "../HostHeader/HostHeader";
-import { FullChecklistToggle } from "../NextTab/NextTab";
+import { FullChecklistButton, FullChecklistToggle } from "../NextTab/NextTab";
 import { HostChecklist } from "../../checklist/HostChecklist/HostChecklist";
 import { useHosts } from "../queries";
 import { anyDrawerOpen } from "../../drawers";
@@ -59,7 +60,17 @@ function focusFirstOpenStep(): boolean {
 /** Two columns from this width of the host page (the `@min-[760px]/host` container query); stacked below it. */
 const TWO_COLUMNS_PX = 760;
 
-export function HostView({ engagementId, hostId }: { engagementId: string; hostId: string }) {
+/**
+ * The host page. In the workspace shell (`workspace`, design §2.2) it sits in an editor tab: the header on one row, the
+ * work tabs underlined over a hairline, and both columns at every width, since the window's 1100px minimum still leaves
+ * the editor about 770px (Spec 1, "At 1100px, the minimum"). The engagement shell keeps its own layout.
+ */
+export function HostView({ engagementId, hostId, workspace = WORKSPACE_SHELL }: {
+  engagementId: string;
+  hostId: string;
+  /** Lays the page out for the workspace shell's editor area; defaults to the shell this run renders. */
+  workspace?: boolean;
+}) {
   const hosts = useHosts(engagementId);
   const log = useLog(engagementId);
   const location = useLocation();
@@ -181,7 +192,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
     return () => clearTimeout(t);
   }, [jumpNote]);
   const [rootRef, width] = useWidth();
-  const stacked = width !== undefined && width < TWO_COLUMNS_PX;
+  const stacked = !workspace && width !== undefined && width < TWO_COLUMNS_PX;
   const selectTab = (id: TabId) => {
     setTab(id);
     setFocusGoal(undefined);
@@ -205,12 +216,12 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   }
   const entries = (log.data ?? []).filter((e) => e.hostIds.includes(hostId)).sort(byOrder(order));
 
-  const facts = <FactsColumn engagementId={engagementId} host={host} variant={stacked ? "stacked" : "column"} onOpenEntry={openInLog} />;
+  const facts = <FactsColumn engagementId={engagementId} host={host} variant={stacked ? "stacked" : "column"} workspace={workspace} onOpenEntry={openInLog} />;
 
   return (
-    <div ref={rootRef} data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="host-view">
+    <div ref={rootRef} data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className={cx("host-view", workspace && "host-view--workspace")}>
       {/* No hint row: it cost a full line of log and facts. The keys are in the title bar's shortcut list (?). */}
-      <HostHeader host={host} />
+      <HostHeader host={host} inline={workspace} />
       {split ? (
         <FindingSplit
           key={split === "new" ? "new" : split.id}
@@ -243,12 +254,23 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                 {tab === "next" && (
                   <div className="host-view__next-controls">
                     {jumpNote && <span role="status" className="host-view__note">{jumpNote}</span>}
-                    <FullChecklistToggle full={fullChecklist} onChange={setFullChecklist} />
+                    {workspace ? (
+                      <FullChecklistButton full={fullChecklist} onChange={setFullChecklist} />
+                    ) : (
+                      <FullChecklistToggle full={fullChecklist} onChange={setFullChecklist} />
+                    )}
                   </div>
                 )}
-                <Button size="sm" onClick={toggleStuck}>
-                  Stuck? <Kbd variant="inline" aria-hidden>H</Kbd>
-                </Button>
+                {workspace ? (
+                  // The key is in the tooltip: the row must fit the work column at 1100px (design §2.2, Spec 1 §1.7).
+                  <Tooltip content={<span>Stuck?<span className="tooltip__key">H</span></span>}>
+                    <Button size="sm" onClick={toggleStuck}>Stuck?</Button>
+                  </Tooltip>
+                ) : (
+                  <Button size="sm" onClick={toggleStuck}>
+                    Stuck? <Kbd variant="inline" aria-hidden>H</Kbd>
+                  </Button>
+                )}
               </div>
             </div>
             <TabsContent value={tab} aria-label={TABS.find((t) => t.id === tab)!.label} className={cx("host-view__panel", SCROLL_PANE)}>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { phaseOf } from "../../../../engines/facts/index";
 import { isFreeKey, useKeydown } from "../../../../lib/keys";
+import { cx } from "../../../../lib/cx";
 import type { Host } from "../../../../types/host";
 import { InterfaceNudge } from "../../../network/InterfaceNudge/InterfaceNudge";
 import { useLog } from "../../../log/queries";
@@ -18,12 +19,14 @@ const AFTER: FactGroupId[] = ["identity", "vectors", "accounts"];
 /**
  * What's known about the host, ordered by phase: the host's access decides it, never its board column. The current
  * phase's groups come first and open; the others fold to one summary line each. Stacked (narrow windows), every
- * group starts folded. `S` toggles Services from anywhere on the page.
+ * group starts folded. `S` toggles Services from anywhere on the page. `workspace` spaces the groups as the workspace
+ * shell's host page does (design §2.2).
  */
-export function FactsColumn({ engagementId, host, variant, onOpenEntry }: {
+export function FactsColumn({ engagementId, host, variant, workspace = false, onOpenEntry }: {
   engagementId: string;
   host: Host;
   variant: "column" | "stacked";
+  workspace?: boolean;
   /** Opens a proof entry (a credential result, the identity's source) in the Log. */
   onOpenEntry?: (entryId: string) => void;
 }) {
@@ -52,7 +55,7 @@ export function FactsColumn({ engagementId, host, variant, onOpenEntry }: {
   const order: FactGroupId[] = phase === "before" ? [...BEFORE, ...AFTER] : [...AFTER, "services", "coverage", "credentials"];
 
   return (
-    <div aria-label="Facts" role="region" className="facts-column">
+    <div aria-label="Facts" role="region" className={cx("facts-column", workspace && "facts-column--workspace")}>
       <InterfaceNudge engagementId={engagementId} host={host} onOpenEntry={onOpenEntry} />
       {order.map((g) => groups[g])}
     </div>
