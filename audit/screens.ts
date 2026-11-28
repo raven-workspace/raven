@@ -557,6 +557,14 @@ export const WORKSPACE_SCREENS: Screen[] = [
   { id: "workspace-board", path: workspace(E), ready: "section[aria-label='Information gathering']", widths: [1100, 1440], setup: chromeReady },
   { id: "workspace-host", path: workspace(H), ready: "role=tab[name='Next'][selected]", widths: [1100, 1440], setup: chromeReady },
   {
+    // The Explorer with the host in view open on its services (design §1.4).
+    id: "workspace-explorer-services", path: workspace(H), ready: "role=list[name$=' services']", widths: [1100, 1440],
+    setup: async (page) => {
+      await chromeReady(page);
+      await page.locator("aside.explorer").getByRole("button", { name: /^Show web-portal.*services$/ }).click();
+    },
+  },
+  {
     id: "workspace-engagement-picker", path: workspace(E), ready: "role=listbox[name='Engagements']", widths: [1100, 1440],
     setup: (page) => page.locator(".chrome-bar").getByRole("button", { name: /^Engagement: / }).click(),
   },

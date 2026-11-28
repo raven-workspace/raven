@@ -47,7 +47,15 @@
     min-height: 0;
   }
 
+  // Closed, the editor takes the Explorer's 264px back (design §1.7).
+  .workspace-shell__frame-body--no-explorer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .workspace-shell__explorer {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    min-width: 0;
     min-height: 0;
     border-right: 1px solid var(--line);
   }
