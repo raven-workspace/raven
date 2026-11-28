@@ -131,7 +131,8 @@ jobs:
         if: runner.os == 'Linux'
         # Tauri's WebKitGTK stack (https://v2.tauri.app/start/prerequisites/#linux). The vendored
         # SQLCipher and OpenSSL that rusqlite builds need only the compiler, perl and make the
-        # runner already has.
+        # runner already has. zsh is for the session tests (src-tauri/tests/sessions.rs): Kali's
+        # default shell, which the runner image leaves out.
         run: |
           # Skip rebuilding the man page index after the install: nobody reads man pages here.
           sudo rm -f /var/lib/man-db/auto-update
@@ -148,7 +149,8 @@ jobs:
             libssl-dev \
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
-            pkg-config
+            pkg-config \
+            zsh
           mkdir -p ~/apt-archives
           cp /var/cache/apt/archives/*.deb ~/apt-archives/
           echo "apt archive: $(ls ~/apt-archives/*.deb | wc -l) packages, $(du -sh ~/apt-archives | cut -f1)"
