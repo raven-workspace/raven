@@ -45,11 +45,13 @@ tauri-plugin-dialog = "2"
 # builds Ghostty vt-1.0.2, pinned in libghostty-vt-sys's build.rs, which CI reads to key its cache.
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "4466c0f45f51f964f86d1974a50502dbec7cb0de", default-features = false, optional = true }
 portable-pty = { version = "0.9", optional = true }
+# Starting a session's shell with its history pipe (src/terminal/pty.rs), already in the tree through portable-pty.
+libc = { version = "0.2", optional = true }
 
 [features]
 # Off by default, so a plain `tauri dev` needs no Zig (docs/specs/terminal.md §4). Building it needs
 # Zig 0.17 on PATH, or named by ZIG.
-terminal = ["dep:libghostty-vt", "dep:portable-pty"]
+terminal = ["dep:libghostty-vt", "dep:portable-pty", "dep:libc"]
 
 [dev-dependencies]
 tempfile = "3"

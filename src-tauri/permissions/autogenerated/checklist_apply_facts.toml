@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-checklist-apply-facts"
+description = "Enables the checklist_apply_facts command without any pre-configured scope."
+commands.allow = ["checklist_apply_facts"]
+
+[[permission]]
+identifier = "deny-checklist-apply-facts"
+description = "Denies the checklist_apply_facts command without any pre-configured scope."
+commands.deny = ["checklist_apply_facts"]

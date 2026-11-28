@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tried-pair-promote"
+description = "Enables the tried_pair_promote command without any pre-configured scope."
+commands.allow = ["tried_pair_promote"]
+
+[[permission]]
+identifier = "deny-tried-pair-promote"
+description = "Denies the tried_pair_promote command without any pre-configured scope."
+commands.deny = ["tried_pair_promote"]

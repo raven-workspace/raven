@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-engagements-progress"
+description = "Enables the engagements_progress command without any pre-configured scope."
+commands.allow = ["engagements_progress"]
+
+[[permission]]
+identifier = "deny-engagements-progress"
+description = "Denies the engagements_progress command without any pre-configured scope."
+commands.deny = ["engagements_progress"]

@@ -10,7 +10,7 @@
     "dev:audit": "vite --mode audit --port ${AUDIT_PORT:-5199} --strictPort",
     "build": "tsc -b && vite build",
     "tauri": "tauri",
-    "tauri:overhaul": "VITE_RAVEN_WORKSPACE=1 RAVEN_DATA_DIR=raven-overhaul RAVEN_DEV_PORT=1430 tauri dev --config src-tauri/tauri.overhaul.conf.json",
+    "tauri:overhaul": "VITE_RAVEN_WORKSPACE=1 RAVEN_DATA_DIR=raven-overhaul RAVEN_DEV_PORT=1430 tauri dev --features terminal --config src-tauri/tauri.overhaul.conf.json",
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc -b",

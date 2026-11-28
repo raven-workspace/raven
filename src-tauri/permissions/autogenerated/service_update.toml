@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-service-update"
+description = "Enables the service_update command without any pre-configured scope."
+commands.allow = ["service_update"]
+
+[[permission]]
+identifier = "deny-service-update"
+description = "Denies the service_update command without any pre-configured scope."
+commands.deny = ["service_update"]

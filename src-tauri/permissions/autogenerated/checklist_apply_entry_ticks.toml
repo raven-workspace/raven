@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-checklist-apply-entry-ticks"
+description = "Enables the checklist_apply_entry_ticks command without any pre-configured scope."
+commands.allow = ["checklist_apply_entry_ticks"]
+
+[[permission]]
+identifier = "deny-checklist-apply-entry-ticks"
+description = "Denies the checklist_apply_entry_ticks command without any pre-configured scope."
+commands.deny = ["checklist_apply_entry_ticks"]

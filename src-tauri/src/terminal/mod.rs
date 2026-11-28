@@ -1,8 +1,8 @@
 //! The terminal core's first piece (RAV-69, docs/adr/0003): a PTY from `portable-pty` whose bytes
 //! feed a headless libghostty-vt terminal, which Raven reads back as plain text and OSC 133 marks.
 //!
-//! Only built with the `terminal` Cargo feature. The session manager and IPC (RAV-71) build on
-//! this; nothing in the app calls it yet.
+//! Only built with the `terminal` Cargo feature. `session` runs one shell per session on top of it,
+//! and `ipc` is the webview's only way in (RAV-71).
 //!
 //! A libghostty-vt `Terminal` is `!Send`: every call on one terminal must come from the thread
 //! that made it. A session therefore owns its `Screen` on one thread and moves bytes to it.
@@ -16,7 +16,13 @@ use libghostty_vt::effect::SemanticPromptKind;
 use libghostty_vt::fmt::{Format, Formatter};
 use libghostty_vt::point::{Coordinate, Point};
 use libghostty_vt::screen::CellSemanticContent;
+use libghostty_vt::fmt::Extras;
 use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
+
+pub mod ipc;
+pub mod pty;
+pub mod session;
+pub mod shell;
 
 /// Scrollback kept per terminal. libghostty-vt's own default is 10,000 bytes, about one page.
 pub const SCROLLBACK_MAX_BYTES: usize = 10 * 1024 * 1024;
@@ -27,6 +33,8 @@ pub enum TerminalError {
     Vt(libghostty_vt::Error),
     #[error("pty: {0}")]
     Pty(String),
+    #[error("no such session")]
+    NoSession,
 }
 
 impl From<libghostty_vt::Error> for TerminalError {
@@ -112,6 +120,29 @@ impl Screen {
     /// Every OSC 133 mark so far, oldest first.
     pub fn marks(&self) -> Vec<Mark> {
         self.marks.borrow().clone()
+    }
+
+    /// The OSC 133 marks since the last call, oldest first, removed from the screen.
+    pub fn take_marks(&mut self) -> Vec<Mark> {
+        std::mem::take(&mut *self.marks.borrow_mut())
+    }
+
+    /// Change the screen's size, as the PTY's was changed.
+    pub fn resize(&mut self, cols: u16, rows: u16) -> TerminalResult<()> {
+        // The cell size only matters for pixel reports and images, which Raven doesn't answer.
+        Ok(self.terminal.resize(cols, rows, 8, 16)?)
+    }
+
+    /// The whole terminal as VT bytes that redraw it from a reset: scrollback, screen, styles, modes and the
+    /// cursor. What a renderer that reattaches is sent first (docs/adr/0003).
+    pub fn vt_snapshot(&self) -> TerminalResult<Vec<u8>> {
+        let mut formatter = Formatter::new(&self.terminal)?;
+        formatter.set_format(Format::Vt)?.set_unwrap(false)?.set_trim(false)?.set_extras(Extras::ALL)?;
+        let bytes = formatter.format_alloc(None)?;
+        // RIS first, so the renderer starts from nothing.
+        let mut out = b"\x1bc".to_vec();
+        out.extend_from_slice(&bytes);
+        Ok(out)
     }
 
     /// Rows in scrollback, above the active screen.

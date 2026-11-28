@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-extraction-file"
+description = "Enables the extraction_file command without any pre-configured scope."
+commands.allow = ["extraction_file"]
+
+[[permission]]
+identifier = "deny-extraction-file"
+description = "Denies the extraction_file command without any pre-configured scope."
+commands.deny = ["extraction_file"]

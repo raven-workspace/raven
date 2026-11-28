@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ruled-out-create"
+description = "Enables the ruled_out_create command without any pre-configured scope."
+commands.allow = ["ruled_out_create"]
+
+[[permission]]
+identifier = "deny-ruled-out-create"
+description = "Denies the ruled_out_create command without any pre-configured scope."
+commands.deny = ["ruled_out_create"]

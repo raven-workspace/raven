@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tun0-address"
+description = "Enables the tun0_address command without any pre-configured scope."
+commands.allow = ["tun0_address"]
+
+[[permission]]
+identifier = "deny-tun0-address"
+description = "Denies the tun0_address command without any pre-configured scope."
+commands.deny = ["tun0_address"]

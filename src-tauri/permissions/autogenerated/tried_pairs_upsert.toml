@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tried-pairs-upsert"
+description = "Enables the tried_pairs_upsert command without any pre-configured scope."
+commands.allow = ["tried_pairs_upsert"]
+
+[[permission]]
+identifier = "deny-tried-pairs-upsert"
+description = "Denies the tried_pairs_upsert command without any pre-configured scope."
+commands.deny = ["tried_pairs_upsert"]

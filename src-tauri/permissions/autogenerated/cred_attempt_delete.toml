@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cred-attempt-delete"
+description = "Enables the cred_attempt_delete command without any pre-configured scope."
+commands.allow = ["cred_attempt_delete"]
+
+[[permission]]
+identifier = "deny-cred-attempt-delete"
+description = "Denies the cred_attempt_delete command without any pre-configured scope."
+commands.deny = ["cred_attempt_delete"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-engagement-get"
+description = "Enables the engagement_get command without any pre-configured scope."
+commands.allow = ["engagement_get"]
+
+[[permission]]
+identifier = "deny-engagement-get"
+description = "Denies the engagement_get command without any pre-configured scope."
+commands.deny = ["engagement_get"]

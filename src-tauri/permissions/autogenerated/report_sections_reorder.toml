@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-report-sections-reorder"
+description = "Enables the report_sections_reorder command without any pre-configured scope."
+commands.allow = ["report_sections_reorder"]
+
+[[permission]]
+identifier = "deny-report-sections-reorder"
+description = "Denies the report_sections_reorder command without any pre-configured scope."
+commands.deny = ["report_sections_reorder"]

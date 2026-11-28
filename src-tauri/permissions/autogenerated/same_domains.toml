@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-same-domains"
+description = "Enables the same_domains command without any pre-configured scope."
+commands.allow = ["same_domains"]
+
+[[permission]]
+identifier = "deny-same-domains"
+description = "Denies the same_domains command without any pre-configured scope."
+commands.deny = ["same_domains"]

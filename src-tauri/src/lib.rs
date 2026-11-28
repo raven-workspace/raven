@@ -28,6 +28,7 @@ pub mod tun0;
 pub mod settings;
 #[cfg(feature = "terminal")]
 pub mod terminal;
+pub mod terminal_history;
 pub mod vault;
 
 use std::sync::Mutex;
@@ -41,7 +42,14 @@ pub fn run() {
         .plugin(platform::init())
         .setup(|app| {
             let paths = paths::DataPaths::resolve(app.handle())?;
+            #[cfg(feature = "terminal")]
+            let integration_dir = paths.root.join("shell-integration");
             app.manage(Mutex::new(vault::Vault::new(paths)));
+            #[cfg(feature = "terminal")]
+            {
+                let sessions = terminal::ipc::manager(app.handle(), integration_dir);
+                app.manage(sessions);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -176,6 +184,18 @@ pub fn run() {
             commands::interface_dismiss,
             commands::cleanup_delete,
             commands::cleanup_counts,
+            #[cfg(feature = "terminal")]
+            terminal::ipc::terminal_spawn,
+            #[cfg(feature = "terminal")]
+            terminal::ipc::terminal_list,
+            #[cfg(feature = "terminal")]
+            terminal::ipc::terminal_attach,
+            #[cfg(feature = "terminal")]
+            terminal::ipc::terminal_write,
+            #[cfg(feature = "terminal")]
+            terminal::ipc::terminal_resize,
+            #[cfg(feature = "terminal")]
+            terminal::ipc::terminal_close,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -194,5 +214,50 @@ mod tests {
             }
         }
         assert!(security["csp"].is_string());
+    }
+
+    /// The quoted names between `start` and the next `end` in `text`.
+    fn quoted(text: &str, start: &str, end: &str) -> Vec<String> {
+        let from = text.find(start).unwrap_or_else(|| panic!("no {start}")) + start.len();
+        let block = &text[from..from + text[from..].find(end).unwrap()];
+        block.split('"').skip(1).step_by(2).map(str::to_owned).collect()
+    }
+
+    /// SR-1: with the app's ACL manifest (build.rs), a command the capability doesn't allow by name can't be called,
+    /// and one the manifest doesn't list has no permission at all. Every registered command must be in both.
+    #[test]
+    fn every_command_is_in_the_acl_manifest_and_allowed_by_the_capability() {
+        let lib = include_str!("lib.rs");
+        let handlers = &lib[lib.find("generate_handler![").unwrap()..];
+        let handlers = &handlers[..handlers.find("])").unwrap()];
+        let registered: Vec<String> = handlers
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.starts_with('#') && line.ends_with(','))
+            .map(|line| line.trim_end_matches(',').rsplit("::").next().unwrap().to_owned())
+            .collect();
+        assert!(registered.len() > 100, "parsed {} commands", registered.len());
+
+        let build = include_str!("../build.rs");
+        let app = quoted(build, "const APP_COMMANDS: &[&str] = &[", "];");
+        let terminal = quoted(build, "const TERMINAL_COMMANDS: &[&str] = &[", "];");
+        let manifest: Vec<String> = app.iter().chain(&terminal).cloned().collect();
+        assert_eq!(manifest, registered, "build.rs must list generate_handler!'s commands, in order");
+        assert_eq!(
+            terminal,
+            ["terminal_spawn", "terminal_list", "terminal_attach", "terminal_write", "terminal_resize", "terminal_close"]
+        );
+
+        let sets = include_str!("../permissions/app.toml");
+        let allow = |names: &[String]| -> Vec<String> {
+            names.iter().map(|name| format!("allow-{}", name.replace('_', "-"))).collect()
+        };
+        // After each set's identifier: its description, then its permissions.
+        assert_eq!(quoted(sets, "identifier = \"app-commands\"", "]")[1..], allow(&app));
+        assert_eq!(quoted(sets, "identifier = \"terminal-commands\"", "]")[1..], allow(&terminal));
+
+        let capability: serde_json::Value = serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        let granted: Vec<&str> = capability["permissions"].as_array().unwrap().iter().filter_map(|p| p.as_str()).collect();
+        assert!(granted.contains(&"app-commands") && granted.contains(&"terminal-commands"), "{granted:?}");
     }
 }

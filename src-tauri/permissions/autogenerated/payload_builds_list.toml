@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-payload-builds-list"
+description = "Enables the payload_builds_list command without any pre-configured scope."
+commands.allow = ["payload_builds_list"]
+
+[[permission]]
+identifier = "deny-payload-builds-list"
+description = "Denies the payload_builds_list command without any pre-configured scope."
+commands.deny = ["payload_builds_list"]

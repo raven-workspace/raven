@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hop-delete"
+description = "Enables the hop_delete command without any pre-configured scope."
+commands.allow = ["hop_delete"]
+
+[[permission]]
+identifier = "deny-hop-delete"
+description = "Denies the hop_delete command without any pre-configured scope."
+commands.deny = ["hop_delete"]

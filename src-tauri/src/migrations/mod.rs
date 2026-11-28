@@ -40,6 +40,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (17, include_str!("../../migrations/0017_service_exploited.sql")),
     (18, include_str!("../../migrations/0018_vector_exploited.sql")),
     (19, include_str!("../../migrations/0019_username_scope.sql")),
+    (20, include_str!("../../migrations/0020_terminal_history.sql")),
 ];
 
 const FK_OFF_MARKER: &str = "-- raven:foreign-keys-off";
@@ -305,14 +306,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 19));
+            assert_eq!((f, t), (1, 20));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 19 });
-        assert_eq!(version(&c), 19);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 20 });
+        assert_eq!(version(&c), 20);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -666,13 +667,13 @@ mod tests {
         c.execute("INSERT INTO settings (key, value) VALUES ('k', 'v')", []).unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (8, 19));
+            assert_eq!((f, t), (8, 20));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 8, to: 19 });
+        assert_eq!(out, MigrationOutcome { from: 8, to: 20 });
         let kept: i64 = c.query_row("SELECT count(*) FROM settings WHERE key='k'", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
         c.execute("INSERT INTO field_manual (id, imported_at, snapshot) VALUES (1, 1, '{}')", []).unwrap();
@@ -775,5 +776,35 @@ mod tests {
         c.execute("DELETE FROM hosts WHERE id IN ('h1','h2')", []).unwrap();
         assert_eq!(count(&c, "SELECT count(*) FROM usernames WHERE scope = 'local' AND local_host_id IS NULL"), 2);
         assert_eq!(count(&c, "SELECT count(*) FROM pragma_foreign_key_check"), 0);
+    }
+
+    #[test]
+    fn migration_0020_from_v19_adds_terminal_history_and_keeps_engagements() {
+        let (_d, _p, mut c) = file_db();
+        migrate_with(&mut c, &MIGRATIONS[..19], &mut |_, _| panic!("hook on fresh db")).unwrap();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        c.execute(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e','Forge','lab','[]','active',1,1)",
+            [],
+        )
+        .unwrap();
+        let mut hook_calls = 0;
+        let out = migrate(&mut c, &mut |f, t| {
+            assert_eq!((f, t), (19, 20));
+            hook_calls += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!((hook_calls, out), (1, MigrationOutcome { from: 19, to: 20 }));
+        assert_eq!(count(&c, "SELECT count(*) FROM engagements WHERE id = 'e' AND name = 'Forge' AND folder IS NULL"), 1);
+
+        c.execute("INSERT INTO terminal_commands (engagement_id, command, created_at) VALUES ('e', 'id', 1)", []).unwrap();
+        assert!(
+            c.execute("INSERT INTO terminal_commands (engagement_id, command, created_at) VALUES ('nope', 'id', 1)", [])
+                .is_err(),
+            "a command line belongs to an engagement"
+        );
+        c.execute("DELETE FROM engagements WHERE id = 'e'", []).unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM terminal_commands"), 0);
     }
 }

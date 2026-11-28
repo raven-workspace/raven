@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tried-pairs-list"
+description = "Enables the tried_pairs_list command without any pre-configured scope."
+commands.allow = ["tried_pairs_list"]
+
+[[permission]]
+identifier = "deny-tried-pairs-list"
+description = "Denies the tried_pairs_list command without any pre-configured scope."
+commands.deny = ["tried_pairs_list"]

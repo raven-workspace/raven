@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-checklist-put"
+description = "Enables the checklist_put command without any pre-configured scope."
+commands.allow = ["checklist_put"]
+
+[[permission]]
+identifier = "deny-checklist-put"
+description = "Denies the checklist_put command without any pre-configured scope."
+commands.deny = ["checklist_put"]

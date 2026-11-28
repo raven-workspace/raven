@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-username-delete"
+description = "Enables the username_delete command without any pre-configured scope."
+commands.allow = ["username_delete"]
+
+[[permission]]
+identifier = "deny-username-delete"
+description = "Denies the username_delete command without any pre-configured scope."
+commands.deny = ["username_delete"]

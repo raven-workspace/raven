@@ -69,7 +69,7 @@ fn guard(s: &VaultState) -> std::sync::MutexGuard<'_, Vault> {
 
 /// Run blocking work on Tauri's blocking thread pool, never on the macOS main (UI) thread,
 /// so Argon2, migrations and backups can't freeze the window.
-async fn off_main<T, F>(f: F) -> AppResult<T>
+pub(crate) async fn off_main<T, F>(f: F) -> AppResult<T>
 where
     F: FnOnce() -> AppResult<T> + Send + 'static,
     T: Send + 'static,
@@ -81,7 +81,7 @@ where
 
 /// `f` gets the vault behind the shared mutex. The guard lives only inside the blocking
 /// closure, so it is never held across an `.await`.
-async fn with_vault<T, F>(app: AppHandle, f: F) -> AppResult<T>
+pub(crate) async fn with_vault<T, F>(app: AppHandle, f: F) -> AppResult<T>
 where
     F: FnOnce(&mut Vault) -> AppResult<T> + Send + 'static,
     T: Send + 'static,
