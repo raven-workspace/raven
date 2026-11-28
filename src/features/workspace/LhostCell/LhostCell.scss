@@ -1,0 +1,45 @@
+@use "@/styles/abstracts" as *;
+
+// LHOST on the status bar (design §1.5): shield, label, the Settings value, Copy.
+@layer features {
+  .lhost-cell {
+    display: grid;
+    grid-template-columns: 16px max-content max-content 28px;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .lhost-cell__icon {
+    display: block;
+    color: var(--accent);
+  }
+
+  // A link to Settings, or (tun0 differs) a button that sets tun0's address there.
+  // 28px tall, as the old strip's cell: a hit target, not just its text line.
+  .lhost-cell__value {
+    display: inline-grid;
+    height: 1.75rem;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    @include type(meta);
+    color: var(--warn);
+    text-decoration-line: none;
+    cursor: default;
+  }
+
+  .lhost-cell__value--set {
+    @include mono;
+    color: var(--fg);
+  }
+
+  .lhost-cell__value--warn {
+    color: var(--warn);
+  }
+
+  button.lhost-cell__value {
+    @include mono;
+  }
+}

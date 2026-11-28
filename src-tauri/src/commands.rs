@@ -123,6 +123,12 @@ pub async fn settings_get(app: AppHandle) -> AppResult<Settings> {
     with_vault(app, |v| settings::get(v.conn()?)).await
 }
 
+/// tun0's IPv4 address, for the status bar's LHOST check. No vault needed: it reads the OS, not the vault.
+#[tauri::command]
+pub async fn tun0_address() -> AppResult<Option<String>> {
+    off_main(|| Ok(crate::tun0::address())).await
+}
+
 #[tauri::command]
 pub async fn settings_update(app: AppHandle, patch: SettingsPatch) -> AppResult<Settings> {
     with_vault(app, move |v| settings::update(v.conn()?, patch)).await

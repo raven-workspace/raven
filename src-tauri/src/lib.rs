@@ -24,6 +24,7 @@ pub mod services;
 pub mod payload_builds;
 pub mod reports;
 pub mod tried_pairs;
+pub mod tun0;
 pub mod settings;
 pub mod vault;
 
@@ -47,6 +48,7 @@ pub fn run() {
             commands::vault_unlock,
             commands::vault_lock,
             commands::settings_get,
+            commands::tun0_address,
             commands::settings_update,
             commands::nvd_lookup,
             commands::backup_now,

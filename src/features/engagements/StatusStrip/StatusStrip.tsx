@@ -8,9 +8,6 @@ import { useCleanupCounts } from "../../cleanup/queries";
 import { useProgress } from "../../hosts/queries";
 import { useThreadCounts } from "../../notes/useThreadCounts";
 import { PauseIcon, PlayIcon } from "@phosphor-icons/react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../../lib/api";
-import { reportError } from "../../../lib/lockSignal";
 import { IconButton } from "../../../ui/index";
 import { TIMEBOX_TEXT, TimeBar } from "../ActiveCard/ActiveCard";
 import {
@@ -25,7 +22,7 @@ import {
 } from "../format";
 import { Listener } from "../Listener/Listener";
 import { MsfLock } from "../MsfLock/MsfLock";
-import { engagementSaved } from "../queries";
+import { useTimeboxPause } from "../queries";
 import "./StatusStrip.scss";
 import "../ActiveCard/ActiveCard.scss";
 
@@ -133,19 +130,11 @@ export function StatusStrip({ engagement: e, named = false }: { engagement: Enga
   );
 }
 
-/**
- * The exam-sim clock. Pause/resume is a click only, never a key, so a real exam can't be paused by a stray press;
- * locking Raven never pauses it either (owner call: an unnoticed pause is worse than a running clock).
- */
+/** The exam-sim clock. Pause/resume is a click only, never a key (useTimeboxPause). */
 function TimeboxStatus({ engagement: e, now }: { engagement: Engagement & { timeboxMinutes: number }; now: number }) {
-  const qc = useQueryClient();
   const clock = timeboxNow(e, now);
   const state = timeboxState(e, now);
-  const toggle = useMutation({
-    mutationFn: (paused: boolean) => api.engagementSetTimeboxPaused(e.id, paused),
-    onSuccess: (saved) => void engagementSaved(qc, saved),
-    onError: reportError,
-  });
+  const toggle = useTimeboxPause(e.id);
   const paused = state === "paused";
   const of: ReactNode = <span data-drop={STEP.of} className="status-strip__of">of {formatDuration(e.timeboxMinutes)}</span>;
   return (

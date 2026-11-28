@@ -1,0 +1,44 @@
+@use "@/styles/abstracts" as *;
+
+// The status bar (design §1.5): the cells from the left, the timebox at the right end. Spec 1 writes it as one grid
+// (seven max-content tracks, a 1fr spacer, the timebox); the cells sit in their own grid here because Metasploit,
+// Threads and Cleanup are not always there, and a dropped cell (useFitStrip sets its inline display) must leave no
+// empty track or gap behind. The 1fr track is the spacer.
+@layer features {
+  .status-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: var(--space-xl);
+    min-width: 0;
+    padding: 0 var(--space-sm) 0 var(--space-lg);
+    border-top: 1px solid var(--line);
+    overflow: hidden;
+    white-space: nowrap;
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .status-bar__cells {
+    display: grid;
+    grid-auto-columns: max-content;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: start;
+    gap: var(--space-xl);
+    min-width: 0;
+    overflow: hidden;
+  }
+}
+
+// The Metasploit lock on the bar (design §1.5): a 28px hit area padded past its text, and "unused" in --muted-2.
+@layer features {
+  .status-bar .msf-lock {
+    padding-inline: var(--space-sm);
+    margin-inline: calc(var(--space-sm) * -1);
+  }
+
+  .status-bar .msf-lock__host:not(.msf-lock__host--locked) {
+    color: var(--muted-2);
+  }
+}

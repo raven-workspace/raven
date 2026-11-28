@@ -1,0 +1,53 @@
+@use "@/styles/abstracts" as *;
+
+// The timebox at the status bar's right end (design §1.5, §1.6). The ring takes the colour the old bar used.
+@layer features {
+  .timebox-cell {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .timebox-cell__pause {
+    margin-inline: calc(var(--space-xs) * -1);
+  }
+
+  .timebox-cell__time {
+    @include mono;
+    @include type(meta);
+  }
+
+  .timebox-cell__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  // Rotated so it fills clockwise from 12 o'clock.
+  .time-ring {
+    display: block;
+    transform: rotate(-90deg);
+  }
+
+  .time-ring__track,
+  .time-ring__used {
+    fill: none;
+    stroke-width: 2;
+  }
+
+  .time-ring__track {
+    stroke: var(--line-2);
+  }
+
+  .time-ring__used--running {
+    stroke: var(--accent);
+  }
+
+  .time-ring__used--paused {
+    stroke: var(--muted);
+  }
+
+  .time-ring__used--over {
+    stroke: var(--warn);
+  }
+}

@@ -1,16 +1,17 @@
 import { useEffect } from "react";
 import { Outlet, useMatch } from "react-router";
 import { ChromeBar } from "../ChromeBar/ChromeBar";
+import { StatusBar } from "../StatusBar/StatusBar";
 import { useTargetStore } from "../useTargetStore";
 import "./WorkspaceShell.scss";
 
 /**
  * The window grid around an engagement (design §1.1): the rail beside the frame, and in the frame the Explorer, the
  * editor area (editor tabs over the page) and the terminal panel, over the status bar. The slots are empty boxes that
- * later issues fill (RAV-74 rail, RAV-75 Explorer, RAV-76 editor tabs, RAV-78 status bar, the terminal panel after
- * them). No terminal panel yet, so its row is collapsed.
+ * later issues fill (RAV-74 rail, RAV-75 Explorer, RAV-76 editor tabs, the terminal panel after them; the status bar is
+ * RAV-78's). No terminal panel yet, so its row is collapsed.
  */
-function EngagementFrame() {
+function EngagementFrame({ engagementId }: { engagementId: string }) {
   return (
     <div className="workspace-shell__workspace">
       <div data-slot="rail" className="workspace-shell__rail" />
@@ -25,7 +26,9 @@ function EngagementFrame() {
             <div data-slot="terminal" className="workspace-shell__terminal" />
           </div>
         </div>
-        <div data-slot="status-bar" className="workspace-shell__status" />
+        <div data-slot="status-bar" className="workspace-shell__status">
+          <StatusBar engagementId={engagementId} />
+        </div>
       </div>
     </div>
   );
@@ -49,7 +52,7 @@ export function WorkspaceShell() {
     <div className={engagementId ? "workspace-shell workspace-shell--engagement" : "workspace-shell"}>
       <ChromeBar />
       {engagementId ? (
-        <EngagementFrame />
+        <EngagementFrame engagementId={engagementId} />
       ) : (
         <div className="workspace-shell__page">
           <Outlet />
