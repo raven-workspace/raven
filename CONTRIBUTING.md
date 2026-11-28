@@ -19,7 +19,7 @@ Issues live in Linear, in the **RAV** team: create and work them there. Linear s
 
 **Outside contributors:** open bugs and feature requests as GitHub issues. They sync into Linear for triage.
 
-- **Labels:** each issue has a category label (`Feature`, `Improvement`, `Bug`, `Security`, `Design`, `Documentation` or `Plan`). Triage adds `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` or `wontfix`.
+- **Labels:** each issue has a category label (`Feature`, `Improvement`, `Bug`, `Security`, `Design`, `Documentation` or `Plan`). Triage adds `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` or `wontfix`. An issue an agent filed with a question its own issue didn't settle also carries `open-question` ([`docs/agents/triage-labels.md`](docs/agents/triage-labels.md)).
 - **Statuses:** Backlog, Todo, In Progress, In Review, Done, Canceled and Duplicate.
 - **Bigger features** start as a design spec in [`docs/specs/`](docs/specs/README.md), agreed before any code is written.
 
