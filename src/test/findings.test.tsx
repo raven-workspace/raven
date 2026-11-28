@@ -46,7 +46,7 @@ const logEntry = (id: string): LogEntry => ({
   returnedNothing: false, private: false, content: { kind: "note", text: "x" }, at: 1, createdAt: 1, updatedAt: 1,
 });
 
-function mount(findings: Finding[] = [], log: LogEntry[] = []) {
+function mount(findings: Finding[] = [], log: LogEntry[] = [], path = "/e/e1/s/findings") {
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockResolvedValue([H1, H2]);
   m.servicesListEngagement.mockResolvedValue([S1, S2]);
@@ -60,7 +60,7 @@ function mount(findings: Finding[] = [], log: LogEntry[] = []) {
   m.findingUpdate.mockImplementation(async (id, input) => finding({ id, ...input, title: input.title }));
   return render(
     <QueryClientProvider client={makeQueryClient()}>
-      <MemoryRouter initialEntries={["/e/e1/s/findings"]}>
+      <MemoryRouter initialEntries={[path]}>
         <App />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -113,6 +113,14 @@ describe("findings section", () => {
     mount([finding({ id: "a", title: "Open share" })]);
     await user.click(await screen.findByRole("button", { name: "Open share" }));
     expect(await screen.findByRole("form", { name: "Edit finding" })).toBeInTheDocument();
+  });
+
+  it("?finding=<id> opens that finding and ?finding=new a new one (the workspace Explorer's rows and Add finding)", async () => {
+    const { unmount } = mount([finding({ id: "a", title: "Open share" })], [], "/e/e1/s/findings?finding=a");
+    expect(await screen.findByRole("form", { name: "Edit finding" })).toBeInTheDocument();
+    unmount();
+    mount([], [], "/e/e1/s/findings?finding=new");
+    expect(await screen.findByRole("form", { name: "New finding" })).toBeInTheDocument();
   });
 
   it("a valid CVSS vector shows the score and suggests the severity; an invalid one shows an error and saves no score", async () => {

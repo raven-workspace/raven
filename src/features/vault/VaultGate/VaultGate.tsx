@@ -34,6 +34,7 @@ import { usePaletteStore } from "../../palette/usePaletteStore";
 import { useSettings } from "../../settings/queries";
 import { cx } from "../../../lib/cx";
 import { prefersReducedMotion } from "../../../ui/motion";
+import { useExplorerStore } from "../../workspace/useExplorerStore";
 import { useTargetStore } from "../../workspace/useTargetStore";
 import { useEditorTabsStore } from "../../workspace/useEditorTabsStore";
 import "../screens.scss";
@@ -129,6 +130,8 @@ export function VaultGate({ children, chrome = "title-bar" }: { children: ReactN
     // And the workspace shell's Target and editor tabs per engagement (the tabs come back from their stored ids).
     useTargetStore.getState().reset();
     useEditorTabsStore.getState().reset();
+    // And which hosts the Explorer had open (host ids), and its Add host dialog.
+    useExplorerStore.getState().reset();
     // Notes too: after a lock no note text stays in memory. `lock()` has already started the
     // flush, which works from a snapshot.
     discardNotes();

@@ -1,6 +1,6 @@
 import { PencilSimple, Trash } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { sortFindingsBySeverity } from "../../../engines/findings/index";
 import type { Finding } from "../../../types/findings";
 import { ActionCell, Button, Chip, EmptyState, IconButton, labelClass, queryState } from "../../../ui/index";
@@ -31,6 +31,29 @@ export function FindingsSection() {
   const sorted = useMemo(() => sortFindingsBySeverity(findingsQ.data ?? []), [findingsQ.data]);
   // In the workspace shell a finding opens in its own editor tab; a new one is still written here.
   const openFinding = (f: Finding) => (WORKSPACE_SHELL ? void navigate(`/e/${id}/f/${f.id}`) : setEditor({ edit: f }));
+
+  // `?finding=<id>` opens that finding and `?finding=new` a new one (the workspace Explorer's rows and Add finding).
+  // Read once the findings load, then dropped from the URL, so Back and a reload don't reopen it.
+  const [params, setParams] = useSearchParams();
+  const asked = params.get("finding");
+  const [handled, setHandled] = useState<string | null>(null);
+  if (!asked && handled) setHandled(null);
+  if (asked && asked !== handled && findingsQ.data) {
+    setHandled(asked);
+    const f = asked === "new" ? undefined : findingsQ.data.find((x) => x.id === asked);
+    if (asked === "new") setEditor({});
+    else if (f) setEditor({ edit: f });
+  }
+  useEffect(() => {
+    if (!asked || !findingsQ.data) return;
+    setParams(
+      (p) => {
+        p.delete("finding");
+        return p;
+      },
+      { replace: true },
+    );
+  }, [asked, findingsQ.data, setParams]);
 
   const state = queryState([hostsQ, findingsQ], "findings");
   if (state || !hostsQ.data || !findingsQ.data) return state;

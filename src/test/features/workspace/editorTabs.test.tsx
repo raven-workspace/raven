@@ -231,7 +231,7 @@ describe("drawers become tabs", () => {
     await user.keyboard("n");
     await screen.findByRole("region", { name: "Notes: zzweb01" });
     expect(await tabs()).toEqual(["zzweb01", "Arsenal", "Payloads", "[Notes: zzweb01]"]);
-    expect(screen.queryByRole("complementary")).toBeNull();
+    for (const name of ["Arsenal", "Payloads", /^Notes/]) expect(screen.queryByRole("complementary", { name })).toBeNull();
   });
 
   it("an opener of the old drawer (a card link, ⌘K's generator) opens the tab instead", async () => {
