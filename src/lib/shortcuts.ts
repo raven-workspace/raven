@@ -228,6 +228,10 @@ export const SHORTCUTS = {
   copyAndLog: shortcut("⌘↵"),
   paste: shortcut("⌘V"),
 
+  /* Status bar */
+  /** Copies LHOST from the status bar. ⇧ already: Ctrl+Alt+L on Linux. */
+  copyLhost: shortcut("⌘⇧L"),
+
   /* Quick capture */
   captureKinds: [1, 2, 3, 4, 5].map((n) => shortcut(`⌘${n}`)),
   capturePrivate: shortcut("⌘P"),

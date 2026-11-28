@@ -20,7 +20,7 @@ for (const screen of VISUAL_SCREENS) {
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.setViewportSize({ width, height: 900 });
-      await page.clock.install({ time: AUDIT_NOW });
+      await page.clock.install({ time: screen.time ?? AUDIT_NOW });
       // `AUDIT_OS=linux`: the app reads a Linux platform, so every shortcut shows (and is bound to) its Linux key.
       if (process.env.AUDIT_OS === "linux") await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "Linux x86_64" }));
       await page.goto(screen.path);

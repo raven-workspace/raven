@@ -1531,3 +1531,28 @@ test("Report: dragging a screenshot's corner resizes it, and Full width puts it 
     await expect.poll(async () => Math.round((await img.boundingBox())!.width)).toBe(Math.round(before));
   });
 });
+
+// The workspace status bar (design §1.7): as it narrows, cells drop in the strip's order (Listeners, Cleanup, Threads,
+// Metasploit, then Flags and Rooted); LHOST and the timebox never drop. The exam sim has every cell but Threads.
+test("workspace status bar: cells drop in order, LHOST and the timebox never", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/h/h-exam-dc01?workspace");
+  const bar = page.locator(".status-bar[role=status]");
+  await bar.getByRole("group", { name: "Cleanup 1" }).waitFor();
+  const shown = () => bar.locator(".status-bar__cells > *").evaluateAll((els) =>
+    els.filter((e) => getComputedStyle(e).display !== "none").map((e) => (e.getAttribute("aria-label") ?? e.textContent ?? "").split(" ")[0]));
+  // At the window's minimum only Listeners has gone.
+  expect(await shown()).toEqual(["LHOST", "Rooted", "Flags", "Metasploit", "Cleanup"]);
+  const seen: string[][] = [];
+  for (const w of [1000, 900, 800, 700, 600, 470]) {
+    await page.evaluate((w) => { document.querySelector<HTMLElement>("[data-slot=status-bar]")!.style.width = `${w}px`; }, w);
+    await expect.poll(async () => (await shown()).length).toBeLessThanOrEqual(seen.at(-1)?.length ?? 5);
+    seen.push(await shown());
+    await expect(bar.getByRole("group", { name: "Timebox" })).toBeVisible();
+  }
+  const order = ["LHOST", "Rooted", "Flags", "Metasploit", "Cleanup"];
+  // Each width shows a prefix of the order: the cells at the end go first.
+  for (const s of seen) expect(s).toEqual(order.slice(0, s.length));
+  expect(seen.at(-1)).toEqual(["LHOST"]);
+});

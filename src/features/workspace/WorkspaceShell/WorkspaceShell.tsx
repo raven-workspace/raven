@@ -8,6 +8,7 @@ import { HostDialog } from "../../hosts/HostDialog/HostDialog";
 import { ChromeBar } from "../ChromeBar/ChromeBar";
 import { EDITOR_PANEL_ID, EditorTabs } from "../EditorTabs/EditorTabs";
 import { Explorer } from "../Explorer/Explorer";
+import { StatusBar } from "../StatusBar/StatusBar";
 import { useDrawerTabs } from "../useDrawerTabs";
 import { useEditorTabsStore } from "../useEditorTabsStore";
 import { useExplorerStore } from "../useExplorerStore";
@@ -46,9 +47,9 @@ function useTabRouting(engagementId: string | undefined) {
 
 /**
  * The window grid around an engagement (design §1.1): the rail beside the frame, and in the frame the Explorer, the
- * editor area (editor tabs over the page) and the terminal panel, over the status bar. The rail and status bar are
- * still empty boxes that later issues fill (RAV-74 rail, RAV-78 status bar, the terminal panel after them). No
- * terminal panel yet, so its row is collapsed.
+ * editor area (editor tabs over the page) and the terminal panel, over the status bar. The rail is still an empty box
+ * that a later issue fills (RAV-74), and the terminal panel comes after it. No terminal panel yet, so its row is
+ * collapsed.
  *
  * ⌘B toggles the Explorer (closed, the editor takes its 264px back) and ⌘N adds a host, open or closed. Both are
  * chords, so `isFreeKey` (which refuses modifiers) does not apply; a dialog, or an editor that took the key (the
@@ -88,7 +89,9 @@ function EngagementFrame({ engagementId }: { engagementId: string }) {
             <div data-slot="terminal" className="workspace-shell__terminal" />
           </div>
         </div>
-        <div data-slot="status-bar" className="workspace-shell__status" />
+        <div data-slot="status-bar" className="workspace-shell__status">
+          <StatusBar engagementId={engagementId} />
+        </div>
       </div>
       <HostDialog open={addingHost} onOpenChange={(open) => useExplorerStore.getState().setAddingHost(open)} engagementId={engagementId} />
     </div>
