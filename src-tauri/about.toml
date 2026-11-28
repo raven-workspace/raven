@@ -1,0 +1,41 @@
+# The licence allow-list for every dependency Raven ships, Rust and npm alike, and cargo-about's
+# settings for the Rust half. scripts/third-party-notices.mjs reads `accepted` for the npm
+# packages too, so this is the one list. A dependency whose licence is missing, or matches none of
+# these, fails `npm run notices` and so CI. Raven itself is AGPL-3.0-only; this list is only for
+# what it depends on.
+#
+# Add a licence only after reading it: it must let Raven ship the code inside an AGPL-3.0 app.
+# Each OR expression needs one licence from the list, each AND expression all of them. Where a
+# dependency offers a choice, the one earliest in this list is used, so MIT and Apache-2.0 lead.
+accepted = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "0BSD",
+  "MIT-0",
+  "CC0-1.0",
+  "Zlib",
+  "bzip2-1.0.6",
+  "Unicode-3.0",
+  # webpki-roots: Mozilla's root certificate list, as data.
+  "CDLA-Permissive-2.0",
+  # File-level copyleft, compatible with the AGPL. Tauri needs it: cssparser, selectors and
+  # dtoa-short (through tauri-utils) and option-ext (through dirs). Raven doesn't modify them.
+  "MPL-2.0",
+  # Fonts: Instrument Sans and JetBrains Mono, from npm and in src-tauri/fonts.
+  "OFL-1.1",
+]
+
+# The platforms Raven ships for (docs/specs/terminal.md §3), so a crate only one of them uses is
+# still listed.
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+
+ignore-build-dependencies = false
+ignore-dev-dependencies = true
+# Raven's own crate (publish = false in Cargo.toml).
+private = { ignore = true }
+# cargo-about's built-in fixes for crates whose licence files it can't read on its own.
+workarounds = ["ring", "rustls"]

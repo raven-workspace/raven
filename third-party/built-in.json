@@ -1,0 +1,85 @@
+{
+  "$comment": "Third-party code built into Raven that no package manager lists: C and Zig libraries that Rust crates compile from source, and the fonts the exam PDF embeds. scripts/third-party-notices.mjs adds each to THIRD_PARTY_NOTICES and checks its licence against the allow-list in src-tauri/about.toml. When a pin moves (a crate's bundled source, the Ghostty commit in libghostty-vt-sys, a font), update its entry and licence file here. Ghostty lists what libghostty-vt links in deps/libghostty-vt-third-party.json at the pinned commit; only the entries marked \"use\": \"linked\" are built into Raven.",
+  "components": [
+    {
+      "name": "libghostty-vt (Ghostty)",
+      "version": "vt-1.0.2, commit 573c4a21e023",
+      "url": "https://github.com/ghostty-org/ghostty",
+      "license": "MIT",
+      "files": ["third-party/licences/ghostty.txt"],
+      "use": "Terminal state, built by libghostty-vt-sys with the terminal"
+    },
+    {
+      "name": "Highway",
+      "version": "1.2.0",
+      "url": "https://github.com/google/highway",
+      "license": "Apache-2.0 OR BSD-3-Clause",
+      "files": ["third-party/licences/highway.txt"],
+      "use": "Part of libghostty-vt"
+    },
+    {
+      "name": "simdutf",
+      "version": "9.0.0",
+      "url": "https://github.com/simdutf/simdutf",
+      "license": "Apache-2.0 OR MIT",
+      "files": ["third-party/licences/simdutf.txt"],
+      "use": "Part of libghostty-vt"
+    },
+    {
+      "name": "translate-c",
+      "version": "2.0.0",
+      "url": "https://codeberg.org/ziglang/translate-c",
+      "license": "MIT",
+      "files": ["third-party/licences/translate-c.txt"],
+      "use": "Part of libghostty-vt"
+    },
+    {
+      "name": "uucode",
+      "version": "0.2.0",
+      "url": "https://github.com/jacobsandlund/uucode",
+      "license": "MIT AND Unicode-3.0",
+      "files": ["third-party/licences/uucode.txt"],
+      "use": "Part of libghostty-vt"
+    },
+    {
+      "name": "Wuffs",
+      "version": "0.4.0-alpha.10",
+      "url": "https://github.com/google/wuffs",
+      "license": "Apache-2.0 OR MIT",
+      "files": ["third-party/licences/wuffs.txt"],
+      "use": "Part of libghostty-vt"
+    },
+    {
+      "name": "SQLCipher (with SQLite, which is in the public domain)",
+      "version": "as bundled by libsqlite3-sys 0.30.1",
+      "url": "https://github.com/sqlcipher/sqlcipher",
+      "license": "BSD-3-Clause",
+      "files": ["third-party/licences/sqlcipher.txt"],
+      "use": "The encrypted vault, compiled by libsqlite3-sys"
+    },
+    {
+      "name": "OpenSSL",
+      "version": "3.6.3",
+      "url": "https://www.openssl.org",
+      "license": "Apache-2.0",
+      "files": ["third-party/licences/openssl.txt"],
+      "use": "SQLCipher's cryptography, compiled by openssl-src"
+    },
+    {
+      "name": "Instrument Sans",
+      "version": "static instances of the variable font",
+      "url": "https://github.com/google/fonts/tree/main/ofl/instrumentsans",
+      "license": "OFL-1.1",
+      "files": ["src-tauri/fonts/InstrumentSans-OFL.txt"],
+      "use": "Embedded in the exam PDF"
+    },
+    {
+      "name": "JetBrains Mono",
+      "version": "2.304",
+      "url": "https://github.com/JetBrains/JetBrainsMono",
+      "license": "OFL-1.1",
+      "files": ["src-tauri/fonts/JetBrainsMono-OFL.txt"],
+      "use": "Embedded in the exam PDF"
+    }
+  ]
+}

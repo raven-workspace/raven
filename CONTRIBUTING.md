@@ -11,6 +11,7 @@ Raven Workspace Community Edition is open source under the [GNU AGPL-3.0](LICENS
   - **If the check stays red** after you sign, comment `recheck`. Every commit author must sign, so check that your commits use the email address on your GitHub account.
 - **Only your own work:** contribute only code you wrote and have the right to give, that no employer or school owns.
 - **Third-party code and data:** ask in the issue before adding anything from another project. Anything added is listed in [`NOTICE`](NOTICE) with its licence.
+- **Dependencies:** every npm package and Rust crate Raven ships must have a licence on the allow-list in [`src-tauri/about.toml`](src-tauri/about.toml). After changing `package-lock.json` or `Cargo.lock`, run `npm run notices` and commit the new [`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES). It needs cargo-about (`cargo install --locked cargo-about --features cli --version 0.9.3`). CI fails when a licence is missing or not on the list, or when the file is out of date. C libraries and fonts built in from source, which no package manager lists, go in [`third-party/built-in.json`](third-party/built-in.json).
 - **Name and logo:** the licence covers the code, not the "Raven Workspace" name or logo. See [`NOTICE`](NOTICE).
 
 ## Tracking work
