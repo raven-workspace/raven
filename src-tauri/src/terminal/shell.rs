@@ -290,8 +290,12 @@ __raven_histfile=${HISTFILE:-~/.bash_history}
 unset HISTFILE
 [[ -r $__raven_histfile ]] && builtin history -r "$__raven_histfile"
 if [[ -n $RAVEN_HISTORY_FD ]]; then
-  builtin history -r "/dev/fd/$RAVEN_HISTORY_FD"
+  # One entry per line. Not `history -r /dev/fd/N`: bash sizes the file first, and on Linux a pipe has size 0.
+  while IFS= read -r __raven_line; do
+    builtin history -s "$__raven_line"
+  done <&"$RAVEN_HISTORY_FD"
   eval "exec $RAVEN_HISTORY_FD<&-"
+  unset __raven_line
 fi
 unset __raven_histfile RAVEN_HISTORY_FD
 

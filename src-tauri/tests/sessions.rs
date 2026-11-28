@@ -169,10 +169,13 @@ fn forge() -> PinnedHost {
 /// A user's zsh setup like Kali's: a history file that zsh would normally read and append to.
 const ZSHRC: &str = "HISTFILE=~/.zsh_history\nHISTSIZE=1000\nSAVEHIST=2000\nsetopt inc_append_history share_history\nPS1='test$ '\n";
 const ZSH_HISTORY: &str = "echo from-user-history\n";
+/// Debian and Ubuntu's /etc/zsh/zshrc runs compinit, which stops at a prompt on CI runners whose completion
+/// folders it calls insecure. The user's own .zshenv can skip it; the tests do.
+const ZSHENV: &str = "skip_global_compinit=1\n";
 
 #[test]
 fn zsh_sessions_run_independently_share_history_through_raven_and_never_write_the_history_file() {
-    let r = rig("zsh", &[(".zshrc", ZSHRC), (".zsh_history", ZSH_HISTORY)]);
+    let r = rig("zsh", &[(".zshenv", ZSHENV), (".zshrc", ZSHRC), (".zsh_history", ZSH_HISTORY)]);
 
     let (one, _) = r.spawn(None);
     r.wait_prompt(&one);
@@ -223,7 +226,7 @@ fn zsh_sessions_run_independently_share_history_through_raven_and_never_write_th
 
 #[test]
 fn a_reattached_renderer_is_redrawn_from_rust_and_gets_output_from_then_on() {
-    let r = rig("zsh", &[(".zshrc", ZSHRC)]);
+    let r = rig("zsh", &[(".zshenv", ZSHENV), (".zshrc", ZSHRC)]);
     let (session, first) = r.spawn(None);
     r.wait_prompt(&session);
     r.run(&session, "echo before-reload");
@@ -257,7 +260,7 @@ fn a_reattached_renderer_is_redrawn_from_rust_and_gets_output_from_then_on() {
 
 #[test]
 fn a_shell_that_exits_ends_its_session_and_says_so() {
-    let r = rig("zsh", &[(".zshrc", ZSHRC)]);
+    let r = rig("zsh", &[(".zshenv", ZSHENV), (".zshrc", ZSHRC)]);
     let (session, _) = r.spawn(None);
     r.wait_prompt(&session);
     r.run(&session, "exit 3");
@@ -273,7 +276,7 @@ fn a_shell_that_exits_ends_its_session_and_says_so() {
 
 #[test]
 fn resize_reaches_the_shell() {
-    let r = rig("zsh", &[(".zshrc", ZSHRC)]);
+    let r = rig("zsh", &[(".zshenv", ZSHENV), (".zshrc", ZSHRC)]);
     let (session, _) = r.spawn(None);
     r.wait_prompt(&session);
     r.manager.resize(&session.id, 132, 40).unwrap();
@@ -284,7 +287,7 @@ fn resize_reaches_the_shell() {
 
 #[test]
 fn output_arrives_in_batches_not_one_message_per_read() {
-    let r = rig("zsh", &[(".zshrc", ZSHRC)]);
+    let r = rig("zsh", &[(".zshenv", ZSHENV), (".zshrc", ZSHRC)]);
     let (session, out) = r.spawn(None);
     r.wait_prompt(&session);
     let before = out.messages().len();
@@ -314,10 +317,21 @@ fn bash_sessions_record_and_preload_history_without_writing_the_history_file() {
         assert!(start.elapsed() < Duration::from_secs(5), "no command line recorded");
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert_eq!(r.history.of("e1"), ["echo bash-$RHOST"]);
+    r.wait_prompt(&one);
+    r.run(&one, "echo second");
+    r.wait_for(&one, "output", |text| text.contains("\nsecond\n"));
+    let start = Instant::now();
+    while r.history.of("e1").len() < 2 {
+        assert!(start.elapsed() < Duration::from_secs(5), "second command line not recorded");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(r.history.of("e1"), ["echo bash-$RHOST", "echo second"]);
 
+    // Every preloaded line is its own entry: none dropped, newest first on ↑, the user's own after them.
     let (two, _) = r.spawn(None);
     r.wait_prompt(&two);
+    r.manager.write(&two.id, b"\x1b[A").unwrap();
+    r.wait_input(&two, "echo second");
     r.manager.write(&two.id, b"\x1b[A").unwrap();
     r.wait_input(&two, "echo bash-$RHOST");
     r.manager.write(&two.id, b"\x1b[A").unwrap();
