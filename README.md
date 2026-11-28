@@ -74,6 +74,7 @@ src-tauri/
 audit/                    # Playwright visual audit
 docs/
 ├── specs/                # design specs per feature round, with the reasoning behind them
+├── design/               # design hand-offs: the plan for a layout, not the app as it is
 └── agents/               # issue tracker and triage conventions
 ```
 
@@ -85,6 +86,7 @@ docs/
 | [`PRODUCT.md`](PRODUCT.md) | Who Raven is for, what each feature does, the rules marked binding that the code must keep, and the product principles |
 | [`DESIGN.md`](DESIGN.md) | The Ink design system: tokens, type roles, layout rules, do's and don'ts (full version in `.impeccable/design-full.md`) |
 | [`docs/specs/`](docs/specs/README.md) | Why features work the way they do |
+| [`docs/design/workspace-ide/`](docs/design/workspace-ide/README.md) | The IDE layout's design hand-off: Specs 1–3 (design spec §), mockups, and `rendered/` for visual checks |
 | [`AGENTS.md`](AGENTS.md) | Instructions for AI coding agents working in the repo |
 
 ## Licence

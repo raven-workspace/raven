@@ -1,0 +1,17 @@
+/* Raven tokens as CSS custom properties, from ds/raven/tokens.json (Ink theme). */
+@font-face { font-family: "Instrument Sans Variable"; src: url("ds/raven/fonts/InstrumentSans-Variable-latin.woff2") format("woff2"); font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "JetBrains Mono Variable"; src: url("ds/raven/fonts/JetBrainsMono-Variable-latin.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "JetBrains Mono Variable"; src: url("ds/raven/fonts/JetBrainsMono-Symbols.woff2") format("woff2"); font-weight: 100 800; font-style: normal; unicode-range: U+2190-21FF, U+2500-25FF; }
+
+:root {
+  --bg: #000000; --surface: #0b0b0b; --surface-hi: #111111;
+  --fg: #ffffff; --fg-2: #e8e8e8; --muted-2: #c4c4c4; --muted: #a8a8a8; --faint: #8a8a8a;
+  --line: #1f1f1f; --line-2: #2a2a2a; --line-strong: #3a3a3a;
+  --accent: #c6ff00; --warn: #e0a030;
+  --font-ui: "Instrument Sans Variable", "Instrument Sans Fallback", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-lg: 16px; --space-xl: 24px; --space-2xl: 32px;
+  --radius-sm: 6px; --radius: 8px; --radius-full: 9999px; --radius-kbd: 4px;
+  --shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --z-drawer: 30; --z-popover: 50; --z-dialog: 50;
+}

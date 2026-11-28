@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spec 3: Keys, focus and open questions</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="raven-tokens.css">
+<link rel="stylesheet" href="ds/raven/components/bundle.css">
+<script src="ds/raven/components/bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#000}
+a{color:#e8e8e8}a:hover{color:#ffffff}
+.mono{font-family:var(--font-mono);font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0}
+.ic{display:block;flex-shrink:0}
+.sp{display:grid;gap:32px;align-content:start;box-sizing:border-box;padding:48px 56px;background:#000;color:#e8e8e8;font-family:var(--font-ui);font-size:14px;line-height:20px}
+.sp h1{margin:0;font-size:20px;line-height:28px;font-weight:600;color:#fff}
+.sp h2{margin:0;font-size:15px;line-height:22px;font-weight:600;color:#fff}
+.sp p{margin:0}
+.lede{color:#c4c4c4;max-width:96ch}
+.sec{display:grid;gap:16px;padding-top:24px;border-top:1px solid #1f1f1f}
+.sec__head{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:12px;align-items:baseline}
+.num{font-family:var(--font-mono);font-size:13px;line-height:18px;color:#a8a8a8}
+.tbl{display:grid;border-top:1px solid #1f1f1f}
+.tr{display:grid;gap:16px;align-items:start;padding:8px 0;border-bottom:1px solid #1f1f1f}
+.th{font-size:12px;line-height:16px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#a8a8a8;padding:8px 0}
+.code{font-family:var(--font-mono);font-variant-ligatures:none;font-size:13px;line-height:20px;color:#e8e8e8}
+.meta{font-size:13px;line-height:18px;color:#c4c4c4}
+.faint{color:#8a8a8a}
+.tag{display:inline-block;height:22px;padding:0 8px;border:1px solid #3a3a3a;border-radius:9999px;font-size:12px;line-height:20px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#e8e8e8;white-space:nowrap;box-sizing:border-box}
+.tag--new{border-color:#c6ff00;color:#c6ff00}
+.tag--ask{border-color:#e0a030;color:#e0a030}
+.pre{margin:0;padding:12px 16px;border:1px solid #1f1f1f;border-radius:6px;background:#0b0b0b;font-family:var(--font-mono);font-variant-ligatures:none;font-size:13px;line-height:20px;color:#e8e8e8;white-space:pre;overflow:hidden}
+.c-dim{color:#8a8a8a}.c-acc{color:#c6ff00}
+.box{position:absolute;box-sizing:border-box;border:1px solid #3a3a3a;border-radius:4px;display:grid;place-items:center;font-size:13px;line-height:18px;color:#c4c4c4}
+.dim{position:absolute;font-family:var(--font-mono);font-size:13px;line-height:18px;color:#c6ff00;white-space:nowrap}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;align-items:start}
+.list{margin:0;padding-left:24px;display:grid;gap:8px}
+.swatch{width:16px;height:16px;border-radius:4px;border:1px solid #3a3a3a;box-sizing:border-box}
+</style>
+</helmet>
+<div class="sp" style="width: 1440px; min-height: 2760px;">
+  <header style="display: grid; gap: 8px;">
+    <span class="num">SPEC 3 OF 3</span>
+    <h1>Keys, focus and open questions</h1>
+    <p class="lede">The keys shown on the Working copy, how they live beside Raven's single-letter keys once a terminal can take focus, and every open question from Specs 1 and 2 in one list.</p>
+  </header>
+
+  <section class="sec">
+    <div class="sec__head"><span class="num">3.1</span><h2>Keys on the artboard</h2></div>
+    <div class="tbl">
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="th">Key</span><span class="th">Action</span><span class="th">Where it's shown</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌘K</span><span>Open search (palette)</span><span class="meta">Chrome bar search field (inline Kbd)</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌘N</span><span>Add host</span><span class="meta">Explorer, Hosts row tooltip</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌘W</span><span>Close editor tab</span><span class="meta">Tab close tooltips</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌃`</span><span>Hide (and show) the terminal</span><span class="meta">Terminal header, Hide tooltip</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌃⇧`</span><span>New terminal session</span><span class="meta">Terminal header, Plus tooltip</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌃⇧M</span><span>Maximize terminal</span><span class="meta">Terminal header</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌘⇧C</span><span>Toggle Capture to engagement</span><span class="meta">Terminal header toggle (inline key)</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌘⇧W</span><span>Close split pane</span><span class="meta">Split pane header</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌘⇧L</span><span>Copy LHOST</span><span class="meta">Status bar, LHOST cell</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌘⇧S</span><span>Screenshot the focused terminal pane</span><span class="meta">Terminal header, Screenshot tooltip</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">L</span><span>Open the capture tab (existing key, new place)</span><span class="meta">Explorer, Logs Plus tooltip</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌘↩</span><span>Send command to terminal (no Enter)</span><span class="meta">Command block, Send to terminal tooltip</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">? ⌘L ⌘,</span><span>Shortcuts, Lock, Settings</span><span class="meta">Rail foot (existing keys)</span></div>
+      <div class="tr" style="grid-template-columns: 160px 280px minmax(0, 1fr);"><span class="code">⌘C</span><span>Copy command</span><span class="meta">Command block</span></div>
+    </div>
+    <p class="meta">Every key here goes in the Shortcuts popover (<span class="code">usePageShortcuts</span>) and in its control's tooltip. Nothing on the artboard shows a hint line, so none is built.</p>
+  </section>
+
+  <section class="sec">
+    <div class="sec__head"><span class="num">3.2</span><h2>When the terminal has focus</h2></div>
+    <p class="meta">Raven's single-letter keys (L, N, A, P, M, H, J, F, S, ?, 1–7) and Esc are needed by the shell. Rule: <b style="color: #ffffff;">while a terminal pane has focus, every key without ⌘ goes to the shell</b>, except ⌃` and ⌃⇧`.</p>
+    <div class="tbl">
+      <div class="tr" style="grid-template-columns: 240px minmax(0, 1fr);"><span class="th">Case</span><span class="th">What to build</span></div>
+      <div class="tr" style="grid-template-columns: 240px minmax(0, 1fr);"><span>Single letters, digits, ?</span><span class="meta">No change needed: xterm.js types into a hidden <span class="code">textarea</span>, so <span class="code">isTypingTarget()</span> is true and <span class="code">isFreeKey()</span> already refuses them. Add a test that proves it.</span></div>
+      <div class="tr" style="grid-template-columns: 240px minmax(0, 1fr);"><span>Esc</span><span class="meta"><b style="color: #ffffff;">Code change.</b> <span class="code">useEscapeTo</span> and <span class="code">useEscapeBack</span> in <span class="code">src/lib/keys.ts</span> blur a typing target on Esc, which would throw focus out of the terminal mid-vim. Return early, without blurring, when <span class="code">e.target</span> is inside <span class="code">[data-terminal]</span>.</span></div>
+      <div class="tr" style="grid-template-columns: 240px minmax(0, 1fr);"><span>⌘ chords</span><span class="meta">In xterm's <span class="code">attachCustomKeyEventHandler</span>, return <span class="code">false</span> for <span class="code">metaKey</span> events (except ⌘C and ⌘V) so ⌘K, ⌘N, ⌘W, ⌘⇧C, ⌘⇧L, ⌘L and ⌘, reach Raven.</span></div>
+      <div class="tr" style="grid-template-columns: 240px minmax(0, 1fr);"><span>⌘C / ⌘V</span><span class="meta">Copy the terminal selection; paste as bracketed paste. ⌃C goes to the shell.</span></div>
+      <div class="tr" style="grid-template-columns: 240px minmax(0, 1fr);"><span>⌃`</span><span class="meta">From the page: show the panel if hidden and focus the last pane. From the terminal: hide it and return focus to what had it before.</span></div>
+      <div class="tr" style="grid-template-columns: 240px minmax(0, 1fr);"><span>? key</span><span class="meta">The terminal root carries <span class="code">data-hint-surface</span>, so <span class="code">?</span> types a question mark instead of opening Shortcuts.</span></div>
+      <div class="tr" style="grid-template-columns: 240px minmax(0, 1fr);"><span>Focus ring</span><span class="meta">Arriving by keyboard, the pane gets the 2px accent ring at <span class="code">outline-offset: -2px</span> (inside, so the frame doesn't clip it).</span></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec__head"><span class="num">3.3</span><h2>Motion</h2></div>
+    <div class="tbl">
+      <div class="tr" style="grid-template-columns: 280px minmax(0, 1fr);"><span>Rail bar, tab underlines</span><span class="meta">Glide 180ms, <span class="code">cubic-bezier(0.16, 1, 0.3, 1)</span> (existing <span class="code">TabMarker</span>). Reduced motion: jump.</span></div>
+      <div class="tr" style="grid-template-columns: 280px minmax(0, 1fr);"><span>Explorer carets</span><span class="meta">Turn 90° in 150ms (existing <span class="code">DisclosureCaret</span>); children open with <span class="code">Collapse</span> (200 open, 150 close).</span></div>
+      <div class="tr" style="grid-template-columns: 280px minmax(0, 1fr);"><span>Terminal show and hide</span><span class="meta"><span class="code">Collapse</span> values: 200ms open, 150 close. Reduced motion: 120ms fade.</span></div>
+      <div class="tr" style="grid-template-columns: 280px minmax(0, 1fr);"><span>Cursor, sessions, split, resize</span><span class="meta">Not animated. The cursor never blinks.</span></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec__head"><span class="num">3.4</span><h2>Lifecycle</h2></div>
+    <div class="tbl">
+      <div class="tr" style="grid-template-columns: 280px minmax(0, 1fr);"><span>Who owns a session</span><span class="meta">The Rust backend (a PTY per session), keyed by engagement. Switching pages, hosts or tabs, or hiding the panel, never ends one.</span></div>
+      <div class="tr" style="grid-template-columns: 280px minmax(0, 1fr);"><span>Scrollback</span><span class="meta">Never written to disk. Only what's captured reaches the vault.</span></div>
+      <div class="tr" style="grid-template-columns: 280px minmax(0, 1fr);"><span>Lock (⌘L, idle)</span><span class="meta">Shells keep running in Rust behind the lock; a lock never kills a caught shell (the same call as the timebox, which also runs through a lock). The webview drops all scrollback with the rest of the query cache. Rust keeps the last 1,000 lines per session in memory only, never on disk, and replays them on unlock.</span></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec__head"><span class="num">3.5</span><h2>Open questions</h2></div>
+    <div class="tbl">
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="th">#</span><span class="th">Question</span><span class="th">What the artboard shows, and the conflict</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">1</span><span style="color: #a8a8a8;">Where do the macOS window controls go? <span class="tag">settled</span></span><span class="meta">In their normal spot, in the 38px chrome bar that now carries the pickers, search and Build report (Spec 1, 1.3).</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">2</span><span style="color: #a8a8a8;">Frame border and radius tokens <span class="tag">settled</span></span><span class="meta">Border <span class="code">--line</span> (the terminal's top edge too). Radius: new <span class="code">--radius-frame: 16px</span>, frame only.</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">3</span><span style="color: #a8a8a8;">Rail tooltip keys <span class="tag">settled</span></span><span class="meta">Raven's existing keys. The rail is reordered to section order so they count 1–6 top to bottom (Spec 1, 1.2). Report keeps 7.</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">4</span><span style="color: #a8a8a8;">Where do the sections live? <span class="tag">settled</span></span><span class="meta">On the rail: Board, Log, Network, Engagement checklist, Findings, Credentials. Report is the Build report button in the chrome bar.</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">5</span><span style="color: #a8a8a8;">Target picker <span class="tag">settled</span></span><span class="meta">The host in view, bidirectional: the Explorer sets it and it sets the Explorer. On a page with no host it keeps the last host picked. The status bar's "target:" cell is removed, since it repeated the picker.</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">6</span><span style="color: #a8a8a8;">Host access chips <span class="tag">settled</span></span><span class="meta">Held access is always an accent chip. The Working copy's data now agrees everywhere: forge and web02 are user, db01 has none, Rooted 0/3, Flags 2/6.</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">7</span><span style="color: #a8a8a8;">Host names or IPs? <span class="tag">settled</span></span><span class="meta">Explorer host rows: name over IP. Tabs, Notes, Logs and Target: name only. The IP stays on the host header and in Target's menu.</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">8</span><span style="color: #a8a8a8;">Notes and Evidence <span class="tag">settled</span></span><span class="meta">Notes match Raven: the engagement note plus one per host. Evidence is replaced by Logs, arranged like Notes: the engagement's log, then one per host.</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">9</span><span style="color: #a8a8a8;">Tabs or one page at a time? <span class="tag">settled</span></span><span class="meta">Tabs. Selecting in the Explorer opens a page in a new tab, or focuses its tab if it's already open; there are never duplicates. Raven routes one page at a time today, so this is a routing change.</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">10</span><span style="color: #a8a8a8;">Capture to engagement <span class="tag">settled</span></span><span class="meta">Automatic. With the toggle on, every finished command and its output goes to the log, and the interpreters file what it proves. PRODUCT.md predates the terminal and needs updating to say so.</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">11</span><span>LHOST, listeners and Send to terminal <span class="tag">settled</span></span><span class="meta">LHOST keeps Raven's cell and warns when tun0 differs (Spec 1, 1.5). Listeners count sessions with a listening socket. Send to terminal types without Enter, ⌘↩. The Arsenal suggestion is an Insert button, no key (Spec 2, 2.3).</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">12</span><span style="color: #a8a8a8;">Lock with live shells <span class="tag">settled</span></span><span class="meta">Shells keep running; the page drops scrollback; the last 1,000 lines per session stay in Rust memory and replay on unlock (3.4).</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">13</span><span style="color: #a8a8a8;">Terminal colours and sizes <span class="tag">settled</span></span><span class="meta">ANSI palette in Spec 2, 2.4, with red allowed in the terminal only. Height 360, range 200–520. Captured-line mark at 8px.</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">14</span><span style="color: #a8a8a8;">Timebox states <span class="tag">settled</span></span><span class="meta">Running, paused, over time and not started use Raven's existing colours and wording (Spec 1, 1.6).</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">15</span><span>Narrow windows <span class="tag">settled</span></span><span class="meta">The minimum is 1100px, so there's no 1000px layout. The Explorer toggles with its rail button or ⌘B; the split divider drags, with a 480px floor for the main pane (Spec 1, 1.7).</span></div>
+      <div class="tr" style="grid-template-columns: 48px 300px minmax(0, 1fr);"><span class="num">16</span><span>Screenshots <span class="tag">settled</span></span><span class="meta">Capture is a tab, not a sheet: anything from outside Raven is pasted there (Spec 2, 2.5). The terminal screenshots its pane with ⌘⇧S, and Capture takes the proof screenshot itself when a flag prints, warning if the IP isn't in it (Spec 2, 2.3).</span>
+    </div>
+  </div></section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2760}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>
