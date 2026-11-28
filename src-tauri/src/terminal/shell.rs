@@ -3,7 +3,8 @@
 //! Raven never edits dotfiles. zsh gets a Raven-owned `ZDOTDIR` whose startup files source the user's own, then add
 //! OSC 133 marks and Raven's history; bash gets `--rcfile` doing the same. Either way the shell writes no history
 //! file (SR-4): it reads the user's own history file, then this engagement's command lines through an inherited pipe
-//! (`/dev/fd/3`), so they exist only in the shell's memory. Engagement commands load last, so ↑ finds them first.
+//! (fd 3, one NUL-ended entry each), so they exist only in the shell's memory. Engagement commands load last, so ↑
+//! finds them first.
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -133,47 +134,21 @@ pub fn write_integration(dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// The history a session's shell reads from the pipe, in its own history-file format: one command per entry,
-/// oldest first.
-pub fn history_bytes(kind: ShellKind, commands: &[String]) -> Vec<u8> {
+/// The history a session's shell reads from the pipe: each command followed by a NUL, oldest first. The shell adds
+/// each as one entry (`print -s`, `history -s`), so a multi-line command stays one entry. Not a history file: zsh and
+/// bash both size a file before reading it, and on Linux a pipe has size 0.
+pub fn history_bytes(commands: &[String]) -> Vec<u8> {
     let mut out = Vec::new();
     for command in commands {
         let command = command.trim_end_matches('\n');
-        if command.trim().is_empty() {
+        // A NUL can't be typed into a shell; one in the vault would split the entry, so it is dropped.
+        if command.trim().is_empty() || command.contains('\0') {
             continue;
         }
-        match kind {
-            // zsh history: a newline inside a command is escaped with a backslash, and the bytes are metafied.
-            ShellKind::Zsh => {
-                for &b in command.as_bytes() {
-                    if b == b'\n' {
-                        out.extend_from_slice(b"\\\n");
-                    } else {
-                        metafy(b, &mut out);
-                    }
-                }
-            }
-            // bash history: one line per entry.
-            ShellKind::Bash | ShellKind::Other => {
-                out.extend(command.bytes().map(|b| if b == b'\n' { b' ' } else { b }));
-            }
-        }
-        out.push(b'\n');
+        out.extend_from_slice(command.as_bytes());
+        out.push(0);
     }
     out
-}
-
-/// zsh's metafication (zsh's `metafy`): NUL and the bytes from Meta (0x83) to Marker (0xa2) are written as Meta
-/// followed by the byte XOR 32, as zsh writes them into its own history file.
-fn metafy(b: u8, out: &mut Vec<u8>) {
-    const META: u8 = 0x83;
-    const MARKER: u8 = 0xa2;
-    if b == 0 || (META..=MARKER).contains(&b) {
-        out.push(META);
-        out.push(b ^ 32);
-    } else {
-        out.push(b);
-    }
 }
 
 /// zsh startup files. Each sources the user's file of the same name with `ZDOTDIR` pointing at the user's own
@@ -235,11 +210,14 @@ unset HISTFILE
 (( ${HISTSIZE:-0} < 10000 )) && HISTSIZE=10000
 [[ -r $__raven_histfile ]] && builtin fc -R "$__raven_histfile"
 if [[ -n $RAVEN_HISTORY_FD ]]; then
-  builtin fc -R "/dev/fd/$RAVEN_HISTORY_FD"
+  # One NUL-ended entry at a time: `fc -R` can't read a pipe on Linux.
+  while IFS= builtin read -r -d '' __raven_line; do
+    builtin print -sr -- "$__raven_line"
+  done <&$RAVEN_HISTORY_FD
   # Close the pipe so nothing the shell runs inherits it.
   builtin exec {RAVEN_HISTORY_FD}<&-
 fi
-unset __raven_histfile RAVEN_HISTORY_FD
+unset __raven_histfile __raven_line RAVEN_HISTORY_FD
 
 # OSC 133 marks: A prompt, B input, C output with the command line, D finished with its exit code.
 __raven_ran=0
@@ -290,8 +268,8 @@ __raven_histfile=${HISTFILE:-~/.bash_history}
 unset HISTFILE
 [[ -r $__raven_histfile ]] && builtin history -r "$__raven_histfile"
 if [[ -n $RAVEN_HISTORY_FD ]]; then
-  # One entry per line. Not `history -r /dev/fd/N`: bash sizes the file first, and on Linux a pipe has size 0.
-  while IFS= read -r __raven_line; do
+  # One NUL-ended entry at a time: `history -r` can't read a pipe on Linux.
+  while IFS= read -r -d '' __raven_line; do
     builtin history -s "$__raven_line"
   done <&"$RAVEN_HISTORY_FD"
   eval "exec $RAVEN_HISTORY_FD<&-"
@@ -352,17 +330,9 @@ mod tests {
     }
 
     #[test]
-    fn zsh_history_escapes_newlines_and_metafies() {
-        let commands = vec!["id".to_string(), "for i in 1 2\ndo echo $i; done".into(), "echo ă".into(), " ".into()];
-        let bytes = history_bytes(ShellKind::Zsh, &commands);
-        // "ă" is C4 83: 0x83 is Meta itself, written as 83 A3.
-        assert_eq!(bytes, b"id\nfor i in 1 2\\\ndo echo $i; done\necho \xc4\x83\xa3\n");
-    }
-
-    #[test]
-    fn bash_history_is_one_line_per_command() {
-        let commands = vec!["id".to_string(), "a\nb".into()];
-        assert_eq!(history_bytes(ShellKind::Bash, &commands), b"id\na b\n");
+    fn history_is_one_nul_ended_entry_per_command() {
+        let commands = vec!["id".to_string(), "for i in 1 2\ndo echo $i; done\n".into(), " ".into(), "a\0b".into()];
+        assert_eq!(history_bytes(&commands), b"id\0for i in 1 2\ndo echo $i; done\0");
     }
 
     #[test]

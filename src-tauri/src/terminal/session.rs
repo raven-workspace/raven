@@ -163,7 +163,7 @@ impl SessionManager {
             rhost: request.host.as_ref().and_then(|host| host.ip.clone()),
             lhost: request.lhost.clone(),
         };
-        let preload = kind.preloads_history().then(|| shell::history_bytes(kind, &request.history));
+        let preload = kind.preloads_history().then(|| shell::history_bytes(&request.history));
         let cmd = shell::command(
             &self.config.shell,
             &self.config.integration_dir,
