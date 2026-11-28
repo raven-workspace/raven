@@ -15,6 +15,7 @@ import { InlineCommand } from "../InlineCommand/InlineCommand";
 import { ManualCommand, type FillBase } from "../ManualCommand/ManualCommand";
 import { NoteTable } from "../NoteTable/NoteTable";
 import "./NoteView.scss";
+import { useReferenceBase } from "../../workspace/referenceBase";
 
 /** Prose keeps a reading measure; tables, code and commands take the full width of the note pane. */
 const PROSE = "note-view__prose";
@@ -123,6 +124,8 @@ function Run({ parts, ctx, at, ranges }: { parts: Inline[]; ctx: Ctx; at: number
 
 /** One non-text inline part, starting at `at` in its run: code, emphasis, or a link (to a note, to a card, or unresolved). */
 function InlinePart({ p, ctx, at, ranges }: { p: Exclude<Inline, { text: string }>; ctx: Ctx; at: number; ranges: Ranges }): ReactNode {
+  // A note link stays where the Manual is: its full page, or its editor tab in the engagement.
+  const base = useReferenceBase();
   if ("code" in p) {
     // A short single token (a status code, a flag, a path) never breaks inside: not at a backslash or dot either.
     if (isCommand(p.code, ctx)) return <InlineCommand command={inlineCommand(p.code, ctx)} base={ctx.base} highlight={ctx.re} />;
@@ -133,7 +136,7 @@ function InlinePart({ p, ctx, at, ranges }: { p: Exclude<Inline, { text: string 
   if ("em" in p) return <em><Run parts={p.em} ctx={ctx} at={at} ranges={ranges} /></em>;
   const { to, title, cardTitle } = linkOf(p.link, ctx);
   if (to.kind === "note") {
-    return <Link to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`${LINK_CLASS} note-view__note-link`}>{marked(title, at, ranges)}</Link>;
+    return <Link to={`${base}/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`${LINK_CLASS} note-view__note-link`}>{marked(title, at, ranges)}</Link>;
   }
   if (to.kind === "card") {
     return (

@@ -220,6 +220,8 @@ export const SHORTCUTS = {
   lock: shortcut("⌘L"),
   toggleSidebar: shortcut("⌘B"),
   newEngagement: shortcut("⌘N"),
+  /** Closes the editor tab in view (workspace shell). */
+  closeTab: shortcut("⌘W"),
   /** ↵ copies a command; with ⌘ it is also logged against the host. */
   copyAndLog: shortcut("⌘↵"),
   paste: shortcut("⌘V"),

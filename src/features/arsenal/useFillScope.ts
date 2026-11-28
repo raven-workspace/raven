@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { useMatch } from "react-router";
 import { create } from "zustand";
+import { WORKSPACE_SHELL } from "../../lib/shell";
 import { useEngagements } from "../engagements/queries";
+import { useTargetStore } from "../workspace/useTargetStore";
 
 interface LastEngagement {
   /** The engagement last open in the route, so full-screen Arsenal can keep filling for it. */
@@ -22,8 +24,9 @@ export interface FillScope {
 }
 
 /**
- * Which engagement and host the palette, drawers, browse and Workbench fill for. In an engagement: the route's. On the
- * full-screen views (`/arsenal`, `/payloads`, `/manual`):
+ * Which engagement and host the palette, drawers, browse and Workbench fill for. In an engagement: the route's (in the
+ * workspace shell the host is Target, which stays on the last host picked when the page in view has none, so the
+ * Arsenal, Manual and Payloads tabs fill for it). On the full-screen views (`/arsenal`, `/payloads`, `/manual`):
  * the engagement (and host) you came from, else the most recently active one. Elsewhere: none.
  */
 export function useFillScope(): FillScope {
@@ -33,7 +36,8 @@ export function useFillScope(): FillScope {
   const onManual = useMatch("/manual/*") !== null;
   const onFull = useMatch("/payloads") !== null || onManual || onArsenal;
   const routeEngagement = hostMatch?.params.id ?? engMatch?.params.id ?? "";
-  const routeHost = hostMatch?.params.hostId ?? null;
+  const target = useTargetStore((s) => (routeEngagement ? (s.byEngagement[routeEngagement] ?? null) : null));
+  const routeHost = hostMatch?.params.hostId ?? (WORKSPACE_SHELL ? target : null);
   const last = useLastEngagementStore();
 
   useEffect(() => {

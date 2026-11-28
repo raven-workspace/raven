@@ -22,6 +22,7 @@ import { SearchBar } from "../SearchBar/SearchBar";
 import { useArsenalStore } from "../useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "../useFillScope";
 import { TabMarker } from "../../../ui/TabMarker";
+import { useReferenceBase } from "../../workspace/referenceBase";
 import "./ArsenalBrowse.scss";
 
 type Row = ResultRow & { hit: ArsenalHit };
@@ -171,13 +172,14 @@ export function ArsenalBrowse() {
 
   // A generator lives in Payloads: opening it goes there (Esc there comes back here).
   const navigate = useNavigate();
-  const payloadsPath = (id: string) => `/payloads?generator=${encodeURIComponent(id)}`;
+  const refBase = useReferenceBase();
+  const payloadsPath = (id: string) => `${refBase}/payloads?generator=${encodeURIComponent(id)}`;
   const focusReading = () => {
     if (open?.type === "generator") void navigate(payloadsPath(open.id));
     else (readingRef.current?.querySelector<HTMLElement>("[data-block]") ?? readingRef.current)?.focus();
   };
   const wide = () => !catsRef.current || getComputedStyle(catsRef.current).display !== "none";
-  // Below 1100px the categories are the Select above the list, so ← goes there.
+  // While the Arsenal is narrow the categories are the Select above the list, so ← goes there.
   const focusCategory = () => (wide() ? catsRef.current?.querySelector<HTMLElement>('button[tabindex="0"]') : selectRef.current)?.focus();
   const modified = (e: ReactKeyboardEvent) => e.metaKey || e.ctrlKey || e.altKey || e.nativeEvent.isComposing;
 

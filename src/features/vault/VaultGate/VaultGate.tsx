@@ -35,6 +35,7 @@ import { useSettings } from "../../settings/queries";
 import { cx } from "../../../lib/cx";
 import { prefersReducedMotion } from "../../../ui/motion";
 import { useTargetStore } from "../../workspace/useTargetStore";
+import { useEditorTabsStore } from "../../workspace/useEditorTabsStore";
 import "../screens.scss";
 import "./VaultGate.scss";
 
@@ -125,8 +126,9 @@ export function VaultGate({ children, chrome = "title-bar" }: { children: ReactN
     useCredPickStore.getState().reset();
     // So is the engagement full-screen Arsenal remembers.
     useLastEngagementStore.setState({ engagementId: null, hostId: null });
-    // And the workspace shell's Target per engagement.
+    // And the workspace shell's Target and editor tabs per engagement (the tabs come back from their stored ids).
     useTargetStore.getState().reset();
+    useEditorTabsStore.getState().reset();
     // Notes too: after a lock no note text stays in memory. `lock()` has already started the
     // flush, which works from a snapshot.
     discardNotes();
@@ -324,9 +326,10 @@ export function VaultGate({ children, chrome = "title-bar" }: { children: ReactN
     if (onManual) document.getElementById(MANUAL_NOTE_ID)?.focus();
     else void navigate("/manual");
   };
-  // M opens the Manual from any unlocked screen: never while typing, or with a drawer or dialog open.
+  // M opens the Manual from any unlocked screen: never while typing, or with a drawer or dialog open. The workspace
+  // shell has its own (its Manual is an editor tab inside an engagement).
   useKeydown((e) => {
-    if (!unlocked || !isFreeKey(e) || (e.key !== "m" && e.key !== "M") || manualKeysBlocked()) return;
+    if (chrome === "workspace" || !unlocked || !isFreeKey(e) || (e.key !== "m" && e.key !== "M") || manualKeysBlocked()) return;
     e.preventDefault();
     openManual();
   });
@@ -400,8 +403,13 @@ export function VaultGate({ children, chrome = "title-bar" }: { children: ReactN
         )}
         {children}
         <Palette />
-        <ArsenalDrawer />
-        <PayloadsDrawer />
+        {/* The workspace shell has no drawers: Arsenal and Payloads open as editor tabs or full pages. */}
+        {chrome !== "workspace" && (
+          <>
+            <ArsenalDrawer />
+            <PayloadsDrawer />
+          </>
+        )}
         <SaveSummary />
       </VaultContext.Provider>
     );

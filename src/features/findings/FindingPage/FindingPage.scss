@@ -1,0 +1,11 @@
+@use "@/styles/abstracts" as *;
+
+// The finding split fills its editor tab, and lays itself out by the host page's container width.
+@layer features {
+  .finding-page {
+    container-type: inline-size;
+    container-name: host;
+    height: 100%;
+    min-height: 0;
+  }
+}
