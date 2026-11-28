@@ -9,7 +9,7 @@ import { setImported } from "../../../engines/library/store";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../../../features/arsenal/useFillScope";
-import { useCaptureStore } from "../../../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../../../features/capture/useLogEntryStore";
 import { useManualStatus } from "../../../features/manual/useManualStatus";
 import { useManualStore } from "../../../features/manual/useManualStore";
 import { useNotesStore } from "../../../features/notes/useNotesStore";
@@ -146,7 +146,7 @@ beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
   useManualStore.setState({ place: null, history: [] });
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   usePaletteStore.getState().close();
   useLastEngagementStore.setState({ engagementId: null, hostId: null });
   useArsenalStore.setState({ open: false, cardId: null, blockId: null, solo: null });

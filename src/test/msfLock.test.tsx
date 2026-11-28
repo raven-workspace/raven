@@ -3,7 +3,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import type { EngagementKind } from "../types/engagement";
 import { fake, renderApp, resetFake } from "./support/fakeStore";
 
@@ -22,7 +22,7 @@ const lockOf = async (engagementId: string) => (await fake.engagementGet(engagem
 
 beforeEach(() => {
   localStorage.clear();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   resetFake();
 });
 

@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { toDraft } from "../features/findings/FindingEditor/FindingEditor";
 import { useFindingDraftStore } from "../features/findings/useFindingDraftStore";
 import { resetNotesStore } from "../features/notes/useNotesStore";
@@ -75,7 +75,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   resetNotesStore();
   useFindingDraftStore.getState().clearAll();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.vaultLock.mockResolvedValue(null);
   m.vaultUnlock.mockResolvedValue({ migratedFrom: 3, migratedTo: 3, dailyBackup: null, dailyBackupError: null });

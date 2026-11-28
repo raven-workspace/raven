@@ -43,6 +43,7 @@ const EVERYWHERE: Hint[] = [
   { keys: "1–6", label: "sections", priority: 1 },
   { keys: "7", label: "Report", priority: 1 },
   { keys: "N", label: "Field notes", priority: 1 },
+  { keys: "L", label: "log entry", priority: 1 },
   { keys: "A", label: "Arsenal", priority: 1 },
   { keys: "P", label: "Payloads", priority: 1 },
   { keys: "M", label: "Manual", priority: 1 },

@@ -1,7 +1,7 @@
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 import { AUDIT_NOTE_IDS, AUDIT_NOW, FIXTURES } from "../src/audit/fixtures";
 import { MEANS_HEADER } from "../src/engines/manual/lookup";
-import { caretAtEnd, garnetOutput, openGarnet, openReportItem, openReportPart, SCREENS } from "./screens";
+import { caretAtEnd, garnetOutput, LOG_ENTRY_HTTP, openGarnet, openReportItem, openReportPart, SCREENS } from "./screens";
 
 // Hard regressions: unlike the audit checks, these fail the run.
 
@@ -1595,4 +1595,26 @@ test("workspace rail: slots, buttons, app group at the foot, and the current-vie
   await expect(page).toHaveURL(/\/s\/network/);
   await expect.poll(async () => (await geo()).current).toBe("network");
   expect((await geo()).bar).toEqual({ dx: 0, dy: 0 });
+});
+
+// The log entry tab (design §2.5): nothing scrolls at the 360px terminal height. The terminal panel isn't in the app yet,
+// so the window is 360px shorter instead (the editor is as tall as it would be under the drawn terminal). Command, HTTP
+// and Note fit; Screenshot and Flag do not at the spec's gaps, and RAV-104 asks what gives.
+test("workspace log entry tab: nothing scrolls at the 360px terminal height", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 - 360 });
+  await page.goto("/e/e-lab/h/h-web?workspace");
+  await page.locator(".chrome-bar").getByRole("button", { name: /^Engagement: / }).waitFor();
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("l");
+  const tab = page.getByRole("region", { name: "New log entry" });
+  await tab.getByLabel("Paste").waitFor();
+  await page.keyboard.insertText(LOG_ENTRY_HTTP);
+  const scrolled = () => page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("#editor-panel, #editor-panel *")]
+      .filter((e) => e.tagName !== "TEXTAREA" && getComputedStyle(e).overflowY !== "visible" && e.scrollHeight > e.clientHeight + 1)
+      .map((e) => e.className));
+  for (const kind of ["HTTP", "Command", "Other"]) {
+    await tab.getByRole("radio", { name: new RegExp(`^${kind}`) }).click();
+    await expect.poll(scrolled, { message: kind }).toEqual([]);
+  }
 });

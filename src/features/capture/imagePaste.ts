@@ -1,4 +1,4 @@
-/** An image pasted into the capture panel: upload bytes plus a preview URL (revoke when dropped). */
+/** An image pasted or dropped into the log entry form: upload bytes plus a preview URL (revoke when dropped). */
 export interface PastedImage {
   mime: string;
   dataBase64: string;

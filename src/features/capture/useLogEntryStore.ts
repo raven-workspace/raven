@@ -4,10 +4,10 @@ import type { FlagKind, LogKind } from "../../types/log";
 import { releaseImage, type PastedImage } from "./imagePaste";
 
 /**
- * What the user has put into the capture panel. `null` on an override means "use the
+ * What the owner has put into the log entry form (the log entry tab, or the sheet in the engagement shell). `null` on an override means "use the
  * suggestion": the kind, hosts, ran-on and flag kind follow the paste until the user picks one.
  */
-export interface PanelDraft {
+export interface LogEntryDraft {
   text: string;
   caption: string;
   image: PastedImage | null;
@@ -26,7 +26,7 @@ export interface PanelDraft {
   asNote: boolean;
 }
 
-export const EMPTY_DRAFT: PanelDraft = {
+export const EMPTY_DRAFT: LogEntryDraft = {
   text: "",
   caption: "",
   image: null,
@@ -43,30 +43,36 @@ export const EMPTY_DRAFT: PanelDraft = {
   asNote: false,
 };
 
-interface CaptureState {
+interface LogEntryState {
+  /**
+   * A request to open the form (L, the Explorer's Plus). The engagement shell shows its sheet while it holds; the
+   * workspace shell turns it into the log entry tab at once and sets it back (useDrawerTabs).
+   */
   open: boolean;
   engagementId: string | null;
-  /** Host preselected when capture was opened from its host view. */
+  /** Host linked to start: the host view's in the engagement shell, Target in the workspace shell. */
   hostId: string | null;
+  /** The route in view when the log entry tab opened: Save goes back to its tab (workspace shell). */
+  returnRoute: string | null;
   /** Element focused when `L` was pressed; it gets focus back on close. */
   returnFocus: HTMLElement | null;
   /** Unsaved drafts, per engagement. */
-  drafts: Record<string, PanelDraft>;
-  /** Shown in the panel after a partial save. */
+  drafts: Record<string, LogEntryDraft>;
+  /** Shown in the form after a partial save. */
   notice: string | null;
-  openCapture: (o: { engagementId: string; hostId?: string | null }) => void;
+  openLogEntry: (o: { engagementId: string; hostId?: string | null }) => void;
   close: () => void;
-  update: (engagementId: string, patch: Partial<PanelDraft>) => void;
+  update: (engagementId: string, patch: Partial<LogEntryDraft>) => void;
   discard: (engagementId: string) => void;
   setNotice: (notice: string | null) => void;
   reset: () => void;
 }
 
-const initial = { open: false, engagementId: null, hostId: null, returnFocus: null, drafts: {}, notice: null };
+const initial = { open: false, engagementId: null, hostId: null, returnRoute: null, returnFocus: null, drafts: {}, notice: null };
 
-export const useCaptureStore = create<CaptureState>()((set, get) => ({
+export const useLogEntryStore = create<LogEntryState>()((set, get) => ({
   ...initial,
-  openCapture: ({ engagementId, hostId = null }) => {
+  openLogEntry: ({ engagementId, hostId = null }) => {
     const active = document.activeElement;
     set({
       open: true,

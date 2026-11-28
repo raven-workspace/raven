@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useLocation, useMatch, useNavigate } from "react-router";
-import type { ReferencePage } from "../../engines/tabs";
+import { LOG_ENTRY_KEY, logEntryRoute, routeKey, type ReferencePage } from "../../engines/tabs";
 import { isFreeKey, useKeydown } from "../../lib/keys";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
+import { LOG_ENTRY_TAB_ID } from "../capture/LogEntryTab/logEntryTabId";
+import { useLogEntryStore } from "../capture/useLogEntryStore";
 import { MANUAL_NOTE_ID, manualKeysBlocked } from "../manual/keys";
 import { NOTES_PAGE_ID } from "../notes/NotesPage/notesPageId";
 import { useNotesStore } from "../notes/useNotesStore";
@@ -51,22 +53,39 @@ export function useOpenView() {
   };
   /** As N: on a host page its notes, else the engagement's (the notes store's subscription opens the tab). */
   const openNotes = () => useNotesStore.getState().toggle(routeHost ? "host" : "engagement");
-  return { engagementId, routeHost, showReference, openReference, showNotes, openNotes };
+  /**
+   * The log entry tab (L, the Explorer's Plus; design §2.5), Target linked to start. Already in view, its paste area takes
+   * focus; elsewhere it opens (or comes back with its draft) and remembers the route it left, for Save to return to.
+   */
+  const showLogEntry = () => {
+    if (!engagementId) return;
+    const route = `${location.pathname}${location.search}${location.hash}`;
+    const hostId = useTargetStore.getState().byEngagement[engagementId] ?? null;
+    if (routeKey(engagementId, route) === LOG_ENTRY_KEY) {
+      useLogEntryStore.setState({ hostId });
+      document.querySelector<HTMLElement>(`#${LOG_ENTRY_TAB_ID} [aria-label="Paste"]`)?.focus();
+      return;
+    }
+    useLogEntryStore.setState({ hostId, returnRoute: route });
+    void navigate(logEntryRoute(engagementId));
+  };
+  return { engagementId, routeHost, showReference, openReference, showNotes, openNotes, showLogEntry };
 }
 
 /**
  * The drawers retired (docs/specs/terminal.md §8): in the workspace shell Arsenal, Manual, Payloads and Field notes
  * open as editor tabs inside an engagement, and Arsenal, Manual and Payloads as full pages from the Dashboard. Every
  * way in that used to open a drawer (A, P, N, ⌘K, a card link, More in Arsenal) still asks the drawer's store to open;
- * this turns that request into the page, and the drawer itself is never mounted.
+ * this turns that request into the page, and the drawer itself is never mounted. The log entry sheet went the same
+ * way: L and the Explorer's Plus open the log entry tab (design §2.5).
  */
 export function useDrawerTabs() {
-  const { showReference, openReference, showNotes, engagementId, routeHost } = useOpenView();
+  const { showReference, openReference, showNotes, showLogEntry, engagementId, routeHost } = useOpenView();
 
   // The stores' subscriptions outlive renders: they read the latest of these through a ref.
-  const latest = useRef({ showReference, showNotes, engagementId, routeHost });
+  const latest = useRef({ showReference, showNotes, showLogEntry, engagementId, routeHost });
   useEffect(() => {
-    latest.current = { showReference, showNotes, engagementId, routeHost };
+    latest.current = { showReference, showNotes, showLogEntry, engagementId, routeHost };
   });
 
   useEffect(() => {
@@ -94,10 +113,16 @@ export function useDrawerTabs() {
       const target = eid ? (useTargetStore.getState().byEngagement[eid] ?? null) : null;
       latest.current.showNotes(s.scope === "host" ? (host ?? target) : null);
     });
+    const offLogEntry = useLogEntryStore.subscribe((s) => {
+      if (!s.open) return;
+      useLogEntryStore.setState({ open: false });
+      if (s.engagementId === latest.current.engagementId) latest.current.showLogEntry();
+    });
     return () => {
       offArsenal();
       offPayloads();
       offNotes();
+      offLogEntry();
     };
   }, []);
 

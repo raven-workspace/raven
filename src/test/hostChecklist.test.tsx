@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { GoalRow } from "../features/checklist/GoalRow/GoalRow";
 import { setImported } from "../engines/library/store";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { useCredPickStore } from "../features/checklist/credPick";
 import { api } from "../lib/api";
 import { commandText } from "./support/commandText";
@@ -80,7 +80,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   useCredPickStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({

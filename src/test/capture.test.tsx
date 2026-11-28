@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -103,7 +103,7 @@ async function ready() {
   await within(screen.getByRole("region", { name: "Vulnerability detection" })).findByRole("link", { name: /dc01/ });
 }
 
-async function openCapture(user: ReturnType<typeof userEvent.setup>) {
+async function openLogEntry(user: ReturnType<typeof userEvent.setup>) {
   await user.keyboard("l");
   return screen.findByRole("dialog", { name: "Add to log" });
 }
@@ -112,7 +112,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.servicesListEngagement.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
@@ -154,7 +154,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     expect(within(dialog).getByLabelText("Paste")).toHaveFocus();
     expect(within(dialog).getByRole("radio", { name: "Other" })).toBeChecked();
   });
@@ -179,7 +179,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste(NMAP);
     expect(within(dialog).getByRole("radio", { name: "Command" })).toBeChecked();
     expect(within(dialog).getByLabelText("Title")).toHaveValue("Versions and default scripts on the open ports");
@@ -196,7 +196,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste(NMAP);
     expect(within(dialog).getByText("Updates services on dc01: 22, 80, 3003.")).toBeInTheDocument();
   });
@@ -205,7 +205,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste(
       [
         "kali@kali:~$ nmap -sV 10.10.10.9 10.10.10.8",
@@ -230,7 +230,7 @@ describe("capture panel", () => {
     await ready();
     const card = within(screen.getByRole("region", { name: "Vulnerability detection" })).getByRole("link", { name: /dc01/ });
     card.focus();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste(NMAP);
     await user.click(within(dialog).getByLabelText("Observations"));
     await user.keyboard("node on 3003");
@@ -251,7 +251,7 @@ describe("capture panel", () => {
     ]);
     expect(card).toHaveFocus();
     // The draft is gone.
-    await openCapture(user);
+    await openLogEntry(user);
     expect(screen.getByLabelText("Paste")).toHaveValue("");
   });
 
@@ -259,7 +259,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste("nmap -p- 10.10.10.5");
     const title = within(dialog).getByLabelText("Title");
     await user.clear(title);
@@ -289,11 +289,11 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    await openCapture(user);
+    await openLogEntry(user);
     await user.paste("remember the vhost");
     await user.keyboard("{Escape}");
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     expect(within(dialog).getByLabelText("Paste")).toHaveValue("remember the vhost");
     await user.click(within(dialog).getByRole("button", { name: "Discard" }));
     expect(within(dialog).getByLabelText("Paste")).toHaveValue("");
@@ -303,7 +303,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.click(within(dialog).getByRole("radio", { name: "Other" }));
     expect(within(dialog).getByLabelText("Paste")).toHaveAttribute("placeholder", expect.stringMatching(/isn't a command, screenshot, request or flag/));
   });
@@ -322,7 +322,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h2");
     await screen.findByRole("navigation", { name: "Engagement" });
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     const group = within(dialog).getByRole("radiogroup", { name: "Kind" });
     expect(group).toHaveClass("toggle-group");
     expect(readFileSync("src/ui/shadcn/toggle-group.scss", "utf8")).toMatch(/\.toggle-group \{[^}]*height: 1\.75rem;/);
@@ -340,7 +340,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h2");
     await screen.findByRole("navigation", { name: "Engagement" });
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste("0123456789abcdef0123456789abcdef");
     expect(within(dialog).getByRole("radio", { name: "Flag" })).toBeChecked();
     expect(within(dialog).getByLabelText("Title")).toHaveValue("proof.txt");
@@ -354,7 +354,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     const block = "whoami; hostname; ip a\nweb07\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n0123456789abcdef0123456789abcdef";
     await user.paste(block);
     expect(within(dialog).getByRole("radio", { name: "Flag" })).toBeChecked();
@@ -375,7 +375,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste("ping -c 1 10.10.10.9");
     // No "+ add as host" tick: the output must prove the host.
     expect(within(dialog).queryByRole("button", { name: "+ 10.10.10.9" })).not.toBeInTheDocument();
@@ -403,7 +403,7 @@ describe("capture panel", () => {
     });
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste(NMAP_NEW);
     expect(within(dialog).getByText("Updates services on 10.10.10.9: 22, 80. OS: Linux.")).toBeInTheDocument();
     await user.click(within(dialog).getByLabelText("Observations"));
@@ -427,7 +427,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste("┌──(kali㉿kali)-[~]\n└─$ whoami\nkali");
     expect(within(dialog).getByRole("radio", { name: "Command" })).toBeChecked();
     await user.keyboard("{Enter}");
@@ -442,7 +442,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste("line one\nline two");
     await user.keyboard("{Enter}");
     expect(within(dialog).getByLabelText("Paste")).toHaveValue("line one\nline two\n");
@@ -459,7 +459,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    await openCapture(user);
+    await openLogEntry(user);
     await user.paste("remember the vhost");
     await user.keyboard("{Enter}");
     expect(await screen.findByLabelText("Password")).toBeInTheDocument();
@@ -470,7 +470,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste(NMAP);
     await user.click(within(dialog).getByLabelText("Observations"));
     await user.keyboard("{Enter}");
@@ -481,7 +481,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.click(within(dialog).getByRole("button", { name: /^Private/ }));
     expect(within(dialog).getByText("Private, not in reports")).not.toHaveAttribute("data-variant", "accent");
   });
@@ -492,14 +492,14 @@ describe("capture panel", () => {
     m.vaultUnlock.mockResolvedValue({ migratedFrom: 3, migratedTo: 3, dailyBackup: null, dailyBackupError: null });
     mount();
     await ready();
-    await openCapture(user);
+    await openLogEntry(user);
     await user.paste("remember the vhost");
     await user.keyboard("{Meta>}l{/Meta}");
     expect(await screen.findByLabelText("Password")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Password"), "correct horse battery{Enter}");
     await ready();
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     expect(within(dialog).getByLabelText("Paste")).toHaveValue("");
   });
 
@@ -508,7 +508,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h2");
     await screen.findByRole("navigation", { name: "Engagement" });
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste("0123456789abcdef0123456789abcdef");
     await pasteImage(within(dialog).getByLabelText("Paste"), pngFile());
     await vi.waitFor(() => expect(within(dialog).getByRole("img", { name: "Pasted image" })).toHaveAttribute("src", "blob:flag"));
@@ -533,7 +533,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
     await screen.findByRole("navigation", { name: "Engagement" });
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await pasteImage(within(dialog).getByLabelText("Paste"), pngFile());
     await vi.waitFor(() =>
       expect(within(dialog).getByRole("radio", { name: "Screenshot" })).toBeChecked(),

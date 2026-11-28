@@ -7,7 +7,7 @@ import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { usePayloadsStore } from "../features/payloads/usePayloadsStore";
 import App from "../App";
 import { applicableGoals } from "../engines/checklist";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ChecklistItem } from "../types/checklist";
@@ -59,7 +59,7 @@ const row = (id: string) => document.querySelector(`li[data-goal-id="${id}"]`)!;
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [],

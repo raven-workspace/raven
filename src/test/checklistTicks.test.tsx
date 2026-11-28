@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applicableGoals, ticksForEntry } from "../engines/checklist";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { useChecklist, useChecklistMutations } from "../features/checklist/queries";
 import { ChecklistSyncError, resetFirstOpens, syncChecklist, type SyncChange } from "../features/checklist/sync";
 import { loadTickContext } from "../features/checklist/ticks";
@@ -60,7 +60,7 @@ const row = async (engagementId: string, ownerId: string, goalId: string): Promi
 const hostOf = async (engagementId: string, id: string) => (await fake.hostsList(engagementId)).find((h) => h.id === id)!;
 const sync = (engagementId: string, change: SyncChange) => syncChecklist({ engagementId, change });
 
-async function openCapture(user: ReturnType<typeof userEvent.setup>) {
+async function openLogEntry(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByRole("navigation", { name: "Engagement" });
   await screen.findAllByText("dc01");
   await user.keyboard("l");
@@ -82,7 +82,7 @@ async function deleteOpenEntry(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   localStorage.clear();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   resetFirstOpens();
   resetFake();
 });
@@ -92,7 +92,7 @@ describe("an entry saved or edited", () => {
     const user = userEvent.setup();
     const { eng, dc01 } = await seed();
     renderApp(`/e/${eng.id}`);
-    await openCapture(user);
+    await openLogEntry(user);
     await user.paste(FULL_SCAN);
     await saveCapture(user);
     await waitFor(async () => expect(await fake.logList(eng.id)).toHaveLength(1));
@@ -127,7 +127,7 @@ describe("an entry saved or edited", () => {
     const user = userEvent.setup();
     const { eng, web07 } = await seed();
     renderApp(`/e/${eng.id}`);
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste(FLAG_PASTE);
     expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt");
     await saveCapture(user);
@@ -140,7 +140,7 @@ describe("an entry saved or edited", () => {
     const { eng, dc01 } = await seed();
     await fake.hostMove(dc01.id, "post-exploitation");
     renderApp(`/e/${eng.id}`);
-    await openCapture(user);
+    await openLogEntry(user);
     await user.paste(FULL_SCAN);
     await saveCapture(user);
     await waitFor(async () => expect((await row(eng.id, dc01.id, "h-enum-full-tcp"))?.status).toBe("done"));
@@ -152,19 +152,19 @@ describe("an entry saved or edited", () => {
     const user = userEvent.setup();
     const { eng, dc01 } = await seed({ kind: "exam-sim" });
     renderApp(`/e/${eng.id}`);
-    let dialog = await openCapture(user);
+    let dialog = await openLogEntry(user);
     await user.paste("kali@kali:~$ msfconsole -q -x 'use exploit/windows/smb/psexec; set RHOSTS 192.0.2.5; run'");
     expect(within(dialog).queryByText(/Metasploit is already locked/)).toBeNull();
     await saveCapture(user);
     await waitFor(async () => expect((await fake.engagementGet(eng.id)).msfHostId).toBe(dc01.id));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    dialog = await openCapture(user);
+    dialog = await openLogEntry(user);
     await user.paste("kali@kali:~$ msfconsole -q -x 'use exploit/multi/http/tomcat_mgr_upload; set RHOSTS 192.0.2.6; run'");
     const warning = await within(dialog).findByText(
       "Metasploit is already locked to another host on this engagement. This entry uses it on a different host.",
     );
-    expect(warning).toHaveClass("capture-form__warning");
+    expect(warning).toHaveClass("log-entry-form__warning");
     // Saving is still allowed, and the lock stays where it is.
     await saveCapture(user);
     await waitFor(async () => expect(await fake.logList(eng.id)).toHaveLength(2));
@@ -177,7 +177,7 @@ describe("an entry saved or edited", () => {
     const { eng } = await seed();
     vi.spyOn(fake, "checklistApplyEntryTicks").mockRejectedValue(new Error("disk full"));
     renderApp(`/e/${eng.id}`);
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     await user.paste(FULL_SCAN);
     await saveCapture(user);
     expect(
@@ -192,7 +192,7 @@ describe("an entry saved or edited", () => {
     const user = userEvent.setup();
     const { eng, web07 } = await seed();
     renderApp(`/e/${eng.id}`);
-    const dialog = await openCapture(user);
+    const dialog = await openLogEntry(user);
     vi.spyOn(fake, "hostSyncBoard").mockRejectedValue(new Error("board busy"));
     await user.paste(FLAG_PASTE);
     await saveCapture(user);
@@ -275,7 +275,7 @@ describe("an entry saved or edited", () => {
     const user = userEvent.setup();
     const { eng, dc01 } = await seed();
     renderApp(`/e/${eng.id}`);
-    await openCapture(user);
+    await openLogEntry(user);
     await user.paste(
       [
         "kali@kali:~$ nmap -sCV -p 22,80 192.0.2.5",

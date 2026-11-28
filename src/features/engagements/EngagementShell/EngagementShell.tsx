@@ -8,10 +8,10 @@ import type { Engagement } from "../../../types/engagement";
 import { Button, EmptyState, queryState } from "../../../ui/index";
 import { syncChecklist } from "../../checklist/sync";
 import { HostView } from "../../hosts/HostView/HostView";
-import { CapturePanel } from "../../capture/CapturePanel/CapturePanel";
+import { LogEntrySheet } from "../../capture/LogEntrySheet/LogEntrySheet";
 import { NotesPanel } from "../../notes/NotesPanel/NotesPanel";
 import { useNotesStore } from "../../notes/useNotesStore";
-import { useCaptureStore } from "../../capture/useCaptureStore";
+import { useLogEntryStore } from "../../capture/useLogEntryStore";
 import { cx } from "../../../lib/cx";
 import { EngagementHeader } from "../EngagementHeader/EngagementHeader";
 import { Sidebar } from "../Sidebar/Sidebar";
@@ -29,7 +29,7 @@ export function EngagementShell({ layout = "sidebar" }: { layout?: "sidebar" | "
   const { id = "", hostId, section } = useParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const openCapture = useCaptureStore((s) => s.openCapture);
+  const openLogEntry = useLogEntryStore((s) => s.openLogEntry);
   // Arsenal, Manual and Payloads as editor tabs (workspace shell): full pages with their own landmark and layout.
   const reference = [useMatch("/e/:id/arsenal"), useMatch("/e/:id/payloads"), useMatch("/e/:id/manual/*")].some((m) => m !== null);
   const query = useQuery({
@@ -51,9 +51,10 @@ export function EngagementShell({ layout = "sidebar" }: { layout?: "sidebar" | "
   useKeydown((e) => {
     if (!isFreeKey(e)) return;
     if (e.key === "l" || e.key === "L") {
-      // L: capture. From a host view, that host is preselected.
+      // L: the log entry form. From a host view, that host is preselected; the workspace shell opens it as the log
+      // entry tab, with Target preselected (useDrawerTabs).
       e.preventDefault();
-      openCapture({ engagementId: id, hostId: hostId ?? null });
+      openLogEntry({ engagementId: id, hostId: hostId ?? null });
       return;
     }
     if (e.key === "n" || e.key === "N") {
@@ -88,21 +89,18 @@ export function EngagementShell({ layout = "sidebar" }: { layout?: "sidebar" | "
   const bars = (hostId ? 0 : 1) + (strip ? 1 : 0);
   const panels = (
     <>
-      <CapturePanel engagement={e} />
+      <LogEntrySheet engagement={e} />
       <NotesPanel engagement={e} hostId={hostId ?? null} />
     </>
   );
 
   if (layout === "workspace") {
-    // Field notes are an editor tab here, not a panel (design §2.1).
+    // Field notes (design §2.1) and the log entry (§2.5) are editor tabs here, not panels.
     const Page = reference ? "div" : "main";
     return (
-      <>
-        <Page className={cx("engagement-shell__main", strip && !reference && "engagement-shell__main--padded")}>
-          <Outlet />
-        </Page>
-        <CapturePanel engagement={e} />
-      </>
+      <Page className={cx("engagement-shell__main", strip && !reference && "engagement-shell__main--padded")}>
+        <Outlet />
+      </Page>
     );
   }
 

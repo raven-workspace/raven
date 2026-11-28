@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 
-const draft = () => useCaptureStore.getState().drafts.e1;
+const draft = () => useLogEntryStore.getState().drafts.e1;
 
 describe("capture draft asNote", () => {
-  beforeEach(() => useCaptureStore.getState().reset());
+  beforeEach(() => useLogEntryStore.getState().reset());
 
   it("resets when the pasted text changes, and holds while it does not", () => {
-    const { update } = useCaptureStore.getState();
+    const { update } = useLogEntryStore.getState();
     update("e1", { text: "admin:Summer2026!" });
     update("e1", { asNote: true });
     update("e1", { caption: "x" });

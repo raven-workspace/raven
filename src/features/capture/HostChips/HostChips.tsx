@@ -26,8 +26,8 @@ export function HostChips({ hosts, linked, onLinked, loadError }: HostChipsProps
         return (
           // The remove button sits beside the chip, not inside it: a 28px target never fits a 22px chip.
           <span key={id} className="host-chips__item">
-            <Chip>
-              <span>{h.name}</span>
+            <Chip title={h.name}>
+              <span className="host-chips__name">{h.name}</span>
               {h.ip && h.ip !== h.name && <span className="host-chips__ip">{h.ip}</span>}
             </Chip>
             <IconButton icon={X} label={`Remove ${h.name}`} onClick={() => onLinked(linked.filter((x) => x !== id))} />

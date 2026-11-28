@@ -13,8 +13,8 @@ export type RailSection = (typeof RAIL_SECTIONS)[number];
 export type RailView = "explorer" | RailSection | "notes" | "arsenal" | "payloads" | "manual";
 
 /**
- * The rail view a page belongs to, or null when none is current. A host or a finding is opened from the Explorer, so
- * its page lights Explorer (as the artboard does on a host page).
+ * The rail view a page belongs to, or null when none is current. A host, a finding or the log entry tab is opened
+ * from the Explorer, so its page lights Explorer (as the artboards do on a host page and on the log entry tab).
  */
 export function railViewOf(page: TabPage | null): RailView | null {
   if (!page) return null;
@@ -25,6 +25,7 @@ export function railViewOf(page: TabPage | null): RailView | null {
       return (RAIL_SECTIONS as readonly string[]).includes(page.section) ? (page.section as RailSection) : "board";
     case "host":
     case "finding":
+    case "log-entry":
       return "explorer";
     case "notes":
       return "notes";

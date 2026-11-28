@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { GoalRow } from "../features/checklist/GoalRow/GoalRow";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { applicableGoals } from "../engines/checklist";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -72,7 +72,7 @@ const next = async () => within(await screen.findByRole("tabpanel", { name: "Nex
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [],

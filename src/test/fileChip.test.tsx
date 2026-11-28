@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { currentLibrary, setImported } from "../engines/library/store";
 import { filePickFor, useFilePickStore } from "../features/checklist/filePick";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { useCredPickStore } from "../features/checklist/credPick";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -48,7 +48,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   useCredPickStore.getState().reset();
   useFilePickStore.setState({ hostId: "", file: "" });
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });

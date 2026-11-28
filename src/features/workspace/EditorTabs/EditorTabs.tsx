@@ -48,6 +48,8 @@ function useLabels(engagementId: string) {
         return findings.data?.find((f) => f.id === page.findingId)?.title ?? "Finding";
       case "reference":
         return REFERENCE_LABELS[page.page];
+      case "log-entry":
+        return "New log entry";
     }
   };
   return { label, hosts, findings };

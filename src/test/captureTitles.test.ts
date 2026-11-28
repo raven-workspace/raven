@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildDraft, flagTitle } from "../engines/capture";
 import { resolveCapture } from "../features/capture/resolve";
-import { EMPTY_DRAFT } from "../features/capture/useCaptureStore";
+import { EMPTY_DRAFT } from "../features/capture/useLogEntryStore";
 import type { Host } from "../types/host";
 import { TEST_LIBRARY } from "./support/library";
 

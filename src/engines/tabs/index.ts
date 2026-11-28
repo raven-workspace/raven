@@ -13,7 +13,8 @@ export type TabPage =
   | { kind: "host"; hostId: string }
   | { kind: "notes"; hostId: string | null }
   | { kind: "finding"; findingId: string }
-  | { kind: "reference"; page: ReferencePage };
+  | { kind: "reference"; page: ReferencePage }
+  | { kind: "log-entry" };
 
 /** One open editor tab: its page's key, and the route it was last on (search and hash included, in memory only). */
 export interface EditorTab {
@@ -32,6 +33,12 @@ export function pathOf(route: string): string {
 /** The engagement's own route for the board, its home page. */
 export const boardRoute = (engagementId: string) => `/e/${engagementId}`;
 
+/** The log entry tab's route ("New log entry", design §2.5): one per engagement, so one tab. */
+export const logEntryRoute = (engagementId: string) => `/e/${engagementId}/log-entry`;
+
+/** The log entry tab's page key. */
+export const LOG_ENTRY_KEY = "log-entry";
+
 /**
  * The page a route inside the engagement shows, or null for a route that is no page of it (another engagement's, or
  * one Raven doesn't know). An unknown section is the board, as `SectionRoute` shows it.
@@ -48,6 +55,7 @@ export function pageOf(engagementId: string, route: string): TabPage | null {
   if (head === "h" && id && rest.length === 0) return { kind: "host", hostId: id };
   if (head === "f" && id && rest.length === 0) return { kind: "finding", findingId: id };
   if (head === "notes" && rest.length === 0) return { kind: "notes", hostId: id ?? null };
+  if (head === "log-entry" && id === undefined) return { kind: "log-entry" };
   if (head && (REFERENCES as readonly string[]).includes(head)) {
     // The Manual keeps the note being read in its route (`manual/:noteId`); the others have no id.
     if (head === "manual" ? rest.length === 0 : id === undefined) return { kind: "reference", page: head as ReferencePage };
@@ -76,6 +84,8 @@ export function pageKey(page: TabPage): string {
       return `f:${page.findingId}`;
     case "reference":
       return page.page;
+    case "log-entry":
+      return LOG_ENTRY_KEY;
   }
 }
 

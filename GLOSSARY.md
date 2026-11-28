@@ -132,7 +132,7 @@ The column listing the engagement's hosts, notes, findings and logs, from which 
 _Avoid_: sidebar, tree, file list
 
 **Editor tab**:
-One open page in the editor area: a host, a note, a finding, a section, the capture tab. A page is open in at most one editor tab.
+One open page in the editor area: a host, a note, a finding, a section, the log entry tab. A page is open in at most one editor tab.
 _Avoid_: page tab, document, view
 
 **Target**:

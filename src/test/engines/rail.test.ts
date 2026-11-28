@@ -25,6 +25,7 @@ describe("the rail's current view", () => {
   it("lights Explorer on the pages opened from it, and nothing on the Report", () => {
     expect(view("/e/e1/h/h1")).toBe("explorer");
     expect(view("/e/e1/f/f1")).toBe("explorer");
+    expect(view("/e/e1/log-entry")).toBe("explorer");
     expect(view("/e/e1/s/report")).toBeNull();
   });
 

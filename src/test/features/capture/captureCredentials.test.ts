@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { credentialsInPaste } from "../../../engines/capture";
 import { resolveCapture } from "../../../features/capture/resolve";
-import { EMPTY_DRAFT, type PanelDraft } from "../../../features/capture/useCaptureStore";
+import { EMPTY_DRAFT, type LogEntryDraft } from "../../../features/capture/useLogEntryStore";
 import type { Host } from "../../../types/host";
 import { TEST_LIBRARY } from "../../support/library";
 
@@ -15,7 +15,7 @@ const WEB: Host = {
 
 const DC: Host = { ...WEB, id: "h2", name: "dc01.corp.example.test", ip: "192.0.2.5" };
 
-const resolve = (text: string, over: Partial<PanelDraft> = {}, hosts: Host[] = [WEB]) =>
+const resolve = (text: string, over: Partial<LogEntryDraft> = {}, hosts: Host[] = [WEB]) =>
   resolveCapture({ ...EMPTY_DRAFT, text, ...over }, {
     hosts, scope: [], domain: "", machines: [], lastRanOn: null, library: TEST_LIBRARY, presetHostId: "h1",
   });

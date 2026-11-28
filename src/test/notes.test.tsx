@@ -6,7 +6,7 @@ import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { resetNotesStore, useNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
 import { reportError } from "../lib/lockSignal";
@@ -70,7 +70,7 @@ beforeEach(() => {
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);
   resetNotesStore();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   for (const k of Object.keys(stored)) delete stored[k];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.vaultLock.mockResolvedValue(null);

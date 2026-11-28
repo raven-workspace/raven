@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { servicesSummaryParts } from "../features/hosts/facts/ServicesFacts/ServicesFacts";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -105,7 +105,7 @@ const summaryOf = async (name: string) => {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [] });
   m.engagementsList.mockResolvedValue([E1]);

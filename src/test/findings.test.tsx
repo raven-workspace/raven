@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { useFindingDraftStore } from "../features/findings/useFindingDraftStore";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -70,7 +70,7 @@ function mount(findings: Finding[] = [], log: LogEntry[] = [], path = "/e/e1/s/f
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   useFindingDraftStore.getState().clearAll();
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);

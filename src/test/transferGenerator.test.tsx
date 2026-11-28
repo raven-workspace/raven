@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { currentLibrary, setImported } from "../engines/library/store";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
-import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useLogEntryStore } from "../features/capture/useLogEntryStore";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import type { LogEntryInput } from "../types/log";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
@@ -55,7 +55,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);
-  useCaptureStore.getState().reset();
+  useLogEntryStore.getState().reset();
   usePaletteStore.getState().close();
   useLastEngagementStore.setState({ engagementId: "e1", hostId: "ms02" });
   useArsenalStore.setState({ open: false, cardId: null });
