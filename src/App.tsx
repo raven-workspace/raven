@@ -11,6 +11,9 @@ import { useEscapeTo } from "./lib/keys";
 import { TooltipProvider } from "./ui";
 import { useVault, VaultGate } from "./features/vault/VaultGate/VaultGate";
 import { WorkspaceShell } from "./features/workspace/WorkspaceShell/WorkspaceShell";
+import { ArsenalTab } from "./features/workspace/ArsenalTab/ArsenalTab";
+import { NotesPage } from "./features/notes/NotesPage/NotesPage";
+import { FindingPage } from "./features/findings/FindingPage/FindingPage";
 import { WORKSPACE_SHELL } from "./lib/shell";
 
 // Dev-only component gallery. `import.meta.env.DEV` is false in builds, so the
@@ -33,6 +36,16 @@ export default function App() {
         <Route index element={<SectionView section="board" />} />
         <Route path="s/:section" element={<SectionRoute />} />
         <Route path="h/:hostId" element={<HostRoute />} />
+        {/* In the workspace shell the drawers are editor tabs, and a finding opens in one (design §2.1). */}
+        {WORKSPACE_SHELL && (
+          <>
+            <Route path="f/:findingId" element={<FindingPage />} />
+            <Route path="notes/:hostId?" element={<NotesPage />} />
+            <Route path="arsenal" element={<ArsenalTab />} />
+            <Route path="manual/:noteId?" element={<ManualPage />} />
+            <Route path="payloads" element={<PayloadsWorkbench />} />
+          </>
+        )}
       </Route>
       <Route path="arsenal" element={<ArsenalBrowse />} />
       <Route path="manual/:noteId?" element={<ManualPage />} />

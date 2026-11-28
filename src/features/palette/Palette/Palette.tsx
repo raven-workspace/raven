@@ -29,6 +29,7 @@ import type { SuggestContext } from "../suggest";
 import { RavenError } from "../../../types/errors";
 import "./Palette.scss";
 import { matches, SHORTCUTS } from "../../../lib/shortcuts";
+import { useReferenceBase } from "../../workspace/referenceBase";
 
 const MAX_RESULTS = 30;
 
@@ -44,6 +45,8 @@ const paletteRow = (result: PaletteResult): PaletteRow => ({
 function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: (opts?: { handOff?: boolean }) => void }) {
   const navigate = useNavigate();
   const location = useLocation();
+  // Arsenal and Manual open where the palette is: full pages, or editor tabs inside an engagement (workspace shell).
+  const refBase = useReferenceBase();
   const { notes } = useManualNotes();
   const library = useLibrary();
   const { toolkit } = useToolkit();
@@ -132,14 +135,14 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     }
     if (current?.type === "manual") {
       // Inside the Manual a move replaces its one history entry, so Esc still leaves the Manual.
-      void navigate(manualSearchPath(current.noteId, query, current.anchor), { replace: location.pathname.startsWith("/manual") });
+      void navigate(manualSearchPath(current.noteId, query, current.anchor, undefined, refBase), { replace: location.pathname.startsWith(`${refBase}/manual`) });
       // The Manual focuses the match itself: focus does not go back to where the palette opened.
       onClose({ handOff: true });
       return;
     }
     if (current?.type === "more") {
       if (engagementId) useLastEngagementStore.setState({ engagementId, hostId: host?.id ?? null });
-      void navigate(`/arsenal?q=${encodeURIComponent(query.trim())}`);
+      void navigate(`${refBase}/arsenal?q=${encodeURIComponent(query.trim())}`);
       onClose();
       return;
     }
@@ -186,7 +189,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       e.preventDefault();
       if (current.type === "command" && "lookup" in current) {
         // Inside the Manual a move replaces its one history entry, so Esc still leaves the Manual.
-        void navigate(manualSearchPath(current.lookup.noteId, query, current.lookup.anchor, current.lookup.row), { replace: location.pathname.startsWith("/manual") });
+        void navigate(manualSearchPath(current.lookup.noteId, query, current.lookup.anchor, current.lookup.row, refBase), { replace: location.pathname.startsWith(`${refBase}/manual`) });
         // The answer card focuses its first command: focus does not go back to where the palette opened.
         onClose({ handOff: true });
         return;

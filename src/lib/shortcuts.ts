@@ -220,6 +220,8 @@ export const SHORTCUTS = {
   lock: shortcut("⌘L"),
   toggleSidebar: shortcut("⌘B"),
   newEngagement: shortcut("⌘N"),
+  /** Closes the editor tab in view (workspace shell). */
+  closeTab: shortcut("⌘W"),
   /** Inside an engagement in the workspace shell, ⌘N adds a host (design §3.1); the Dashboard keeps it for engagements. */
   addHost: shortcut("⌘N"),
   /** ↵ copies a command; with ⌘ it is also logged against the host. */

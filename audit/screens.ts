@@ -572,6 +572,27 @@ export const WORKSPACE_SCREENS: Screen[] = [
     id: "workspace-target-picker", path: workspace(H), ready: "role=listbox[name='Hosts']", widths: [1100, 1440],
     setup: (page) => page.locator(".chrome-bar").getByRole("button", { name: /^Target/ }).click(),
   },
+  // Editor tabs (design §2.1), drawn as on the Host View: the host, its notes and a finding open, the host in view.
+  {
+    id: "workspace-tabs", path: workspace(H), ready: "role=tablist[name='Open editors'] >> role=tab[name=/^web-portal/][selected]", widths: [1100, 1440],
+    setup: async (page) => {
+      await chromeReady(page);
+      await page.getByRole("tab", { name: "Next", exact: true }).waitFor();
+      await page.keyboard.press("n");
+      // The notes tab puts the caret in the note; Esc leaves the field, then 4 opens Findings and its title the finding.
+      await page.getByRole("region", { name: /^Notes: / }).waitFor();
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("4");
+      await page.getByRole("button", { name: "SNMP community string public", exact: true }).click();
+      await page.locator("role=tab[name='SNMP community string public'][selected]").waitFor();
+      await page.getByRole("tablist", { name: "Open editors" }).getByRole("tab", { name: /^web-portal/ }).click();
+    },
+  },
+  { id: "workspace-notes-tab", path: workspace(`${E}/notes/${AUDIT_IDS.webHost}`), ready: "role=region[name=/^Notes: /]", widths: [1100, 1440], setup: chromeReady },
+  { id: "workspace-arsenal-tab", path: workspace(`${E}/arsenal`), ready: "role=main[name='Arsenal']", widths: [1100, 1440], setup: chromeReady },
+  { id: "workspace-manual-tab", path: workspace(`${E}${MANUAL_LONG}`), ready: `${NOTE_PANE} article[aria-label='Zz Status Codes'] table`, widths: [1100, 1440], setup: chromeReady },
+  { id: "workspace-payloads-tab", path: workspace(`${E}/payloads`), ready: "role=main[name='Payloads']", widths: [1100, 1440], setup: chromeReady },
+  { id: "workspace-finding-tab", path: workspace(`${E}/f/f-3`), ready: "role=tab[name='SNMP community string public'][selected]", widths: [1100, 1440], setup: chromeReady },
   // The status bar (design §1.5–§1.7) on the exam sim, which has every cell: at 1100 the cells drop in their order.
   { id: "workspace-exam-host", path: workspace(EXAM_DC), ready: TIMEBOX, widths: [1100, 1440], setup: chromeReady },
   // The timebox's other states (design §1.6), and LHOST when tun0 differs from Settings.

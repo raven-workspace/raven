@@ -1,0 +1,71 @@
+@use "@/styles/abstracts" as *;
+
+// The editor tabs (design §2.1): a 40px row of tabs over the editor. The row's bottom hairline is an inset shadow, so
+// the selected tab's underline (drawn behind the labels, above the row's own paint) lies over it.
+@layer features {
+  .editor-tabs {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: start;
+    align-items: end;
+    height: 100%;
+    min-width: 0;
+    padding-left: var(--space-xs);
+    box-shadow: inset 0 -1px 0 var(--line);
+    // Past the editor's width the row scrolls sideways rather than squeezing labels.
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  // Label, then the close button, always visible.
+  .editor-tabs__tab {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) 28px;
+    align-items: center;
+    gap: var(--space-xs);
+    height: 100%;
+    padding-right: var(--space-xs);
+    @include type(meta);
+    color: var(--muted);
+
+    &[data-selected="true"] {
+      color: var(--fg);
+    }
+  }
+
+  // The label is the tab's click target: the full height, and the tab's 12px lead.
+  .editor-tabs__label {
+    @include truncate;
+    // A long finding title stops at about 30 characters, its full name in the tooltip.
+    max-width: 16rem;
+    height: 100%;
+    padding: 0 0 0 var(--space-md);
+    border: 0;
+    background-color: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: default;
+    @include transition-colors;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+  }
+
+  // The selected tab's 2px accent underline, inset 8px each side, over the row's hairline.
+  .editor-tabs__marker::after {
+    content: "";
+    position: absolute;
+    right: var(--space-sm);
+    bottom: 0;
+    left: var(--space-sm);
+    height: 2px;
+    background-color: var(--accent);
+  }
+}

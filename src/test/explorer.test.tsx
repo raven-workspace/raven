@@ -42,6 +42,8 @@ function renderAt(path: string) {
             <Route path="e/:id" element={<Where />} />
             <Route path="e/:id/s/:section" element={<Where />} />
             <Route path="e/:id/h/:hostId" element={<Where />} />
+            <Route path="e/:id/f/:findingId" element={<Where />} />
+            <Route path="e/:id/notes/:hostId?" element={<Where />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -150,20 +152,22 @@ describe("Explorer (design §1.4)", () => {
     expect(group(/^Hosts/).getByRole("button", { name: /^forge/ })).toHaveAttribute("aria-current", "true");
   });
 
-  it("note, finding and log rows open their page", async () => {
+  it("note, finding and log rows open their page: notes and findings in their own tab", async () => {
     const user = userEvent.setup();
     renderAt("/e/e1");
     await user.click(await group(/^Findings/).findByRole("button", { name: "SSRF in upload URL fetch" }));
-    expect(where()).toHaveTextContent("/e/e1/s/findings?finding=f2");
+    expect(where().textContent).toBe("/e/e1/f/f2");
     await user.click(group(/^Logs/).getByRole("button", { name: "web02" }));
     expect(where()).toHaveTextContent("/e/e1/s/log?host=h2");
     await user.click(group(/^Logs/).getByRole("button", { name: "Engagement" }));
     expect(where().textContent).toBe("/e/e1/s/log");
     await user.click(group(/^Notes/).getByRole("button", { name: "forge" }));
-    expect(where()).toHaveTextContent("/e/e1/h/h1");
-    expect(useNotesStore.getState()).toMatchObject({ open: true, scope: "host" });
+    expect(where().textContent).toBe("/e/e1/notes/h1");
+    // A host's notes make it Target, as its page does.
+    expect(useTargetStore.getState().byEngagement.e1).toBe("h1");
     await user.click(group(/^Notes/).getByRole("button", { name: "Engagement" }));
-    expect(useNotesStore.getState()).toMatchObject({ open: true, scope: "engagement" });
+    expect(where().textContent).toBe("/e/e1/notes");
+    expect(useNotesStore.getState().open).toBe(false);
   });
 
   it("the Plus buttons add a host, a note, a finding and a log entry", async () => {
@@ -175,11 +179,13 @@ describe("Explorer (design §1.4)", () => {
     useExplorerStore.getState().setAddingHost(false);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    await user.click(group(/^Notes/).getByRole("button", { name: "Add note" }));
-    expect(useNotesStore.getState()).toMatchObject({ open: true, scope: "host" });
-
     await user.click(group(/^Logs/).getByRole("button", { name: "Add log entry" }));
     expect(useCaptureStore.getState()).toMatchObject({ open: true, engagementId: "e1", hostId: "h3" });
+    useCaptureStore.getState().reset();
+
+    // On a host's page, Add note opens that host's notes tab.
+    await user.click(group(/^Notes/).getByRole("button", { name: "Add note" }));
+    expect(where().textContent).toBe("/e/e1/notes/h3");
 
     await user.click(group(/^Findings/).getByRole("button", { name: "Add finding" }));
     expect(where()).toHaveTextContent("/e/e1/s/findings?finding=new");

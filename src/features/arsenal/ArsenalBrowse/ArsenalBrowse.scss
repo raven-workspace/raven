@@ -1,9 +1,13 @@
 @use "@/styles/abstracts/index" as *;
 
-// The full-screen Arsenal. Under 1100px: categories as a select over the results, the reading pane beside both. From
-// 1100px: three columns, categories as a vertical tab list; from 1280px the results column grows.
+// The full-screen Arsenal, or its editor tab. Narrow: categories as a select over the results, the reading pane beside
+// both. Wide: three columns, categories as a vertical tab list; wider still, the results column grows. The breakpoints
+// are its own width (a container), so the editor tab follows the editor's width: 1052px and 1232px of content are the
+// 1100px and 1280px windows of the full page, less its 24px padding each side.
 @layer features {
   .arsenal-browse {
+    container-type: inline-size;
+    container-name: arsenal-browse;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     gap: var(--space-lg);
@@ -53,12 +57,12 @@
     row-gap: var(--space-md);
     min-height: 0;
 
-    @media (width >= 1100px) {
+    @container arsenal-browse (min-width: 1052px) {
       grid-template-columns: minmax(150px, 180px) minmax(220px, 260px) minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr);
     }
 
-    @media (width >= 1280px) {
+    @container arsenal-browse (min-width: 1232px) {
       grid-template-columns: minmax(150px, 180px) minmax(260px, 320px) minmax(0, 1fr);
     }
   }
@@ -68,7 +72,7 @@
     grid-row-start: 1;
     min-height: 0;
 
-    @media (width >= 1100px) {
+    @container arsenal-browse (min-width: 1052px) {
       padding-block: var(--space-xs);
       padding-right: var(--space-md);
       padding-left: var(--space-xs);
@@ -80,7 +84,7 @@
   .arsenal-browse__category-picker {
     display: grid;
 
-    @media (width >= 1100px) {
+    @container arsenal-browse (min-width: 1052px) {
       display: none;
     }
   }
@@ -95,7 +99,7 @@
     display: none;
     gap: 0;
 
-    @media (width >= 1100px) {
+    @container arsenal-browse (min-width: 1052px) {
       display: grid;
     }
   }
@@ -153,7 +157,7 @@
     overflow-x: hidden;
     overflow-y: auto;
 
-    @media (width >= 1100px) {
+    @container arsenal-browse (min-width: 1052px) {
       grid-column-start: 2;
       grid-row-start: 1;
     }
@@ -174,14 +178,13 @@
     overflow-y: auto;
     outline-style: none;
 
-    @media (width < 1099px) {
-      grid-column-start: 2;
-      grid-row: span 2 / span 2;
-      grid-row-start: 1;
-    }
+    grid-column-start: 2;
+    grid-row: span 2 / span 2;
+    grid-row-start: 1;
 
-    @media (width >= 1100px) {
+    @container arsenal-browse (min-width: 1052px) {
       grid-column-start: 3;
+      grid-row: auto;
     }
   }
 

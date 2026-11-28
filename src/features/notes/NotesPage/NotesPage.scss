@@ -1,0 +1,31 @@
+@use "@/styles/abstracts" as *;
+
+// Field notes in an editor tab: the title over the note, which takes the rest of the page.
+@layer features {
+  .notes-page {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--space-lg);
+    height: 100%;
+    min-height: 0;
+    color: var(--fg-2);
+  }
+
+  .notes-page__title {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--space-sm);
+  }
+
+  .notes-page__name {
+    @include truncate;
+    @include type(body);
+    color: var(--fg);
+  }
+
+  .notes-page .notes-page__editor {
+    min-height: 0;
+  }
+}

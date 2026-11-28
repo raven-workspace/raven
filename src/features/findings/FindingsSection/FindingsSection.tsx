@@ -11,6 +11,7 @@ import { AttemptsList } from "../AttemptsList/AttemptsList";
 import { FindingSplit } from "../FindingSplit/FindingSplit";
 import { useFindingMutations, useFindings } from "../queries";
 import { hostLabel } from "../../../lib/hostName";
+import { WORKSPACE_SHELL } from "../../../lib/shell";
 import "./FindingsSection.scss";
 
 /** Critical and high use the warn colour; the rest stay neutral. */
@@ -28,6 +29,8 @@ export function FindingsSection() {
   const [editor, setEditor] = useState<{ edit?: Finding } | null>(null);
   const [deleting, setDeleting] = useState<Finding>();
   const sorted = useMemo(() => sortFindingsBySeverity(findingsQ.data ?? []), [findingsQ.data]);
+  // In the workspace shell a finding opens in its own editor tab; a new one is still written here.
+  const openFinding = (f: Finding) => (WORKSPACE_SHELL ? void navigate(`/e/${id}/f/${f.id}`) : setEditor({ edit: f }));
 
   // `?finding=<id>` opens that finding and `?finding=new` a new one (the workspace Explorer's rows and Add finding).
   // Read once the findings load, then dropped from the URL, so Back and a reload don't reopen it.
@@ -95,7 +98,7 @@ export function FindingsSection() {
                     type="button"
                     data-testid="finding-title"
                     title={f.title}
-                    onClick={() => setEditor({ edit: f })}
+                    onClick={() => openFinding(f)}
                     className="findings-section__title"
                   >
                     {f.title}
@@ -113,7 +116,7 @@ export function FindingsSection() {
                 {/* 28px buttons centred on the 20px first line. */}
                 <span className="findings-section__actions">
                   <ActionCell>
-                    <IconButton icon={PencilSimple} label={`Edit ${f.title}`} onClick={() => setEditor({ edit: f })} />
+                    <IconButton icon={PencilSimple} label={`Edit ${f.title}`} onClick={() => openFinding(f)} />
                     <IconButton icon={Trash} tone="destructive" label={`Delete ${f.title}`} onClick={() => setDeleting(f)} />
                   </ActionCell>
                 </span>

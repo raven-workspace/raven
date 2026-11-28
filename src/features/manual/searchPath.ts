@@ -7,5 +7,5 @@ export const MANUAL_ROW = "row";
  * A note opened from ⌘K: at the query's matches, starting in `anchor`'s section (the hash). With `row`, the landing is
  * that row of `anchor`'s table: its first match, or the row itself when the query matches nothing in it.
  */
-export const manualSearchPath = (noteId: string, query: string, anchor?: string, row?: number): string =>
-  `/manual/${encodeURIComponent(noteId)}?${MANUAL_QUERY}=${encodeURIComponent(query.trim())}${row !== undefined && anchor ? `&${MANUAL_ROW}=${row}` : ""}${anchor ? `#${anchor}` : ""}`;
+export const manualSearchPath = (noteId: string, query: string, anchor?: string, row?: number, base = ""): string =>
+  `${base}/manual/${encodeURIComponent(noteId)}?${MANUAL_QUERY}=${encodeURIComponent(query.trim())}${row !== undefined && anchor ? `&${MANUAL_ROW}=${row}` : ""}${anchor ? `#${anchor}` : ""}`;

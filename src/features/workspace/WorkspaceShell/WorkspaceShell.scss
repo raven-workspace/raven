@@ -72,8 +72,9 @@
     --terminal-h: 0px;
   }
 
+  // The editor tabs draw the row's hairline themselves, under the selected tab's underline.
   .workspace-shell__tabs {
-    border-bottom: 1px solid var(--line);
+    min-width: 0;
   }
 
   // The page in view. Pages lay themselves out in it as they do in the engagement shell's main column.

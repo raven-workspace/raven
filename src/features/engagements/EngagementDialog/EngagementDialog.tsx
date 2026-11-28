@@ -16,6 +16,7 @@ import {
 import { engagementDeleted, engagementSaved } from "../queries";
 import { RavenError } from "../../../types/errors";
 import "./EngagementDialog.scss";
+import { useEditorTabsStore } from "../../workspace/useEditorTabsStore";
 
 const KINDS: { value: EngagementKind; label: string }[] = [
   { value: "exam-sim", label: "Exam sim" },
@@ -358,6 +359,8 @@ function DeleteDialog({ engagement: e, onClose }: { engagement: Engagement; onCl
     onSuccess: () => {
       // Its notes are gone: unsaved text for them can never be saved.
       dropPendingNotes(e.id);
+      // And its editor tabs: their stored route ids would never be read again.
+      useEditorTabsStore.getState().forget(e.id);
       void navigate("/");
       void engagementDeleted(qc, e.id);
     },

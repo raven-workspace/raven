@@ -1,8 +1,11 @@
 @use "@/styles/abstracts/index" as *;
 
-// The Manual: rail, reader and (from 1100px) the outline aside, over the hint line. Only the note scrolls.
+// The Manual: rail, reader and (from 1100px) the outline aside, over the hint line. Only the note scrolls. The widths
+// are the page's own (a container), so the Manual's editor tab follows the editor's width; the full page is the window's.
 @layer features {
   .manual-page {
+    container-type: inline-size;
+    container-name: manual-page;
     display: grid;
     height: 100%;
     min-height: 0;
@@ -32,10 +35,10 @@
   .manual-page__reader {
     display: grid;
     min-height: 0;
-    grid-template-columns: clamp(200px, 20vw, 260px) minmax(0, 1fr);
+    grid-template-columns: clamp(200px, 20cqi, 260px) minmax(0, 1fr);
 
-    @media (width >= 1100px) {
-      grid-template-columns: clamp(200px, 20vw, 260px) minmax(0, 1fr) 220px;
+    @container manual-page (min-width: 1100px) {
+      grid-template-columns: clamp(200px, 20cqi, 260px) minmax(0, 1fr) 220px;
     }
   }
 
@@ -161,7 +164,7 @@
 
   // Under 1100px the outline is a disclosure above the note.
   .manual-page__inline-outline {
-    @media (width >= 1100px) {
+    @container manual-page (min-width: 1100px) {
       display: none;
     }
   }
@@ -187,7 +190,7 @@
     padding-inline: var(--space-md);
     padding-bottom: var(--space-lg);
 
-    @media (width >= 1100px) {
+    @container manual-page (min-width: 1100px) {
       display: grid;
     }
   }

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { Outlet, useNavigate, useParams } from "react-router";
+import { Outlet, useMatch, useNavigate, useParams } from "react-router";
 import { api } from "../../../lib/api";
 import { reportError } from "../../../lib/lockSignal";
 import { isFreeKey, useEscapeTo, useKeydown } from "../../../lib/keys";
@@ -30,6 +30,8 @@ export function EngagementShell({ layout = "sidebar" }: { layout?: "sidebar" | "
   const qc = useQueryClient();
   const navigate = useNavigate();
   const openCapture = useCaptureStore((s) => s.openCapture);
+  // Arsenal, Manual and Payloads as editor tabs (workspace shell): full pages with their own landmark and layout.
+  const reference = [useMatch("/e/:id/arsenal"), useMatch("/e/:id/payloads"), useMatch("/e/:id/manual/*")].some((m) => m !== null);
   const query = useQuery({
     queryKey: engagementKey(id),
     queryFn: () => api.engagementGet(id),
@@ -55,7 +57,8 @@ export function EngagementShell({ layout = "sidebar" }: { layout?: "sidebar" | "
       return;
     }
     if (e.key === "n" || e.key === "N") {
-      // N: field notes. In a host view they open on that host.
+      // N: field notes. In a host view they open on that host. In the workspace shell that opens the notes tab
+      // (useDrawerTabs).
       e.preventDefault();
       useNotesStore.getState().toggle(hostId ? "host" : "engagement");
       return;
@@ -91,12 +94,14 @@ export function EngagementShell({ layout = "sidebar" }: { layout?: "sidebar" | "
   );
 
   if (layout === "workspace") {
+    // Field notes are an editor tab here, not a panel (design §2.1).
+    const Page = reference ? "div" : "main";
     return (
       <>
-        <main className={cx("engagement-shell__main", strip && "engagement-shell__main--padded")}>
+        <Page className={cx("engagement-shell__main", strip && !reference && "engagement-shell__main--padded")}>
           <Outlet />
-        </main>
-        {panels}
+        </Page>
+        <CapturePanel engagement={e} />
       </>
     );
   }

@@ -22,13 +22,15 @@ import { useManualStore, type ManualPlace } from "../useManualStore";
 import { firstNote, useManualNotes, type ManualStatus } from "../useManualNotes";
 import { cx } from "../../../lib/cx";
 import "./ManualPage.scss";
+import { useReferenceBase } from "../../workspace/referenceBase";
 
 /** The "Opening the Manual…" line waits this long, so a quick load shows nothing. */
 const LOADING_MS = 300;
 /** Saving the place waits for the scroll to settle. */
 const SAVE_MS = 200;
 
-export const manualPath = (noteId: string) => `/manual/${encodeURIComponent(noteId)}`;
+/** A note's route: under `base` (useReferenceBase) when the Manual is an editor tab. */
+export const manualPath = (noteId: string, base = "") => `${base}/manual/${encodeURIComponent(noteId)}`;
 
 const HINTS: Hint[] = [
   // The line keeps five (DESIGN.md); the rest wait in the ? list, and "/" and "⌘[" take a slot when copy hints go.
@@ -191,6 +193,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const refBase = useReferenceBase();
   const note = noteId ? notes.find((n) => n.id === noteId) : undefined;
   const { engagementId, hostId, pending: scopePending } = useFillScope();
   const base = useFillBase(engagementId, hostId);
@@ -243,8 +246,8 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     const target = remembered?.noteId ?? firstNote(notes)?.id;
     if (!target) return;
     pendingScroll.current = remembered ?? { noteId: target, scrollTop: 0 };
-    void navigate(manualPath(target), { replace: true });
-  }, [note, noteId, notes, navigate]);
+    void navigate(manualPath(target, refBase), { replace: true });
+  }, [note, noteId, notes, navigate, refBase]);
 
   // A note opens: push the one left behind (unless ⌘[ is returning to it), then restore or reset the scroll.
   useLayoutEffect(() => {
@@ -428,7 +431,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const open = (id: string, read = false) => {
     if (id !== note?.id) {
       readNext.current = read;
-      void navigate(manualPath(id), { replace: true });
+      void navigate(manualPath(id, refBase), { replace: true });
     } else if (read) focusQuietly(paneRef.current);
   };
 
@@ -436,7 +439,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const onClickCapture = (e: ReactMouseEvent) => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const href = (e.target as Element).closest("a[href]")?.getAttribute("href");
-    if (!href?.startsWith("/manual/")) return;
+    if (!href?.startsWith(`${refBase}/manual/`)) return;
     e.preventDefault();
     void navigate(href, { replace: true });
   };
@@ -454,7 +457,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
       if (!notes.some((n) => n.id === prev.noteId)) return;
       returning.current = true;
       pendingScroll.current = prev;
-      void navigate(manualPath(prev.noteId), { replace: true });
+      void navigate(manualPath(prev.noteId, refBase), { replace: true });
       return;
     }
     if (query && e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.code === "ArrowDown" || e.code === "ArrowUp")) {

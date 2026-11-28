@@ -16,7 +16,6 @@ import { HostGlyph } from "../../hosts/HostGlyph/HostGlyph";
 import { useHosts } from "../../hosts/queries";
 import { useLog } from "../../log/queries";
 import { useNotes } from "../../notes/queries";
-import { useNotesStore, type NotesScope } from "../../notes/useNotesStore";
 import { useEngagementServices } from "../../services/queries";
 import { useExplorerStore } from "../useExplorerStore";
 import { useTargetStore } from "../useTargetStore";
@@ -26,12 +25,6 @@ const NO_HOSTS: Host[] = [];
 /** Rows name a host by its short name, as the host rows do ("forge", not "forge.lab.local"). */
 const shortName = (h: Host) => shortHostName(h.name);
 
-/** Opens the field notes drawer on `scope`, or moves an open one there. Editor tabs replace the drawer (RAV-76). */
-function showNotes(scope: NotesScope) {
-  const notes = useNotesStore.getState();
-  if (notes.open) notes.setScope(scope);
-  else notes.toggle(scope);
-}
 
 /** One group: its label with a count, the Plus button on the right edge, then its rows. */
 function Group({ label, count, add, addKeys, onAdd, children }: {
@@ -122,8 +115,8 @@ function HostRow({ host, services, selected, onSelect }: {
 
 /**
  * The Explorer (design §1.4): the engagement's hosts, notes, findings and logs, in that order. Selecting a host makes
- * it Target and opens its page; the other rows open their page or drawer. Until editor tabs land (RAV-76) a row
- * navigates the route rather than opening a tab.
+ * it Target and opens its page. A note or a finding opens in its own editor tab; a log row opens the Log, filtered to
+ * its host. Each opens by its route, so a page already open has its tab focused, never a second one.
  */
 export function Explorer({ engagementId }: { engagementId: string }) {
   const navigate = useNavigate();
@@ -146,16 +139,17 @@ export function Explorer({ engagementId }: { engagementId: string }) {
     useTargetStore.getState().pick(engagementId, hostId);
     void navigate(hostPath(hostId));
   };
-  const openNote = (row: ScopeRow) => {
-    if (row.hostId) selectHost(row.hostId);
-    showNotes(row.hostId ? "host" : "engagement");
+  // Field notes open in their own editor tab (design §2.1): a host's notes make that host Target, as its page does.
+  const openNotes = (hostId: string | null) => {
+    if (hostId) useTargetStore.getState().pick(engagementId, hostId);
+    void navigate(hostId ? `/e/${engagementId}/notes/${encodeURIComponent(hostId)}` : `/e/${engagementId}/notes`);
   };
   const openLog = (row: ScopeRow) => {
     const path = sectionPath(engagementId, "log");
     void navigate(row.hostId ? `${path}?host=${encodeURIComponent(row.hostId)}` : path);
   };
-  const openFinding = (findingId: string) =>
-    void navigate(`${sectionPath(engagementId, "findings")}?finding=${encodeURIComponent(findingId)}`);
+  // A finding opens in its own editor tab.
+  const openFinding = (findingId: string) => void navigate(`/e/${engagementId}/f/${encodeURIComponent(findingId)}`);
 
   return (
     <aside aria-label="Explorer" className="explorer">
@@ -174,9 +168,9 @@ export function Explorer({ engagementId }: { engagementId: string }) {
             />
           ))}
         </Group>
-        <Group label="Notes" count={notesList.length} add="Add note" onAdd={() => showNotes(routeHostId ? "host" : "engagement")}>
+        <Group label="Notes" count={notesList.length} add="Add note" onAdd={() => openNotes(routeHostId)}>
           {notesList.map((row) => (
-            <ItemRow key={row.hostId ?? ""} label={row.label} onOpen={() => openNote(row)} />
+            <ItemRow key={row.hostId ?? ""} label={row.label} onOpen={() => openNotes(row.hostId)} />
           ))}
         </Group>
         <Group
