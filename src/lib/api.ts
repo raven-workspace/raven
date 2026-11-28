@@ -79,6 +79,8 @@ export const api = {
 
   settingsGet: () => call<Settings>("settings_get"),
   settingsUpdate: (patch: SettingsPatch) => call<Settings>("settings_update", { patch }),
+  /** tun0's IPv4 address, or null with no tun0 (src-tauri/src/tun0.rs). */
+  tun0Address: () => call<string | null>("tun0_address"),
   /** NIST NVD lookup, the one network call (runs in Rust; the key never reaches the webview).
    *  Rejects with `no_key`, `offline`, `nvd_busy`, `key_rejected`, `not_found` or `validation`. */
   nvdLookup: (cveId: string) => call<NvdRecord>("nvd_lookup", { cveId }),

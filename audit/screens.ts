@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { AUDIT_IDS, AUDIT_NOTE_IDS } from "../src/audit/fixtures";
+import { AUDIT_IDS, AUDIT_NOTE_IDS, AUDIT_NOW } from "../src/audit/fixtures";
 import { AUDIT_PNGS } from "../src/audit/images";
 
 export interface Screen {
@@ -10,6 +10,8 @@ export interface Screen {
   setup?: (page: Page) => Promise<void>;
   /** The widths it runs at, when not every one of `WIDTHS` (a layout that exists only at one window size). */
   widths?: readonly number[];
+  /** The clock it runs at, when not `AUDIT_NOW` (the exam's timebox before it starts, or after time is up). */
+  time?: number;
 }
 
 export const WIDTHS = [900, 1024, 1280, 1440] as const;
@@ -540,6 +542,9 @@ export const SCREENS: Screen[] = [
 
 /** Adds the audit switch for the workspace shell (src/lib/shell.ts) to a screen's path. */
 const workspace = (path: string) => `${path}${path.includes("?") ? "&" : "?"}workspace`;
+const HOUR = 60 * 60_000;
+/** The status bar's timebox, on the exam sim. */
+const TIMEBOX = ".status-bar >> role=group[name='Timebox']";
 /** The chrome bar, ready once the Engagement picker shows its value. */
 const chromeReady = (page: Page) => page.locator(".chrome-bar").getByRole("button", { name: /^Engagement: / }).waitFor();
 
@@ -567,6 +572,17 @@ export const WORKSPACE_SCREENS: Screen[] = [
     id: "workspace-target-picker", path: workspace(H), ready: "role=listbox[name='Hosts']", widths: [1100, 1440],
     setup: (page) => page.locator(".chrome-bar").getByRole("button", { name: /^Target/ }).click(),
   },
+  // The status bar (design §1.5–§1.7) on the exam sim, which has every cell: at 1100 the cells drop in their order.
+  { id: "workspace-exam-host", path: workspace(EXAM_DC), ready: TIMEBOX, widths: [1100, 1440], setup: chromeReady },
+  // The timebox's other states (design §1.6), and LHOST when tun0 differs from Settings.
+  {
+    id: "workspace-timebox-paused", path: workspace(EXAM_DC), ready: ".status-bar >> role=button[name='Resume timebox']", widths: [1440],
+    setup: async (page) => { await chromeReady(page); await page.locator(".status-bar").getByRole("button", { name: "Pause timebox" }).click(); },
+  },
+  // The exam's timebox started 3h before AUDIT_NOW and runs 23h 45m.
+  { id: "workspace-timebox-over", path: workspace(EXAM_DC), ready: TIMEBOX, widths: [1440], time: AUDIT_NOW + 22 * HOUR, setup: chromeReady },
+  { id: "workspace-timebox-not-started", path: workspace(EXAM_DC), ready: TIMEBOX, widths: [1440], time: AUDIT_NOW - 4 * HOUR, setup: chromeReady },
+  { id: "workspace-lhost-tun0", path: `${workspace(EXAM_DC)}&tun0=10.10.14.7`, ready: ".status-bar >> role=button[name^='LHOST']", widths: [1440], setup: chromeReady },
 ];
 
 /** Every screen visual.spec runs: the old shell's, then the workspace shell's. */
