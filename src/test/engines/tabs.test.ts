@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeTab, dropTabs, pageOf, parseStored, routeKey, storedForm, visit, type EditorTab } from "../../engines/tabs";
+import { closeTab, dropTabs, hostOfRoute, pageOf, parseStored, routeKey, storedForm, visit, type EditorTab } from "../../engines/tabs";
 
 const E = "e1";
 const open = (...routes: string[]) => routes.reduce<readonly EditorTab[]>((tabs, r) => visit(E, tabs, r), []);
@@ -106,5 +106,19 @@ describe("restoring tabs", () => {
 
   it("gives no tabs for nothing stored or a value that doesn't parse", () => {
     for (const raw of [null, "", "{", "null", "[]", '{"tabs":"x"}']) expect(parseStored(E, raw)).toEqual({ tabs: [], active: null });
+  });
+});
+
+describe("the host a page is about (Target)", () => {
+  it("is the host of a host's page or a host's notes", () => {
+    expect(hostOfRoute(E, "/e/e1/h/h1")).toBe("h1");
+    expect(hostOfRoute(E, "/e/e1/h/h1?tab=services#p80")).toBe("h1");
+    expect(hostOfRoute(E, "/e/e1/notes/h2")).toBe("h2");
+  });
+
+  it("is none on a page with no host, so Target stays where it was", () => {
+    for (const route of ["/e/e1", "/e/e1/s/log?host=h1", "/e/e1/s/report", "/e/e1/f/f1", "/e/e1/notes", "/e/e1/arsenal", "/e/e2/h/h1", "/"]) {
+      expect(hostOfRoute(E, route), route).toBeNull();
+    }
   });
 });

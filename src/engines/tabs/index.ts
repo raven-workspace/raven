@@ -86,6 +86,17 @@ export function routeKey(engagementId: string, route: string): string | null {
 }
 
 /**
+ * The host a route's page is about, which makes it Target (GLOSSARY): a host's page or a host's notes. Every other page
+ * (a section, a finding, the engagement's notes, a reference page) has no host, so Target stays where it was.
+ */
+export function hostOfRoute(engagementId: string, route: string): string | null {
+  const page = pageOf(engagementId, route);
+  if (page?.kind === "host") return page.hostId;
+  if (page?.kind === "notes") return page.hostId;
+  return null;
+}
+
+/**
  * The tabs after `route` comes into view: its page's tab takes the route (focusing it), or a new tab opens at the end.
  * A route that is no page of the engagement leaves the list as it is.
  */

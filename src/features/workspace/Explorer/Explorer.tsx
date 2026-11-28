@@ -115,7 +115,8 @@ function HostRow({ host, services, selected, onSelect }: {
 
 /**
  * The Explorer (design §1.4): the engagement's hosts, notes, findings and logs, in that order. Selecting a host makes
- * it Target and opens its page. A note or a finding opens in its own editor tab; a log row opens the Log, filtered to
+ * it Target and opens its page; the selected row is always Target, so a pick in the Target picker selects it here, and
+ * on a page with no host the last host picked stays selected. A note or a finding opens in its own editor tab; a log row opens the Log, filtered to
  * its host. Each opens by its route, so a page already open has its tab focused, never a second one.
  */
 export function Explorer({ engagementId }: { engagementId: string }) {
@@ -139,9 +140,9 @@ export function Explorer({ engagementId }: { engagementId: string }) {
     useTargetStore.getState().pick(engagementId, hostId);
     void navigate(hostPath(hostId));
   };
-  // Field notes open in their own editor tab (design §2.1): a host's notes make that host Target, as its page does.
+  // Field notes open in their own editor tab (design §2.1): a host's notes make that host Target, as its page does
+  // (the workspace shell sets Target from the route).
   const openNotes = (hostId: string | null) => {
-    if (hostId) useTargetStore.getState().pick(engagementId, hostId);
     void navigate(hostId ? `/e/${engagementId}/notes/${encodeURIComponent(hostId)}` : `/e/${engagementId}/notes`);
   };
   const openLog = (row: ScopeRow) => {

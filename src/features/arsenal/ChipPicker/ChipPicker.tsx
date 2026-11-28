@@ -27,8 +27,10 @@ const TYPEAHEAD_MS = 700;
  * (`data-flash`). In the open list the pointer moves the highlight like the arrow keys (a popup, not a pane). Until
  * the user moves it, the highlight follows `value`, so data that loads while the list is open lands on its row.
  */
-export function ChipPicker({ options, value, onPick, onMousePick, label, listLabel, title, align = "end", wide, prefix, shown, warn, ref }: {
+export function ChipPicker({ options, value, onPick, onMousePick, repick, label, listLabel, title, align = "end", wide, prefix, shown, warn, ref }: {
   options: ChipOption[]; value: string | null; onPick: (id: string | null) => void;
+  /** Picking the option already chosen still calls `onPick` (without the flash), for a pick that also acts. */
+  repick?: boolean;
   /** After a click on an option (not a key): where focus goes next, so ↵ does not land on the chip and reopen it. */
   onMousePick?: (id: string | null) => void;
   /** The button's accessible name. */
@@ -104,7 +106,10 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
     const id = options[i]?.id ?? null;
     close(true);
     if (mouse) onMousePick?.(id);
-    if (id === value) return;
+    if (id === value) {
+      if (repick) onPick(id);
+      return;
+    }
     onPick(id);
     setFlash(true);
     clearTimeout(flashTimer.current);

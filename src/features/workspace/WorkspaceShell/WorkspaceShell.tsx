@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { Outlet, useLocation, useMatch, useNavigate } from "react-router";
-import { boardRoute, pathOf } from "../../../engines/tabs";
+import { boardRoute, hostOfRoute, pathOf } from "../../../engines/tabs";
 import { cx } from "../../../lib/cx";
 import { isDialogOpen, useKeydown } from "../../../lib/keys";
 import { matches, SHORTCUTS } from "../../../lib/shortcuts";
@@ -108,11 +108,13 @@ function EngagementFrame({ engagementId }: { engagementId: string }) {
  */
 export function WorkspaceShell() {
   const engagementId = useMatch("/e/:id/*")?.params.id;
-  const hostId = useMatch("/e/:id/h/:hostId")?.params.hostId;
+  const { pathname } = useLocation();
+  const hostId = engagementId ? hostOfRoute(engagementId, pathname) : null;
   useTabRouting(engagementId);
   useDrawerTabs();
 
-  // Opening a host's page makes it Target; a page with no host keeps the last one.
+  // Target follows the page in view (a host's page or its notes), however it came into view: the Explorer, the Target
+  // picker, a tab, ⌘K or a link. A page with no host keeps the last one.
   useEffect(() => {
     if (engagementId && hostId) useTargetStore.getState().pick(engagementId, hostId);
   }, [engagementId, hostId]);

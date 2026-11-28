@@ -8,8 +8,10 @@ interface TargetState {
 }
 
 /**
- * Target, the host in view (GLOSSARY): set by opening a host's page, and kept on pages with no host. The Explorer
- * sets it too once it exists (RAV-77).
+ * Target, the host in view (GLOSSARY, design §1.3): the one piece of state behind the Target picker, the Explorer's
+ * selected host and, later, the host a new session pins. The workspace shell sets it from the page in view (a host's
+ * page or its notes), so selecting a host in the Explorer, picking one in the Target picker and switching tabs all land
+ * here; a page with no host keeps the last one.
  */
 export const useTargetStore = create<TargetState>()((set) => ({
   byEngagement: {},
