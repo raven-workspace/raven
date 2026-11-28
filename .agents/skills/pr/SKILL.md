@@ -161,7 +161,7 @@ Concrete evidence that the change works. Show a before and after.
 
 Screenshots are S-tier - when the environment is set up for it and the change is visual.
 
-For a UI PR in Raven, the Evidence shows the `audit:visual` screenshot beside the Figma frame it builds, at the same width. The frames are in the [Raven Workspace](https://www.figma.com/design/Z49qXmfYnFfPxk3qhECLme/Raven-Workspace) file; `docs/specs/terminal.md` maps each area to its node. Get the frame through the Figma MCP's `get_screenshot`, and name its node id.
+For a UI PR in Raven, the Evidence shows the `audit:visual` screenshot beside the design mockup it builds, both at 1440px. Open the mockup's `rendered/` file from `docs/design/workspace-ide/` in a browser at 1440px wide, screenshot the same area, and name the file and the design spec § it builds. Compare at 1440px only: the rendered mockups only squeeze at 1100px, so 1100px behaviour is checked against the spec text, not a screenshot.
 
 Execution-based evidence is A-tier. Test results, console output. Show the exact test that now fails and passes, using pseudocode.
 
