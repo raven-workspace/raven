@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-host-mark-access-reviewed"
+description = "Enables the host_mark_access_reviewed command without any pre-configured scope."
+commands.allow = ["host_mark_access_reviewed"]
+
+[[permission]]
+identifier = "deny-host-mark-access-reviewed"
+description = "Denies the host_mark_access_reviewed command without any pre-configured scope."
+commands.deny = ["host_mark_access_reviewed"]

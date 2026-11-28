@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-host-sync-board"
+description = "Enables the host_sync_board command without any pre-configured scope."
+commands.allow = ["host_sync_board"]
+
+[[permission]]
+identifier = "deny-host-sync-board"
+description = "Denies the host_sync_board command without any pre-configured scope."
+commands.deny = ["host_sync_board"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-log-create"
+description = "Enables the log_create command without any pre-configured scope."
+commands.allow = ["log_create"]
+
+[[permission]]
+identifier = "deny-log-create"
+description = "Denies the log_create command without any pre-configured scope."
+commands.deny = ["log_create"]

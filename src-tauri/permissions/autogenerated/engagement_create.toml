@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-engagement-create"
+description = "Enables the engagement_create command without any pre-configured scope."
+commands.allow = ["engagement_create"]
+
+[[permission]]
+identifier = "deny-engagement-create"
+description = "Denies the engagement_create command without any pre-configured scope."
+commands.deny = ["engagement_create"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cred-attempts-list"
+description = "Enables the cred_attempts_list command without any pre-configured scope."
+commands.allow = ["cred_attempts_list"]
+
+[[permission]]
+identifier = "deny-cred-attempts-list"
+description = "Denies the cred_attempts_list command without any pre-configured scope."
+commands.deny = ["cred_attempts_list"]

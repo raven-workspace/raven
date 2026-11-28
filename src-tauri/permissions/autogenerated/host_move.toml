@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-host-move"
+description = "Enables the host_move command without any pre-configured scope."
+commands.allow = ["host_move"]
+
+[[permission]]
+identifier = "deny-host-move"
+description = "Denies the host_move command without any pre-configured scope."
+commands.deny = ["host_move"]

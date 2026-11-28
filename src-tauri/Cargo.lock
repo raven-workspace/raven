@@ -4106,6 +4106,7 @@ dependencies = [
  "argon2",
  "base64 0.22.1",
  "blake2",
+ "libc",
  "libghostty-vt",
  "md-5",
  "portable-pty",

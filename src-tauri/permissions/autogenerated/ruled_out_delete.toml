@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ruled-out-delete"
+description = "Enables the ruled_out_delete command without any pre-configured scope."
+commands.allow = ["ruled_out_delete"]
+
+[[permission]]
+identifier = "deny-ruled-out-delete"
+description = "Denies the ruled_out_delete command without any pre-configured scope."
+commands.deny = ["ruled_out_delete"]

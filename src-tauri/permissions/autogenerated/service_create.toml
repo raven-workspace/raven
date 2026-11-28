@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-service-create"
+description = "Enables the service_create command without any pre-configured scope."
+commands.allow = ["service_create"]
+
+[[permission]]
+identifier = "deny-service-create"
+description = "Denies the service_create command without any pre-configured scope."
+commands.deny = ["service_create"]

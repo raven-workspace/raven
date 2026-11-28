@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cleanup-update"
+description = "Enables the cleanup_update command without any pre-configured scope."
+commands.allow = ["cleanup_update"]
+
+[[permission]]
+identifier = "deny-cleanup-update"
+description = "Denies the cleanup_update command without any pre-configured scope."
+commands.deny = ["cleanup_update"]

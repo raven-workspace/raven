@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-vectors-list"
+description = "Enables the vectors_list command without any pre-configured scope."
+commands.allow = ["vectors_list"]
+
+[[permission]]
+identifier = "deny-vectors-list"
+description = "Denies the vectors_list command without any pre-configured scope."
+commands.deny = ["vectors_list"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-vector-upsert"
+description = "Enables the vector_upsert command without any pre-configured scope."
+commands.allow = ["vector_upsert"]
+
+[[permission]]
+identifier = "deny-vector-upsert"
+description = "Denies the vector_upsert command without any pre-configured scope."
+commands.deny = ["vector_upsert"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-extraction-get"
+description = "Enables the extraction_get command without any pre-configured scope."
+commands.allow = ["extraction_get"]
+
+[[permission]]
+identifier = "deny-extraction-get"
+description = "Denies the extraction_get command without any pre-configured scope."
+commands.deny = ["extraction_get"]

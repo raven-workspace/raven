@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-finding-files-list"
+description = "Enables the finding_files_list command without any pre-configured scope."
+commands.allow = ["finding_files_list"]
+
+[[permission]]
+identifier = "deny-finding-files-list"
+description = "Denies the finding_files_list command without any pre-configured scope."
+commands.deny = ["finding_files_list"]

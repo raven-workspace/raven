@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-access-grant-create"
+description = "Enables the access_grant_create command without any pre-configured scope."
+commands.allow = ["access_grant_create"]
+
+[[permission]]
+identifier = "deny-access-grant-create"
+description = "Denies the access_grant_create command without any pre-configured scope."
+commands.deny = ["access_grant_create"]

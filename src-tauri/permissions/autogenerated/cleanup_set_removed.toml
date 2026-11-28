@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cleanup-set-removed"
+description = "Enables the cleanup_set_removed command without any pre-configured scope."
+commands.allow = ["cleanup_set_removed"]
+
+[[permission]]
+identifier = "deny-cleanup-set-removed"
+description = "Denies the cleanup_set_removed command without any pre-configured scope."
+commands.deny = ["cleanup_set_removed"]

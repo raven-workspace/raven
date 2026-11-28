@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-engagement-delete"
+description = "Enables the engagement_delete command without any pre-configured scope."
+commands.allow = ["engagement_delete"]
+
+[[permission]]
+identifier = "deny-engagement-delete"
+description = "Denies the engagement_delete command without any pre-configured scope."
+commands.deny = ["engagement_delete"]

@@ -34,6 +34,7 @@ export type Entity =
   | "hostIdentity"
   | "vector"
   | "payloadBuild"
+  | "terminalCommand"
   | "report"
   | "reportSection";
 
@@ -79,6 +80,8 @@ export const ENTITY_TABLES: Record<Entity, readonly string[]> = {
   hostIdentity: ["host_identity"],
   vector: ["privesc_vectors"],
   payloadBuild: ["payload_builds"],
+  /** A typed terminal command line (Rust writes these; the webview never reads them). */
+  terminalCommand: ["terminal_commands"],
   report: ["reports"],
   reportSection: ["report_sections"],
 };
@@ -163,6 +166,7 @@ export const FOREIGN_KEYS: readonly ForeignKey[] = [
   fk("payload_builds", "host_id", "hosts", "cascade"),
   fk("reports", "engagement_id", "engagements", "cascade"),
   fk("report_sections", "report_id", "reports", "cascade"),
+  fk("terminal_commands", "engagement_id", "engagements", "cascade"),
 ];
 
 type Also = readonly { entity: Entity; change: Change }[];

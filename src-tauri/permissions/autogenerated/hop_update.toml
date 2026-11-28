@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hop-update"
+description = "Enables the hop_update command without any pre-configured scope."
+commands.allow = ["hop_update"]
+
+[[permission]]
+identifier = "deny-hop-update"
+description = "Denies the hop_update command without any pre-configured scope."
+commands.deny = ["hop_update"]

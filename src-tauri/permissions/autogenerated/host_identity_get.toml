@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-host-identity-get"
+description = "Enables the host_identity_get command without any pre-configured scope."
+commands.allow = ["host_identity_get"]
+
+[[permission]]
+identifier = "deny-host-identity-get"
+description = "Denies the host_identity_get command without any pre-configured scope."
+commands.deny = ["host_identity_get"]

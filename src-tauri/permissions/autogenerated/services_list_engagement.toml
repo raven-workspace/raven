@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-services-list-engagement"
+description = "Enables the services_list_engagement command without any pre-configured scope."
+commands.allow = ["services_list_engagement"]
+
+[[permission]]
+identifier = "deny-services-list-engagement"
+description = "Denies the services_list_engagement command without any pre-configured scope."
+commands.deny = ["services_list_engagement"]

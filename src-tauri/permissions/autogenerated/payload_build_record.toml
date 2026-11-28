@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-payload-build-record"
+description = "Enables the payload_build_record command without any pre-configured scope."
+commands.allow = ["payload_build_record"]
+
+[[permission]]
+identifier = "deny-payload-build-record"
+description = "Denies the payload_build_record command without any pre-configured scope."
+commands.deny = ["payload_build_record"]

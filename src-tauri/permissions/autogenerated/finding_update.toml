@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-finding-update"
+description = "Enables the finding_update command without any pre-configured scope."
+commands.allow = ["finding_update"]
+
+[[permission]]
+identifier = "deny-finding-update"
+description = "Denies the finding_update command without any pre-configured scope."
+commands.deny = ["finding_update"]

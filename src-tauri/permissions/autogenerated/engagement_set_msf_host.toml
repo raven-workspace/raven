@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-engagement-set-msf-host"
+description = "Enables the engagement_set_msf_host command without any pre-configured scope."
+commands.allow = ["engagement_set_msf_host"]
+
+[[permission]]
+identifier = "deny-engagement-set-msf-host"
+description = "Denies the engagement_set_msf_host command without any pre-configured scope."
+commands.deny = ["engagement_set_msf_host"]

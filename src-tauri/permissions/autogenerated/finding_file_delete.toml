@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-finding-file-delete"
+description = "Enables the finding_file_delete command without any pre-configured scope."
+commands.allow = ["finding_file_delete"]
+
+[[permission]]
+identifier = "deny-finding-file-delete"
+description = "Denies the finding_file_delete command without any pre-configured scope."
+commands.deny = ["finding_file_delete"]

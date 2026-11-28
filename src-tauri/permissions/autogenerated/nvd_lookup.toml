@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nvd-lookup"
+description = "Enables the nvd_lookup command without any pre-configured scope."
+commands.allow = ["nvd_lookup"]
+
+[[permission]]
+identifier = "deny-nvd-lookup"
+description = "Denies the nvd_lookup command without any pre-configured scope."
+commands.deny = ["nvd_lookup"]

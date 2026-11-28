@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cred-attempts-upsert"
+description = "Enables the cred_attempts_upsert command without any pre-configured scope."
+commands.allow = ["cred_attempts_upsert"]
+
+[[permission]]
+identifier = "deny-cred-attempts-upsert"
+description = "Denies the cred_attempts_upsert command without any pre-configured scope."
+commands.deny = ["cred_attempts_upsert"]
